@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- UUID key mapping for an effective account/API grant. -->
+<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" version="2.5">
+  <embeddable class="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccountApiKey">
+    <attributes><basic attribute-type="java.lang.String" name="id"/></attributes>
+  </embeddable>
+</entity-mappings>

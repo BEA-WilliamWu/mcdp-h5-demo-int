@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.5"
+	xsi:schemaLocation="http://www.eclipse.org/eclipselink/xsds/persistence/orm http://www.eclipse.org/eclipselink/xsds/eclipselink_orm_2_5.xsd">
+	<entity class="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfile" name="HthUserProfile">
+		<table name="HTH_USER_PROFILE" schema="HTH_BEA"/>
+		<attributes>
+			<embedded-id attribute-type="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfileKey" name="key">
+				<attribute-override name="partyId">
+					<column name="PARTY_ID"/>
+				</attribute-override>
+				<attribute-override name="closeId">
+					<column name="CLOSE_ID"/>
+				</attribute-override>
+			</embedded-id>
+		</attributes>
+	</entity>
+</entity-mappings>

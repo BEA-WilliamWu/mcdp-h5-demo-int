@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mappings>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiMaster.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiMasterKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiUri.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiUriKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthManagement.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthManagementKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthManagementApi.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthManagementApiKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUamClientRegistry.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUamClientRegistryKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthRequest.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthRequestKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthRequest-Query.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthRequestApi.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthRequestApiKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthCertificate.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthCertificateKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthCertificateRequest.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthCertificateRequestKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserProfile.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserProfileKey-embeddable.orm.xml"/>
+	<!-- BCOH2H-595 effective grants followed by immutable maker approval snapshots. -->
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccount.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApi.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApiKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequest.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestAccount.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestAccountKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestApi.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestApiKey-embeddable.orm.xml"/>
+</mappings>

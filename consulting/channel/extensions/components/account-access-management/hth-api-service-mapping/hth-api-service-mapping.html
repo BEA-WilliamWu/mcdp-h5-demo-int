@@ -1,0 +1,29 @@
+<div class="form-main-container">
+    <page-section heading="[[$component.nls.headers.hthApiMapping]]">
+        <!-- ko if: isEditable -->
+        <div class="oj-flex oj-flex-items-pad">
+            <oj-button class="action-button-secondary" on-click="[[$component.applyFirstToAll]]">
+                <span data-bind="text: nls.fieldname.hthApplyFirstToAll"></span>
+            </oj-button>
+        </div>
+        <!-- /ko -->
+        <!-- ko foreach: accounts -->
+        <details class="hth-api-account" open>
+            <summary data-bind="text: (displayName || accountType) + ' (' + (maskedAccountNumber || accountNumber) + ')' "></summary>
+            <div class="hth-api-grid" data-bind="foreach: apiServices">
+                <label class="hth-api-option">
+                    <input type="checkbox" data-bind="checked: selected, enable: $component.isEditable">
+                    <span data-bind="text: apiName"></span>
+                </label>
+            </div>
+        </details>
+        <!-- /ko -->
+    </page-section>
+    <div class="button-container">
+        <!-- ko if: isEditable -->
+        <oj-button class="action-button-primary" on-click="[[$component.next]]"><span data-bind="text: nls.common.next"></span></oj-button>
+        <!-- /ko -->
+        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
+        <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
+    </div>
+</div>

@@ -1,0 +1,4 @@
+.hth-api-account { margin-bottom: 1rem; }
+.hth-api-account summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
+.hth-api-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .5rem 1rem; }
+.hth-api-option { padding: .5rem; border-bottom: 1px solid #ececec; }

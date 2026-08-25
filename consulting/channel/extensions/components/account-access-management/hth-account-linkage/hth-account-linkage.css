@@ -1,0 +1,4 @@
+.hth-user-context { margin-bottom: 1rem; }
+.hth-account-table { width: 100%; border-collapse: collapse; }
+.hth-account-table th, .hth-account-table td { padding: .75rem; border-bottom: 1px solid #d6d7d8; text-align: left; }
+.hth-account-message { padding: 1rem 0; }

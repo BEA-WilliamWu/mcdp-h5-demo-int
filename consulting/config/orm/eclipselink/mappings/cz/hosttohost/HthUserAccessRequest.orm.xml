@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Immutable maker request header reloaded during checker approval. -->
+<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" version="2.5">
+  <entity class="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequest" name="HthUserAccessRequest">
+    <table name="HTH_USER_ACCESS_REQUEST" schema="HTH_BEA"/>
+    <attributes>
+      <embedded-id attribute-type="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestKey" name="key">
+        <attribute-override name="id"><column name="ID"/></attribute-override>
+      </embedded-id>
+      <basic attribute-type="java.lang.String" name="transactionId"><column name="TRANSACTION_ID"/></basic>
+      <basic attribute-type="java.lang.String" name="referenceNo"><column name="REFERENCE_NO"/></basic>
+      <basic attribute-type="java.lang.String" name="actionType"><column name="ACTION_TYPE"/></basic>
+      <basic attribute-type="java.lang.String" name="partyId"><column name="PARTY_ID"/></basic>
+      <basic attribute-type="java.lang.String" name="closeId"><column name="CLOSE_ID"/></basic>
+      <basic attribute-type="java.lang.String" name="accessPartyId"><column name="ACCESS_PARTY_ID"/></basic>
+      <basic attribute-type="java.lang.String" name="linkageType"><column name="LINKAGE_TYPE"/></basic>
+      <basic attribute-type="java.lang.String" name="userName"><column name="USER_NAME"/></basic>
+      <basic attribute-type="java.lang.String" name="fullName"><column name="FULL_NAME"/></basic>
+      <basic attribute-type="java.lang.String" name="accessPartyName"><column name="ACCESS_PARTY_NAME"/></basic>
+      <basic attribute-type="java.lang.String" name="objectStatus"><column name="OBJECT_STATUS"/></basic>
+      <basic attribute-type="java.lang.String" name="createdBy"><column name="CREATED_BY" updatable="false"/></basic>
+      <basic attribute-type="com.ofss.fc.datatype.Date" name="creationDate"><column name="CREATION_DATE" updatable="false"/><convert>DateTime</convert></basic>
+      <basic attribute-type="java.lang.String" name="lastUpdatedBy"><column name="LAST_UPDATED_BY"/></basic>
+      <basic attribute-type="com.ofss.fc.datatype.Date" name="lastUpdatedDate"><column name="LAST_UPDATE_DATE"/><convert>DateTime</convert></basic>
+    </attributes>
+  </entity>
+</entity-mappings>

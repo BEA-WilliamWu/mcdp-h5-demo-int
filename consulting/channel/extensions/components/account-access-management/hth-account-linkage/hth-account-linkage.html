@@ -1,0 +1,70 @@
+<div class="form-main-container">
+    <page-section>
+        <div class="hth-user-context">
+            <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userID"></label></div>
+                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.username || context.closeId"></span></div>
+            </div>
+            <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userName"></label></div>
+                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.fullName || '-'"></span></div>
+            </div>
+            <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userChannelType"></label></div>
+                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.userChannelType || 'HTH'"></span></div>
+            </div>
+        </div>
+    </page-section>
+
+    <page-section heading="[[context.linkageType === 'ASSOCIATED' ? nls.fieldname.linkedModuleToMap : nls.fieldname.moduleToMap]]">
+        <!-- ko if: loading -->
+        <div class="hth-account-message" data-bind="text: nls.info.hthSummaryLoading"></div>
+        <!-- /ko -->
+        <!-- ko if: errorMessage -->
+        <div class="hth-account-message" data-bind="text: errorMessage"></div>
+        <!-- /ko -->
+        <!-- ko if: pendingRequest -->
+        <div class="hth-account-message" data-bind="text: nls.info.hthPendingApproval"></div>
+        <!-- /ko -->
+        <!-- ko if: !loading() && !errorMessage() -->
+        <div class="oj-flex oj-flex-items-pad">
+            <button type="button" class="link-button" data-bind="click: toggleAll, enable: isEditable">
+                <span data-bind="text: nls.fieldname.mapallAccts"></span>
+            </button>
+        </div>
+        <table class="hth-account-table">
+            <thead>
+                <tr>
+                    <th><span data-bind="text: nls.fieldname.mapAccts"></span></th>
+                    <th><span data-bind="text: nls.headers.AccountNumber"></span></th>
+                    <th><span data-bind="text: nls.headers.currency"></span></th>
+                    <th><span data-bind="text: nls.headers.displayName"></span></th>
+                </tr>
+            </thead>
+            <tbody data-bind="foreach: accounts">
+                <tr>
+                    <td><input type="checkbox" data-bind="checked: selected, enable: $component.isEditable"></td>
+                    <td><span data-bind="text: maskedAccountNumber || accountNumber"></span></td>
+                    <td><span data-bind="text: currency || '-'"></span></td>
+                    <td><span data-bind="text: accountType"></span></td>
+                </tr>
+            </tbody>
+        </table>
+        <!-- ko if: accounts().length === 0 -->
+        <div class="hth-account-message" data-bind="text: nls.headers.noAccountsAvailable"></div>
+        <!-- /ko -->
+        <!-- /ko -->
+    </page-section>
+
+    <div class="button-container">
+        <!-- ko if: mode() === 'VIEW' && !pendingRequest() -->
+        <oj-button class="action-button-primary" on-click="[[$component.edit]]"><span data-bind="text: nls.headers.edit"></span></oj-button>
+        <oj-button class="action-button-secondary" on-click="[[$component.deleteAccess]]"><span data-bind="text: nls.headers.deleteHeader"></span></oj-button>
+        <!-- /ko -->
+        <!-- ko if: !pendingRequest() -->
+        <oj-button class="action-button-primary" on-click="[[$component.next]]" disabled="[[selectedCount() === 0]]"><span data-bind="text: nls.common.next"></span></oj-button>
+        <!-- /ko -->
+        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
+        <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
+    </div>
+</div>

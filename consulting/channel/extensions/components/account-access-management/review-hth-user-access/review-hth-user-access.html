@@ -1,0 +1,37 @@
+<div class="form-main-container">
+    <!-- ko ifnot: approvalMode -->
+    <div data-bind="template: { name: 'review-screen/review-banner-template', data: { header: nls.navLabels.review, reviewHeader: nls.info.hthReviewMessage } }"></div>
+    <!-- /ko -->
+    <page-section>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userID"></label></div>
+            <div class="oj-flex-item oj-sm-8"><span data-bind="text: access.username || access.closeId"></span></div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.companyName"></label></div>
+            <div class="oj-flex-item oj-sm-8"><span data-bind="text: access.accessPartyName || access.accessPartyId"></span></div>
+        </div>
+    </page-section>
+    <!-- ko if: isDelete -->
+    <div class="hth-review-delete" data-bind="text: nls.info.hthDeleteWarning"></div>
+    <!-- /ko -->
+    <!-- ko ifnot: isDelete -->
+    <page-section heading="[[$component.nls.headers.hthReviewMapping]]">
+        <!-- ko foreach: accounts -->
+        <div class="hth-review-account">
+            <h3 data-bind="text: displayName + ' (' + (maskedAccountNumber || accountNumber) + ')' "></h3>
+            <div data-bind="foreach: $component.selectedApis($data)">
+                <span class="hth-review-api" data-bind="text: apiName"></span>
+            </div>
+        </div>
+        <!-- /ko -->
+    </page-section>
+    <!-- /ko -->
+    <!-- ko ifnot: approvalMode -->
+    <div class="button-container">
+        <oj-button class="action-button-primary" on-click="[[$component.confirm]]" disabled="[[$component.isSubmitting]]"><span data-bind="text: nls.common.confirm"></span></oj-button>
+        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
+        <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
+    </div>
+    <!-- /ko -->
+</div>

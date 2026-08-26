@@ -24,6 +24,7 @@ import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 import com.ofss.digx.app.sms.dto.user.UserDTO;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import com.ofss.digx.cz.bea.app.sms.dto.user.AuditLogMigRequestDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.CZUserDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.CreateLoginUserRequestDto;
@@ -113,7 +114,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	@Override
 	public void create(UserExtensionData object) throws Exception {
 		String taskId = (String) ThreadAttribute.get(ThreadAttribute.CURRENT_TASK);
-		System.out.print("local repo call create" + taskId);
+		BeaSystemOut.println("local repo call create" + taskId);
 		SessionContext session = (SessionContext) ThreadAttribute.get(ThreadAttribute.SESSION_CONTEXT);
 		IFMOHelperCallAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(IFMOHelperCallAdapter.class,
 				"callFMOHelper", DeterminantType.Enterprise);
@@ -122,9 +123,9 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			adapter.callFMOHelper(session, taskId, object, true);
 		}
 		object.setBounceBackReminder("N");
-		System.out.print("Set bounce back reminder as N");
+		BeaSystemOut.println("Set bounce back reminder as N");
 
-		System.out.print("local repo call create");
+		BeaSystemOut.println("local repo call create");
 		super.create(object);
 		if ("HTH".equals(IHthUserProfileAdapter.normalizeUserChannelType(object.getUserChannelType()))) {
 			hthUserProfileAdapter().createUserProfile(object.getCdcNo(), object.getUserID());
@@ -154,7 +155,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			}
 			data = super.read(UserExtensionData.class, userExtensionDataKey);
 		} catch (java.lang.Exception e) {
-			e.printStackTrace();
+			BeaSystemOut.printErr(e);
 
 		} finally {
 			if (isSessionOpen) {
@@ -170,14 +171,14 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	public void update(UserExtensionData object) throws Exception {
 
 		String taskId = (String) ThreadAttribute.get(ThreadAttribute.CURRENT_TASK);
-		System.out.print("Logout FMO Call - Task ID - " + taskId);
+		BeaSystemOut.println("Logout FMO Call - Task ID - " + taskId);
 		com.ofss.digx.infra.thread.ThreadAttribute.set("FMO_USER_ID", object.getUserID());
 		SessionContext sessionContext = (SessionContext) ThreadAttribute.get(ThreadAttribute.SESSION_CONTEXT);
 		IFMOHelperCallAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(IFMOHelperCallAdapter.class,
 				"callFMOHelper", DeterminantType.Enterprise);
 		if ("AU_CZ_LOGOUT".equalsIgnoreCase(taskId)) {
 			adapter.callFMOHelper(sessionContext, taskId, object, true);
-			System.out.println("FMO Called for Logout");
+			BeaSystemOut.println("FMO Called for Logout");
 		}
 
 		Session session = null;
@@ -192,18 +193,18 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			}
 			if (object.getBounceBackReminder() == null) {
 				object.setBounceBackReminder("N");
-				System.out.print("Set bounce back reminder as N");
+				BeaSystemOut.println("Set bounce back reminder as N");
 			}
-			System.out.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: isSessionOpen : " + isSessionOpen);
-			System.out.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: Calling super.update() : STARTS");
+			BeaSystemOut.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: isSessionOpen : " + isSessionOpen);
+			BeaSystemOut.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: Calling super.update() : STARTS");
 			super.update(object);
-			System.out.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: Calling super.update() : ENDS");
+			BeaSystemOut.println("\n Try block LocalUserExtensionDataRepositoryAdapter update() :: Calling super.update() : ENDS");
 		} catch (java.lang.Exception e) {
-			System.out.println("\n Catch block LocalUserExtensionDataRepositoryAdapter update()");
+			BeaSystemOut.println("\n Catch block LocalUserExtensionDataRepositoryAdapter update()");
 			DataAccessManager.getManager().rollbackTransaction();
-			e.printStackTrace();
+			BeaSystemOut.printErr(e);
 		} finally {
-			System.out.println("\n Finally block LocalUserExtensionDataRepositoryAdapter update() :: isSessionOpen : " + isSessionOpen);
+			BeaSystemOut.println("\n Finally block LocalUserExtensionDataRepositoryAdapter update() :: isSessionOpen : " + isSessionOpen);
 			if (isSessionOpen) {
 				session.fetchCurrentTransaction().commit();
 				DataAccessManager.getManager().closeSession(session);
@@ -342,7 +343,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			}
 			if (userDTO.getUsername() != null && !userDTO.getUsername().equals("")) {
 				criteria.add(Expression.like("userID", "%" + userDTO.getUsername() + "%"));
-				System.out.println("Reading extentiondata for" + userDTO.getUsername());
+				BeaSystemOut.println("Reading extentiondata for" + userDTO.getUsername());
 			}
 
 			userExtensionList = super.executeCriteria(criteria);
@@ -463,18 +464,18 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			
 			if (userDTO.getUsername() != null && !userDTO.getUsername().equals("")) {
 				criteria.add(Expression.eq("userID",userDTO.getUsername()));
-				System.out.println("LocalUserExtensionDataRepositoryAdapter.listUsers userDTO.getUsername is :"+userDTO.getUsername());
-				System.out.println("Reading extentiondata for" + userDTO.getUsername());
+				BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.listUsers userDTO.getUsername is :"+userDTO.getUsername());
+				BeaSystemOut.println("Reading extentiondata for" + userDTO.getUsername());
 			}
    
 			if (userDTO.getHomeBusinessUnit() != null && !userDTO.getHomeBusinessUnit().equals("")) {
 				criteria.add(Expression.eq("loginID", userDTO.getHomeBusinessUnit()));
-				System.out.println("Reading extentiondata for loginID" + userDTO.getHomeBusinessUnit());
+				BeaSystemOut.println("Reading extentiondata for loginID" + userDTO.getHomeBusinessUnit());
 			}
 			
 			if (userDTO.getTargetUnit() != null && !userDTO.getTargetUnit().equals("")) {
 				criteria.add(Expression.eq("signerID",userDTO.getTargetUnit()));
-				System.out.println("Reading extentiondata for signerID" + userDTO.getTargetUnit());
+				BeaSystemOut.println("Reading extentiondata for signerID" + userDTO.getTargetUnit());
 			}
 			
 			userExtensionList = super.executeCriteria(criteria);
@@ -644,10 +645,10 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			query.setParameter("mobileNo", "%%");
 		}
 		
-		System.out.println("Printing data for getNamesPArams"+Arrays.toString(query.getNamedParameters()));
+		BeaSystemOut.println("Printing data for getNamesPArams"+Arrays.toString(query.getNamedParameters()));
 
 		for (String param : query.getNamedParameters()) {
-			System.out.println("Params-->"+param);
+			BeaSystemOut.println("Params-->"+param);
 		}
 
 		List<Object[]> userListDTO = query.list();
@@ -731,7 +732,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			query.setParameter("userID", userID);
 
 			int result = query.executeUpdate();
-			System.out.println("Signer status updated");
+			BeaSystemOut.println("Signer status updated");
 		} finally {
 			if (isSessionOpen) {
 				DataAccessManager.getManager().closeSession(session);
@@ -899,10 +900,10 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			}
 
 			if (MAX_ATTEMPTS_ALLOWED == attemptNumber) {
-				System.out.println("Updating Signer status and attempts");
+				BeaSystemOut.println("Updating Signer status and attempts");
 				query = "UpdateSignerHoldStatusAndAttempts";
 			} else {
-				System.out.println("Updating Signer attempts");
+				BeaSystemOut.println("Updating Signer attempts");
 				query = "UpdateSignerAttempts";
 			}
 
@@ -912,7 +913,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			parameters.put("attemptNumber", attemptNumber);
 			executeUpdateQuery(query, parameters);
 
-			System.out.println("Signer update done");
+			BeaSystemOut.println("Signer update done");
 		} finally {
 			if (isSessionOpen) {
 				DataAccessManager.getManager().closeSession(session);
@@ -925,7 +926,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		Session session = DataAccessManager.getManager().fetchCurrentSession();
 		if (object.getBounceBackReminder() == null) {
 			object.setBounceBackReminder("N");
-			System.out.print("Set bounce back reminder as N");
+			BeaSystemOut.println("Set bounce back reminder as N");
 		}
 		super.update(object);
 		session.flush();
@@ -949,18 +950,18 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		for (Object[] userObj : result) {
 			if (userObj[1] != null) {
 
-				System.out.println("username::" + (String) userObj[0] + " preLastLoginDate format from sql ::"
+				BeaSystemOut.println("username::" + (String) userObj[0] + " preLastLoginDate format from sql ::"
 						+ userObj[1].toString());
-				System.out
+				com.ofss.digx.cz.bea.app.logger.BeaSystemOut
 						.println("preLastLoginDate format from after split ::" + userObj[1].toString().split("\\.")[0]);
 				username = (String) userObj[0];
 				date = (String) userObj[1].toString().split("\\.")[0];
 				try {
 					preLastLoginDate = new Date(date, "yyyy-MM-dd HH:mm:ss");
-					System.out.println("after conversion logged in date is " + preLastLoginDate);
-					System.out.println("preLastLoginDate fcdate format ::" + preLastLoginDate.toString());
+					BeaSystemOut.println("after conversion logged in date is " + preLastLoginDate);
+					BeaSystemOut.println("preLastLoginDate fcdate format ::" + preLastLoginDate.toString());
 				} catch (java.lang.Exception e) {
-					e.printStackTrace();
+					BeaSystemOut.printErr(e);
 				}
 			}
 		}
@@ -996,7 +997,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	public static java.util.Date beaResponseStringToJavaDate(String val, String pattern) {
 
 		java.util.Date opDate = null;
-		System.out.println("Input Params : val = " + val + ", pattern = " + pattern);
+		BeaSystemOut.println("Input Params : val = " + val + ", pattern = " + pattern);
 		if (val == null || val.trim().length() == 0) {
 			return null;
 		}
@@ -1006,7 +1007,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		try {
 			opDate = sdf.parse(val);
 		} catch (ParseException e) {
-			e.printStackTrace();
+			BeaSystemOut.printErr(e);
 		}
 
 		return opDate;
@@ -1029,7 +1030,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	 * = super.executeCriteria(criteria);
 	 * 
 	 * 
-	 * } catch (java.lang.Exception e) { e.printStackTrace();
+	 * } catch (java.lang.Exception e) { com.ofss.digx.cz.bea.app.logger.BeaSystemOut.printErr(e);
 	 * 
 	 * } finally { if (isSessionOpen) {
 	 * 
@@ -1048,7 +1049,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	 * isSessionOpen = true; } session.beginTransaction(); session.update(domain);
 	 * DataAccessManager.getManager().commitTransaction(); session.flush(); return
 	 * domain; } catch (java.lang.Exception e) {
-	 * DataAccessManager.getManager().rollbackTransaction(); e.printStackTrace();
+	 * DataAccessManager.getManager().rollbackTransaction(); com.ofss.digx.cz.bea.app.logger.BeaSystemOut.printErr(e);
 	 * 
 	 * } finally { if (isSessionOpen) {
 	 * DataAccessManager.getManager().closeSession(session); } } return null; }
@@ -1056,14 +1057,14 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 
 	@Override
 	public void updateDefaultUser(UserDetailsUpdationDTO userDetailsUpdationDTO, String userName) throws Exception {
-		System.out.println("Reached updateDefaultUser in LocalUserExtensionDataRepositoryAdapter");
+		BeaSystemOut.println("Reached updateDefaultUser in LocalUserExtensionDataRepositoryAdapter");
 		Connection con = null;
-		System.out.println("New Username: " + userDetailsUpdationDTO.getUserId());
-		System.out.println("Old Username: " + userName);
-		System.out.println(userDetailsUpdationDTO.toString());
+		BeaSystemOut.println("New Username: " + userDetailsUpdationDTO.getUserId());
+		BeaSystemOut.println("Old Username: " + userName);
+		BeaSystemOut.println(userDetailsUpdationDTO.toString());
 		
 		try {
-			System.out.println("Inside try block");
+			BeaSystemOut.println("Inside try block");
 			if (userName != null) {
 				con = ConnectionUtil.getConnection("DIGX", true, null);
 				CallableStatement st = con.prepareCall(UPDATE_USERNAME);
@@ -1086,50 +1087,50 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 //					st.setBoolean(10, userDetailsUpdationDTO.getIsUserInfoUpdateRequired());
 			
 
-//				System.out.println("New Username from CallableStatement: " + st.getString(1));
-//				System.out.println("Old Username from CallableStatement: " + st.getString(2));
+//				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("New Username from CallableStatement: " + st.getString(1));
+//				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Old Username from CallableStatement: " + st.getString(2));
 				st.execute();
 				st.close();
 				st = null;
 			}
-			System.out.println("Exiting try block");
+			BeaSystemOut.println("Exiting try block");
 		} catch (java.lang.Exception e) {
-			e.printStackTrace();
+			BeaSystemOut.printErr(e);
 		} finally {
 			if (con != null) {
 				ConnectionUtil.closeConnection("DIGX", con);
 				con = null;
-				System.out.println("Connection closed from finally block");
+				BeaSystemOut.println("Connection closed from finally block");
 			}
 			con = null;
 		}
-		System.out.println("Exiting updateDefaultUser in LocalUserExtensionDataRepositoryAdapter ");
+		BeaSystemOut.println("Exiting updateDefaultUser in LocalUserExtensionDataRepositoryAdapter ");
 	}
 
 	@Override
 	public void updateMigrationStatus(MigrationStatusRequestDto migrationStatusRequestDto) throws Exception {
-		System.out.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() starts here");
+		BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() starts here");
 		Session session = null;
 		boolean isSessionOpen = false;
 
 		try {
 
 			if (DataAccessManager.getManager().isSessionOpen()) {
-				System.out.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() entered in if");
+				BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() entered in if");
 				session = DataAccessManager.getManager().fetchCurrentSession();
-				System.out.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() in if session is::"
+				BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() in if session is::"
 						+ session.toString());
 			} else {
-				System.out.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() entered in else");
+				BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() entered in else");
 				session = DataAccessManager.getManager().openSession();
-				System.out
+				com.ofss.digx.cz.bea.app.logger.BeaSystemOut
 						.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() in else session is::"
 								+ session.toString());
 				isSessionOpen = true;
 			}
 
 			Query query = session.getNamedQuery("UpdateMigrationStatus");
-			System.out.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() userId is:"
+			BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.updateMigrationStatus() userId is:"
 					+ migrationStatusRequestDto.getUsrId());
 			
 			com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData domain = new com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData();
@@ -1140,28 +1141,28 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 			query.setParameter("userId", migrationStatusRequestDto.getDecryptedUserId());
 			if(domain.getMigtationStatus() != null && domain.getMigtationStatus().equals("N")
 					&& domain.getSignerID() != null) {
-				System.out.println("Migration status set as S in new flow from LocalUserExtensionDataRepositoryAdapter");
+				BeaSystemOut.println("Migration status set as S in new flow from LocalUserExtensionDataRepositoryAdapter");
 				
 				if(domain.getMigSignerUpdated() != null && domain.getMigSignerUpdated().equals("Y")) {
-					System.out.println("getMigSignerUpdated is Y");
+					BeaSystemOut.println("getMigSignerUpdated is Y");
 					query.setParameter("migrationStatus", "Y");	
 				} else {
-					System.out.println("getMigSignerUpdated is null");
+					BeaSystemOut.println("getMigSignerUpdated is null");
 					query.setParameter("migrationStatus", "S");	
 				}
 			}
 			else {
 				query.setParameter("migrationStatus", "Y");
-				System.out.println("Migration status set as Y in new flow from LocalUserExtensionDataRepositoryAdapter");
+				BeaSystemOut.println("Migration status set as Y in new flow from LocalUserExtensionDataRepositoryAdapter");
 			}
 
 			int result = query.executeUpdate();
 
-			System.out.println("Migration status updated query result is::" + result);
+			BeaSystemOut.println("Migration status updated query result is::" + result);
 
 		} catch (java.lang.Exception e) {
 
-			e.printStackTrace();
+			BeaSystemOut.printErr(e);
 
 		} finally {
 			if (isSessionOpen) {
@@ -1188,7 +1189,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 	public AuditLogMigRequestDTO downloadCcbAuditLog(String partyId, String auditType) throws Exception {
 		AuditLogMigRequestDTO request = null;
 		Query query = null;
-		System.out.println("AuditType = "+ auditType);
+		BeaSystemOut.println("AuditType = "+ auditType);
 		Session session = DataAccessManager.getManager().fetchCurrentSession();
 		if(auditType != null && auditType.equalsIgnoreCase("TRANSACTION")) {
 			query = session.getNamedQuery("getFileContentCCBAudit");
@@ -1198,13 +1199,13 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		}
 		query.setParameter("partyId", partyId);
 
-		System.out.println("Entered in Local User Ext for Audit");
+		BeaSystemOut.println("Entered in Local User Ext for Audit");
 
 		List<Object[]> result = query.list();
 		for (Object[] auditContent : result) {
 			if (auditContent[0] != null) {
 				request = new AuditLogMigRequestDTO();
-				System.out.println("Response from Audit Log : " + auditContent[0].toString());
+				BeaSystemOut.println("Response from Audit Log : " + auditContent[0].toString());
 				request.setFileName(auditContent[0].toString());
 				request.setFileContent((byte[]) auditContent[1]);
 			}
@@ -1236,7 +1237,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		
 		AuditLogMigRequestDTO request = null;
 		Query query = null;
-		System.out.println("accountId "+ accountId);
+		BeaSystemOut.println("accountId "+ accountId);
 		Session session = DataAccessManager.getManager().fetchCurrentSession();
 		
 		query = session.getNamedQuery("getPartyIDForAccount");
@@ -1289,18 +1290,18 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		String jvmID = new String();
 		Query query = null;
 		Boolean isSessionOpen = null;
-		System.out.println("Inside readTimerJvmID localAdapter");
-		System.out.println("TimerID: "+ id);
+		BeaSystemOut.println("Inside readTimerJvmID localAdapter");
+		BeaSystemOut.println("TimerID: "+ id);
 		Session session = null;
 		if (DataAccessManager.getManager().isSessionOpen()) {
-			System.out.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() entered in if");
+			BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() entered in if");
 			session = DataAccessManager.getManager().fetchCurrentSession();
-			System.out.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() in if session is::"
+			BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() in if session is::"
 					+ session.toString());
 		} else {
-			System.out.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() entered in else");
+			BeaSystemOut.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() entered in else");
 			session = DataAccessManager.getManager().openSession();
-			System.out
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut
 					.println("LocalUserExtensionDataRepositoryAdapter.readTimerJvmID() in else session is::"
 							+ session.toString());
 			isSessionOpen = true;

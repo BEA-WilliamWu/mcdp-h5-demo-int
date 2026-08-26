@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.eclipse.org/eclipselink/xsds/persistence/orm http://www.eclipse.org/eclipselink/xsds/eclipselink_orm_2_5.xsd">
+  <entity name="UserExtensionData" class="com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData">
+    <table name="DIGX_CZ_UM_EXTENSIONDATA"/>
+    <attributes>
+      <embedded-id attribute-type="com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionDataKey" name="userExtensionDataKey">
+        <attribute-override name="userExtensionKey">
+          <column name="ID"/>
+        </attribute-override>
+      </embedded-id>
+	   <basic attribute-type="java.lang.String" name="loginHoldStatus">
+				<column name="LOGIN_HOLD_STATUS"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="signerID">
+				<column name="SIGNER_ID"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="userID">
+				<column name="USER_ID"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="documentType">
+				<column name="DOC_TYPE"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="documentCountry">
+				<column name="DOC_COUNTRY"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="documentID">
+				<column name="DOC_ID"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="loginPinReferenceNo">
+				<column name="LOGIN_PIN_REF"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="signerPinReferenceNo">
+				<column name="SIGNER_PIN_REF"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="signerHoldStatus">
+				<column name="SIGNER_HOLD_STATUS"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="signerPinstatus">
+				<column name="SIGNER_PIN_STATUS"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="externalReferenceId">
+				<column name="EXT_REF_NO"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="loginID">
+				<column name="LOGIN_ID"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="signerHoldReason">
+				<column name="SIGNER_HOLD_REASON"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="loginHoldReason">
+				<column name="LOGIN_HOLD_REASON"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.Boolean" name="idDocSubmitted">
+				<column name="IS_DOC_SUB"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.Boolean" name="isAuthorisedPerson">
+				<column name="IS_AP"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="loginPinstatus">
+				<column name="LOGIN_PIN_STATUS"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="bounceBackReminder">
+				<column name="BOUNCE_BACK_REMINDER"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="cdcNo">
+				<column name="CDC_NO"/>
+				
+	  </basic>
+	 <basic attribute-type="java.lang.String" name="createdBy">
+				<column name="CREATED_BY" updatable="false"/>
+	  </basic>
+	  
+	  <basic attribute-type="com.ofss.fc.datatype.Date" name="creationDate">
+				<column name="CREATION_DATE"/>
+				<convert>DateTime</convert>
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="lastUpdatedBy">
+				<column name="LAST_UPDATED_BY"/>
+	  </basic>
+	  <basic attribute-type="com.ofss.fc.datatype.Date" name="lastUpdatedDate">
+				<column name="LAST_UPDATED_DATE"/>
+				<convert>DateTime</convert>
+	  </basic>
+	  <basic attribute-type="com.ofss.fc.enumeration.EntityStatus" name="entityStatus">
+				<column name="OBJECT_STATUS"/>
+				<enumerated>VALUE</enumerated>
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="mobileNo">
+				<column name="MOBILE_NO"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="loginPinType">
+				<column name="LGN_PIN_TYP"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.String" name="signerPinType">
+				<column name="SGN_PIN_TYP"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="forceChangeSigner">
+				<column name="FORCE_CHG_SIGNER"/>
+				
+	  </basic>
+		<version attribute-type="java.lang.Integer" name="version">
+        <column name="OBJECT_VERSION_NUMBER"/>
+      </version>
+	  <basic attribute-type="com.ofss.fc.datatype.Date" name="loginPinMapDate">
+				<column name="LGN_PIN_MAP_DATE"/>
+				<convert>DateTime</convert>
+	   </basic>
+	   <basic attribute-type="com.ofss.fc.datatype.Date" name="signPinMapDate">
+			<column name="SGN_PIN_MAP_DATE"/>
+			<convert>DateTime</convert>
+	   </basic>
+	   <basic attribute-type="com.ofss.fc.datatype.Date" name="signPinExpiryDate">
+			<column name="SGN_PIN_EXP_DATE"/>
+			<convert>DateTime</convert>
+	   </basic>
+	    <basic attribute-type="java.lang.String" name="mobileCode">
+				<column name="MOBILE_CODE"/>				
+	  </basic>
+	   <basic attribute-type="com.ofss.fc.datatype.Date" name="logOutDate">
+			<column name="LOG_OUT_DATE"/>
+			<convert>DateTime</convert>
+	   </basic>
+	   <basic attribute-type="java.lang.Boolean" name="isLoginPinReminder">
+				<column name="IS_LOGIN_PIN_REMINDER"/>
+				
+	  </basic>
+	   <basic attribute-type="java.lang.Boolean" name="isSignerPinReminder">
+				<column name="IS_SIGNER_PIN_REMINDER"/>
+				
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="userLocale">
+                <column name="USER_LOCALE"/>
+      </basic>
+	  <basic attribute-type="java.lang.Integer" name="signerAttempts">
+				<column name="SIGNER_ATTEMPTS"/>
+	  </basic>
+	  <basic attribute-type="java.lang.String" name="defaultUser">
+                <column name="DEFAULT_USER"/>
+      </basic>
+	  <basic attribute-type="java.lang.String" name="migtationStatus">
+                <column name="MIGRATION_STATUS"/>
+      </basic>
+	  <basic attribute-type="java.lang.String" name="migSignerUpdated">
+                <column name="MIG_SIGNER_UPDATED"/>
+      </basic>
+	   <basic attribute-type="com.ofss.fc.datatype.Date" name="ccbLastLoginDate">
+			<column name="CCB_LOGIN_TIME"/>
+			<convert>DateTime</convert>
+	   </basic>
+	   <basic attribute-type="java.lang.String" name="isMerchantUser">
+        	<column name="IS_MERCHANT_USER"/>
+      </basic>
+      <basic attribute-type="java.lang.String" name="securityQuestionsBypass">
+        	<column name="SEC_QUE_BYPASS"/>
+      </basic>
+      <basic attribute-type="java.lang.String" name="bypassCode">
+        	<column name="BYPASS_CODE"/>
+      </basic>
+      <basic attribute-type="com.ofss.fc.datatype.Date" name="bypassExpiryTime">
+			<column name="BYPASS_EXPIRY_TIME"/>
+			<convert>DateTime</convert>
+	   </basic>
+      <transient name="userChannelType"/>
+      <transient name="closeId"/>
+      <transient name="hthAccessSetupDone"/>
+    </attributes>
+  </entity>
+</entity-mappings>

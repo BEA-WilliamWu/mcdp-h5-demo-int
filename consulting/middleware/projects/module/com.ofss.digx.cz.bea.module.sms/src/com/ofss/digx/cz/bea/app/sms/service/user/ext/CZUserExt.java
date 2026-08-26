@@ -24,12 +24,12 @@ import com.ofss.digx.app.sms.service.user.password.policy.PasswordPolicy;
 import com.ofss.digx.common.constants.CommonAdapterConstants;
 import com.ofss.digx.common.constants.CommonAdapterFactoryConstants;
 import com.ofss.digx.cz.bea.app.common.adapter.hostuserdetails.IHostUserDetailsInvocationAdapter;
-import com.ofss.digx.cz.bea.app.customconfig.adapter.ICustomConfigAdapter;
+import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.LoginUserDetailsDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.LoginUserDetailsResponseDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.SignerUserDetailsDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.SignerUserDetailsResponseDTO;
-import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import com.ofss.digx.cz.bea.app.sms.dto.user.PasswordExpiryDTO;
 import com.ofss.digx.cz.bea.common.constants.CZCommonErrorConstants;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData;
@@ -155,19 +155,17 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 			userExtensionDomain.update(userExtensionDomain);
 		}
 		String taskId = (String) ThreadAttribute.get(ThreadAttribute.CURRENT_TASK);
-		System.out.print("delete repo for fmo" + taskId);
+		BeaSystemOut.println("delete repo for fmo" + taskId);
 		SessionContext session = (SessionContext) ThreadAttribute.get(ThreadAttribute.SESSION_CONTEXT);
 		IFMOHelperCallAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(IFMOHelperCallAdapter.class,
 				"callFMOHelper", DeterminantType.Enterprise);
 		if (com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin") != null
 				&& !(Boolean) com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin")) {
 		adapter.callFMOHelper(session, taskId, userExtensionDomain, true);
-			System.out.print("delete repo fmo for corporate user");
+			BeaSystemOut.println("delete repo fmo for corporate user");
 		}
 
 	}
-	
-	
 	/**
 	 * This is the extension point for
 	 * {@code User#softDelete(SessionContext, userDetails)}. Post hook process like
@@ -185,14 +183,14 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 	public void postSoftDelete(SessionContext sessionContext, UserDTO userDTO, TransactionStatus transactionStatus)
 			throws Exception {
 		if (sessionContext.getUserId() != null && userDTO.getUsername() != null) {
-			System.out.println("PostDelete username=" + userDTO.getUsername());
+			BeaSystemOut.println("PostDelete username=" + userDTO.getUsername());
 
 			IAdapterFactory hostUserDetailsAdapterFactory = AdapterFactoryConfigurator.getInstance()
 					.getAdapterFactory(HOSTUSER_DETAILS_ADAPTER_FACTORY);
 			IHostUserDetailsInvocationAdapter hostuserDetailsAdapter = (IHostUserDetailsInvocationAdapter) hostUserDetailsAdapterFactory
 					.getAdapter(HOST_USERDETAILS_INVOCATION_ADAPTER);
 			hostuserDetailsAdapter.deleteUserFromGroups(sessionContext, userDTO.getUsername());
-			System.out.println("Delete from groups done");
+			BeaSystemOut.println("Delete from groups done");
 		}
 	}
 	
@@ -253,14 +251,14 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 	@Override
 	public void postList(SessionContext sessionContext, UserDTO userDTO, UserListResponseDTO userListResponseDTO)
 			throws Exception {
-		System.out.println("=========================== In Service Executor postList ===========================");
+		BeaSystemOut.println("=========================== In Service Executor postList ===========================");
 		
-		System.out.println("com.ofss.digx.infra.thread.ThreadAttribute.get(isAdmin) "+com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin"));
+		BeaSystemOut.println("com.ofss.digx.infra.thread.ThreadAttribute.get(isAdmin) "+com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin"));
 		
 		if (com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin") != null
 				&& !(Boolean) com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin")) {
 			
-			System.out.println("UserDTOListFiltered postList inside if");
+			BeaSystemOut.println("UserDTOListFiltered postList inside if");
 			
 			List<UserDTO> UserDTOListFiltered = new ArrayList<UserDTO>();
 			

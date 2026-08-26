@@ -5,11 +5,11 @@
  */
 package com.ofss.digx.cz.bea.domain.sms.entity.user;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+
 import java.util.List;
 
 import com.ofss.digx.app.sms.dto.user.UserDTO;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import com.ofss.digx.cz.bea.app.sms.dto.user.AuditLogMigRequestDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.CZUserDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.CreateLoginUserRequestDto;
@@ -22,8 +22,6 @@ import com.ofss.digx.cz.bea.app.sms.dto.user.ResetUserDataDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserDetailsUpdationDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataResponseDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserPartyListDTO;
-import com.ofss.digx.cz.bea.common.util.CZAccountHelper;
-import com.ofss.digx.cz.bea.common.util.CZDateUtils;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.repository.UserExtensionDataRepository;
 import com.ofss.digx.domain.approval.entity.usergroup.UserGroup;
 import com.ofss.digx.domain.approval.entity.usergroup.UserGroupUser;
@@ -49,6 +47,8 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 	private String documentCountry;
 
 	private Boolean isAuthorisedPerson;
+	
+	private Boolean companyActivityLog;
 
 	private Date logOutDate;
 
@@ -163,6 +163,14 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 
 	public void setIsAuthorisedPerson(Boolean isAuthorisedPerson) {
 		this.isAuthorisedPerson = isAuthorisedPerson;
+	}
+
+	public Boolean getCompanyActivityLog() {
+		return companyActivityLog;
+	}
+
+	public void setCompanyActivityLog(Boolean companyActivityLog) {
+		this.companyActivityLog = companyActivityLog;
 	}
 
 	public String getDocumentID() {
@@ -561,17 +569,20 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 		return "UserExtensionData [loginHoldStatus=" + loginHoldStatus + ", signerID=" + signerID + ", userID=" + userID
 				+ ", documentType=" + documentType + ", userExtensionDataKey=" + userExtensionDataKey
 				+ ", documentCountry=" + documentCountry + ", isAuthorisedPerson=" + isAuthorisedPerson
-				+ ", logOutDate=" + logOutDate + ", documentID=" + documentID + ", loginPinReferenceNo="
-				+ loginPinReferenceNo + ", signerPinReferenceNo=" + signerPinReferenceNo + ", signerHoldStatus="
-				+ signerHoldStatus + ", signerPinstatus=" + signerPinstatus + ", externalReferenceId="
-				+ externalReferenceId + ", loginID=" + loginID + ", signerHoldReason=" + signerHoldReason
+				+ ", companyActivityLog=" + companyActivityLog + ", logOutDate=" + logOutDate
+				+ ", documentID=" + documentID + ", loginPinReferenceNo=" + loginPinReferenceNo
+				+ ", signerPinReferenceNo=" + signerPinReferenceNo + ", signerHoldStatus=" + signerHoldStatus
+				+ ", signerPinstatus=" + signerPinstatus + ", externalReferenceId=" + externalReferenceId + ", loginID="
+				+ loginID + ", bounceBackReminder=" + bounceBackReminder + ", signerHoldReason=" + signerHoldReason
 				+ ", loginHoldReason=" + loginHoldReason + ", idDocSubmitted=" + idDocSubmitted + ", loginPinstatus="
 				+ loginPinstatus + ", cdcNo=" + cdcNo + ", mobileNo=" + mobileNo + ", loginPinType=" + loginPinType
 				+ ", signerPinType=" + signerPinType + ", forceChangeSigner=" + forceChangeSigner + ", loginPinMapDate="
 				+ loginPinMapDate + ", signPinMapDate=" + signPinMapDate + ", signPinExpiryDate=" + signPinExpiryDate
 				+ ", mobileCode=" + mobileCode + ", isLoginPinReminder=" + isLoginPinReminder + ", isSignerPinReminder="
-				+ isSignerPinReminder + ", userLocale=" + userLocale + ", securityQuestionsBypass=" + securityQuestionsBypass
-				+ ", bypassExpiryTime=" + bypassExpiryTime + ", bypassCode=" + bypassCode + "]";
+				+ isSignerPinReminder + ", userLocale=" + userLocale + ", signerAttempts=" + signerAttempts
+				+ ", defaultUser=" + defaultUser + ", migtationStatus=" + migtationStatus + ", migSignerUpdated="
+				+ migSignerUpdated + ", ccbLastLoginDate=" + ccbLastLoginDate + ", isMerchantUser=" + isMerchantUser
+				+ "]";
 	}
 
 	public String getBounceBackReminder() {
@@ -589,31 +600,31 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 	}
 
 	public void updateDefaultUser(UserDetailsUpdationDTO userDetailsUpdationDTO, String userName) throws Exception {
-		System.out.println("Entered updateDefaultUser domain");
+		BeaSystemOut.println("Entered updateDefaultUser domain");
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
 		userExtensionDataRepository.updateDefaultUser(userDetailsUpdationDTO, userName);
-		System.out.println("Exited updateDefaultUser domain");
+		BeaSystemOut.println("Exited updateDefaultUser domain");
 
 	}
 
 	public void updateMigrationStatus(SessionContext sessionContext,
 			MigrationStatusRequestDto migrationStatusRequestDto) throws Exception {
-		System.out.println("User.updateMigrationStatus() before calling  reposity");
+		BeaSystemOut.println("User.updateMigrationStatus() before calling  reposity");
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
-		System.out.println("User.updateMigrationStatus() after calling  reposity");
+		BeaSystemOut.println("User.updateMigrationStatus() after calling  reposity");
 		userExtensionDataRepository.updateMigrationStatus(migrationStatusRequestDto);
 	}
 
 	public MigrationStatusResponseDto updateHostMigrationStatus(SessionContext sessionContext,
 			MigrationStatusRequestDto migrationStatusRequestDto) throws Exception {
-		System.out.println("UserExtensionData.readStatus()");
+		BeaSystemOut.println("UserExtensionData.readStatus()");
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
 		return userExtensionDataRepository.updateHostMigrationStatus(migrationStatusRequestDto);
 	}
 
 	public CreateLoginUserResponseDto migrateLoginUser(SessionContext sessionContext,
 			CreateLoginUserRequestDto createLoginUserRequestDto) throws Exception{
-		System.out.println("UserExtensionData.createLoginUser()");
+		BeaSystemOut.println("UserExtensionData.createLoginUser()");
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
 		return userExtensionDataRepository.migrateLoginUser(createLoginUserRequestDto);
 	}
@@ -656,7 +667,7 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 	}
 
 	public String readTimerJvmID(String id) throws Exception {
-		System.out.println("Inside readTimerJvmID domain");
+		BeaSystemOut.println("Inside readTimerJvmID domain");
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
 		return userExtensionDataRepository.readTimerJvmID(id);
 	}

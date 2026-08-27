@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <title>Cash in Hand Programme · offersCIH</title>
+    <style>
+      :root {
+        --bea-red: #d71920;
+        --ink: #20242a;
+        --muted: #67717d;
+        --line: #e3e7ea;
+        --surface: #ffffff;
+        --canvas: #eef1f3;
+        --promo: #f8e9e9;
+        --success: #16825d;
+        --warning: #a85f00;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: radial-gradient(circle at 15% 10%, rgba(215, 25, 32, 0.08), transparent 28rem), var(--canvas);
+      }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      .page-shell { width: min(1180px, 100%); margin: 0 auto; padding: 28px 20px 48px; }
+      .demo-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+      .demo-heading p, .demo-heading h1 { margin: 0; }
+      .demo-heading h1 { margin-top: 4px; font-size: clamp(24px, 3vw, 36px); letter-spacing: -0.03em; }
+      .eyebrow { color: var(--bea-red); font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+      .heading-note { max-width: 480px; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: right; }
+      .workspace { display: grid; grid-template-columns: minmax(360px, 430px) minmax(440px, 1fr); align-items: start; gap: 28px; }
+      .phone {
+        width: 100%; min-height: 820px; overflow: hidden; background: var(--surface); border: 8px solid #202329;
+        border-radius: 34px; box-shadow: 0 24px 70px rgba(25, 33, 43, 0.22);
+      }
+      .status-bar {
+        display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 18px;
+        color: white; background: var(--bea-red); font-size: 11px; font-weight: 700;
+      }
+      .status-icons { display: flex; align-items: center; gap: 6px; }
+      .signal { display: inline-flex; align-items: flex-end; gap: 1px; height: 10px; }
+      .signal i { width: 2px; background: white; border-radius: 2px; }
+      .signal i:nth-child(1) { height: 4px; }
+      .signal i:nth-child(2) { height: 6px; }
+      .signal i:nth-child(3) { height: 8px; }
+      .signal i:nth-child(4) { height: 10px; }
+      .app-header {
+        position: relative; display: flex; align-items: center; justify-content: center; height: 56px; padding: 0 54px;
+        color: white; background: var(--bea-red); font-size: 16px; font-weight: 700;
+      }
+      .back-button { position: absolute; left: 14px; width: 36px; height: 36px; border: 0; color: white; background: transparent; font-size: 30px; line-height: 1; }
+      .app-body { background: #f5f6f7; }
+      .placement-shell { padding: 12px 12px 4px; background: white; }
+      .placement-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: #7a838d; font-size: 10px; }
+      .placement-meta code { color: #535d68; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .placement-state { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+      .placement-state::before { width: 6px; height: 6px; content: ""; border-radius: 50%; background: var(--warning); }
+      .placement-state.live { color: var(--success); }
+      .placement-state.live::before { background: var(--success); }
+      .mcdp-view-wrap { position: relative; width: 100%; min-height: 84px; overflow: hidden; border-radius: 8px; }
+      .mcdp-view-wrap img { display: block; width: 100%; height: auto; }
+      .placement-preview, .mcdp-custom-result {
+        display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 84px;
+        padding: 12px; color: #481519; background: var(--promo); border: 1px solid #efd0d2; border-radius: 8px;
+      }
+      .promo-icon {
+        display: grid; place-items: center; width: 48px; height: 48px; overflow: hidden; background: white;
+        border-radius: 50%; box-shadow: 0 3px 10px rgba(112, 21, 27, 0.14);
+      }
+      .promo-icon img { width: 100%; height: 100%; object-fit: cover; }
+      .promo-icon svg { width: 30px; height: 30px; }
+      .promo-copy { min-width: 0; }
+      .promo-title { display: block; margin: 0 0 3px; font-size: 12px; font-weight: 800; line-height: 1.25; }
+      .promo-subtitle { display: block; margin: 0; font-size: 10px; line-height: 1.35; }
+      .promo-button {
+        min-width: 72px; padding: 9px 8px; color: white; background: var(--bea-red); border: 0; border-radius: 4px;
+        font-size: 10px; font-weight: 700; text-decoration: none; text-align: center;
+      }
+      .preview-label {
+        position: absolute; top: 4px; right: 5px; padding: 2px 5px; color: #7a3b3e; background: rgba(255, 255, 255, 0.8);
+        border-radius: 8px; font-size: 8px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+      }
+      .content-card { margin-top: 8px; padding: 18px 16px; background: white; }
+      .content-card h2 { margin: 0 0 10px; font-size: 15px; }
+      .kfs-link {
+        display: flex; align-items: center; justify-content: space-between; padding: 12px 0; color: #a20f16;
+        border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 700;
+      }
+      .field-label { display: block; margin: 18px 0 8px; color: #343a40; font-size: 11px; font-weight: 700; }
+      .card-select { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #d9dde1; border-radius: 6px; }
+      .card-art {
+        display: grid; place-items: center; width: 58px; height: 36px; color: white; background: linear-gradient(135deg, #151b2c, #747f91);
+        border-radius: 4px; font-size: 8px; font-style: italic; font-weight: 800;
+      }
+      .card-copy { flex: 1; font-size: 11px; line-height: 1.45; }
+      .amount-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 18px; }
+      .amount-row strong { color: var(--bea-red); font-size: 22px; }
+      .range-track { position: relative; height: 5px; margin: 18px 4px 8px; background: #d9dce0; border-radius: 5px; }
+      .range-track::before { display: block; width: 48%; height: 100%; content: ""; background: var(--bea-red); border-radius: 5px; }
+      .range-track::after {
+        position: absolute; top: 50%; left: 48%; width: 18px; height: 18px; content: ""; transform: translate(-50%, -50%);
+        background: white; border: 4px solid var(--bea-red); border-radius: 50%;
+      }
+      .range-labels, .summary-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+      .term-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .term-grid button { padding: 9px 4px; color: #49515b; background: white; border: 1px solid #ccd1d6; border-radius: 5px; font-size: 10px; }
+      .term-grid button.selected { color: var(--bea-red); background: #fff6f6; border-color: var(--bea-red); font-weight: 800; }
+      .summary-row { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--line); }
+      .summary-row strong { color: var(--ink); font-size: 12px; }
+      .disclaimer { margin: 14px 0; color: #7c848d; font-size: 9px; line-height: 1.45; }
+      .proceed { width: 100%; padding: 13px; color: white; background: var(--bea-red); border: 0; border-radius: 5px; font-weight: 800; }
+      .control-panel {
+        overflow: hidden; background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(215, 219, 223, 0.95);
+        border-radius: 18px; box-shadow: 0 16px 44px rgba(31, 39, 49, 0.12);
+      }
+      .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px 16px; border-bottom: 1px solid var(--line); }
+      .panel-header h2, .panel-header p { margin: 0; }
+      .panel-header h2 { font-size: 18px; }
+      .panel-header p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .status-stack { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+      .pill { padding: 5px 8px; color: #5a626c; background: #eff1f3; border-radius: 99px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+      .pill.ok { color: #0c6646; background: #e0f5ec; }
+      .pill.bad { color: #9b1f25; background: #fbe5e6; }
+      .config-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 18px 22px; }
+      .config-form label { display: grid; gap: 5px; color: #4b535d; font-size: 11px; font-weight: 700; }
+      .config-form label.full { grid-column: 1 / -1; }
+      .config-form input, .config-form select {
+        width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid #d7dce0; border-radius: 7px; font-size: 12px;
+      }
+      .security-note {
+        grid-column: 1 / -1; padding: 10px 11px; color: #60522f; background: #fff8df; border: 1px solid #f0dfa3;
+        border-radius: 7px; font-size: 11px; line-height: 1.45;
+      }
+      .button-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 22px 18px; }
+      .button-row button { padding: 9px 12px; color: white; background: #343b44; border: 0; border-radius: 7px; font-size: 11px; font-weight: 800; }
+      .button-row button.primary { background: var(--bea-red); }
+      .button-row button.ghost { color: #4c555f; background: #edf0f2; }
+      .effective-url {
+        margin: 0 22px 16px; padding: 10px 12px; overflow-wrap: anywhere; color: #4b5560; background: #f6f7f8;
+        border-radius: 7px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px;
+      }
+      .log-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px 10px; border-top: 1px solid var(--line); }
+      .log-header strong { font-size: 13px; }
+      .log-list { display: grid; gap: 8px; max-height: 330px; overflow: auto; padding: 0 22px 22px; }
+      .log-list article { padding: 10px; color: #d8dee7; background: #20252c; border-radius: 7px; }
+      .log-list header { display: flex; justify-content: space-between; gap: 12px; color: #9ba8b7; font-size: 9px; }
+      .log-list header strong { color: #f2f4f7; }
+      .log-list header strong.ok { color: #6ee7b7; }
+      .log-list header strong.bad { color: #fda4af; }
+      .log-list pre { margin: 7px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; font: 9px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+      @media (max-width: 820px) {
+        .page-shell { padding: 0 0 30px; }
+        .demo-heading { display: none; }
+        .workspace { display: block; }
+        .phone { min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
+        .control-panel { margin: 18px 12px 0; border-radius: 12px; }
+        .config-form { grid-template-columns: 1fr; }
+        .config-form label.full, .security-note { grid-column: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="demo-heading">
+        <div>
+          <p class="eyebrow">CMS · IMK · MCDP integration demo</p>
+          <h1>CIH_Offer placement</h1>
+        </div>
+        <p class="heading-note">
+          The Cash in Hand page is the client surface. CMS owns the material,
+          IMK owns placement and campaign configuration, and MCDP decides what
+          the client receives for <strong>offersCIH</strong>.
+        </p>
+      </header>
+
+      <div class="workspace">
+        <section class="phone" aria-label="Cash in Hand mobile client demo">
+          <div class="status-bar">
+            <span>9:41</span>
+            <span class="status-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span>▰</span></span>
+          </div>
+          <header class="app-header">
+            <button class="back-button" type="button" aria-label="Back">‹</button>
+            Cash in Hand Programme
+          </header>
+
+          <div class="app-body">
+            <section class="placement-shell" aria-label="MCDP offersCIH placement">
+              <div class="placement-meta">
+                <span>Personalised offer</span>
+                <span id="placementState" class="placement-state">Preview</span>
+                <code id="placementLabel">offersCIH</code>
+              </div>
+              <div id="offersCihMount" class="mcdp-view-wrap" data-mcdp-code="offersCIH">
+                <article class="placement-preview" data-preview="true">
+                  <span class="preview-label">Demo preview</span>
+                  <span class="promo-icon" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" role="img">
+                      <circle cx="24" cy="24" r="23" fill="#fff1f1"/>
+                      <path d="M14 18h20v16H14z" fill="#d71920"/>
+                      <path d="M17 15h14v7H17z" fill="#f9c8ca"/>
+                      <circle cx="24" cy="26" r="4" fill="#fff"/>
+                      <path d="M11 31c5-3 9-3 13 0 4-3 8-3 13 0" fill="none" stroke="#8d1117" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <span class="promo-copy">
+                    <strong class="promo-title">Cash rebate offer</strong>
+                    <span class="promo-subtitle">Cash out now and enjoy up to HK$10,000 cash rebate. T&amp;C apply.</span>
+                  </span>
+                  <a class="promo-button" href="#programme-details">Learn more</a>
+                </article>
+              </div>
+            </section>
+
+            <section id="programme-details" class="content-card">
+              <h2>Cash in Hand Programme</h2>
+              <div class="kfs-link"><span>Key Facts Statement</span><span>›</span></div>
+              <span class="field-label">Select a credit card</span>
+              <div class="card-select">
+                <span class="card-art">VISA</span>
+                <span class="card-copy">BEA Visa Card<br>•••• 6688</span>
+                <span>⌄</span>
+              </div>
+              <div class="amount-row"><span class="field-label">Cash amount</span><strong>HK$50,000</strong></div>
+              <div class="range-track" aria-hidden="true"></div>
+              <div class="range-labels"><span>HK$5,000</span><span>HK$100,000</span></div>
+              <span class="field-label">Repayment period</span>
+              <div class="term-grid">
+                <button type="button">6 months</button>
+                <button type="button" class="selected">12 months</button>
+                <button type="button">18 months</button>
+              </div>
+              <div class="summary-row"><span>Monthly repayment</span><strong>HK$4,315.00</strong></div>
+              <div class="summary-row"><span>Handling fee</span><strong>HK$600.00</strong></div>
+              <p class="disclaimer">The above figures are for reference only. The actual amount, fees and repayment schedule are subject to the Bank's final approval.</p>
+              <button class="proceed" type="button">Proceed</button>
+            </section>
+          </div>
+        </section>
+
+        <aside class="control-panel" aria-label="MCDP diagnostics">
+          <header class="panel-header">
+            <div>
+              <h2>Live integration diagnostics</h2>
+              <p>Only non-secret client identifiers are stored in this browser.</p>
+            </div>
+            <div class="status-stack"><span id="sdkStatus" class="pill">SDK</span><span id="mgsStatus" class="pill">MGS idle</span></div>
+          </header>
+          <form class="config-form" onsubmit="return false">
+            <label>Endpoint
+              <select id="endpointPreset">
+                <option value="mpaas-proxy">Same-origin ACS proxy</option>
+                <option value="acs-direct">ACS ALB direct (HTTP/443)</option>
+                <option value="bea-uat">BEA UAT direct</option>
+                <option value="ali-public">Alibaba public endpoint</option>
+              </select>
+            </label>
+            <label>Placement code<input id="placementCode" value="offersCIH" autocomplete="off"></label>
+            <label>App ID<input id="appId" autocomplete="off"></label>
+            <label>Workspace ID<input id="workspaceId" autocomplete="off"></label>
+            <label>Tenant ID<input id="tenantId" autocomplete="off"></label>
+            <label>User ID<input id="userId" autocomplete="off"></label>
+            <label>UTDID<input id="utdid" autocomplete="off"></label>
+            <label>Last initialised<input id="lastInit" value="—" readonly></label>
+            <label class="full">Report URL<input id="reportURL" autocomplete="off"></label>
+            <label class="full">Upload URL<input id="uploadURL" autocomplete="off"></label>
+            <div class="security-note">
+              App Secret, signing private keys and Alibaba Cloud AccessKeys must remain in the server-side
+              <code>mpaas-proxy</code>. This page never asks for or persists them.
+            </div>
+          </form>
+          <div class="button-row">
+            <button id="requestButton" class="primary" type="button">Refresh offersCIH</button>
+            <button id="probeButton" type="button">Probe proxy</button>
+            <button id="resetButton" class="ghost" type="button">Restore defaults</button>
+            <button id="clearLogButton" class="ghost" type="button">Clear log</button>
+          </div>
+          <div id="effectiveReportURL" class="effective-url"></div>
+          <div class="log-header"><strong>Request log</strong></div>
+          <div id="logList" class="log-list" aria-live="polite"></div>
+        </aside>
+      </div>
+    </main>
+
+    <script src="./vendor/mpaas-mcdp-h5-render/index.js"></script>
+    <script>
+      const DEFAULT_APP_ID = "ALIHK291A058251056";
+      const DEFAULT_WORKSPACE_ID = "UAT";
+      const DEFAULT_TENANT_ID = "VEXJGYYS";
+      const ACS_DIRECT_PROXY_URL = "http://10.23.34.52:443/mpaas-proxy";
+      const STORAGE_KEY = `mcdp-offers-cih-v2-${DEFAULT_APP_ID}-${DEFAULT_WORKSPACE_ID}`;
+
+      function proxyOrigin() {
+        if (["http:", "https:"].includes(window.location.protocol)) return `${window.location.origin}/mpaas-proxy`;
+        return "http://localhost:8080/mpaas-proxy";
+      }
+
+      function isDirectALBTestPage() {
+        return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
+          && window.location.port === "3517";
+      }
+
+      const ENDPOINT_PRESETS = {
+        "mpaas-proxy": { reportURL: proxyOrigin(), uploadURL: `${proxyOrigin()}/mdap` },
+        "acs-direct": { reportURL: ACS_DIRECT_PROXY_URL, uploadURL: `${ACS_DIRECT_PROXY_URL}/mdap` },
+        "bea-uat": { reportURL: "https://mgsuat.hkbea.com/obk", uploadURL: "https://maspuat.hkbea.com/obk" },
+        "ali-public": { reportURL: "https://mgw.mpaas.cn-hongkong.aliyuncs.com", uploadURL: "https://mdap.mpaas.cn-hongkong.aliyuncs.com" }
+      };
+      const DEFAULT_ENDPOINT_PRESET = isDirectALBTestPage() ? "acs-direct" : "mpaas-proxy";
+      const DEFAULT_ENDPOINT = ENDPOINT_PRESETS[DEFAULT_ENDPOINT_PRESET];
+      const DEFAULT_CONFIG = {
+        endpointPreset: DEFAULT_ENDPOINT_PRESET,
+        reportURL: DEFAULT_ENDPOINT.reportURL,
+        uploadURL: DEFAULT_ENDPOINT.uploadURL,
+        appId: DEFAULT_APP_ID, workspaceId: DEFAULT_WORKSPACE_ID, tenantId: DEFAULT_TENANT_ID,
+        userId: "web-demo-user", utdid: "web-demo-browser", placementCode: "offersCIH"
+      };
+      const FIELD_IDS = ["endpointPreset", "reportURL", "uploadURL", "appId", "workspaceId", "tenantId", "userId", "utdid", "placementCode"];
+      let diagnosticsInstalled = false;
+      let customCreativeRendered = false;
+
+      function getElement(id) { return document.getElementById(id); }
+      function nowTime() { return new Date().toLocaleTimeString("en-GB", { hour12: false }); }
+      function escapeHTML(value) {
+        return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      }
+      function safeLink(value) {
+        const link = String(value || "").trim();
+        if (!link) return "#programme-details";
+        return /^(https?:|[a-z][a-z0-9+.-]*:|\/|#)/i.test(link) ? link : "#programme-details";
+      }
+      function log(title, payload, tone) {
+        const article = document.createElement("article");
+        const body = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+        article.innerHTML = `<header><span>${escapeHTML(nowTime())}</span><strong class="${tone || ""}">${escapeHTML(title)}</strong></header><pre>${escapeHTML(body)}</pre>`;
+        const list = getElement("logList");
+        list.prepend(article);
+        while (list.children.length > 20) list.removeChild(list.lastElementChild);
+      }
+      function readSavedConfig() {
+        try {
+          const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+          return value && typeof value === "object" ? value : {};
+        } catch (error) { return {}; }
+      }
+      function getConfig() {
+        return FIELD_IDS.reduce((config, id) => { config[id] = getElement(id).value.trim(); return config; }, {});
+      }
+      function setConfig(config) {
+        for (const id of FIELD_IDS) if (Object.prototype.hasOwnProperty.call(config, id)) getElement(id).value = config[id] == null ? "" : config[id];
+      }
+      function joinURL(base, path) { return `${String(base || "").replace(/\/+$/, "")}/${String(path || "").replace(/^\/+/, "")}`; }
+      function maybeJSON(value) {
+        if (typeof value !== "string") return value;
+        const trimmed = value.trim();
+        if (!trimmed || !["{", "["].includes(trimmed[0])) return value;
+        try { return JSON.parse(trimmed); } catch (error) { return value; }
+      }
+      function walk(value, visit, seen) {
+        const parsed = maybeJSON(value);
+        if (!parsed || typeof parsed !== "object") return null;
+        const visited = seen || new Set();
+        if (visited.has(parsed)) return null;
+        visited.add(parsed);
+        const direct = visit(parsed);
+        if (direct) return direct;
+        const children = Array.isArray(parsed) ? parsed : Object.values(parsed);
+        for (const child of children) {
+          const result = walk(child, visit, visited);
+          if (result) return result;
+        }
+        return null;
+      }
+      function findPlacement(payload, code) {
+        return walk(payload, (value) => {
+          if (Array.isArray(value)) return null;
+          const candidates = [value.zoneCode, value.spaceCode, value.placementCode, value.adSpaceCode, value.code];
+          return candidates.some((item) => String(item || "") === code) ? value : null;
+        });
+      }
+      function imageURL(value) {
+        const parsed = maybeJSON(value);
+        const first = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (first && typeof first === "object") return first.fileUrl || first.url || first.hrefUrl || first.src || "";
+        return typeof first === "string" ? first : "";
+      }
+      function normaliseAttrData(value) {
+        const parsed = maybeJSON(value);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        const keys = ["image", "subtitle", "button_text", "link_url", "main_title", "activity_desc"];
+        return keys.some((key) => Object.prototype.hasOwnProperty.call(parsed, key)) ? parsed : null;
+      }
+      function findCmsAttrData(placement) {
+        for (const language of ["en", "tc", "sc"]) {
+          const result = walk(placement, (value) => {
+            if (Array.isArray(value) || String(value.language || "").toLowerCase() !== language) return null;
+            return normaliseAttrData(value.attrData) || normaliseAttrData(value);
+          });
+          if (result) return result;
+        }
+        return walk(placement, (value) => Array.isArray(value) ? null : normaliseAttrData(value.attrData) || normaliseAttrData(value));
+      }
+      function fallbackIcon() {
+        return '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="23" fill="#fff1f1"/><path d="M14 18h20v16H14z" fill="#d71920"/><path d="M17 15h14v7H17z" fill="#f9c8ca"/><circle cx="24" cy="26" r="4" fill="#fff"/><path d="M11 31c5-3 9-3 13 0 4-3 8-3 13 0" fill="none" stroke="#8d1117" stroke-width="2"/></svg>';
+      }
+      function renderCmsCreative(attrData) {
+        const image = imageURL(attrData.image);
+        const title = attrData.main_title || "Cash rebate offer";
+        const subtitle = attrData.subtitle || attrData.activity_desc || "View your personalised offer.";
+        const buttonText = attrData.button_text || "Learn more";
+        const link = safeLink(attrData.link_url);
+        getElement("offersCihMount").innerHTML = [
+          '<article class="mcdp-custom-result"><span class="promo-icon" aria-hidden="true">',
+          image ? `<img src="${escapeHTML(image)}" alt="">` : fallbackIcon(),
+          `</span><span class="promo-copy"><strong class="promo-title">${escapeHTML(title)}</strong>`,
+          `<span class="promo-subtitle">${escapeHTML(subtitle)}</span></span>`,
+          `<a class="promo-button" href="${escapeHTML(link)}">${escapeHTML(buttonText)}</a></article>`
+        ].join("");
+        customCreativeRendered = true;
+        setPlacementState("Live MCDP", true);
+      }
+      function previewMarkup() {
+        return `<article class="placement-preview" data-preview="true"><span class="preview-label">Demo preview</span><span class="promo-icon" aria-hidden="true">${fallbackIcon()}</span><span class="promo-copy"><strong class="promo-title">Cash rebate offer</strong><span class="promo-subtitle">Cash out now and enjoy up to HK$10,000 cash rebate. T&amp;C apply.</span></span><a class="promo-button" href="#programme-details">Learn more</a></article>`;
+      }
+      function setPlacementState(label, live) {
+        const element = getElement("placementState");
+        element.textContent = label;
+        element.classList.toggle("live", Boolean(live));
+      }
+      function resetPlacement(code) {
+        const mount = getElement("offersCihMount");
+        customCreativeRendered = false;
+        mount.dataset.mcdpCode = code;
+        mount.innerHTML = previewMarkup();
+        getElement("placementLabel").textContent = code;
+        setPlacementState("Preview", false);
+      }
+      function isMcdpRequest(url) { return Boolean(url) && (String(url).includes("/mgw.htm") || String(url).includes("/mdap")); }
+      function decodeHeader(value) { try { return decodeURIComponent(value || ""); } catch (error) { return value || ""; } }
+      function handleGatewayResponse(url, status, headers, body) {
+        if (String(url).includes("/mgw.htm")) {
+          getElement("mgsStatus").textContent = headers.resultStatus || `HTTP ${status || 0}`;
+          getElement("mgsStatus").className = `pill ${status >= 200 && status < 400 ? "ok" : "bad"}`;
+        }
+        const code = getConfig().placementCode;
+        const placement = findPlacement(maybeJSON(body), code);
+        const attrData = placement ? findCmsAttrData(placement) : null;
+        log("MCDP response", {
+          url, status, headers, placementCode: code, placementFound: Boolean(placement), cmsMaterialFound: Boolean(attrData),
+          bodyPreview: String(body || "").slice(0, 900)
+        }, status >= 200 && status < 400 ? "ok" : "bad");
+        if (attrData) window.setTimeout(() => renderCmsCreative(attrData), 60);
+        else if (placement) window.setTimeout(checkSdkRender, 600);
+      }
+      function installDiagnostics() {
+        if (diagnosticsInstalled) return;
+        diagnosticsInstalled = true;
+        const originalOpen = window.XMLHttpRequest.prototype.open;
+        const originalSend = window.XMLHttpRequest.prototype.send;
+        window.XMLHttpRequest.prototype.open = function (method, url) { this.__mcdpURL = url; return originalOpen.apply(this, arguments); };
+        window.XMLHttpRequest.prototype.send = function () {
+          if (isMcdpRequest(this.__mcdpURL)) {
+            this.addEventListener("loadend", function () {
+              handleGatewayResponse(this.__mcdpURL, this.status, {
+                resultStatus: this.getResponseHeader("result-status") || "",
+                memo: decodeHeader(this.getResponseHeader("memo")),
+                traceId: this.getResponseHeader("x-mgw-traceid") || ""
+              }, typeof this.responseText === "string" ? this.responseText : "");
+            });
+          }
+          return originalSend.apply(this, arguments);
+        };
+        if (window.fetch) {
+          const originalFetch = window.fetch.bind(window);
+          window.fetch = function (input, init) {
+            const requestURL = typeof input === "string" ? input : input && input.url;
+            return originalFetch(input, init).then((response) => {
+              if (isMcdpRequest(requestURL || response.url)) response.clone().text().then((body) => {
+                handleGatewayResponse(response.url || requestURL, response.status, {
+                  resultStatus: response.headers.get("result-status") || "",
+                  memo: decodeHeader(response.headers.get("memo")),
+                  traceId: response.headers.get("x-mgw-traceid") || ""
+                }, body);
+              }).catch(() => {});
+              return response;
+            });
+          };
+        }
+      }
+      function checkSdkRender() {
+        if (customCreativeRendered) return;
+        const mount = getElement("offersCihMount");
+        const preview = mount.querySelector("[data-preview='true']");
+        if (!preview && mount.children.length === 0) {
+          mount.innerHTML = previewMarkup();
+          setPlacementState("Preview", false);
+          return;
+        }
+        const nonPreview = Array.from(mount.children).some((child) => child !== preview);
+        if (nonPreview || (!preview && mount.children.length > 0)) {
+          if (preview) preview.remove();
+          setPlacementState("Live MCDP", true);
+        }
+      }
+      function requestMcdp() {
+        const config = getConfig();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        resetPlacement(config.placementCode);
+        installDiagnostics();
+        getElement("effectiveReportURL").textContent = `MGS: ${joinURL(config.reportURL, "mgw.htm")}`;
+        getElement("mgsStatus").textContent = "MGS requesting";
+        getElement("mgsStatus").className = "pill";
+        if (!window.McdpView || typeof window.McdpView.init !== "function") {
+          getElement("sdkStatus").textContent = "SDK missing";
+          getElement("sdkStatus").className = "pill bad";
+          log("SDK error", "window.McdpView was not loaded.", "bad");
+          return;
+        }
+        const initConfig = {
+          appId: config.appId, workspaceId: config.workspaceId, tenantId: config.tenantId, tenantid: config.tenantId,
+          reportURL: config.reportURL, uploadURL: config.uploadURL, userId: config.userId, utdid: config.utdid,
+          extraHeaderInfos: { tenantId: config.tenantId, tenantid: config.tenantId }
+        };
+        try {
+          window.McdpView.init(initConfig);
+          getElement("sdkStatus").textContent = "SDK initialised";
+          getElement("sdkStatus").className = "pill ok";
+          getElement("lastInit").value = nowTime();
+          log("McdpView.init", { ...initConfig, placementCode: config.placementCode, security: "No App Secret is present in the browser configuration." }, "ok");
+          [500, 1500, 4000, 9000].forEach((delay) => window.setTimeout(checkSdkRender, delay));
+        } catch (error) {
+          getElement("sdkStatus").textContent = "SDK failed";
+          getElement("sdkStatus").className = "pill bad";
+          log("McdpView.init failed", error.message, "bad");
+        }
+      }
+      function probeNetwork() {
+        const target = joinURL(getConfig().reportURL, "healthz");
+        fetch(target, { cache: "no-store" }).then((response) => response.text().then((body) => {
+          log("Proxy probe", { target, status: response.status, bodyPreview: body.slice(0, 500) }, response.ok ? "ok" : "bad");
+        })).catch((error) => log("Proxy probe failed", { target, message: error.message }, "bad"));
+      }
+      function applyEndpointPreset() {
+        const preset = ENDPOINT_PRESETS[getElement("endpointPreset").value];
+        if (preset) { getElement("reportURL").value = preset.reportURL; getElement("uploadURL").value = preset.uploadURL; }
+      }
+      function initPage() {
+        setConfig({ ...DEFAULT_CONFIG, ...readSavedConfig() });
+        getElement("sdkStatus").textContent = window.McdpView ? "SDK loaded" : "SDK missing";
+        getElement("sdkStatus").className = `pill ${window.McdpView ? "ok" : "bad"}`;
+        getElement("endpointPreset").addEventListener("change", applyEndpointPreset);
+        getElement("requestButton").addEventListener("click", requestMcdp);
+        getElement("probeButton").addEventListener("click", probeNetwork);
+        getElement("resetButton").addEventListener("click", () => { localStorage.removeItem(STORAGE_KEY); setConfig(DEFAULT_CONFIG); requestMcdp(); });
+        getElement("clearLogButton").addEventListener("click", () => { getElement("logList").innerHTML = ""; });
+        new MutationObserver(checkSdkRender).observe(getElement("offersCihMount"), { childList: true, subtree: true });
+        requestMcdp();
+      }
+      initPage();
+    </script>
+  </body>
+</html>

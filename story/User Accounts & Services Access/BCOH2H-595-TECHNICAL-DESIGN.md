@@ -174,6 +174,7 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 | `hth-api-service-mapping/*` | 每账户 API Selection。 |
 | `review-hth-user-access/*` | Maker/Checker Review 和 Submit。 |
 | `account-access-management/META-INF/UIAuthorization.json` | Search/Accounts/Write Component Mapping。 |
+| `extensions/override/task-component-mapping.js` | 将 Create/Edit/Delete Task 映射到 Checker、Pending Approval 和 Activity Log 共用的只读 Review Component。 |
 | `extensions/resources/nls/access-management.js` | HTH 页面、校验和 Pending 文案。 |
 
 ## 4. REST 和 DTO Contract
@@ -609,6 +610,8 @@ HostToHostUserAccess.delete
 | `UAT_N_HUA_DEL` | Delete | approval, audit, blackout |
 
 三项 Task 都挂在既有 `UAT` Parent，并在 `DIGX_CM_RESOURCE_TASK_REL` 映射到对应 Write Service。`SubmitHostToHostUserAccessApprovalAssembler` 同时注册到 Base 和 Override Configuration；`TAB_CHANGE_TASK_CODES` 合并加入三项 Task Code。
+
+三个 Write Service 同时声明 `PERFORM` 和 `APPROVE` Entitlement；前端 Task Mapping 将三个 Task Code 统一解析为 `review-hth-user-access`，保证 Checker、Pending Approval 和 Activity Log 详情都能加载相同的只读请求快照。
 
 Approval Assembler 使用完整 Context 的 Hash 作为 Entity Identifier，不使用 Account Number，避免一项多账户请求产生不稳定身份或在 Task Metadata 暴露 Account Number。
 

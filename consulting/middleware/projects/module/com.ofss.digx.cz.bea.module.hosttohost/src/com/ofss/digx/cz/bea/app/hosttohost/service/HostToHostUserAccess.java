@@ -238,6 +238,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   @Override
   @Entitlement(name = "Create Host To Host User Access", action = ActionType.PERFORM,
       requiredResources = {})
+  @Entitlement(name = "Create Host To Host User Access", action = ActionType.APPROVE,
+      requiredResources = {})
   @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
       subCategory = EntitlementSubCategory.Party_Preference)
   @Task(id = "UAT_N_HUA_NEW", parent = "UAT", name = "HTH User Access - Create",
@@ -253,6 +255,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   @Override
   @Entitlement(name = "Edit Host To Host User Access", action = ActionType.PERFORM,
       requiredResources = {})
+  @Entitlement(name = "Edit Host To Host User Access", action = ActionType.APPROVE,
+      requiredResources = {})
   @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
       subCategory = EntitlementSubCategory.Party_Preference)
   @Task(id = "UAT_N_HUA_EDT", parent = "UAT", name = "HTH User Access - Edit",
@@ -267,6 +271,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   /** Submits soft deletion of an existing access context for approval. */
   @Override
   @Entitlement(name = "Delete Host To Host User Access", action = ActionType.PERFORM,
+      requiredResources = {})
+  @Entitlement(name = "Delete Host To Host User Access", action = ActionType.APPROVE,
       requiredResources = {})
   @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
       subCategory = EntitlementSubCategory.Party_Preference)

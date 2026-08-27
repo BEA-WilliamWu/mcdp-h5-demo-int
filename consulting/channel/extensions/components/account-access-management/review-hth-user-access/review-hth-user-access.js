@@ -155,7 +155,13 @@ define([
                 }, self);
             }).fail(function (error) {
                 const response = error && error.responseJSON ? error.responseJSON : error,
-                    code = response && (response.errorCode || response.message);
+                    message = response && response.message,
+                    statusMessage = response && response.status && response.status.message,
+                    responseCode = response && response.errorCode,
+                    messageCode = typeof message === "string" ? message : message && message.code,
+                    statusCode = typeof statusMessage === "string"
+                        ? statusMessage : statusMessage && statusMessage.code,
+                    code = responseCode || messageCode || statusCode;
 
                 rootParams.baseModel.showMessages(null,
                     [typeof code === "string" ? code : self.nls.info.hthSubmitFailed], "ERROR");

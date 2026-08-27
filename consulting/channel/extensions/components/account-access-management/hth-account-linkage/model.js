@@ -8,10 +8,44 @@ define([
     /*
      * HTH access transport wrapper. OBDX can return a successful HTTP status with a failed business
      * status, so both transport and response status are normalized into the same Deferred failure
-     * path consumed by the view models.
+     * path consumed by the view models. Approval-required is the one exception: older OBDX releases
+     * report a successfully staged maker request as HTTP 400 with DIGX_APPROVAL_REQUIRED. That
+     * transport response is normalized to the standard HTTP 202 confirmation contract.
      */
-    const baseService = BaseService.getInstance(),
+    const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
+        APPROVAL_ACCEPTED_STATUS = 202,
+        baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
+        responseBody = function (error) {
+            return error && error.responseJSON ? error.responseJSON : error;
+        },
+        isApprovalRequiredResponse = function (error) {
+            const response = responseBody(error) || {},
+                status = response.status || {},
+                message = response.message || status.message;
+
+            return !!(message && message.code === APPROVAL_REQUIRED_CODE);
+        },
+        normalizeApprovalRequiredResponse = function (error) {
+            const response = Object.assign({}, responseBody(error) || {}),
+                status = Object.assign({}, response.status || {});
+
+            status.result = status.result || response.result || "SUCCESSFUL";
+
+            status.message = status.message || response.message || {
+                code: APPROVAL_REQUIRED_CODE,
+                type: "INFO"
+            };
+
+            if (status.receiptAvailable === undefined) {
+                status.receiptAvailable = false;
+            }
+
+            response.status = status;
+            baseModel.injectProps(response, "getResponseStatus", APPROVAL_ACCEPTED_STATUS);
+
+            return response;
+        },
         isFailureResponse = function (data) {
             const result = data && data.status && data.status.result
                 ? String(data.status.result).toUpperCase() : "";
@@ -32,6 +66,13 @@ define([
                         deferred.resolve(data, status, jqXhr);
                     },
                     error: function (error) {
+                        if (isApprovalRequiredResponse(error)) {
+                            deferred.resolve(normalizeApprovalRequiredResponse(error),
+                                "success", error);
+
+                            return;
+                        }
+
                         deferred.reject(error);
                     }
                 });

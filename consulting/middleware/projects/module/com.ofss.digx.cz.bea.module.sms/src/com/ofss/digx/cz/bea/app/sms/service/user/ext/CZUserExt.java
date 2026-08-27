@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.prefs.Preferences;
 import java.util.Locale;
 import java.util.Map;
 
@@ -24,30 +25,49 @@ import com.ofss.digx.app.sms.service.user.password.policy.PasswordPolicy;
 import com.ofss.digx.common.constants.CommonAdapterConstants;
 import com.ofss.digx.common.constants.CommonAdapterFactoryConstants;
 import com.ofss.digx.cz.bea.app.common.adapter.hostuserdetails.IHostUserDetailsInvocationAdapter;
+import com.ofss.digx.cz.bea.app.customconfig.adapter.ICustomConfigAdapter;
+import com.ofss.digx.cz.bea.app.crm.adapter.ICRMAsserterCallAdapter;
+import com.ofss.digx.cz.bea.app.gaas.dto.access.GaasAccessListDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.LoginUserDetailsDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.LoginUserDetailsResponseDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.SignerUserDetailsDTO;
 import com.ofss.digx.cz.bea.app.hostuserdetails.dto.SignerUserDetailsResponseDTO;
+import com.ofss.digx.cz.bea.app.itoken.dto.ITokenCancelResponseDTO;
+import com.ofss.digx.cz.bea.app.itoken.dto.ITokenDTO;
 import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
+import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
 import com.ofss.digx.cz.bea.app.sms.dto.user.PasswordExpiryDTO;
+import com.ofss.digx.cz.bea.app.sms.dto.user.UserTokenDataDTO;
 import com.ofss.digx.cz.bea.common.constants.CZCommonErrorConstants;
+import com.ofss.digx.cz.bea.domain.sms.entity.user.RevokedUser;
+import com.ofss.digx.cz.bea.domain.sms.entity.user.RevokedUserKey;
+import com.ofss.digx.cz.bea.common.constants.UserItokenConstants;
+import com.ofss.digx.cz.bea.common.framework.crm.CRMConstants;
+import com.ofss.digx.cz.bea.common.framework.crm.CRMInputData;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionDataKey;
 import com.ofss.digx.cz.bea.extxface.fmo.adapter.IFMOHelperCallAdapter;
+import com.ofss.digx.cz.bea.extxface.gaas.adapter.IGaasAccessAdapter;
+import com.ofss.digx.cz.bea.common.constants.UserItokenConstants;
+import com.ofss.digx.cz.bea.extxface.itoken.adapter.IITokenAdapter;
 import com.ofss.digx.extxface.extxface.ExtxfaceAdapterFactory;
+import com.ofss.digx.framework.determinant.DeterminantResolver;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.datatype.Date;
 import com.ofss.fc.enumeration.DeterminantType;
 import com.ofss.fc.framework.domain.common.dto.Dictionary;
 import com.ofss.fc.framework.domain.common.dto.NameValuePairDTO;
+import com.ofss.fc.infra.config.ConfigurationFactory;
 import com.ofss.fc.infra.thread.ThreadAttribute;
 import com.ofss.fc.service.response.TransactionStatus;
+import com.ofss.sms.dbAuthenticator.domain.UserProfile;
 
 public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.service.user.ext.IUserExt {
 
 	private static final String LOGINID = "loginId";
+
 
 	private static final String SIGNERID = "signerId";
 
@@ -155,17 +175,19 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 			userExtensionDomain.update(userExtensionDomain);
 		}
 		String taskId = (String) ThreadAttribute.get(ThreadAttribute.CURRENT_TASK);
-		BeaSystemOut.println("delete repo for fmo" + taskId);
+		com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("delete repo for fmo" + taskId);
 		SessionContext session = (SessionContext) ThreadAttribute.get(ThreadAttribute.SESSION_CONTEXT);
 		IFMOHelperCallAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(IFMOHelperCallAdapter.class,
 				"callFMOHelper", DeterminantType.Enterprise);
 		if (com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin") != null
 				&& !(Boolean) com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin")) {
 		adapter.callFMOHelper(session, taskId, userExtensionDomain, true);
-			BeaSystemOut.println("delete repo fmo for corporate user");
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("delete repo fmo for corporate user");
 		}
 
 	}
+
+
 	/**
 	 * This is the extension point for
 	 * {@code User#softDelete(SessionContext, userDetails)}. Post hook process like
@@ -183,17 +205,126 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 	public void postSoftDelete(SessionContext sessionContext, UserDTO userDTO, TransactionStatus transactionStatus)
 			throws Exception {
 		if (sessionContext.getUserId() != null && userDTO.getUsername() != null) {
-			BeaSystemOut.println("PostDelete username=" + userDTO.getUsername());
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("PostDelete username=" + userDTO.getUsername());
 
 			IAdapterFactory hostUserDetailsAdapterFactory = AdapterFactoryConfigurator.getInstance()
 					.getAdapterFactory(HOSTUSER_DETAILS_ADAPTER_FACTORY);
 			IHostUserDetailsInvocationAdapter hostuserDetailsAdapter = (IHostUserDetailsInvocationAdapter) hostUserDetailsAdapterFactory
 					.getAdapter(HOST_USERDETAILS_INVOCATION_ADAPTER);
 			hostuserDetailsAdapter.deleteUserFromGroups(sessionContext, userDTO.getUsername());
-			BeaSystemOut.println("Delete from groups done");
+
+			//BCOCDC-7316 start
+			//insert record for Revoked user
+//			String email = CustomConfigUtil.readConfigValue("DUMMY_EMAIL", "dummy@dummy.dummy");
+//			String mobileNo = CustomConfigUtil.readConfigValue("DUMMY_MOBILE_NO", "00000000");
+
+			IAdapterFactory customConfigAdapterFactory = AdapterFactoryConfigurator.getInstance()
+					.getAdapterFactory("CUSTOM_CONFIG_ADAPTER_FACTORY");
+			ICustomConfigAdapter customConfigAdapter = (ICustomConfigAdapter) customConfigAdapterFactory
+					.getAdapter("CUSTOM_CONFIG_ADAPTER");
+			String email  ="";
+			String mobileNo= "";
+			try {
+				email = customConfigAdapter.getConfiguationDetails(
+						com.ofss.digx.common.constants.CommonConstants.DAY_ONE_CONFIG, "DUMMY_EMAIL", "dummy@dummy.dummy");
+				mobileNo = customConfigAdapter.getConfiguationDetails(
+						com.ofss.digx.common.constants.CommonConstants.DAY_ONE_CONFIG, "DUMMY_MOBILE_NO", "00000000");
+			} catch (java.lang.Exception e) {
+				e.printStackTrace();
+			}
+			BeaSystemOut.println("postSoftDelete DUMMY_EMAIL is "+email);
+			BeaSystemOut.println("postSoftDelete DUMMY_MOBILE_NO is "+mobileNo);
+			UserExtensionData userExtensionDomain = new UserExtensionData();
+			UserExtensionDataKey userExtensionKey = new UserExtensionDataKey();
+			userExtensionKey.setUserExtensionKey(userDTO.getUsername());
+			userExtensionDomain = userExtensionDomain.read(userExtensionKey);
+
+
+			com.ofss.sms.dbAuthenticator.domain.UserProfile userProfileDomain = new com.ofss.sms.dbAuthenticator.domain.UserProfile();
+			com.ofss.sms.dbAuthenticator.domain.UsersKey userProfileKey = new com.ofss.sms.dbAuthenticator.domain.UsersKey();
+			userProfileKey.setUserName(userDTO.getUsername());
+			userProfileDomain.setKey(userProfileKey);
+			userProfileDomain = userProfileDomain.read(userProfileDomain);
+			//insert RevokedUser record
+			RevokedUser revokedUserDomain = getRevokedUser(userDTO, userProfileDomain, userExtensionDomain);
+			revokedUserDomain.create(revokedUserDomain);
+
+			//change UserExtensionData to dummy mobileNo
+			userExtensionDomain.setMobileNo(mobileNo);
+			userExtensionDomain.update(userExtensionDomain);
+			BeaSystemOut.println("postSoftDelete DUMMY_MOBILE_NO update done");
+
+			//change UserProfile to dummy email
+			userProfileDomain.setEmailId(email);
+			userProfileDomain.setMobileNumber(mobileNo);
+			userProfileDomain.update(userProfileDomain);
+			BeaSystemOut.println("postSoftDelete DUMMY_EMAIL update done");
+
+			//BCOCDC-7316 end
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Delete from groups done");
+			// add Auto cancellation of i-Token BCM-248 start   2026-04-07
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Auto cancellation of i-Token service Begin");
+			String userId = userDTO.getUsername();
+			String editBy = sessionContext.getUserId();
+			ITokenDTO itoken = new ITokenDTO();
+			itoken.setUserIdentifier(userId);
+			itoken.setInstanceStatus("SUS");
+			itoken.setScenario(UserItokenConstants.SUS_BY_ACCESS_REVOKE_CHANGE);
+			itoken.setLastUpdatedBy(editBy);
+			IITokenAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(IITokenAdapter.class,
+					"cancelItoken",
+					DeterminantResolver.getInstance().getDeterminantTypeForObject(ITokenDTO.class.getName()));
+			// call ITK_CANCEL_ITOKEN
+			ITokenCancelResponseDTO response = adapter.cancelItoken(itoken);
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Auto cancellation of i-Token service End respone:" + response.getReturnCode());
+			// add Auto cancellation of i-Token BCM-248 end
+
+			// BCM-2549: CDC6907 - Cancel I-Token on BCO
+			boolean success = "200".equals(response.getReturnCode());
+			sendITokenCancelCrm(sessionContext, userId, success);
 		}
 	}
-	
+
+	private void sendITokenCancelCrm(SessionContext sessionContext, String userName, boolean success) throws Exception {
+		try {
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("CZUserExtensionDataExt add crm sendCrm CDC6907 begin ");
+			IAdapterFactory adapterFactory = AdapterFactoryConfigurator.getInstance().getAdapterFactory(com.ofss.digx.cz.bea.common.constants.CommonAdapterFactoryConstants.CRM_ADAPTER_FACTORY);
+			ICRMAsserterCallAdapter crmAdapter = (ICRMAsserterCallAdapter) adapterFactory.getAdapter(com.ofss.digx.cz.bea.common.constants.CommonAdapterConstants.CRM_ADAPTER);
+
+			// calling fetchCommonInfo to fill in most of the generic fields in CRMInputData, not passing serviceParameters and taskCode won't impact those generic fields
+			Preferences crmConfiguration = ConfigurationFactory.getInstance().getConfigurations("CRMConfiguration");
+			CRMInputData data = crmAdapter.fetchCommonInfo(null, "", crmConfiguration, null, sessionContext, userName);
+			data.setEventActvTypeCode(CRMConstants.CRM_EVENT_CANCEL_ITOKEN);
+
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("CZUserExtensionDataExt UserExtension get Itoken begin ");
+			com.ofss.digx.cz.bea.domain.sms.entity.user.UserItokenInfo userItokenDomain = new com.ofss.digx.cz.bea.domain.sms.entity.user.UserItokenInfo();
+			UserTokenDataDTO tokenDto = userItokenDomain.getUserItokenInfo(userName, null);
+			data.setTokenId(tokenDto.getTokenId());
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("CZUserExtensionDataExt UserExtension get Itoken status_ : " + tokenDto.getItokenStatus());
+
+			data.setEventStatusCode(success ? "A": "R");
+
+			crmAdapter.crmInsertForRaq(data);
+		} catch (java.lang.Exception e) {
+			BeaSystemOut.printErr(e);
+			BeaSystemOut.println("CZUserExtensionDataExt CRMAsserter.crmInsertData( crm" + e);
+		}
+	}
+
+	private static RevokedUser getRevokedUser(UserDTO userDTO, UserProfile userProfileDomain, UserExtensionData userExtensionDomain) {
+		RevokedUser revokedUserDomain =new RevokedUser();
+		RevokedUserKey revokedUserkEY =new RevokedUserKey();
+		revokedUserkEY.setKey(userDTO.getUsername());
+		revokedUserDomain.setRevokedUserKey(revokedUserkEY);
+
+		revokedUserDomain.setUmMobileNo(userProfileDomain.getMobileNumber());
+		revokedUserDomain.setUmEmail(userProfileDomain.getEmailId());
+		revokedUserDomain.setCzMobileNo(userExtensionDomain.getMobileNo());
+		revokedUserDomain.setCzMobileCode(userExtensionDomain.getMobileCode());
+		revokedUserDomain.setLastUpdateTime(new Date());
+		return revokedUserDomain;
+	}
+
 	@Override
 	public void postUpdateCredentials(SessionContext sessionContext,
 			UserUpdateCredentialsRequestDTO userUpdateCredentialsRequestDTO, TransactionStatus transactionStatus) throws Exception {
@@ -251,14 +382,14 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 	@Override
 	public void postList(SessionContext sessionContext, UserDTO userDTO, UserListResponseDTO userListResponseDTO)
 			throws Exception {
-		BeaSystemOut.println("=========================== In Service Executor postList ===========================");
+		com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("=========================== In Service Executor postList ===========================");
 		
-		BeaSystemOut.println("com.ofss.digx.infra.thread.ThreadAttribute.get(isAdmin) "+com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin"));
+		com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("com.ofss.digx.infra.thread.ThreadAttribute.get(isAdmin) "+com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin"));
 		
 		if (com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin") != null
 				&& !(Boolean) com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin")) {
 			
-			BeaSystemOut.println("UserDTOListFiltered postList inside if");
+			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("UserDTOListFiltered postList inside if");
 			
 			List<UserDTO> UserDTOListFiltered = new ArrayList<UserDTO>();
 			
@@ -268,10 +399,42 @@ public class CZUserExt extends VoidUserExt implements com.ofss.digx.app.sms.serv
 				{
 					UserDTOListFiltered.add(UserDTO);
 				}
-	}
+			}
 
 			userListResponseDTO.setUserDTOList(UserDTOListFiltered);
+
 		}
+
+
+		if (com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin") != null
+				&& (Boolean) com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin")) {
+			try{
+				System.out.println("###GAAS_ACCESS###:::::::  test" );
+				Boolean flag = false;
+				if(ThreadAttribute.get("GAAS_ACCESS_FLAG")!=null){
+					flag = ((Boolean)ThreadAttribute.get("GAAS_ACCESS_FLAG")).booleanValue();
+				}
+				System.out.println("postList::::GAAS_ACCESS_FLAG:::"+flag);
+				if(userDTO!=null && flag){
+					for(UserDTO dto: userListResponseDTO.getUserDTOList()){
+						IGaasAccessAdapter adapter = ExtxfaceAdapterFactory.getInstance().getAdapter(
+								IGaasAccessAdapter.class, "listGaasAccessByUser",
+								DeterminantResolver.getInstance()
+										.getDeterminantTypeForObject(GaasAccessListDTO.class.getName()));
+
+						List<GaasAccessListDTO> itemList = adapter.listGaasAccessByUser(dto.getUsername());
+						if(itemList!=null && !itemList.isEmpty()){
+							dto.setAccountAccessSetupDone(true);
+						} else {
+							dto.setAccountAccessSetupDone(false);
+						}
+					}
+				}
+			}catch (Exception e) {
+
+			}
+		}
+
 
 		if (Boolean.TRUE.equals(userDTO.isAccessSetupCheckRequired())
 				&& userListResponseDTO.getUserDTOList() != null) {

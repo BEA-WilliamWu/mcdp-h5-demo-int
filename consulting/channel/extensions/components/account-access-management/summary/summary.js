@@ -106,6 +106,7 @@ define([
         self.isHthMode = ko.pureComputed(function () {
             return String(readValue(self.channelMode) || "BCO").toUpperCase() === "HTH";
         });
+
         self.hthSummaryLoading = ko.observable(false);
         self.hthSummaryError = ko.observable("");
         self.hthEnterpriseStatus = ko.observable();
@@ -116,6 +117,7 @@ define([
         self.hthEnterpriseDisabled = ko.pureComputed(function () {
             return self.hthEnterpriseStatus() && self.hthEnterpriseStatus() !== "ENABLE";
         });
+
         self.hthSummaryReady = ko.pureComputed(function () {
             return !self.hthSummaryLoading() && !self.hthSummaryError();
         });
@@ -156,8 +158,10 @@ define([
             summary.casaAccountCount = Number(summary.accountCountByType.CSA || 0);
             summary.tdAccountCount = Number(summary.accountCountByType.TD || 0);
             summary.totalAccountCount = summary.casaAccountCount + summary.tdAccountCount;
+
             summary.hasPendingRequest = Boolean(summary.pendingAction ||
                 String(summary.setupStatus || "").indexOf("PENDING_") === 0);
+
             summary.canMaintain = !self.hthEnterpriseDisabled() && !summary.hasPendingRequest &&
                 summary.setupStatus !== "ERROR";
 
@@ -170,12 +174,15 @@ define([
             if (setupStatus === "ACTIVE") {
                 return self.nls.info.hthActive;
             }
+
             if (setupStatus === "DISABLED") {
                 return self.nls.info.hthDisabled;
             }
+
             if (setupStatus && setupStatus.indexOf("PENDING_") === 0) {
                 return self.nls.info.hthPendingApproval;
             }
+
             return self.nls.info.hthNotSetup;
         };
 
@@ -207,6 +214,7 @@ define([
             };
 
             self.hthLinkageContext(context);
+
             return context;
         };
 
@@ -216,6 +224,7 @@ define([
 
             if (typeof navigationHandler === "function") {
                 navigationHandler(context);
+
                 return;
             }
 
@@ -225,6 +234,7 @@ define([
             rootParams.baseModel.registerComponent("hth-api-service-mapping", "account-access-management");
             rootParams.baseModel.registerComponent("review-hth-user-access", "account-access-management");
             rootParams.baseModel.registerElement("confirm-screen");
+
             rootParams.dashboard.loadComponent("hth-account-linkage", {
                 hthLinkageContext: context,
                 summaryParams: inputParams

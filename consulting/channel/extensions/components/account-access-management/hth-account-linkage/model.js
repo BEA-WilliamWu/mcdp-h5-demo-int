@@ -25,8 +25,10 @@ define([
                     success: function (data, status, jqXhr) {
                         if (isFailureResponse(data)) {
                             deferred.reject(data);
+
                             return;
                         }
+
                         deferred.resolve(data, status, jqXhr);
                     },
                     error: function (error) {

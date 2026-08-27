@@ -25,9 +25,11 @@ define([
                 if (accountType === "TRD" || accountType === "TERM_DEPOSIT") {
                     return "TD";
                 }
+
                 if (accountType === "DEMAND_DEPOSIT") {
                     return "CSA";
                 }
+
                 return accountType;
             },
             mapApi = function (api) {
@@ -80,13 +82,17 @@ define([
         self.action = ko.observable(ko.unwrap(params.action) || "CREATE");
         self.editing = ko.observable(self.action() !== "VIEW");
         self.activeAccountType = ko.observable("CSA");
+
         self.isEditable = ko.pureComputed(function () {
             return self.editing();
         });
+
         self.allAccounts = (ko.unwrap(params.accounts) || []).map(mapAccount);
+
         self.accounts = ko.observableArray(self.allAccounts.filter(function (account) {
             return account.selected();
         }));
+
         self.filteredAccounts = ko.pureComputed(function () {
             return self.accounts().filter(function (account) {
                 return String(read(account.accountType) || "").toUpperCase()
@@ -96,13 +102,16 @@ define([
                     .localeCompare(String(read(right.accountNumber) || ""));
             });
         });
+
         self.isActiveAccount = function (account) {
             return String(read(account && account.accountType) || "").toUpperCase()
                 === self.activeAccountType();
         };
+
         self.noAccountsForActiveType = ko.pureComputed(function () {
             return self.filteredAccounts().length === 0;
         });
+
         self.instructions = ko.pureComputed(function () {
             return self.isEditable()
                 ? self.nls.notes.UAC07_CREATE_EDIT : self.nls.notes.UAC05_REVIEW;
@@ -116,12 +125,14 @@ define([
             if (!self.isEditable() || accounts.length < 2) {
                 return;
             }
+
             const selectedCodes = {};
 
             // Copy by API code rather than array position because catalogue display order may vary.
             accounts[0].apiServices.forEach(function (api) {
                 selectedCodes[api.apiCode] = api.selected();
             });
+
             accounts.slice(1).forEach(function (account) {
                 account.apiServices.forEach(function (api) {
                     api.selected(!!selectedCodes[api.apiCode]);
@@ -141,6 +152,7 @@ define([
             if (self.action() === "VIEW") {
                 self.action("EDIT");
             }
+
             self.editing(true);
         };
 
@@ -148,6 +160,7 @@ define([
             if (!self.isEditable()) {
                 return;
             }
+
             const missingMapping = self.accounts().some(function (account) {
                 return !account.apiServices.some(function (api) {
                     return api.selected();
@@ -157,8 +170,10 @@ define([
             if (missingMapping) {
                 rootParams.baseModel.showMessages(null,
                     [self.nls.info.hthSelectApi], "ERROR");
+
                 return;
             }
+
             rootParams.dashboard.loadComponent("review-hth-user-access", {
                 hthLinkageContext: self.context,
                 summaryParams: self.summaryParams,

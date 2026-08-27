@@ -66,17 +66,24 @@ define([
         self.context = ko.unwrap(params.hthLinkageContext) || record;
         self.summaryParams = params.summaryParams || {};
         self.approvalMode = ko.observable(params.mode === "approval" || !!transactionSnapshot);
+
         self.action = read(params.action) || record.actionType
             || (taskCode === "UAT_N_HUA_DEL" ? "DELETE"
                 : taskCode === "UAT_N_HUA_EDT" ? "EDIT" : "CREATE");
+
         self.access = record;
+
         self.allAccounts = (ko.toJS(ko.unwrap(params.accounts)) || record.accounts || [])
             .map(normalizeAccount);
+
         self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
+
         self.accounts = self.allAccounts.filter(function (account) {
             return read(account.selected) !== false;
         });
+
         self.isSubmitting = ko.observable(false);
+
         self.isDelete = ko.pureComputed(function () {
             return self.action === "DELETE";
         });
@@ -136,7 +143,9 @@ define([
             if (self.approvalMode() || self.isSubmitting()) {
                 return;
             }
+
             self.isSubmitting(true);
+
             HthUserAccessModel.save(self.payload(), self.action).done(function (response, _status, jqXhr) {
                 rootParams.dashboard.loadComponent("confirm-screen", {
                     jqXHR: jqXhr,
@@ -169,8 +178,10 @@ define([
                     originalAccounts: self.originalAccounts,
                     action: "VIEW"
                 });
+
                 return;
             }
+
             rootParams.dashboard.loadComponent("hth-api-service-mapping", {
                 hthLinkageContext: self.context,
                 summaryParams: self.summaryParams,

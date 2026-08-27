@@ -5,6 +5,7 @@ define([
     "extensions/generic/service-extension",
     "ojs/ojbutton",
     "ojs/ojcheckboxset",
+    "ojs/ojdialog",
     "framework/elements/api/page-section/loader"
 ], function (ko, HthUserAccessModel, resourceBundle, serviceExtension) {
     "use strict";
@@ -32,9 +33,11 @@ define([
                 if (accountType === "TRD" || accountType === "TERM_DEPOSIT") {
                     return "TD";
                 }
+
                 if (accountType === "DEMAND_DEPOSIT") {
                     return "CSA";
                 }
+
                 return accountType;
             },
             accountNumberValue = function (account) {
@@ -155,6 +158,7 @@ define([
             if (!self.isEditable()) {
                 return;
             }
+
             const selectedValues = event && event.detail
                     && Array.isArray(event.detail.value) ? event.detail.value : [],
                 selected = selectedValues.indexOf("ALL") !== -1;
@@ -180,8 +184,10 @@ define([
             if (!self.selectedCount()) {
                 rootParams.baseModel.showMessages(null,
                     [self.nls.info.hthSelectAccount], "ERROR");
+
                 return;
             }
+
             rootParams.dashboard.loadComponent("hth-api-service-mapping", {
                 hthLinkageContext: context,
                 summaryParams: self.summaryParams,
@@ -201,26 +207,6 @@ define([
                 originalAccounts: self.originalAccounts,
                 action: "DELETE"
             });
-        };
-
-        self.cancel = function () {
-            if (self.mode() === "EDIT") {
-                initialize({
-                    access: Object.assign({}, self.access(), {
-                        accounts: ko.toJS(self.originalAccounts)
-                    })
-                }, "VIEW", self.originalAccounts);
-                return;
-            }
-            rootParams.dashboard.switchModule(true);
-        };
-
-        self.back = function () {
-            if (hasUnsavedChanges() && typeof window !== "undefined"
-                && !window.confirm(self.nls.info.hthDiscardChanges)) {
-                return;
-            }
-            rootParams.dashboard.loadComponent("summary", self.summaryParams);
         };
 
         const selectionState = function (accounts) {
@@ -255,9 +241,43 @@ define([
                 self.accounts(accounts.map(mapAccount));
                 self.originalAccounts = ko.toJS(originalAccounts || accounts);
                 self.pendingRequest(!!data.pendingRequest);
+
                 self.mode(requestedMode || (context.setupStatus === "ACTIVE"
                     ? "VIEW" : "CREATE"));
             };
+
+        self.cancel = function () {
+            if (self.mode() === "EDIT") {
+                initialize({
+                    access: Object.assign({}, self.access(), {
+                        accounts: ko.toJS(self.originalAccounts)
+                    })
+                }, "VIEW", self.originalAccounts);
+
+                return;
+            }
+
+            rootParams.dashboard.switchModule(true);
+        };
+
+        self.confirmDiscard = function () {
+            document.querySelector("#hthDiscardChangesDialog").close();
+            rootParams.dashboard.loadComponent("summary", self.summaryParams);
+        };
+
+        self.dismissDiscard = function () {
+            document.querySelector("#hthDiscardChangesDialog").close();
+        };
+
+        self.back = function () {
+            if (hasUnsavedChanges()) {
+                document.querySelector("#hthDiscardChangesDialog").open();
+
+                return;
+            }
+
+            rootParams.dashboard.loadComponent("summary", self.summaryParams);
+        };
 
         if (params.preloadedAccounts) {
             // Back navigation must retain the in-memory selection instead of re-reading effective
@@ -267,7 +287,9 @@ define([
                     accounts: ko.unwrap(params.preloadedAccounts)
                 })
             }, read(params.action), read(params.originalAccounts));
+
             self.loading(false);
+
             return;
         }
 

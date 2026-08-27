@@ -160,11 +160,11 @@ define([
       };
 
       baseService.fetch(options, params);
-    };
+    },
 
     // HTH summary is intentionally isolated from legacy BCO account-access calls. CloseID is
     // required so grants for multiple HTH users under the same corporate party cannot be mixed.
-    const readHthUserAccessSummary = function(partyId, closeId, deferred) {
+     readHthUserAccessSummary = function(partyId, closeId, deferred) {
       const params = {
           partyId: partyId,
           closeId: closeId

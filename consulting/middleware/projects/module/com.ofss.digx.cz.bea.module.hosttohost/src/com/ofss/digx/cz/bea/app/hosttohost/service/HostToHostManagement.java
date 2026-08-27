@@ -14,8 +14,9 @@ import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostManagementResponseDTO;
 import com.ofss.digx.common.constants.ApprovalsErrorConstants;
 import com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO;
 import com.ofss.digx.cz.bea.app.sms.adapter.user.IUserExtensionAdapter;
-import com.ofss.digx.cz.bea.app.sms.dto.user.UserManagementActivityLogDTO;
+import com.ofss.digx.cz.bea.app.sms.dto.user.UserProfUpdateActivityLogDTO;
 import com.ofss.digx.cz.bea.common.constants.CZCommonConstants;
+import com.ofss.digx.cz.bea.common.constants.UserExtensionDataConstants;
 import com.ofss.digx.cz.bea.common.util.CZLocaleUtils;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiMaster;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiMasterKey;
@@ -54,6 +55,9 @@ import com.ofss.fc.infra.das.orm.Session;
 import com.ofss.fc.infra.log.impl.MultiEntityLogger;
 import com.ofss.fc.service.response.TransactionStatus;
 import com.ofss.fc.xface.ep.dto.NotificationDetail;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.ObjectUtils;
+
 import java.lang.Override;
 import java.lang.RuntimeException;
 import java.lang.String;
@@ -67,7 +71,6 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
 
     private static final String ACTIVITY_NAME = "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostManagement.notifyHostToHostManagement";
     // todo  have no tem
-
     private static final String ACTIVITY_CREATE =
             "com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData.create";
 
@@ -76,11 +79,11 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
 
     private static final String ACTIVITY_ACCOUNT_ACCESS_UPDATE =
             "com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.update";
-    private static final String EVENT_ENABLE_PREFIX = "USER_MANAGEMENT_CREATE_PARTY_CUSTOMER_";
+    private static final String EVENT_ENABLE_PREFIX ="USER_MANAGEMENT_CREATE";
 
-    private static final String EVENT_DISABLE_PREFIX = "USER_MANAGEMENT_EDIT_CORPORATE_USER_";
+    private static final String EVENT_DISABLE_PREFIX = "USER_MANAGEMENT_EDIT";
 
-    private static final String EVENT_EDIT_PREFIX = "USER_ACCOUNT_ACCESS_UPDATE_CORPORATE_USER_";
+    private static final String EVENT_EDIT_PREFIX = "USER_ACCOUNT_ACCESS_UPDATE";
 
     private static final String THIS_COMPONENT_NAME = HostToHostManagement.class.getName();
 
@@ -280,9 +283,10 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
     }
 
     private void notifyHostToHostManagement(SessionContext sessionContext, HostToHostManagementDTO requestDTO, String actionType) throws Exception {
-
+        NotificationDetail[] details = new NotificationDetail[1];
         String eventId;
-        logger.log(Level.INFO,
+        System.out.println("[HTH-NOTIFICATION] Start notification,PartyId"+requestDTO.getPartyId());
+        logger.log(Level.FINE,
                 formatter.formatMessage(
                         "[HTH-NOTIFICATION] Start notification, actionType=%s, partyId=%s",
                         actionType,
@@ -292,26 +296,40 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
                         com.ofss.digx.cz.bea.common.constants.CommonAdapterFactoryConstants.USER_EXTENSION_ADAPTER_FACTORY);
         IUserExtensionAdapter adapter = (IUserExtensionAdapter) adapterFactory
                 .getAdapter(com.ofss.digx.cz.bea.common.constants.CommonAdapterConstants.USER_EXTENSION_ADAPTER);
-        CZPartyPreferenceDTO partyDetails = adapter.getPartyPreferences(sessionContext.getTransactingPartyCode());
+        CZPartyPreferenceDTO partyDetails = adapter.getPartyPreferences(requestDTO.getPartyId());
 
         NotificationDetail detail = buildNotification(partyDetails);
-        if (detail.getDestination() == null) {
+        if (ObjectUtils.isEmpty(detail.getDestination())) {
             return;
         }
-        eventId=  getEventId(actionType,detail);
-        UserManagementActivityLogDTO activityLog = new UserManagementActivityLogDTO();
+        // eventId=  getEventId(actionType,detail);
+        if (ACTION_ENABLE.equals(actionType)) {
+            UserProfUpdateActivityLogDTO activityLog = new UserProfUpdateActivityLogDTO();
+            System.out.println("### Mobile update to new nob number Alert");
+            NotificationDetail messageNotificationDetail = new NotificationDetail();
+            messageNotificationDetail.setRecipientId(requestDTO.getPartyId());
+            messageNotificationDetail.setDestination(DestinationType.SMS);
+            messageNotificationDetail.setDispatchAddress(partyDetails.getOfficeTelNo());
+            messageNotificationDetail.setRecipientType(SubscriberType.EXTERNAL.toString());
+            System.out.println("#### User New mobile no: " + partyDetails.getOfficeTelNo());
 
-        activityLog.setCustomerId(requestDTO.getPartyId());
-        activityLog.setUserSysDate(getFormatDate(new Date()));
-        activityLog.setUserId(sessionContext.getUserId());
-        activityLog.setCompName(maskName(sepChar(partyDetails.getCompanyName(), " "), 1));
-        activityLog.setNotificationDetails(new NotificationDetail[]{detail});
-        registerActivityAndGenerateEvent(sessionContext, getActivityId(actionType), eventId,new Date(), activityLog);
-        logger.log(Level.INFO,
-                formatter.formatMessage(
-                        "[HTH-NOTIFICATION] Notification submitted successfully, activityId=%s, eventId=%s",
-                        getActivityId(actionType),
-                        eventId));
+            details[0] = messageNotificationDetail;
+            activityLog.setNotificationDetails(details);
+            activityLog.setCustomerId(requestDTO.getPartyId());
+            activityLog.setUserId(sessionContext.getUserId());
+            activityLog.setProfileUser(sessionContext.getUserId());
+            System.out.println("#########################HTH-NOTIFICATION usermgmtActivityLog: - " + activityLog.toString());
+            String activityId=ACTIVITY_CREATE;
+            eventId=UserExtensionDataConstants.CORPORATEPLUS_WELCOME_MAIL;
+            System.out.println("#########################HTH-NOTIFICATION##########activityId:"+activityId+"####  eventId:"+eventId);
+            super.registerActivityAndGenerateEvent(sessionContext, activityId,
+                    eventId, new Date(), activityLog);
+            logger.log(Level.FINE,
+                    formatter.formatMessage(
+                            "[HTH-NOTIFICATION] Notification submitted successfully, activityId=%s, eventId=%s",
+                            getActivityId(actionType),
+                            eventId));
+        }
     }
 
     private String getActivityId(String actionType) {
@@ -342,23 +360,6 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
         } else {
             eventId.append(EVENT_DISABLE_PREFIX);
         }
-
-        if (DestinationType.EMAIL.equals(detail.getDestination())) {
-            eventId.append("EMAIL_");
-        } else {
-            eventId.append("SMS_");
-        }
-
-        String locale = CZLocaleUtils.getUserLocale();
-
-        if (CZCommonConstants.LOCALE_SIMPLI_CHI.equalsIgnoreCase(locale)) {
-            eventId.append("zh-Hans-CN");
-        } else if (CZCommonConstants.LOCALE_TRAD_CHI.equalsIgnoreCase(locale)) {
-            eventId.append("zh-Hant");
-        } else {
-            eventId.append("en");
-        }
-
         return eventId.toString();
     }
 
@@ -471,6 +472,7 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
             detail.setDispatchAddress(partyDetails.getOfficeTelNo());
         }
         detail.setRecipientType(SubscriberType.EXTERNAL.toString());
+        detail.setRecipientId(partyDetails.getPartyIdValue());
 
         return detail;
     }
@@ -498,7 +500,7 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
                                String referenceNumber) throws Exception {
         validateRequestForSave(sessionContext, requestDTO, actionType, approvedExecution);
         logSaveDecision(requestDTO, actionType, approvedExecution, referenceNumber);
-
+        System.out.println("==========processSave======="+approvedExecution);
         if (approvedExecution) {
             referenceNumber = executeApprovedSave(sessionContext, requestDTO, actionType);
             //  notify

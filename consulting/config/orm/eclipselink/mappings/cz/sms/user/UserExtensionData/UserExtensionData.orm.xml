@@ -181,6 +181,29 @@
 			<column name="BYPASS_EXPIRY_TIME"/>
 			<convert>DateTime</convert>
 	   </basic>
+	  <basic attribute-type="java.lang.Boolean" name="companyActivityLog">
+            <column name="COMPANY_ACTIVITY_LOG"/>
+	  </basic>
+	   <basic attribute-type="java.lang.Integer" name="itokenFailedCounter">
+	   		<column name="ITOKEN_FAILED_COUNTER"/>
+	   </basic>
+	   <basic attribute-type="java.lang.Integer" name="itokenDocLockedCounter">
+	   		<column name="ITOKEN_DOC_LOCKED_COUNTER"/>
+	   </basic>
+	   <basic attribute-type="java.lang.Integer" name="itokenDocFailedCounter">
+	   		<column name="ITOKEN_DOC_FAILED_COUNTER"/>
+	   </basic>
+      <basic attribute-type="com.ofss.fc.datatype.Date" name="itokenDocFailedDate">
+			<column name="ITOKEN_DOC_FAILED_DATE"/>
+			<convert>DateTime</convert>
+	   </basic>
+      <basic attribute-type="com.ofss.fc.datatype.Date" name="itokenDocStatusLastUpdatedDate">
+			<column name="ITOKEN_DOC_STATUS_LAST_UPDATED_DATE"/>
+			<convert>DateTime</convert>
+	   </basic>
+      <basic attribute-type="java.lang.String" name="itokenStatusLastUpdatedBy">
+        	<column name="ITOKEN_STATUS_LAST_UPDATED_BY"/>
+      </basic>
       <transient name="userChannelType"/>
       <transient name="closeId"/>
       <transient name="hthAccessSetupDone"/>

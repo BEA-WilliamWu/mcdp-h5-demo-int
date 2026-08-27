@@ -346,6 +346,15 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 				BeaSystemOut.println("Reading extentiondata for" + userDTO.getUsername());
 			}
 
+			if (userDTO.getHomeBusinessUnit() != null && !userDTO.getHomeBusinessUnit().equals("")) {
+				criteria.add(Expression.eq("loginID", userDTO.getHomeBusinessUnit()));
+				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Reading extentiondata for loginID" + userDTO.getHomeBusinessUnit());
+			}
+
+			if (userDTO.getTargetUnit() != null && !userDTO.getTargetUnit().equals("")) {
+				criteria.add(Expression.eq("signerID",userDTO.getTargetUnit()));
+				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Reading extentiondata for signerID" + userDTO.getTargetUnit());
+			}
 			userExtensionList = super.executeCriteria(criteria);
 
 			String partyId = null;
@@ -438,7 +447,7 @@ public class LocalUserExtensionDataRepositoryAdapter extends AbstractLocalReposi
 		return (IHthUserProfileAdapter) RepositoryAdapterFactory.getInstance().getRepositoryAdapter(
 				IHthUserProfileAdapter.HTH_USER_PROFILE_LOCAL_REPOSITORY_ADAPTER);
 	}
-	
+
 	//rkeshari 26/12/24 fix for PRD SR 3-39146654721
 	@Override
 	public List<UserExtensionData> listUsersForLogin(UserDTO userDTO) throws Exception {

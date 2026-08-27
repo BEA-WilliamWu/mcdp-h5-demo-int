@@ -71,6 +71,7 @@ com.ofss.digx.cz.bea.appx.approval.service.workflow.Workflow
 com.ofss.digx.cz.bea.appx.approval.service.usergroup.UserGroup
 com.ofss.digx.cz.bea.appx.approval.service.rule.Rule
 com.ofss.digx.cz.bea.appx.fileupload.service.FileUpload
+com.ofss.digx.cz.bea.appx.fileupload.service.OctopusUpload
 com.ofss.digx.cz.bea.appx.dda.service.accountname.AccountName
 com.ofss.digx.cz.bea.appx.healthcheck.service.healthcheck.HealthCheck
 com.ofss.digx.cz.bea.appx.common.service.dashboardAuditLogger
@@ -107,6 +108,19 @@ com.ofss.digx.cz.bea.appx.payment.service.remittance.InwardRemittance
 com.ofss.digx.cz.bea.appx.investment.service.RiskAssessment
 com.ofss.digx.cz.bea.appx.marketingwidget.service.MarketingWidget
 com.ofss.digx.cz.bea.appx.report.service.CZReportProcessHistory
+com.ofss.digx.cz.bea.appx.itoken.service.IToken
+com.ofss.digx.cz.bea.appx.itoken.service.ITokenActivation
+com.ofss.digx.cz.bea.appx.sms.service.user.UserItoken
+com.ofss.digx.cz.bea.appx.security.authentication.AmbushLoginOtp
 com.ofss.digx.cz.bea.appx.hosttohost.service.HostToHostManagement
+com.ofss.digx.cz.bea.appx.payment.service.bulkpayment.BulkPaymentFileUpload
+com.ofss.digx.cz.bea.appx.transactioninquiry.service.TransactionInquiry
 com.ofss.digx.cz.bea.appx.hosttohost.service.HostToHostCertificateManagement
+com.ofss.digx.cz.bea.appx.payment.service.bulkpayment.BulkTransaction
+com.ofss.digx.cz.bea.appx.crossborder.service.CrossBorderAccountsMaintenance
+com.ofss.digx.cz.bea.appx.gaas.service.GaasAccess
+com.ofss.digx.cz.bea.appx.gaas.service.GaasService
+com.ofss.digx.cz.bea.appx.payment.service.bulkpayment.BulkPaymentTran
+com.ofss.digx.cz.bea.appx.bulkpayment.BulkPaymentIncomingFundNotification
+com.ofss.digx.cz.bea.appx.onlinesetting.service.onlinesetting.OnlineServiceSetting
 com.ofss.digx.cz.bea.appx.hosttohost.service.HostToHostUserAccess

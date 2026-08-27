@@ -47,7 +47,7 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 	private String documentCountry;
 
 	private Boolean isAuthorisedPerson;
-	
+
 	private Boolean companyActivityLog;
 
 	private Date logOutDate;
@@ -124,6 +124,58 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 	private String bypassCode;
 	
 	private Date bypassExpiryTime;
+
+	private Integer itokenFailedCounter;
+
+	private Integer itokenDocLockedCounter;
+
+	private Integer itokenDocFailedCounter;
+
+	public com.ofss.fc.datatype.Date itokenDocFailedDate;
+
+	public com.ofss.fc.datatype.Date itokenDocStatusLastUpdatedDate;
+	
+	private String itokenStatusLastUpdatedBy;
+
+	public String getItokenStatusLastUpdatedBy() {
+		return itokenStatusLastUpdatedBy;
+	}
+
+	public void setItokenStatusLastUpdatedBy(String itokenStatusLastUpdatedBy) {
+		this.itokenStatusLastUpdatedBy = itokenStatusLastUpdatedBy;
+	}
+
+	public com.ofss.fc.datatype.Date getItokenDocStatusLastUpdatedDate() {
+		return itokenDocStatusLastUpdatedDate;
+	}
+
+	public void setItokenDocStatusLastUpdatedDate(com.ofss.fc.datatype.Date itokenDocStatusLastUpdatedDate) {
+		this.itokenDocStatusLastUpdatedDate = itokenDocStatusLastUpdatedDate;
+	}
+
+	public Integer getItokenDocFailedCounter() {
+		return itokenDocFailedCounter;
+	}
+
+	public void setItokenDocFailedCounter(Integer itokenDocFailedCounter) {
+		this.itokenDocFailedCounter = itokenDocFailedCounter;
+	}
+
+	public Integer getItokenDocLockedCounter() {
+		return itokenDocLockedCounter;
+	}
+
+	public void setItokenDocLockedCounter(Integer itokenDocLockedCounter) {
+		this.itokenDocLockedCounter = itokenDocLockedCounter;
+	}
+
+	public com.ofss.fc.datatype.Date getItokenDocFailedDate() {
+		return itokenDocFailedDate;
+	}
+
+	public void setItokenDocFailedDate(com.ofss.fc.datatype.Date itokenDocFailedDate) {
+		this.itokenDocFailedDate = itokenDocFailedDate;
+	}
 
 	public String getLoginHoldStatus() {
 		return loginHoldStatus;
@@ -468,6 +520,14 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 		this.bypassExpiryTime = bypassExpiryTime;
 	}
 
+	public Integer getItokenFailedCounter() {
+		return itokenFailedCounter;
+	}
+
+	public void setItokenFailedCounter(Integer itokenFailedCounter) {
+		this.itokenFailedCounter = itokenFailedCounter;
+	}
+
 	public UserExtensionData read(UserExtensionDataKey userExtensionDataKey) throws Exception {
 		UserExtensionDataRepository userExtensionDataRepository = UserExtensionDataRepository.getInstance();
 		return userExtensionDataRepository.read(userExtensionDataKey);
@@ -582,7 +642,8 @@ public class UserExtensionData extends AbstractDomainObject implements IPersiste
 				+ isSignerPinReminder + ", userLocale=" + userLocale + ", signerAttempts=" + signerAttempts
 				+ ", defaultUser=" + defaultUser + ", migtationStatus=" + migtationStatus + ", migSignerUpdated="
 				+ migSignerUpdated + ", ccbLastLoginDate=" + ccbLastLoginDate + ", isMerchantUser=" + isMerchantUser
-				+ "]";
+				+ ", securityQuestionsBypass=" + securityQuestionsBypass
+				+ ", bypassExpiryTime=" + bypassExpiryTime + ", bypassCode=" + bypassCode + "]";
 	}
 
 	public String getBounceBackReminder() {

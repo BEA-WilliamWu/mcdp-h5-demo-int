@@ -84,4 +84,20 @@
         <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
         <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
     </div>
+
+    <oj-dialog id="hthDiscardChangesDialog" role="alertdialog"
+        dialog-title="[[$component.nls.navLabels.confirm]]" cancel-behavior="escape"
+        resize-behavior="none">
+        <div slot="body">
+            <span data-bind="text: nls.info.hthDiscardChanges"></span>
+        </div>
+        <div slot="footer" class="button-container">
+            <oj-button class="action-button-primary" on-click="[[$component.confirmDiscard]]">
+                <span data-bind="text: nls.headers.yes"></span>
+            </oj-button>
+            <oj-button class="action-button-secondary" on-click="[[$component.dismissDiscard]]">
+                <span data-bind="text: nls.headers.no"></span>
+            </oj-button>
+        </div>
+    </oj-dialog>
 </div>

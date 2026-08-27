@@ -195,7 +195,7 @@ define([
         // Channel routing is decided from server-enriched user metadata. HTH never falls back to
         // the legacy BCO flow when CloseID is missing because that could expose the wrong policy UI.
         self.buildAccessPolicy = function(data) {
-            const userChannelType = String(data && data.userChannelType || "BCO").toUpperCase(),
+            const userChannelType = String((data && data.userChannelType) || "BCO").toUpperCase(),
                 isHthUser = userChannelType === "HTH";
 
             return {
@@ -216,6 +216,7 @@ define([
 
                 if (accessPolicy.channelMode === "HTH" && !accessPolicy.closeId) {
                     rootParams.baseModel.showMessages(null, [self.nls.info.hthMissingCloseId], "ERROR");
+
                     return;
                 }
 

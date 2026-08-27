@@ -37,11 +37,11 @@ define([
             });
 
             return value;
-        };
+        },
 
         // BCO setup status remains the original accountAccessSetupDone value. HTH setup status is
         // derived independently from approved effective grants and is supplied by the backend.
-        const normalizeUser = function (item) {
+         normalizeUser = function (item) {
             const userChannelType = String(readDictionaryValue(item, "userChannelType") || "BCO").toUpperCase(),
                 firstName = item.firstName || "",
                 lastName = item.lastName || "",
@@ -54,7 +54,7 @@ define([
                 firstName: firstName,
                 accountAccessSetupDone: isHthUser ? hthAccessSetupDone : item.accountAccessSetupDone,
                 lastName: lastName,
-                fullName: (firstName + " " + lastName).trim(),
+                fullName: `${item.firstName || ""} ${item.lastName || ""}`.trim(),
                 partyID: item.partyId,
                 customer: item.customer,
                 userChannelType: isHthUser ? "HTH" : "BCO",

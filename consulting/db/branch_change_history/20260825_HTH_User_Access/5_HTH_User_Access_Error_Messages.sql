@@ -99,21 +99,21 @@ INSERT ALL
      SUMMARY_TEXT, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
      LAST_UPDATED_DATE, OBJECT_STATUS_FLAG, OBJECT_VERSION_NUMBER)
   VALUES
-    ('DIGX_CZ_HTH_UA_004', 'Only Current and Savings accounts are supported.',
+    ('DIGX_CZ_HTH_UA_004', 'Only Current and Savings or Time Deposit accounts are supported.',
      'en', 'N', 'Error Message', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, 'A', 1)
   INTO DIGX_FW_ERROR_MESSAGES
     (ERROR_CODE, ERROR_MESSAGE, USER_LOCALE, FACTORY_SHIPPED_FLAG,
      SUMMARY_TEXT, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
      LAST_UPDATED_DATE, OBJECT_STATUS_FLAG, OBJECT_VERSION_NUMBER)
   VALUES
-    ('DIGX_CZ_HTH_UA_004', '只支持活期及储蓄账户。',
+    ('DIGX_CZ_HTH_UA_004', '只支持活期及储蓄账户或定期存款账户。',
      'zh-hans-cn', 'N', 'Error Message', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, 'A', 1)
   INTO DIGX_FW_ERROR_MESSAGES
     (ERROR_CODE, ERROR_MESSAGE, USER_LOCALE, FACTORY_SHIPPED_FLAG,
      SUMMARY_TEXT, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
      LAST_UPDATED_DATE, OBJECT_STATUS_FLAG, OBJECT_VERSION_NUMBER)
   VALUES
-    ('DIGX_CZ_HTH_UA_004', '只支援活期及儲蓄賬戶。',
+    ('DIGX_CZ_HTH_UA_004', '只支援活期及儲蓄賬戶或定期存款賬戶。',
      'zh-hant', 'N', 'Error Message', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, 'A', 1)
 
   INTO DIGX_FW_ERROR_MESSAGES

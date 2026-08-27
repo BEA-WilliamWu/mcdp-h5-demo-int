@@ -1,4 +1,48 @@
-.hth-api-account { margin-bottom: 1rem; }
-.hth-api-account summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
-.hth-api-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .5rem 1rem; }
-.hth-api-option { padding: .5rem; border-bottom: 1px solid #ececec; }
+.hth-api-instructions { margin: 0 0 1.5rem; line-height: 1.45; }
+.hth-api-account-header,
+.hth-api-account-row {
+    display: grid;
+    grid-template-columns: 35% 20% 45%;
+    column-gap: 1rem;
+    align-items: center;
+}
+.hth-api-account-header {
+    margin-top: 1rem;
+    padding: .9rem 1rem .9rem 2rem;
+    background: #f3f5f7;
+    font-weight: 600;
+}
+.hth-api-account-row { width: calc(100% - 2rem); margin-left: .5rem; }
+.hth-api-account { margin: 0; border-bottom: 1px solid #d6d7d8; }
+.hth-api-account summary { cursor: pointer; font-weight: 600; padding: 1rem 0; }
+.hth-api-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0 1.5rem;
+    padding-bottom: .75rem;
+}
+.hth-api-option { padding: .75rem 0; border-bottom: 1px solid #ececec; }
+.hth-api-option input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    margin-right: .5rem;
+    accent-color: var(--base-cz-color-blue);
+}
+.hth-api-empty { padding: 1rem 0; }
+.hth-account-tabs {
+    display: flex;
+    gap: 0;
+    margin: .75rem 0 1rem;
+    border-bottom: 1px solid #d6d7d8;
+}
+.hth-account-tabs button {
+    min-width: 14rem;
+    padding: .9rem 1.5rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+.hth-account-tabs .hth-account-tab-active {
+    border-bottom: 3px solid #0070c9;
+    font-weight: 600;
+}

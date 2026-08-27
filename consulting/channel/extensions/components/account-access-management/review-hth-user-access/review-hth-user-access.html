@@ -19,7 +19,8 @@
     <page-section heading="[[$component.nls.headers.hthReviewMapping]]">
         <!-- ko foreach: accounts -->
         <div class="hth-review-account">
-            <h3 data-bind="text: displayName + ' (' + (maskedAccountNumber || accountNumber) + ')' "></h3>
+            <h3 data-bind="text: (accountType === 'TD' ? $component.nls.fieldname.tdMapping : $component.nls.fieldname.casaMapping)
+                + ' - ' + accountNumberDisplay + (displayName ? ' - ' + displayName : '')"></h3>
             <div data-bind="foreach: $component.selectedApis($data)">
                 <span class="hth-review-api" data-bind="text: apiName"></span>
             </div>

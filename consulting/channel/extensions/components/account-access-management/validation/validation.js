@@ -201,7 +201,7 @@ define([
             return {
                 channelMode: isHthUser ? "HTH" : "BCO",
                 closeId: isHthUser && data.closeId ? String(data.closeId).trim() : null,
-                allowedAccountTypes: isHthUser ? ["CSA"] : null,
+                allowedAccountTypes: isHthUser ? ["CSA", "TD"] : null,
                 serviceMappingType: isHthUser ? "HTH_API" : "OBDX_TASK"
             };
         };

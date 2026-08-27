@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Effective CSA grants; A/I status implements soft replacement and deletion. -->
+<!-- Effective Current and Savings/Time Deposit grants; A/I status enables soft replacement. -->
 <entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" version="2.5">
   <entity class="com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccount" name="HthUserAccessAccount">
     <table name="HTH_USER_ACCESS_ACCOUNT" schema="HTH_BEA"/>

@@ -120,6 +120,11 @@ define([
             return !self.hthSummaryLoading() && !self.hthSummaryError();
         });
 
+        self.userAccessPageTitle = function () {
+            return self.isHthMode() ? self.nls.pageTitle.hthUserAccess
+                : self.nls.pageTitle.bcoUserAccess;
+        };
+
         if (rootParams.dashboard.appData.segment === "ADMIN") {
             self.displayEditButtons(true);
         }
@@ -149,6 +154,8 @@ define([
 
             summary.accountCountByType = summary.accountCountByType || {};
             summary.casaAccountCount = Number(summary.accountCountByType.CSA || 0);
+            summary.tdAccountCount = Number(summary.accountCountByType.TD || 0);
+            summary.totalAccountCount = summary.casaAccountCount + summary.tdAccountCount;
             summary.hasPendingRequest = Boolean(summary.pendingAction ||
                 String(summary.setupStatus || "").indexOf("PENDING_") === 0);
             summary.canMaintain = !self.hthEnterpriseDisabled() && !summary.hasPendingRequest &&
@@ -246,9 +253,7 @@ define([
         };
 
         if (self.accessLevel() === "USER" || self.accessLevel() === "USERLINKAGE") {
-            rootParams.dashboard.headerName(rootParams.baseModel.format(self.nls.pageTitle.accessManagement, {
-                user: self.nls.navLabels.UserLevel_title
-            }));
+            rootParams.dashboard.headerName(self.userAccessPageTitle());
         }
 
         const getNewKoModel = function () {
@@ -410,9 +415,7 @@ define([
                 self.partyName(self.ExclusionModelInstance().partyDetails.partyName());
 
                 if (self.accessLevel() === "USER" || self.accessLevel() === "USERLINKAGE") {
-                    rootParams.dashboard.headerName(rootParams.baseModel.format(self.nls.pageTitle.accessManagement, {
-                        user: self.nls.navLabels.UserLevel_title
-                    }));
+                    rootParams.dashboard.headerName(self.userAccessPageTitle());
 
                     self.loadUserListComponent(false);
                     self.loadUserListComponent(true);
@@ -439,9 +442,7 @@ define([
             if (self.accessLevel() === "PARTY" || self.accessLevel() === "LINKAGE") {
                 rootParams.dashboard.headerName(self.nls.pageTitle.accessManagementParty);
             } else if (self.accessLevel() === "USER" || self.accessLevel() === "USERLINKAGE") {
-                rootParams.dashboard.headerName(rootParams.baseModel.format(self.nls.pageTitle.accessManagement, {
-                    user: self.nls.navLabels.UserLevel_title
-                }));
+                rootParams.dashboard.headerName(self.userAccessPageTitle());
             }
 
             ExclusionModel.readAllAccountDetails(isCorpAdmin ? partyId.value : self.partyID()).done(function (data) {
@@ -1060,9 +1061,7 @@ define([
         };
 
         self.getAllUsersList = function () {
-            rootParams.dashboard.headerName(rootParams.baseModel.format(self.nls.pageTitle.accessManagement, {
-                user: self.nls.navLabels.UserLevel_title
-            }));
+            rootParams.dashboard.headerName(self.userAccessPageTitle());
 
             ExclusionModel.fetchAssociatedUserForParty(isCorpAdmin ? partyId.value : self.partyID()).done(function (data) {
                 self.userList(data.userDTOList);
@@ -2352,9 +2351,7 @@ define([
             if (self.accessLevel() === "PARTY" || self.accessLevel() === "LINKAGE") {
                 rootParams.dashboard.headerName(self.nls.pageTitle.accessManagementParty);
             } else if (self.accessLevel() === "USER" || self.accessLevel() === "USERLINKAGE") {
-                rootParams.dashboard.headerName(rootParams.baseModel.format(self.nls.pageTitle.accessManagement, {
-                    user: self.nls.navLabels.UserLevel_title
-                }));
+                rootParams.dashboard.headerName(self.userAccessPageTitle());
             }
         };
 
@@ -2588,6 +2585,7 @@ define([
         };
 
         if (self.isHthMode()) {
+            rootParams.dashboard.headerName(self.userAccessPageTitle());
             self.loadHthSummary();
         } else if (self.accessLevel() === "PARTY" || self.accessLevel() === "LINKAGE") {
             self.getAllAccountsCount();

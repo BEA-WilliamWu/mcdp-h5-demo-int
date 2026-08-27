@@ -13,7 +13,7 @@ public interface IHostToHostUserAccess {
       SessionContext sessionContext,
       HostToHostUserAccessSearchDTO requestDTO) throws Exception;
 
-  /** Returns eligible CSA accounts, APIs, and existing access for one relationship context. */
+  /** Returns eligible Current and Savings/Time Deposit accounts, APIs, and existing access. */
   HostToHostUserAccessResponseDTO accounts(
       SessionContext sessionContext,
       HostToHostUserAccessSearchDTO requestDTO) throws Exception;

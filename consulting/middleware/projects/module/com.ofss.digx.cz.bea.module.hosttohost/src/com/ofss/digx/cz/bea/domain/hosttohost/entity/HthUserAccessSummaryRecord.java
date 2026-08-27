@@ -7,7 +7,7 @@ import java.util.Map;
  * Read-only aggregate of active effective account grants for one company context.
  *
  * <p>The map is keyed by account type so the response can remain extensible even though this Story
- * currently supports CSA only.
+ * supports Current and Savings and Time Deposit account totals.
  */
 public class HthUserAccessSummaryRecord {
   private String accessPartyId;

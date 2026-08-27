@@ -1,6 +1,8 @@
 define({
     "pageTitle": {
         "accessManagement": "{user}账户及服务管理",
+        "bcoUserAccess": "BCO - 用户账户及服务访问",
+        "hthUserAccess": "HTH - 用户账户及服务访问",
         "accessManagementParty": "账户及服务",
         "delete": "删除用户账户及服务的访问权限"
     },
@@ -51,6 +53,13 @@ define({
         "hthToLink": "前往配对",
         "hthNoAssociatedCompanies": "此用户没有可用的关联公司。",
         "hthLinkageRequires595": "此版本尚未提供 HTH 账户配对维护功能。",
+        "hthMaintenanceLoadError": "无法载入 HTH 账户及服务访问设置，请重试。",
+        "hthSelectAccount": "请至少选择一个往来及储蓄账户或定期存款账户。",
+        "hthSelectApi": "请为每个已选账户至少选择一项 API 服务。",
+        "hthSubmitFailed": "无法提交 HTH 用户访问申请。",
+        "hthReviewMessage": "提交审批前，请复核已选 HTH 账户及 API 服务。",
+        "hthDeleteWarning": "审批后将删除此公司上下文中的所有账户及 API 访问权限。",
+        "hthDiscardChanges": "是否放弃尚未保存的 HTH 账户及 API 变更？",
         "lonRemark1": "*选取贷款账户的空格后，所有现有及未来的贷款账户均会全部配对。",
         "lonRemark2":"重要事项: 新增用户将可阅览已选取服务及所有贷款账户的相关详情和资料。",
         "eStatementAndEAdviceSettingNotSameForAIO": "{accounts}于「往来及储蓄」与「定期存款」的「查看电子结单」及 / 或「查看电子交易通知」功能设定不一致。请检视并更新设定。"
@@ -99,6 +108,8 @@ define({
         "transTabs": "交易映射选项卡",
         "phoneBankingStatus": "电话理财",
         "copyAccountAccessSetting": "您是否要复制另一用户的访问设置？",
+        "hthApiMapping": "HTH API 服务设置",
+        "hthReviewMapping": "HTH 账户及 API 服务",
     },
     "fieldname": {
         "mappingType": "映射类型",
@@ -121,6 +132,7 @@ define({
         "fullName": "{firstName} {lastName}",
         "moduleToMap": "指定账户 - 配对",
         "linkedModuleToMap": "关联账户 – 配对",
+        "hthApplyFirstToAll": "将第一个账户的 API 选择套用到所有已选账户",
         "ExceptionAccountNumbers": "例外账号",
         "totalAccts": "账户总数",
         "mappedAccts": "账户数目",

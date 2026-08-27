@@ -1,5 +1,20 @@
 <div class="form-main-container">
     <page-section heading="[[$component.nls.headers.hthApiMapping]]">
+        <div class="hth-api-instructions" data-bind="text: instructions"></div>
+        <div class="hth-account-tabs" role="tablist">
+            <button type="button" role="tab"
+                data-bind="click: showCurrentAndSavings,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
+                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
+                <span data-bind="text: nls.navLabels.CASA"></span>
+            </button>
+            <button type="button" role="tab"
+                data-bind="click: showTimeDeposits,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
+                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
+                <span data-bind="text: nls.navLabels.TD"></span>
+            </button>
+        </div>
         <!-- ko if: isEditable -->
         <div class="oj-flex oj-flex-items-pad">
             <oj-button class="action-button-secondary" on-click="[[$component.applyFirstToAll]]">
@@ -7,10 +22,22 @@
             </oj-button>
         </div>
         <!-- /ko -->
+        <div class="hth-api-account-header">
+            <span data-bind="text: nls.headers.AccountNumber"></span>
+            <span data-bind="text: nls.headers.currency"></span>
+            <span data-bind="text: nls.headers.displayName"></span>
+        </div>
         <!-- ko foreach: accounts -->
-        <details class="hth-api-account" open>
-            <summary data-bind="text: (displayName || accountType) + ' (' + (maskedAccountNumber || accountNumber) + ')' "></summary>
-            <div class="hth-api-grid" data-bind="foreach: apiServices">
+        <details class="hth-api-account" role="treeitem"
+            data-bind="visible: $parent.isActiveAccount($data)">
+            <summary>
+                <span class="hth-api-account-row">
+                    <span data-bind="text: accountNumberDisplay"></span>
+                    <span data-bind="text: displayCurrency"></span>
+                    <span data-bind="text: displayAccountType"></span>
+                </span>
+            </summary>
+            <div class="hth-api-grid" role="group" data-bind="foreach: apiServices">
                 <label class="hth-api-option">
                     <input type="checkbox" data-bind="checked: selected, enable: $component.isEditable">
                     <span data-bind="text: apiName"></span>
@@ -18,10 +45,15 @@
             </div>
         </details>
         <!-- /ko -->
+        <div class="hth-api-empty"
+            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
     </page-section>
     <div class="button-container">
+        <!-- ko ifnot: isEditable -->
+        <oj-button class="action-button-primary" on-click="[[$component.edit]]"><span data-bind="text: nls.headers.edit"></span></oj-button>
+        <!-- /ko -->
         <!-- ko if: isEditable -->
-        <oj-button class="action-button-primary" on-click="[[$component.next]]"><span data-bind="text: nls.common.next"></span></oj-button>
+        <oj-button class="action-button-primary" on-click="[[$component.save]]"><span data-bind="text: nls.common.save"></span></oj-button>
         <!-- /ko -->
         <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
         <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>

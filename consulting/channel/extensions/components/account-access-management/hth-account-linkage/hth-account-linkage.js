@@ -2,9 +2,11 @@ define([
     "knockout",
     "./model",
     "ojL10n!extensions/resources/nls/access-management",
+    "extensions/generic/service-extension",
     "ojs/ojbutton",
+    "ojs/ojcheckboxset",
     "framework/elements/api/page-section/loader"
-], function (ko, HthUserAccessModel, resourceBundle) {
+], function (ko, HthUserAccessModel, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -24,6 +26,33 @@ define([
 
                 return Array.isArray(value) ? value : [];
             },
+            normalizeAccountType = function (value) {
+                const accountType = String(read(value) || "").toUpperCase();
+
+                if (accountType === "TRD" || accountType === "TERM_DEPOSIT") {
+                    return "TD";
+                }
+                if (accountType === "DEMAND_DEPOSIT") {
+                    return "CSA";
+                }
+                return accountType;
+            },
+            accountNumberValue = function (account) {
+                const value = read(account && account.accountNumber);
+
+                return value && typeof value === "object"
+                    ? read(value.value) || read(value.displayValue) || "" : value || "";
+            },
+            accountNumberDisplay = function (account, canonicalValue) {
+                const value = read(account && account.accountNumber),
+                    suppliedDisplay = read(account && account.accountNumberDisplay)
+                        || (value && typeof value === "object" ? read(value.displayValue) : ""),
+                    displaySource = suppliedDisplay || canonicalValue,
+                    converted = displaySource && serviceExtension.int2extAccNo(
+                        String(displaySource), "Y");
+
+                return converted || suppliedDisplay || canonicalValue || "-";
+            },
             context = read(params.hthLinkageContext) || {};
 
         self.nls = resourceBundle;
@@ -35,7 +64,7 @@ define([
         self.access = ko.observable();
         self.accounts = ko.observableArray([]);
         self.mode = ko.observable("CREATE");
-        self.linkAllAccounts = ko.observable(false);
+        self.activeAccountType = ko.observable("CSA");
         self.originalAccounts = [];
 
         self.isEditable = ko.pureComputed(function () {
@@ -48,7 +77,45 @@ define([
             }).length;
         });
 
-        rootParams.dashboard.headerName(self.nls.pageTitle.accessManagement.replace("{user}", "HTH User"));
+        // Bind JET to a named observable. Complex inline expressions are evaluated only once by
+        // some OBDX/JET versions and previously left Next disabled after a row was selected.
+        self.nextDisabled = ko.pureComputed(function () {
+            return self.selectedCount() === 0;
+        });
+
+        self.filteredAccounts = ko.pureComputed(function () {
+            return self.accounts().filter(function (account) {
+                return String(read(account.accountType) || "").toUpperCase()
+                    === self.activeAccountType();
+            }).sort(function (left, right) {
+                return String(read(left.accountNumber) || "")
+                    .localeCompare(String(read(right.accountNumber) || ""));
+            });
+        });
+
+        self.isActiveAccount = function (account) {
+            return String(read(account && account.accountType) || "").toUpperCase()
+                === self.activeAccountType();
+        };
+
+        self.activeAllSelection = ko.pureComputed(function () {
+            const activeAccounts = self.filteredAccounts();
+
+            return activeAccounts.length > 0 && activeAccounts.every(function (account) {
+                return account.selected();
+            }) ? ["ALL"] : [];
+        });
+
+        self.instructions = ko.pureComputed(function () {
+            return self.mode() === "VIEW"
+                ? self.nls.notes.UAC04_REVIEW : self.nls.notes.UAC06_CREATE_EDIT;
+        });
+
+        self.noAccountsForActiveType = ko.pureComputed(function () {
+            return !self.loading() && !self.errorMessage() && self.filteredAccounts().length === 0;
+        });
+
+        rootParams.dashboard.headerName(self.nls.pageTitle.hthUserAccess);
 
         const mapApi = function (api) {
                 api = api || {};
@@ -60,7 +127,22 @@ define([
             mapAccount = function (account) {
                 account = account || {};
 
+                const canonicalNumber = String(accountNumberValue(account)),
+                    accountType = normalizeAccountType(account.accountType),
+                    currency = read(account.currency) || read(account.currencyCode) || "",
+                    displayName = read(account.displayName) || "";
+
                 return Object.assign({}, account, {
+                    accountNumber: canonicalNumber,
+                    accountNumberDisplay: accountNumberDisplay(account, canonicalNumber),
+                    maskedAccountNumber: read(account.maskedAccountNumber) || "",
+                    accountType: accountType,
+                    currency: currency,
+                    displayName: displayName,
+                    displayCurrency: currency || "-",
+                    displayAccountType: displayName || (accountType === "TD"
+                        ? self.nls.navLabels.TD : accountType === "CSA"
+                            ? self.nls.navLabels.CASA : accountType || "-"),
                     selected: ko.observable(!!read(account.selected)),
                     apiServices: asArray(account.apiServices).map(mapApi)
                 });
@@ -69,18 +151,25 @@ define([
                 self.errorMessage(message || self.nls.info.hthMaintenanceLoadError);
             };
 
-        self.toggleAll = function () {
+        self.toggleAll = function (event) {
             if (!self.isEditable()) {
                 return;
             }
-            const selected = !self.accounts().every(function (account) {
-                return account.selected();
-            });
+            const selectedValues = event && event.detail
+                    && Array.isArray(event.detail.value) ? event.detail.value : [],
+                selected = selectedValues.indexOf("ALL") !== -1;
 
-            self.linkAllAccounts(selected);
-            self.accounts().forEach(function (account) {
+            self.filteredAccounts().forEach(function (account) {
                 account.selected(selected);
             });
+        };
+
+        self.showCurrentAndSavings = function () {
+            self.activeAccountType("CSA");
+        };
+
+        self.showTimeDeposits = function () {
+            self.activeAccountType("TD");
         };
 
         self.edit = function () {
@@ -140,6 +229,7 @@ define([
                 return (ko.toJS(accounts) || []).map(function (account) {
                     return {
                         accountNumber: account.accountNumber,
+                        accountType: account.accountType,
                         selected: !!account.selected,
                         apiCodes: (account.apiServices || []).filter(function (api) {
                             return !!api.selected;
@@ -167,10 +257,6 @@ define([
                 self.pendingRequest(!!data.pendingRequest);
                 self.mode(requestedMode || (context.setupStatus === "ACTIVE"
                     ? "VIEW" : "CREATE"));
-                self.linkAllAccounts(self.accounts().length > 0
-                    && self.accounts().every(function (account) {
-                        return account.selected();
-                    }));
             };
 
         if (params.preloadedAccounts) {

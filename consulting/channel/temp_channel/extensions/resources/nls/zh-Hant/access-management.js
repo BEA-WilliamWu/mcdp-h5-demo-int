@@ -1,6 +1,8 @@
 define({
     "pageTitle": {
         "accessManagement": "{user}賬戶及服務管理",
+        "bcoUserAccess": "BCO - 用戶賬戶及服務訪問",
+        "hthUserAccess": "HTH - 用戶賬戶及服務訪問",
         "accessManagementParty": "賬戶及服務",
         "delete": "刪除用戶賬戶及服務的訪問權限"
     },
@@ -51,6 +53,13 @@ define({
         "hthToLink": "前往配對",
         "hthNoAssociatedCompanies": "此用戶沒有可用的關聯公司。",
         "hthLinkageRequires595": "此版本尚未提供 HTH 賬戶配對維護功能。",
+        "hthMaintenanceLoadError": "無法載入 HTH 賬戶及服務訪問設定，請重試。",
+        "hthSelectAccount": "請至少選擇一個往來及儲蓄賬戶或定期存款賬戶。",
+        "hthSelectApi": "請為每個已選賬戶至少選擇一項 API 服務。",
+        "hthSubmitFailed": "無法提交 HTH 用戶訪問申請。",
+        "hthReviewMessage": "提交審批前，請複核已選 HTH 賬戶及 API 服務。",
+        "hthDeleteWarning": "審批後將刪除此公司上下文中的所有賬戶及 API 訪問權限。",
+        "hthDiscardChanges": "是否放棄尚未保存的 HTH 賬戶及 API 變更？",
         "lonRemark1": "*選取貸款賬戶的空格後，所有現有及未來的貸款賬戶均會全部配對。",
         "lonRemark2":"重要事項: 新增用戶将可閱覽已選取服務及所有貸款賬戶的相關詳情和資料。",
         "eStatementAndEAdviceSettingNotSameForAIO": "{accounts}於「往來及儲蓄」與「定期存款」的「查看電子結單」及 / 或「查看電子交易通知」功能設定不一致。請檢視並更新設定。"
@@ -98,7 +107,9 @@ define({
         "acctTabs": "賬戶映射選項卡",
         "transTabs": "交易映射選項卡",
         "phoneBankingStatus": "電話理財",
-        "copyAccountAccessSetting": "您是否要複製另一用戶之訪問設定？"
+        "copyAccountAccessSetting": "您是否要複製另一用戶之訪問設定？",
+        "hthApiMapping": "HTH API 服務設定",
+        "hthReviewMapping": "HTH 賬戶及 API 服務"
     },
     "fieldname": {
         "mappingType": "映射類型",
@@ -121,6 +132,7 @@ define({
         "fullName": "{firstName} {lastName}",
         "moduleToMap": "指定賬戶 - 配對",
         "linkedModuleToMap": "關聯賬戶 - 配對",
+        "hthApplyFirstToAll": "將第一個賬戶的 API 選擇套用到所有已選賬戶",
         "ExceptionAccountNumbers": "例外賬號",
         "totalAccts": "賬戶總數",
         "mappedAccts": "賬戶數目",

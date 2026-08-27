@@ -1,0 +1,72 @@
+plugins {
+    id "java"
+}
+
+def repositoryRoot = file("../..").canonicalFile
+def middlewareRoot = new File(repositoryRoot, "consulting/middleware")
+def projectsRoot = new File(middlewareRoot, "projects")
+def librariesRoot = new File(middlewareRoot, "lib")
+def localJarFiles = fileTree(dir: librariesRoot, include: "**/*.jar")
+
+if (!projectsRoot.isDirectory()) {
+    throw new GradleException("Backend source directory does not exist: ${projectsRoot}")
+}
+
+if (!librariesRoot.isDirectory()) {
+    throw new GradleException("Backend library directory does not exist: ${librariesRoot}")
+}
+
+// Derive source roots instead of listing OBDX projects manually. This keeps IDEA in sync when a
+// consulting module is added or removed, while excluding generated output and non-source folders.
+def backendSourceDirectories = fileTree(projectsRoot) {
+    include "**/src/**/*.java"
+}.files.collect { javaFile ->
+    def current = javaFile.parentFile
+
+    while (current != null && current.name != "src") {
+        current = current.parentFile
+    }
+
+    if (current == null) {
+        throw new GradleException("Cannot resolve Java source root for ${javaFile}")
+    }
+
+    current
+}.toSet().sort { left, right -> left.path <=> right.path }
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+sourceSets {
+    main {
+        java.setSrcDirs(backendSourceDirectories)
+        resources.setSrcDirs([])
+    }
+    test {
+        java.setSrcDirs([])
+        resources.setSrcDirs([])
+    }
+}
+
+dependencies {
+    // OBDX and project-specific dependencies are supplied with the consulting workspace. No
+    // dependency is downloaded from Maven Central, keeping the check usable on the internal LAN.
+    implementation localJarFiles
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "windows-1252"
+    options.debug = true
+    options.warnings = false
+}
+
+task printCompileLayout {
+    group = "verification"
+    description = "Prints the Java source roots and local JAR count used by IntelliJ/Gradle."
+
+    doLast {
+        println "Repository  : ${repositoryRoot}"
+        println "Source roots: ${backendSourceDirectories.size()}"
+        println "Local JARs  : ${localJarFiles.files.size()}"
+    }
+}

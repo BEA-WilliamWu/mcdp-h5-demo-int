@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="hth-consulting-backend-compile" default="compile" basedir="../..">
+    <!--
+        Thin IDEA Ant entry point. The official consulting build remains the source of truth for
+        project order and compiler classpath; this wrapper intentionally stops after compile-all.
+    -->
+    <target name="compile" description="Compile all consulting backend projects without packaging EARs">
+        <ant antfile="${basedir}/consulting/ant/build_backend.xml"
+             dir="${basedir}/consulting/ant"
+             target="compile-all"
+             inheritAll="false"/>
+    </target>
+</project>

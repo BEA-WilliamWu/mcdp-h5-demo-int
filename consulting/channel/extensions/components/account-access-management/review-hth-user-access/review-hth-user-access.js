@@ -2,9 +2,10 @@ define([
     "knockout",
     "../hth-account-linkage/model",
     "ojL10n!extensions/resources/nls/access-management",
+    "extensions/generic/service-extension",
     "ojs/ojbutton",
     "framework/elements/api/page-section/loader"
-], function (ko, HthUserAccessModel, resourceBundle) {
+], function (ko, HthUserAccessModel, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -30,6 +31,35 @@ define([
             read = function (value) {
                 return ko.isObservable(value) ? value() : value;
             },
+            normalizeAccount = function (account) {
+                account = ko.toJS(account || {});
+
+                const accountNumberObject = account.accountNumber,
+                    canonicalNumber = String(accountNumberObject
+                        && typeof accountNumberObject === "object"
+                        ? accountNumberObject.value || accountNumberObject.displayValue || ""
+                        : accountNumberObject || ""),
+                    accountTypeValue = String(account.accountType || "").toUpperCase(),
+                    accountType = accountTypeValue === "TRD"
+                        || accountTypeValue === "TERM_DEPOSIT" ? "TD"
+                            : accountTypeValue === "DEMAND_DEPOSIT" ? "CSA" : accountTypeValue,
+                    currency = account.currency || account.currencyCode || "",
+                    displayName = account.displayName || "",
+                    suppliedDisplay = account.accountNumberDisplay
+                        || (accountNumberObject && typeof accountNumberObject === "object"
+                            ? accountNumberObject.displayValue : ""),
+                    convertedDisplay = serviceExtension.int2extAccNo(
+                        String(suppliedDisplay || canonicalNumber), "Y");
+
+                return Object.assign({}, account, {
+                    accountNumber: canonicalNumber,
+                    accountNumberDisplay: convertedDisplay || suppliedDisplay
+                        || canonicalNumber || "-",
+                    accountType: accountType,
+                    currency: currency,
+                    displayName: displayName
+                });
+            },
             taskCode = ko.unwrap(params.taskCode || data.taskCode) || "";
 
         self.nls = resourceBundle;
@@ -40,7 +70,8 @@ define([
             || (taskCode === "UAT_N_HUA_DEL" ? "DELETE"
                 : taskCode === "UAT_N_HUA_EDT" ? "EDIT" : "CREATE");
         self.access = record;
-        self.allAccounts = ko.toJS(ko.unwrap(params.accounts)) || record.accounts || [];
+        self.allAccounts = (ko.toJS(ko.unwrap(params.accounts)) || record.accounts || [])
+            .map(normalizeAccount);
         self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
         self.accounts = self.allAccounts.filter(function (account) {
             return read(account.selected) !== false;
@@ -72,7 +103,7 @@ define([
                         accountNumber: account.accountNumber,
                         maskedAccountNumber: account.maskedAccountNumber,
                         displayName: account.displayName,
-                        accountType: "CSA",
+                        accountType: String(account.accountType || "").toUpperCase(),
                         currency: account.currency,
                         selected: true,
                         displayOrder: account.displayOrder === undefined

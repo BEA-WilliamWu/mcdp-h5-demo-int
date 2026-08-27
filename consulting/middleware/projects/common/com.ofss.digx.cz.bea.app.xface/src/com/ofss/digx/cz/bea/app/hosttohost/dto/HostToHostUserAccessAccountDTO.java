@@ -8,8 +8,9 @@ import java.util.List;
  * Account-level selection used by HTH user access maintenance and approval snapshots.
  *
  * <p>The account number is the canonical value used for server-side ownership validation;
- * {@code maskedAccountNumber} and {@code displayName} are presentation-only values. Only CSA
- * accounts are supported. The nested API list records the services selected for this account.
+ * {@code maskedAccountNumber} and {@code displayName} are presentation-only values. Both Current
+ * and Savings (CSA) and Time Deposit (TD) accounts are supported. The nested API list records the
+ * services selected for this account.
  */
 public class HostToHostUserAccessAccountDTO extends DomainObjectDTO {
   private static final long serialVersionUID = 1032528897282091210L;

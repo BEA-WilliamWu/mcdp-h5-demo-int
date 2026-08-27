@@ -8,16 +8,16 @@
 | 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
 | 前置依赖 | `HTH_USER_PROFILE`、`HTH_MANAGEMENT`、`HTH_MANAGEMENT_API`、`HTH_API_MASTER` 已在 `HTH_BEA` |
 | 关联 Story | BCOH2H-538 提供 HTH User Summary 和维护入口 |
-| 更新时间 | 2026-08-26 |
+| 更新时间 | 2026-08-28 |
 
 ## 1. 目标和范围
 
-为一个 HTH 用户设置可访问的 Current and Savings Account，以及每个账户允许调用的 HTH API Service。
+为一个 HTH 用户设置可访问的 Current and Savings Account 与 Time Deposit Account，以及每个账户允许调用的 HTH API Service。
 
 已实现范围：
 
 - Related 和 Associated 两种 Company Context。
-- 只允许 CSA Account。
+- 只允许 CSA（Current and Savings）和 TD（Time Deposit）Account。
 - Account Selection、按账户 API Mapping、Review、Create/Edit/Delete。
 - Maker/Checker Request Snapshot 和 Approved Re-entry。
 - 审批后生效的 Account/API Grant。
@@ -29,7 +29,7 @@
 
 - 企业级 HTH Enable/Disable、Certificate、UAM Client 和 API Master Maintenance。
 - BCO `taskIds` 或 `DIGX_AM_*` 数据模型修改。
-- 非 CSA Account。
+- CSA/TD 以外的 Account Type。
 - HTH API 的业务处理实现。
 - User Scope API。最终数据模型按 Account Scope 实现，每项 API Grant 必须属于一个 Account Grant。
 - CloseID 生成规则。
@@ -43,7 +43,7 @@ flowchart TB
     REST --> SERVICE["HostToHostUserAccess Application Service"]
     SERVICE --> PROFILE["HTH_USER_PROFILE"]
     SERVICE --> REL["Party Relationship Domain"]
-    SERVICE --> PORTFOLIO["PartyToAccountRelationship"]
+    SERVICE --> PORTFOLIO["BCO AccountAccess eligible account inventory"]
     SERVICE --> CATALOG["HTH_MANAGEMENT + HTH_MANAGEMENT_API + HTH_API_MASTER"]
     SERVICE --> APPROVAL["OBDX Approval Framework"]
     SERVICE --> REQUEST["3 Request Snapshot Tables"]
@@ -81,14 +81,13 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A["HTH Summary"] --> B["mapping-modules HTH branch"]
-    B --> C["hth-account-linkage"]
+    A["HTH Summary"] --> C["hth-account-linkage"]
     C --> D["hth-api-service-mapping"]
     D --> E["review-hth-user-access"]
     E --> F["confirm-screen"]
 ```
 
-`mapping-modules` 只作为入口分流器：当 `channelMode=HTH` 或存在 `hthLinkageContext` 时，立即加载 `hth-account-linkage`；否则继续执行原 BCO 代码。
+HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules` 继续只服务 BCO，避免 HTH Template 与旧 BCO Binding 同时初始化。
 
 ### 3.2 Account Linkage
 
@@ -97,24 +96,27 @@ flowchart LR
 行为：
 
 - `setupStatus=ACTIVE` 时初始 Mode 为 `VIEW`，否则为 `CREATE`。
+- 默认进入 Current and Savings Tab，只显示 CSA；可切换 Time Deposit Tab，只显示 TD。
 - Pending Request 时禁止编辑。
 - `Edit` 把 Mode 改为 `EDIT`。
 - `Link All` 只修改 Account Selection。
 - `Next` 至少要求一个 Selected Account。
 - `Delete` 直接进入 Delete Review。
 - `Cancel Edit` 使用进入页面时的 Deep Copy 恢复 Account/API Selection。
-- `Back` 比较 Account Number、Selected 和 API Code Selection；有未保存修改时提示确认。
+- `Back` 比较 Account Type、Account Number、Selected 和 API Code Selection；有未保存修改时提示确认。
 
 ### 3.3 API Mapping
 
-`hth-api-service-mapping` 只显示 Account Linkage 中 Selected 的账户。每个 Account 的 `apiServices` 来源于后端 Enterprise-enabled API Catalogue。
+`hth-api-service-mapping` 只显示 Account Linkage 中 Selected 的账户。页面默认 Current and Savings Tab，可切换 Time Deposit；每个 Account 的 `apiServices` 来源于后端 Enterprise-enabled API Catalogue。
 
 规则：
 
 - 每个 Selected Account 至少选择一个 API。
+- 页面初始只读，点击 `Edit` 后才能选择；账户默认折叠，展开后以 Account 为根、API 为子项显示。
 - API Selection 使用 `apiCode`，后端重新解析 `apiMasterId`、Name 和 Display Order。
 - `Apply first to all` 按 API Code 复制第一项 Account 的选择，不能按数组下标复制。
 - Back 返回 Account 页面时保留内存中的 Account/API Selection，不重新读取数据库。
+- `Save` 完成选择校验并进入 Review；`Confirm` 才提交 Maker Request。
 
 ### 3.4 Review 和提交
 
@@ -258,12 +260,12 @@ HostToHostUserAccessResponseDTO
 4. 要求主 Party 的 `HTH_MANAGEMENT.HTH_STATUS=ENABLE`。
 5. 验证 RELATED/ASSOCIATED Relationship。
 6. 从 `HTH_MANAGEMENT_API` 和 Active `HTH_API_MASTER` 建立 Eligible API Catalogue。
-7. 使用 `PartyToAccountRelationship.fetchAllAccountsOfParty()` 读取 `accessPartyId` 的 Demand Deposit Account，并映射为 CSA。
+7. 调用与 BCO Account Linkage 页面相同的 `IAccountAccess.listAccounts()`：`partyId` 始终作为 Primary Party；RELATED 使用空的 Linked Party List，ASSOCIATED 把 `accessPartyId` 放入 Linked Party List。服务返回对应公司的 Eligible Demand Deposit 与 Term Deposit 后，分别映射为 CSA 和 TD。HTH 丢弃 BCO Task Tree，仅保留 Account Metadata 并挂接 HTH API Catalogue。
 8. 读取该 Context 下全部 Effective Account/API Row。
 9. 将 Effective Selection 合并到 Eligible Account/API。
 10. 查询相同 Context 是否有 Pending Request。
 
-Account Portfolio 中不存在但 Effective 中仍 Active 的 Account 会以 Masked Account Number 补入响应并标记 Selected，使 View 能显示历史授权；Maker/Checker 校验时仍会使用当前 Portfolio 重新验证，不能继续审批已失效账户。
+BCO AccountAccess 当前 Eligible Inventory 中不存在但 Effective 中仍 Active 的 Account，会以 Masked Account Number 补入响应并标记 Selected，使 View 能显示历史授权；Maker/Checker 校验时仍会调用相同的 AccountAccess Inventory 重新验证，不能继续审批已失效账户。
 
 ### 5.2 Write Service
 
@@ -299,12 +301,12 @@ HUA + actionType 前 3 个字符 + UUID
 | 当前 Active Context 不存在 | Y | N | N | 按 Action 重新检查 |
 | 当前 Active Context 存在 | N | Y | Y | 按 Action 重新检查 |
 | 至少一个 Account/API | Y | Y | N | Y/Y/N |
-| Account Type 为 CSA | Y | Y | N | Y |
+| Account Type 为 CSA 或 TD | Y | Y | N | Y |
 | Account 属于当前 Access Party | Y | Y | N | Y，失效时报 012 |
 | API 属于当前 Enterprise Catalogue | Y | Y | N | Y |
-| Account/API 无重复 | Y | Y | N | Y |
+| Account Type + Account Number/API 无重复 | Y | Y | N | Y |
 
-Checker Approve 时重新从当前 Account Portfolio 和 Enterprise API Catalogue 校验，而不是直接信任 Maker Snapshot。Maker 提交后 Account 被关闭时，Approved Re-entry 失败并保留原 Effective Grant。
+Checker Approve 时重新从当前 BCO AccountAccess Eligible Inventory 和 Enterprise API Catalogue 校验，而不是直接信任 Maker Snapshot。Maker 提交后 Account 被关闭时，Approved Re-entry 失败并保留原 Effective Grant。
 
 ## 6. 数据库设计
 
@@ -349,7 +351,7 @@ Schema SQL 对每张表和每个 Column 都有 `COMMENT ON`。
 
 ### 6.3 `HTH_USER_ACCESS_ACCOUNT`
 
-这张表同时代表 User/Company Context 和一个 Effective CSA Account Grant。
+这张表同时代表 User/Company Context 和一个 Effective CSA/TD Account Grant。
 
 | Column | Type | 约束/用途 |
 | --- | --- | --- |
@@ -359,17 +361,17 @@ Schema SQL 对每张表和每个 Column 都有 `COMMENT ON`。
 | `ACCESS_PARTY_ID` | `VARCHAR2(64)` | Account-owning Party。 |
 | `LINKAGE_TYPE` | `VARCHAR2(16)` | `RELATED` / `ASSOCIATED`。 |
 | `ACCOUNT_NUMBER` | `VARCHAR2(64)` | Canonical unmasked Account Number。 |
-| `ACCOUNT_TYPE` | `VARCHAR2(8)` | Check Constraint 固定 `CSA`。 |
+| `ACCOUNT_TYPE` | `VARCHAR2(8)` | Check Constraint 允许 `CSA`、`TD`。 |
 | `CURRENCY` | `VARCHAR2(3)` | 显示快照。 |
 
 关键约束：
 
 ```text
 PK (ID)
-UNIQUE (PARTY_ID, CLOSE_ID, ACCESS_PARTY_ID, LINKAGE_TYPE, ACCOUNT_NUMBER)
+UNIQUE (PARTY_ID, CLOSE_ID, ACCESS_PARTY_ID, LINKAGE_TYPE, ACCOUNT_TYPE, ACCOUNT_NUMBER)
 FK (PARTY_ID, CLOSE_ID) → HTH_BEA.HTH_USER_PROFILE
 CHECK LINKAGE_TYPE IN ('RELATED','ASSOCIATED')
-CHECK ACCOUNT_TYPE = 'CSA'
+CHECK ACCOUNT_TYPE IN ('CSA','TD')
 CHECK OBJECT_STATUS IN ('A','I')
 ```
 
@@ -426,11 +428,11 @@ Create/Edit Maker 提交时的 Account Snapshot；Delete 不写 Account Child。
 | `ID` | `VARCHAR2(36)` | PK。 |
 | `HTH_USER_ACCESS_REQUEST_ID` | `VARCHAR2(36)` | FK 到 Request Header。 |
 | `ACCOUNT_NUMBER` | `VARCHAR2(64)` | 提交时 Canonical Account。 |
-| `ACCOUNT_TYPE` | `VARCHAR2(8)` | 固定 `CSA`。 |
+| `ACCOUNT_TYPE` | `VARCHAR2(8)` | `CSA` 或 `TD`。 |
 | `CURRENCY` | `VARCHAR2(3)` | 提交快照。 |
 | `DISPLAY_ORDER` | `NUMBER` | Maker Review 顺序。 |
 
-Unique Key：`(HTH_USER_ACCESS_REQUEST_ID, ACCOUNT_NUMBER)`。
+Unique Key：`(HTH_USER_ACCESS_REQUEST_ID, ACCOUNT_TYPE, ACCOUNT_NUMBER)`。BCO 可能把同一个 Account Number 同时放在 CSA 与 TD Tab，因此账户身份必须包含 Account Type。
 
 ### 6.7 `HTH_USER_ACCESS_REQ_API`
 
@@ -481,7 +483,7 @@ Request Snapshot 代表 Maker 当时提交内容，之后不随 Effective Data �
 2. 按 Transaction ID 读取 Active Request Header。
 3. 确认 Snapshot Action 与当前 Service Action 一致。
 4. 从三张 Request Table 重建 DTO，保留 Display Order。
-5. 使用当前 Profile、Relationship、Account Portfolio 和 API Catalogue 重新校验。
+5. 使用当前 Profile、Relationship、BCO AccountAccess Eligible Inventory 和 API Catalogue 重新校验。
 6. Create/Edit 执行完整 Effective Replace；Delete 执行完整 Context Deactivate。
 
 Reject 不进入 Approved Re-entry，因此不会修改 Effective Tables。
@@ -496,7 +498,7 @@ Reject 不进入 Approved Re-entry，因此不会修改 Effective Tables。
 4. 已有 Row 更新为 `A` 并保留原 `ID/CREATED_BY/CREATION_DATE`；没有则插入 UUID Row。
 5. API Grant 同样按 `(ACCOUNT_ID, API_MASTER_ID)` 复用或新建并设为 `A`。
 
-Delete 只执行步骤 1-2。完整历史由 Request Snapshot 保留，Effective Row 的 A/I 状态支持重复启用同一 Business Key。
+Delete 只执行步骤 1-2。完整历史由 Request Snapshot 保留，Effective Row 的 A/I 状态支持重复启用同一 `Account Type + Account Number` Business Key。
 
 ## 8. ORM 和 Repository
 
@@ -576,7 +578,8 @@ consulting/db/branch_change_history/20260825_HTH_User_Access/
 5. `3_HTH_User_Access_Process.sql`
 6. `4_HTH_User_Access_Repository_Adapters.sql`
 7. `5_HTH_User_Access_Error_Messages.sql`
-8. `6_HTH_User_Access_Verification.sql`
+8. 已执行过旧版 Schema 的环境执行 `7_HTH_User_Access_Time_Deposit_Upgrade.sql`；全新安装跳过。
+9. `6_HTH_User_Access_Verification.sql`
 
 ### 10.1 Service 和 Entitlement
 
@@ -618,7 +621,7 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 | `DIGX_CZ_HTH_UA_001` | Profile/CloseID 不可用。 |
 | `DIGX_CZ_HTH_UA_002` | Enterprise HTH 未启用。 |
 | `DIGX_CZ_HTH_UA_003` | RELATED/ASSOCIATED Context 无效。 |
-| `DIGX_CZ_HTH_UA_004` | 非 CSA Account。 |
+| `DIGX_CZ_HTH_UA_004` | 非 CSA/TD Account。 |
 | `DIGX_CZ_HTH_UA_005` | Account 不属于 Access Party 或 Runtime 未授权。 |
 | `DIGX_CZ_HTH_UA_006` | API 无效或企业未启用。 |
 | `DIGX_CZ_HTH_UA_007` | Stale Version 文案保留；最终无 OVN 实现未抛出此 Code。 |
@@ -633,7 +636,7 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 ### 12.1 Security
 
 - 后端重新验证 Profile、Relationship、Account Ownership 和 API Eligibility。
-- Account Number 在数据库保存 Canonical Value，但 UI 返回 Masked Value；日志不得打印完整 Account Number。
+- Account Number 在数据库保存 Canonical Value；授权 BM/CM 维护页面与原 BCO 页面一致显示 Canonical Value，日志仍不得打印完整 Account Number。
 - Maker Snapshot 不能代替 Checker 时的当前状态校验。
 - Runtime Authorization Fail Closed。
 - UI 权限只控制显示，Service Access Policy 才是后端控制边界。
@@ -641,7 +644,7 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 ### 12.2 Performance
 
 - Eligible API Catalogue 每次 Detail/Write 读取一次。
-- Account Portfolio 一次读取 Access Party 的 Demand Deposit Account。
+- 复用 BCO `AccountAccess` 服务一次读取 Primary/Linked Party 的 Demand Deposit 与 Term Deposit，保证 HTH 与 BCO 在 RELATED/ASSOCIATED 场景中的可选账户范围一致。
 - Effective Account 按完整 Context 批量读取，API 按 Account ID 读取。
 - Summary 在数据库按 Context/Account Type 聚合，不返回账户明细。
 - Pending Summary 单次联查 Approval Transaction。
@@ -663,7 +666,7 @@ Feature Tables 不使用乐观锁版本号。当前并发保护由以下机制�
 ### 13.1 Deployment Order
 
 1. 确认 `HTH_BEA` 中 Profile、Management 和 API Master 前置对象存在。
-2. 按第 10 节顺序执行八个 SQL 文件。
+2. 按第 10 节顺序执行 SQL；旧 Schema 环境额外执行 TD Upgrade。
 3. 部署 common DTO、host-to-host module、REST endpoint 和 SMS 兼容更新。
 4. 部署 Channel Components、NLS 和 UI Authorization。
 5. 刷新 Framework Configuration/Authorization Cache 或重启 Managed Server。
@@ -673,6 +676,7 @@ Feature Tables 不使用乐观锁版本号。当前并发保护由以下机制�
 Verification 预期：
 
 - 5 张 HTH_BEA Table。
+- 2 个 Account Type Check Constraint 均允许 `CSA`、`TD`。
 - 8 项 Entitlement 及 Group Mapping。
 - 5 个 SVC Resource、16 个 Resource Action Mapping。
 - 3 个 Task，每个 3 个 Aspect。
@@ -728,7 +732,7 @@ Verification 预期：
 
 | Story 要求 | 最终实现 | 验证方式 |
 | --- | --- | --- |
-| CASA-only | Account Portfolio Demand Deposit + Server `CSA` Validation | API/E2E |
+| CSA/TD-only | BCO AccountAccess Demand/Term Deposit Inventory + Server `CSA`/`TD` Validation | API/E2E |
 | Account Linkage | `hth-account-linkage` + Effective Account Table | UI/Repository |
 | 每账户 API Mapping | Nested `apiServices` + Account API Table | UI/API |
 | View/Edit/Delete | HTH Component State + 3 Write Services | E2E |

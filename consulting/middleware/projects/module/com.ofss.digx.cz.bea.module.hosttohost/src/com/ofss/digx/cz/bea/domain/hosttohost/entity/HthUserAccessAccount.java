@@ -4,7 +4,8 @@ import com.ofss.fc.framework.domain.AbstractDomainObject;
 import com.ofss.fc.framework.domain.IPersistenceObject;
 
 /**
- * Effective CSA account grant for one HTH user and company relationship context.
+ * Effective Current and Savings or Time Deposit account grant for one HTH user and company
+ * relationship context.
  *
  * <p>Rows use A/I status for soft replacement and deletion; inactive rows are retained for audit
  * history and may be reactivated when the same business key is approved again.

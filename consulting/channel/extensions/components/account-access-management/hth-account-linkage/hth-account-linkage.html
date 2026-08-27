@@ -17,52 +17,69 @@
     </page-section>
 
     <page-section heading="[[context.linkageType === 'ASSOCIATED' ? nls.fieldname.linkedModuleToMap : nls.fieldname.moduleToMap]]">
-        <!-- ko if: loading -->
-        <div class="hth-account-message" data-bind="text: nls.info.hthSummaryLoading"></div>
-        <!-- /ko -->
-        <!-- ko if: errorMessage -->
-        <div class="hth-account-message" data-bind="text: errorMessage"></div>
-        <!-- /ko -->
-        <!-- ko if: pendingRequest -->
-        <div class="hth-account-message" data-bind="text: nls.info.hthPendingApproval"></div>
-        <!-- /ko -->
-        <!-- ko if: !loading() && !errorMessage() -->
-        <div class="oj-flex oj-flex-items-pad">
-            <button type="button" class="link-button" data-bind="click: toggleAll, enable: isEditable">
-                <span data-bind="text: nls.fieldname.mapallAccts"></span>
+        <div class="hth-account-instructions" data-bind="visible: !loading() && !errorMessage(), text: instructions"></div>
+        <!-- Keep the slotted DOM mounted so legacy Oracle JET observes asynchronous KO updates. -->
+        <div class="hth-account-message"
+            data-bind="visible: loading(), text: nls.info.hthSummaryLoading"></div>
+        <div class="hth-account-message"
+            data-bind="visible: errorMessage(), text: errorMessage"></div>
+        <div class="hth-account-message"
+            data-bind="visible: pendingRequest(), text: nls.info.hthPendingApproval"></div>
+        <div class="hth-account-tabs" role="tablist" data-bind="visible: !loading() && !errorMessage()">
+            <button type="button" role="tab"
+                data-bind="click: showCurrentAndSavings,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
+                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
+                <span data-bind="text: nls.navLabels.CASA"></span>
+            </button>
+            <button type="button" role="tab"
+                data-bind="click: showTimeDeposits,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
+                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
+                <span data-bind="text: nls.navLabels.TD"></span>
             </button>
         </div>
-        <table class="hth-account-table">
+        <div class="oj-flex oj-flex-items-pad hth-link-all" data-bind="visible: !loading() && !errorMessage()">
+            <oj-checkboxset class="oj-flex-item" value="[[activeAllSelection]]"
+                on-value-changed="[[$component.toggleAll]]" disabled="[[!isEditable()]]">
+                <oj-option id="hth_link_all_accounts" value="ALL">
+                    <span data-bind="text: nls.fieldname.mapallAccts"></span>
+                </oj-option>
+            </oj-checkboxset>
+        </div>
+        <table class="hth-account-table" data-bind="visible: !loading() && !errorMessage()">
             <thead>
                 <tr>
-                    <th><span data-bind="text: nls.fieldname.mapAccts"></span></th>
+                    <th class="hth-select-column" data-bind="attr: { 'aria-label': nls.fieldname.mapAccts }"></th>
                     <th><span data-bind="text: nls.headers.AccountNumber"></span></th>
                     <th><span data-bind="text: nls.headers.currency"></span></th>
                     <th><span data-bind="text: nls.headers.displayName"></span></th>
                 </tr>
             </thead>
             <tbody data-bind="foreach: accounts">
-                <tr>
-                    <td><input type="checkbox" data-bind="checked: selected, enable: $component.isEditable"></td>
-                    <td><span data-bind="text: maskedAccountNumber || accountNumber"></span></td>
-                    <td><span data-bind="text: currency || '-'"></span></td>
-                    <td><span data-bind="text: accountType"></span></td>
+                <tr data-bind="visible: $parent.isActiveAccount($data)">
+                    <td><input type="checkbox"
+                        data-bind="checked: selected, enable: $parent.isEditable,
+                            attr: { 'aria-label': $parent.nls.fieldname.mapAccts + ' ' + accountNumberDisplay }"></td>
+                    <td><span data-bind="text: accountNumberDisplay"></span></td>
+                    <td><span data-bind="text: displayCurrency"></span></td>
+                    <td><span data-bind="text: displayAccountType"></span></td>
                 </tr>
             </tbody>
         </table>
-        <!-- ko if: accounts().length === 0 -->
-        <div class="hth-account-message" data-bind="text: nls.headers.noAccountsAvailable"></div>
-        <!-- /ko -->
-        <!-- /ko -->
+        <div class="hth-account-message"
+            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
     </page-section>
 
     <div class="button-container">
         <!-- ko if: mode() === 'VIEW' && !pendingRequest() -->
         <oj-button class="action-button-primary" on-click="[[$component.edit]]"><span data-bind="text: nls.headers.edit"></span></oj-button>
-        <oj-button class="action-button-secondary" on-click="[[$component.deleteAccess]]"><span data-bind="text: nls.headers.deleteHeader"></span></oj-button>
         <!-- /ko -->
         <!-- ko if: !pendingRequest() -->
-        <oj-button class="action-button-primary" on-click="[[$component.next]]" disabled="[[selectedCount() === 0]]"><span data-bind="text: nls.common.next"></span></oj-button>
+        <oj-button class="action-button-primary" on-click="[[$component.next]]" disabled="[[$component.nextDisabled]]"><span data-bind="text: nls.common.next"></span></oj-button>
+        <!-- /ko -->
+        <!-- ko if: mode() === 'VIEW' && !pendingRequest() -->
+        <oj-button class="action-button-secondary" on-click="[[$component.deleteAccess]]"><span data-bind="text: nls.headers.deleteHeader"></span></oj-button>
         <!-- /ko -->
         <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
         <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>

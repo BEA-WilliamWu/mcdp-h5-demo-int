@@ -1,9 +1,10 @@
 define([
     "knockout",
     "ojL10n!extensions/resources/nls/access-management",
+    "extensions/generic/service-extension",
     "ojs/ojbutton",
     "framework/elements/api/page-section/loader"
-], function (ko, resourceBundle) {
+], function (ko, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -14,25 +15,103 @@ define([
     return function (rootParams) {
         const self = this,
             rootModel = rootParams.rootModel || {},
-            params = rootModel.params || rootModel;
+            params = rootModel.params || rootModel,
+            read = function (value) {
+                return ko.isObservable(value) ? value() : value;
+            },
+            normalizeAccountType = function (value) {
+                const accountType = String(read(value) || "").toUpperCase();
+
+                if (accountType === "TRD" || accountType === "TERM_DEPOSIT") {
+                    return "TD";
+                }
+                if (accountType === "DEMAND_DEPOSIT") {
+                    return "CSA";
+                }
+                return accountType;
+            },
+            mapApi = function (api) {
+                return Object.assign({}, api || {}, {
+                    apiMasterId: read(api && api.apiMasterId),
+                    apiCode: read(api && api.apiCode),
+                    apiName: read(api && api.apiName),
+                    displayOrder: read(api && api.displayOrder),
+                    selected: ko.observable(!!read(api && api.selected))
+                });
+            },
+            mapAccount = function (account) {
+                account = account || {};
+
+                const accountNumberObject = read(account.accountNumber),
+                    canonicalNumber = String(accountNumberObject
+                        && typeof accountNumberObject === "object"
+                        ? read(accountNumberObject.value) || read(accountNumberObject.displayValue) || ""
+                        : accountNumberObject || ""),
+                    suppliedDisplay = read(account.accountNumberDisplay)
+                        || (accountNumberObject && typeof accountNumberObject === "object"
+                            ? read(accountNumberObject.displayValue) : ""),
+                    accountType = normalizeAccountType(account.accountType),
+                    currency = read(account.currency) || read(account.currencyCode) || "",
+                    displayName = read(account.displayName) || "";
+
+                return Object.assign({}, account, {
+                    accountNumber: canonicalNumber,
+                    accountNumberDisplay: serviceExtension.int2extAccNo(
+                        String(suppliedDisplay || canonicalNumber), "Y")
+                        || suppliedDisplay || canonicalNumber || "-",
+                    maskedAccountNumber: read(account.maskedAccountNumber) || "",
+                    accountType: accountType,
+                    currency: currency,
+                    displayName: displayName,
+                    displayCurrency: currency || "-",
+                    displayAccountType: displayName || (accountType === "TD"
+                        ? resourceBundle.navLabels.TD : accountType === "CSA"
+                            ? resourceBundle.navLabels.CASA : accountType || "-"),
+                    selected: ko.observable(!!read(account.selected)),
+                    apiServices: (read(account.apiServices) || []).map(mapApi)
+                });
+            };
 
         self.nls = resourceBundle;
         self.context = ko.unwrap(params.hthLinkageContext) || {};
         self.summaryParams = params.summaryParams || {};
         self.access = ko.unwrap(params.access) || {};
         self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
-        self.action = ko.unwrap(params.action) || "CREATE";
+        self.action = ko.observable(ko.unwrap(params.action) || "CREATE");
+        self.editing = ko.observable(self.action() !== "VIEW");
+        self.activeAccountType = ko.observable("CSA");
         self.isEditable = ko.pureComputed(function () {
-            return self.action !== "VIEW";
+            return self.editing();
         });
-        self.accounts = ko.observableArray((ko.unwrap(params.accounts) || []).filter(function (account) {
+        self.allAccounts = (ko.unwrap(params.accounts) || []).map(mapAccount);
+        self.accounts = ko.observableArray(self.allAccounts.filter(function (account) {
             return account.selected();
         }));
+        self.filteredAccounts = ko.pureComputed(function () {
+            return self.accounts().filter(function (account) {
+                return String(read(account.accountType) || "").toUpperCase()
+                    === self.activeAccountType();
+            }).sort(function (left, right) {
+                return String(read(left.accountNumber) || "")
+                    .localeCompare(String(read(right.accountNumber) || ""));
+            });
+        });
+        self.isActiveAccount = function (account) {
+            return String(read(account && account.accountType) || "").toUpperCase()
+                === self.activeAccountType();
+        };
+        self.noAccountsForActiveType = ko.pureComputed(function () {
+            return self.filteredAccounts().length === 0;
+        });
+        self.instructions = ko.pureComputed(function () {
+            return self.isEditable()
+                ? self.nls.notes.UAC07_CREATE_EDIT : self.nls.notes.UAC05_REVIEW;
+        });
 
         rootParams.dashboard.headerName(self.nls.headers.hthApiMapping);
 
         self.applyFirstToAll = function () {
-            const accounts = self.accounts();
+            const accounts = self.filteredAccounts();
 
             if (!self.isEditable() || accounts.length < 2) {
                 return;
@@ -50,7 +129,22 @@ define([
             });
         };
 
-        self.next = function () {
+        self.showCurrentAndSavings = function () {
+            self.activeAccountType("CSA");
+        };
+
+        self.showTimeDeposits = function () {
+            self.activeAccountType("TD");
+        };
+
+        self.edit = function () {
+            if (self.action() === "VIEW") {
+                self.action("EDIT");
+            }
+            self.editing(true);
+        };
+
+        self.save = function () {
             if (!self.isEditable()) {
                 return;
             }
@@ -69,9 +163,9 @@ define([
                 hthLinkageContext: self.context,
                 summaryParams: self.summaryParams,
                 access: self.access,
-                accounts: ko.unwrap(params.accounts),
+                accounts: self.allAccounts,
                 originalAccounts: self.originalAccounts,
-                action: self.action
+                action: self.action()
             });
         };
 
@@ -84,9 +178,9 @@ define([
                 hthLinkageContext: self.context,
                 summaryParams: self.summaryParams,
                 preloadedAccess: self.access,
-                preloadedAccounts: ko.unwrap(params.accounts),
+                preloadedAccounts: self.allAccounts,
                 originalAccounts: self.originalAccounts,
-                action: self.action
+                action: self.action()
             });
         };
     };

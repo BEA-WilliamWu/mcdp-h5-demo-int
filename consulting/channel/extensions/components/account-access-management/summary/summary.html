@@ -132,7 +132,7 @@
                   </div>
                 </div>
 
-                <!-- ko if: casaAccountCount > 0 -->
+                <!-- ko if: totalAccountCount > 0 -->
                 <div class="oj-flex oj-flex-items-pad hth-summary-row hth-summary-row-heading">
                   <div class="oj-flex-item oj-sm-8">
                     <span data-bind="text: $component.nls.fieldname.accountType"></span>
@@ -149,9 +149,17 @@
                     <span data-bind="text: casaAccountCount"></span>
                   </div>
                 </div>
+                <div class="oj-flex oj-flex-items-pad hth-summary-row">
+                  <div class="oj-flex-item oj-sm-8">
+                    <span data-bind="text: $component.nls.fieldname.tdMapping"></span>
+                  </div>
+                  <div class="oj-flex-item oj-sm-4">
+                    <span data-bind="text: tdAccountCount"></span>
+                  </div>
+                </div>
                 <!-- /ko -->
 
-                <!-- ko if: casaAccountCount === 0 -->
+                <!-- ko if: totalAccountCount === 0 -->
                 <div class="oj-flex oj-flex-items-pad hth-summary-message">
                   <span data-bind="text: $component.nls.info.userSetUp"></span>
                 </div>
@@ -194,7 +202,7 @@
                     </div>
                   </div>
 
-                  <!-- ko if: casaAccountCount > 0 -->
+                  <!-- ko if: totalAccountCount > 0 -->
                   <div class="oj-flex oj-flex-items-pad hth-summary-row hth-summary-row-heading">
                     <div class="oj-flex-item oj-sm-8">
                       <span data-bind="text: $component.nls.fieldname.accountType"></span>
@@ -211,9 +219,17 @@
                       <span data-bind="text: casaAccountCount"></span>
                     </div>
                   </div>
+                  <div class="oj-flex oj-flex-items-pad hth-summary-row">
+                    <div class="oj-flex-item oj-sm-8">
+                      <span data-bind="text: $component.nls.fieldname.tdMapping"></span>
+                    </div>
+                    <div class="oj-flex-item oj-sm-4">
+                      <span data-bind="text: tdAccountCount"></span>
+                    </div>
+                  </div>
                   <!-- /ko -->
 
-                  <!-- ko if: casaAccountCount === 0 -->
+                  <!-- ko if: totalAccountCount === 0 -->
                   <div class="oj-flex oj-flex-items-pad hth-summary-message">
                     <span data-bind="text: $component.nls.info.userLinkageSetUp"></span>
                   </div>

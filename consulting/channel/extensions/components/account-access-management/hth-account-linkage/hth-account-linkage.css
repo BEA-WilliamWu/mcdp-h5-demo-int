@@ -1,4 +1,38 @@
 .hth-user-context { margin-bottom: 1rem; }
-.hth-account-table { width: 100%; border-collapse: collapse; }
-.hth-account-table th, .hth-account-table td { padding: .75rem; border-bottom: 1px solid #d6d7d8; text-align: left; }
+.hth-account-instructions { margin: 0 0 1.5rem; line-height: 1.45; }
+.hth-account-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.hth-account-table th, .hth-account-table td {
+    padding: .9rem 1rem;
+    border-bottom: 1px solid #d6d7d8;
+    text-align: left;
+    vertical-align: middle;
+}
+.hth-account-table th { background: #f3f5f7; font-weight: 600; }
+.hth-account-table th:nth-child(1) { width: 8%; }
+.hth-account-table th:nth-child(2) { width: 32%; }
+.hth-account-table th:nth-child(3) { width: 20%; }
+.hth-account-table th:nth-child(4) { width: 40%; }
+.hth-account-table input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--base-cz-color-blue);
+}
 .hth-account-message { padding: 1rem 0; }
+.hth-account-tabs {
+    display: flex;
+    gap: 0;
+    margin: .75rem 0 1rem;
+    border-bottom: 1px solid #d6d7d8;
+}
+.hth-account-tabs button {
+    min-width: 14rem;
+    padding: .9rem 1.5rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+.hth-account-tabs .hth-account-tab-active {
+    border-bottom: 3px solid #0070c9;
+    font-weight: 600;
+}
+.hth-link-all { margin: .5rem 0 1.25rem; }

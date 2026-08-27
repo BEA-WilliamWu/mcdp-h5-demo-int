@@ -7,7 +7,7 @@
 | 文档状态 | As Implemented |
 | 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
 | 依赖 Story | BCOH2H-595 提供 HTH User Access 生效表、Request Snapshot 和查询服务 |
-| 更新时间 | 2026-08-26 |
+| 更新时间 | 2026-08-28 |
 
 ## 1. 目标和范围
 
@@ -18,7 +18,7 @@
 - 用户列表返回并展示 `userChannelType`、`closeId` 和 HTH Access Setup 状态。
 - 点击 Username 时按 `HTH` / `BCO` 分流。
 - HTH Summary 显示用户、企业 HTH 状态、Related 和 Associated 公司上下文。
-- Summary 只统计审批后生效的 CSA Account Grant。
+- Summary 分别统计审批后生效的 Current and Savings (`CSA`) 与 Time Deposit (`TD`) Grant。
 - Pending Create/Edit/Delete 单独显示，不提前计入生效数量。
 - `To link` 把完整 HTH Context 传入 BCOH2H-595 维护流程。
 - 保留原 BCO API、账户类型、Task Mapping 和页面逻辑。
@@ -40,6 +40,7 @@
 6. Related 固定代表主 Party 本身；Associated 只来自当前 Party Relationship Domain 返回的关联 Party。
 7. BCO 是默认兼容分支。HTH 用户缺少 CloseID 时停止跳转，不允许错误地回退到 BCO 页面。
 8. BCOH2H-538 没有新增独立业务表；Summary 使用 BCOH2H-595 的五张表中的生效账户表和 Request Header。
+9. HTH Related/Associated 维护页复用 BCO `IAccountAccess.listAccounts()` 返回的企业 Eligible Account Inventory，仅保留 CSA/TD 并替换为 HTH API Tree，保证两个 Channel 的可选账户范围一致。
 
 ## 3. 组件和数据流
 
@@ -179,7 +180,7 @@ listActiveAccessCloseIds(String partyId)
 {
     channelMode: "HTH",
     closeId: "CLOSE001",
-    allowedAccountTypes: ["CSA"],
+    allowedAccountTypes: ["CSA", "TD"],
     serviceMappingType: "HTH_API"
 }
 ```
@@ -204,6 +205,8 @@ UI 对每个 Summary 计算：
 
 ```text
 casaAccountCount = accountCountByType.CSA or 0
+tdAccountCount = accountCountByType.TD or 0
+totalAccountCount = casaAccountCount + tdAccountCount
 hasPendingRequest = pendingAction exists or setupStatus starts with PENDING_
 canMaintain = enterprise enabled AND no pending request AND status != ERROR
 ```
@@ -256,7 +259,8 @@ GET /hostToHostUserAccess/search?partyId={partyId}&closeId={closeId}
     "accessPartyName": "Example Limited",
     "setupStatus": "ACTIVE",
     "accountCountByType": {
-      "CSA": 4
+      "CSA": 4,
+      "TD": 2
     },
     "pendingAction": null,
     "pendingReferenceNumber": null
@@ -427,10 +431,12 @@ validation#user-list-details#summary
 ### 11.1 必测场景
 
 - BCO 用户仍进入原 BCO Summary，原账户类型和审批流程不变。
+- BCO 页面标题为 `BCO - User Accounts & Service Access`；HTH 页面标题为 `HTH – User Accounts & Services Access`。
 - HTH 用户进入 HTH Summary，用户信息和 Channel Type 正确。
 - HTH 用户缺少 CloseID 时停止跳转。
 - Profile 存在但无 Active Grant 时 Setup 为 false、Summary 为 `NOT_SETUP`。
 - Related 与多个 Associated Party 的 Count 不混用。
+- Related/Associated Summary 同时显示 CSA 与 TD 数量；无授权时仍使用原未设置文案。
 - Pending Create/Edit/Delete 不改变生效 Count，并禁止 `To link`。
 - Enterprise Disable 时显示 `DISABLED`，不显示维护按钮。
 - Invalid/Expired Associated Relationship 的历史 Grant 不暴露。

@@ -5,12 +5,16 @@ import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
 import com.ofss.digx.app.AbstractApplication;
 import com.ofss.digx.app.Interaction;
+import com.ofss.digx.app.access.dto.AccountAccessListAccountsDTO;
+import com.ofss.digx.app.access.dto.AccountAccessListAccountsResponseDTO;
+import com.ofss.digx.app.access.dto.AccountFilterDTO;
+import com.ofss.digx.app.access.dto.AccountsAccessListsDTO;
+import com.ofss.digx.app.access.service.account.AccountAccess;
+import com.ofss.digx.app.access.service.account.IAccountAccess;
 import com.ofss.digx.app.adapter.AdapterFactoryConfigurator;
 import com.ofss.digx.app.adapter.IAdapterFactory;
 import com.ofss.digx.app.party.adapter.IPartyDetailsAdapter;
 import com.ofss.digx.app.party.dto.PersonalInfoDTO;
-import com.ofss.digx.app.party.dto.relation.account.PartyToAccountRelationshipDTO;
-import com.ofss.digx.app.party.service.relation.account.PartyToAccountRelationship;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessAccountDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessApiDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessContextDTO;
@@ -45,6 +49,7 @@ import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserProfileRe
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestAccountRepositoryAdapter;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestApiRepositoryAdapter;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestRepositoryAdapter;
+import com.ofss.digx.datatype.complex.Party;
 import com.ofss.digx.enumeration.ModuleType;
 import com.ofss.digx.enumeration.accounts.AccountType;
 import com.ofss.digx.enumeration.approval.ApprovalStatus;
@@ -79,8 +84,9 @@ import java.util.logging.Logger;
  * Maintains account and API grants for Host-to-Host users.
  *
  * <p>Access is isolated by the tuple {@code (partyId, closeId, accessPartyId, linkageType)}. The
- * primary party owns the HTH user, while the access party owns the eligible CSA accounts. RELATED
- * means both parties are the same; ASSOCIATED requires a current party relationship.
+ * primary party owns the HTH user, while the access party owns the eligible Current and Savings
+ * or Time Deposit accounts. RELATED means both parties are the same; ASSOCIATED requires a
+ * current party relationship.
  *
  * <p>Write operations use the OBDX maker/checker workflow. Maker execution validates the request
  * and stores an immutable database snapshot. Checker approval reloads and revalidates that
@@ -135,6 +141,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
   private static final String ACCOUNT_TYPE_CSA = "CSA";
 
+  private static final String ACCOUNT_TYPE_TD = "TD";
+
   /**
    * Builds the effective and pending access summary for every valid company context of an HTH
    * user. Effective counts include active grants only; pending requests change presentation state
@@ -181,8 +189,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   }
 
   /**
-   * Loads eligible CSA accounts and enterprise-enabled APIs for a single company context. Existing
-   * effective selections are merged into the eligible catalogue for view/edit screens.
+   * Loads eligible Current and Savings/Time Deposit accounts and enterprise-enabled APIs for a
+   * single company context. Existing effective selections are merged into the eligible catalogue
+   * for view/edit screens.
    */
   @Override
   @Entitlement(name = "Read Host To Host User Accounts", action = ActionType.VIEW,
@@ -465,7 +474,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       String accessPartyId, String linkageType) throws Exception {
     List<HostToHostUserAccessApiDTO> eligibleApis = listEnterpriseApis(partyId);
     List<HostToHostUserAccessAccountDTO> eligibleAccounts =
-        listEligibleAccounts(sessionContext, accessPartyId, eligibleApis);
+        listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+            eligibleApis);
     List<HthUserAccessAccount> effectiveAccounts = HthUserAccessAccountRepository
         .getInstance().listByContext(partyId, closeId, accessPartyId, linkageType);
 
@@ -544,36 +554,71 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   }
 
   private List<HostToHostUserAccessAccountDTO> listEligibleAccounts(
-      SessionContext sessionContext, String accessPartyId,
+      SessionContext sessionContext, String partyId, String accessPartyId,
+      String linkageType,
       List<HostToHostUserAccessApiDTO> eligibleApis) throws Exception {
+    // Reuse the same AccountAccess service and request model as the BCO account-linkage screen.
+    // The primary party is the company being maintained. For an ASSOCIATED context the selected
+    // company is supplied as a linked party; for RELATED it is the primary party and the linked
+    // party list stays empty. Calling PartyToAccountRelationship directly would bypass BCO's
+    // corporate-admin remote lookup and eligibility adapter, producing a different or stale list.
     List<AccountType> accountTypes = new ArrayList<AccountType>();
     accountTypes.add(AccountType.DEMAND_DEPOSIT);
-    List<PartyToAccountRelationshipDTO> relationships = new PartyToAccountRelationship()
-        .fetchAllAccountsOfParty(sessionContext, accountTypes, accessPartyId,
-            null, null, null).getPartyToAccountRelationshipDTOs();
+    accountTypes.add(AccountType.TERM_DEPOSIT);
+
+    AccountAccessListAccountsDTO request = new AccountAccessListAccountsDTO();
+    Party party = new Party();
+    party.setValue(partyId);
+    request.setParty(party);
+    request.setAccountTypes(accountTypes);
+    List<Party> linkedParties = new ArrayList<Party>();
+    if (ASSOCIATED.equals(linkageType)) {
+      Party linkedParty = new Party();
+      linkedParty.setValue(accessPartyId);
+      linkedParties.add(linkedParty);
+    }
+    request.setLinkedPartyList(linkedParties);
+
+    IAccountAccess accountAccess = new AccountAccess();
+    AccountAccessListAccountsResponseDTO accountAccessResponse =
+        accountAccess.listAccounts(sessionContext, request);
     List<HostToHostUserAccessAccountDTO> result =
         new ArrayList<HostToHostUserAccessAccountDTO>();
+    // BCO can legitimately expose one account number in both CSA and TD; only an exact
+    // Account Type + Account Number duplicate is removed.
     Set<String> seen = new HashSet<String>();
-    if (relationships == null) {
+    if (accountAccessResponse == null || accountAccessResponse.getAccounts() == null) {
       return result;
     }
+
     long order = 0L;
-    for (PartyToAccountRelationshipDTO relationship : relationships) {
-      String accountNumber = relationship == null || relationship.getAccount() == null
-          ? null : normalize(relationship.getAccount().getValue());
-      if (accountNumber == null || !seen.add(accountNumber)) {
+    for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
+      if (partyAccounts == null || partyAccounts.getParty() == null
+          || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
+          || partyAccounts.getAccountsList() == null) {
         continue;
       }
-      HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
-      dto.setAccountNumber(accountNumber);
-      dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
-      dto.setDisplayName(firstNonBlank(relationship.getNickName(),
-          relationship.getAccountTitle(), dto.getMaskedAccountNumber()));
-      dto.setAccountType(ACCOUNT_TYPE_CSA);
-      dto.setSelected(Boolean.FALSE);
-      dto.setDisplayOrder(Long.valueOf(order++));
-      dto.setApiServices(copyApis(eligibleApis));
-      result.add(dto);
+      for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
+        String accountNumber = account == null || account.getAccountNumber() == null
+            ? null : normalize(account.getAccountNumber().getValue());
+        String accountType = toUserAccessAccountType(
+            account == null ? null : account.getAccountType());
+        if (accountNumber == null || accountType == null
+            || !seen.add(accountKey(accountType, accountNumber))) {
+          continue;
+        }
+        HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
+        dto.setAccountNumber(accountNumber);
+        dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
+        dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
+            dto.getMaskedAccountNumber()));
+        dto.setAccountType(accountType);
+        dto.setCurrency(account.getCurrencyCode());
+        dto.setSelected(Boolean.FALSE);
+        dto.setDisplayOrder(Long.valueOf(order++));
+        dto.setApiServices(copyApis(eligibleApis));
+        result.add(dto);
+      }
     }
     return result;
   }
@@ -585,7 +630,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     Map<String, HostToHostUserAccessAccountDTO> dtoByAccount =
         new LinkedHashMap<String, HostToHostUserAccessAccountDTO>();
     for (HostToHostUserAccessAccountDTO dto : access.getAccounts()) {
-      dtoByAccount.put(dto.getAccountNumber(), dto);
+      dtoByAccount.put(accountKey(dto.getAccountType(), dto.getAccountNumber()), dto);
     }
     if (effectiveAccounts == null) {
       return;
@@ -601,17 +646,19 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       if (!OBJECT_ACTIVE.equals(account.getObjectStatus())) {
         continue;
       }
-      HostToHostUserAccessAccountDTO dto = dtoByAccount.get(account.getAccountNumber());
+      String effectiveAccountKey = accountKey(account.getAccountType(),
+          account.getAccountNumber());
+      HostToHostUserAccessAccountDTO dto = dtoByAccount.get(effectiveAccountKey);
       if (dto == null) {
         dto = new HostToHostUserAccessAccountDTO();
         dto.setAccountNumber(account.getAccountNumber());
         dto.setMaskedAccountNumber(maskAccountNumber(account.getAccountNumber()));
         dto.setDisplayName(dto.getMaskedAccountNumber());
-        dto.setAccountType(ACCOUNT_TYPE_CSA);
+        dto.setAccountType(account.getAccountType());
         dto.setCurrency(account.getCurrency());
         dto.setApiServices(copyApis(eligibleApis));
         access.getAccounts().add(dto);
-        dtoByAccount.put(dto.getAccountNumber(), dto);
+        dtoByAccount.put(effectiveAccountKey, dto);
       }
       dto.setSelected(Boolean.TRUE);
       Set<String> selectedMasterIds = selectedMasterIdsByAccount.get(account.getKey().getId());
@@ -716,15 +763,17 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       eligibleApiByCode.put(api.getApiCode(), api);
     }
     List<HostToHostUserAccessAccountDTO> eligibleAccounts = listEligibleAccounts(
-        sessionContext, request.getAccessPartyId(), eligibleApis);
-    Map<String, HostToHostUserAccessAccountDTO> eligibleAccountByNumber =
+        sessionContext, request.getPartyId(), request.getAccessPartyId(),
+        request.getLinkageType(), eligibleApis);
+    Map<String, HostToHostUserAccessAccountDTO> eligibleAccountByKey =
         new HashMap<String, HostToHostUserAccessAccountDTO>();
     for (HostToHostUserAccessAccountDTO account : eligibleAccounts) {
-      eligibleAccountByNumber.put(account.getAccountNumber(), account);
+      eligibleAccountByKey.put(accountKey(account.getAccountType(), account.getAccountNumber()),
+          account);
     }
 
     int selectedAccountCount = 0;
-    Set<String> selectedNumbers = new HashSet<String>();
+    Set<String> selectedAccountKeys = new HashSet<String>();
     if (request.getAccounts() != null) {
       for (HostToHostUserAccessAccountDTO account : request.getAccounts()) {
         if (account == null || !Boolean.TRUE.equals(account.getSelected())) {
@@ -732,20 +781,22 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         }
         selectedAccountCount++;
         String accountNumber = normalize(account.getAccountNumber());
-        if (!ACCOUNT_TYPE_CSA.equals(account.getAccountType())) {
+        String accountType = normalizeAccountType(account.getAccountType());
+        if (!isSupportedAccountType(accountType)) {
           throw new Exception("DIGX_CZ_HTH_UA_004");
         }
-        if (accountNumber == null || !selectedNumbers.add(accountNumber)) {
+        if (accountNumber == null
+            || !selectedAccountKeys.add(accountKey(accountType, accountNumber))) {
           throw new Exception("DIGX_CZ_HTH_UA_005");
         }
         HostToHostUserAccessAccountDTO eligibleAccount =
-            eligibleAccountByNumber.get(accountNumber);
+            eligibleAccountByKey.get(accountKey(accountType, accountNumber));
         if (eligibleAccount == null) {
           throw new Exception(approvedExecution ? "DIGX_CZ_HTH_UA_012"
               : "DIGX_CZ_HTH_UA_005");
         }
         account.setAccountNumber(accountNumber);
-        account.setAccountType(ACCOUNT_TYPE_CSA);
+        account.setAccountType(accountType);
         account.setMaskedAccountNumber(eligibleAccount.getMaskedAccountNumber());
         account.setDisplayName(eligibleAccount.getDisplayName());
         account.setCurrency(eligibleAccount.getCurrency());
@@ -867,7 +918,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       accountRow.setKey(accountKey);
       accountRow.setHthUserAccessRequestId(requestId);
       accountRow.setAccountNumber(account.getAccountNumber());
-      accountRow.setAccountType(ACCOUNT_TYPE_CSA);
+      accountRow.setAccountType(account.getAccountType());
       accountRow.setCurrency(account.getCurrency());
       accountRow.setDisplayOrder(account.getDisplayOrder() == null
           ? Long.valueOf(accountOrder) : account.getDisplayOrder());
@@ -922,11 +973,20 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     for (HostToHostUserAccessApiDTO api : listEnterpriseApis(request.getPartyId())) {
       enterpriseApiByCode.put(api.getApiCode(), api);
     }
+    Map<String, HthUserAccessAccount> existingAccountByKey =
+        new HashMap<String, HthUserAccessAccount>();
+    List<HthUserAccessAccount> existingAccounts = HthUserAccessAccountRepository.getInstance()
+        .listByContext(request.getPartyId(), request.getCloseId(),
+            request.getAccessPartyId(), request.getLinkageType());
+    if (existingAccounts != null) {
+      for (HthUserAccessAccount existingAccount : existingAccounts) {
+        existingAccountByKey.put(accountKey(existingAccount.getAccountType(),
+            existingAccount.getAccountNumber()), existingAccount);
+      }
+    }
     for (HostToHostUserAccessAccountDTO accountDTO : selectedAccounts(request)) {
-      HthUserAccessAccount account = HthUserAccessAccountRepository.getInstance()
-          .findByContextAndAccountNumber(request.getPartyId(), request.getCloseId(),
-              request.getAccessPartyId(), request.getLinkageType(),
-              accountDTO.getAccountNumber());
+      HthUserAccessAccount account = existingAccountByKey.get(
+          accountKey(accountDTO.getAccountType(), accountDTO.getAccountNumber()));
       if (account == null) {
         account = new HthUserAccessAccount();
         HthUserAccessAccountKey key = new HthUserAccessAccountKey();
@@ -937,13 +997,14 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         account.setAccessPartyId(request.getAccessPartyId());
         account.setLinkageType(request.getLinkageType());
         account.setAccountNumber(accountDTO.getAccountNumber());
-        account.setAccountType(ACCOUNT_TYPE_CSA);
+        account.setAccountType(accountDTO.getAccountType());
         account.setCurrency(accountDTO.getCurrency());
         account.setObjectStatus(OBJECT_ACTIVE);
         account.setCreatedBy(userId);
         account.setLastUpdatedBy(userId);
         HthUserAccessAccountRepository.getInstance().create(account);
       } else {
+        account.setAccountType(accountDTO.getAccountType());
         account.setCurrency(accountDTO.getCurrency());
         account.setObjectStatus(OBJECT_ACTIVE);
         account.setLastUpdatedBy(userId);
@@ -1031,6 +1092,30 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     return result;
   }
 
+  /** Maps platform portfolio account types to the stable values stored by this feature. */
+  private String toUserAccessAccountType(AccountType accountType) {
+    if (AccountType.DEMAND_DEPOSIT.equals(accountType)) {
+      return ACCOUNT_TYPE_CSA;
+    }
+    if (AccountType.TERM_DEPOSIT.equals(accountType)) {
+      return ACCOUNT_TYPE_TD;
+    }
+    return null;
+  }
+
+  private String normalizeAccountType(String accountType) {
+    String normalized = normalize(accountType);
+    return normalized == null ? null : normalized.toUpperCase();
+  }
+
+  private boolean isSupportedAccountType(String accountType) {
+    return ACCOUNT_TYPE_CSA.equals(accountType) || ACCOUNT_TYPE_TD.equals(accountType);
+  }
+
+  private String accountKey(String accountType, String accountNumber) {
+    return safe(normalizeAccountType(accountType)) + "#" + safe(normalize(accountNumber));
+  }
+
   private void validateRequest(String partyId, String closeId) throws Exception {
     if (partyId == null || closeId == null) {
       throw new Exception("DIGX_CZ_HTH_UA_001");
@@ -1106,7 +1191,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     summary.setAccessPartyId(accessPartyId);
     summary.setAccessPartyName(accessPartyName);
     summary.setSetupStatus(ENABLE.equals(enterpriseStatus) ? NOT_SETUP : DISABLED);
-    summary.getAccountCountByType().put("CSA", Integer.valueOf(0));
+    summary.getAccountCountByType().put(ACCOUNT_TYPE_CSA, Integer.valueOf(0));
+    summary.getAccountCountByType().put(ACCOUNT_TYPE_TD, Integer.valueOf(0));
     return summary;
   }
 
@@ -1131,8 +1217,11 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       }
       summary.setAccountCountByType(
           new LinkedHashMap<String, Integer>(record.getAccountCountByType()));
-      if (!summary.getAccountCountByType().containsKey("CSA")) {
-        summary.getAccountCountByType().put("CSA", Integer.valueOf(0));
+      if (!summary.getAccountCountByType().containsKey(ACCOUNT_TYPE_CSA)) {
+        summary.getAccountCountByType().put(ACCOUNT_TYPE_CSA, Integer.valueOf(0));
+      }
+      if (!summary.getAccountCountByType().containsKey(ACCOUNT_TYPE_TD)) {
+        summary.getAccountCountByType().put(ACCOUNT_TYPE_TD, Integer.valueOf(0));
       }
       if (ENABLE.equals(enterpriseStatus)) {
         summary.setSetupStatus(ACTIVE);

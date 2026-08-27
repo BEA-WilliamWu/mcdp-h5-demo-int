@@ -1,0 +1,19 @@
+# Operating-system and editor files
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Build outputs and dependency caches
+**/target/
+**/dist/
+**/bin/
+**/.gradle/
+**/node_modules/
+**/*.class
+
+# Local transient files
+*.log
+*.tmp

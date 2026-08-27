@@ -6,6 +6,8 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
             root: {
                 pageTitle: {
                     accessManagement: "{user} Accounts & Services Access",
+                    bcoUserAccess: "BCO - User Accounts & Service Access",
+                    hthUserAccess: "HTH – User Accounts & Services Access",
                     accessManagementParty: "Accounts and Services Access",
                     delete: "User Accounts & Services Access - Delete"
                 },
@@ -64,7 +66,7 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
                     hthNoAssociatedCompanies: "There are no associated companies available for this user.",
                     hthLinkageRequires595: "HTH account linkage maintenance is not available in this deployment.",
                     hthMaintenanceLoadError: "The HTH account and service access could not be loaded. Please try again.",
-                    hthSelectAccount: "Select at least one Current and Savings account.",
+                    hthSelectAccount: "Select at least one Current and Savings or Time Deposit account.",
                     hthSelectApi: "Select at least one API service for every selected account.",
                     hthSubmitFailed: "The HTH user access request could not be submitted.",
                     hthReviewMessage: "Review the selected HTH accounts and API services before submitting for approval.",

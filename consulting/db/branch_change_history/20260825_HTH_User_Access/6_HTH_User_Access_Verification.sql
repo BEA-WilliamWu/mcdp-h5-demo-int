@@ -2,6 +2,8 @@
 -- Expected result counts are documented above each query.
 -- Execute after all feature scripts using an account with dictionary and OBDX configuration-table
 -- read access. This file performs no DML and requires no commit or rollback.
+-- For an existing installation created by an older version of the schema script, execute
+-- 7_HTH_User_Access_Time_Deposit_Upgrade.sql before running these checks.
 
 -- Expected: 5 rows.
 SELECT TABLE_NAME
@@ -29,6 +31,24 @@ SELECT OWNER, CONSTRAINT_NAME, TABLE_NAME, STATUS
    )
    AND CONSTRAINT_TYPE = 'R'
    AND STATUS <> 'ENABLED';
+
+-- Expected: 2 enabled check constraints; each SEARCH_CONDITION_VC contains both CSA and TD.
+SELECT TABLE_NAME, CONSTRAINT_NAME, STATUS, SEARCH_CONDITION_VC
+  FROM ALL_CONSTRAINTS
+ WHERE OWNER = 'HTH_BEA'
+   AND CONSTRAINT_NAME IN ('CK_HTH_UAA_TYPE', 'CK_HTH_UARA_TYPE')
+ ORDER BY TABLE_NAME;
+
+-- Expected: 9 rows. ACCOUNT_TYPE must precede ACCOUNT_NUMBER in both unique business keys.
+SELECT C.TABLE_NAME, C.CONSTRAINT_NAME, CC.POSITION, CC.COLUMN_NAME
+  FROM ALL_CONSTRAINTS C
+  JOIN ALL_CONS_COLUMNS CC
+    ON CC.OWNER = C.OWNER
+   AND CC.CONSTRAINT_NAME = C.CONSTRAINT_NAME
+   AND CC.TABLE_NAME = C.TABLE_NAME
+ WHERE C.OWNER = 'HTH_BEA'
+   AND C.CONSTRAINT_NAME IN ('UK_HTH_UA_ACCOUNT', 'UK_HTH_UAR_ACCOUNT')
+ ORDER BY C.TABLE_NAME, C.CONSTRAINT_NAME, CC.POSITION;
 
 -- Expected: 8 entitlements and 8 UAT group mappings.
 SELECT E.ID AS ENTITLEMENT_ID, M.ENT_GROUP_ID

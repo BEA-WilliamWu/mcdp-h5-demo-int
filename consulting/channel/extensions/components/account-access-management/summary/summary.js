@@ -212,8 +212,13 @@ define([
                 return;
             }
 
-            rootParams.dashboard.loadComponent("mapping-modules", {
-                channelMode: "HTH",
+            // HTH uses its own template chain. Loading the legacy mapping-modules component here
+            // would bind its BCO-only template before the HTH redirect completes.
+            rootParams.baseModel.registerComponent("hth-account-linkage", "account-access-management");
+            rootParams.baseModel.registerComponent("hth-api-service-mapping", "account-access-management");
+            rootParams.baseModel.registerComponent("review-hth-user-access", "account-access-management");
+            rootParams.baseModel.registerElement("confirm-screen");
+            rootParams.dashboard.loadComponent("hth-account-linkage", {
                 hthLinkageContext: context,
                 summaryParams: inputParams
             });

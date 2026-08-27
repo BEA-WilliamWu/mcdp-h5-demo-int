@@ -24,28 +24,7 @@ define([
     "use strict";
 
     return function viewModel(rootParams) {
-        const self = this,
-            componentModel = rootParams.rootModel || {},
-            componentParams = componentModel.params || componentModel,
-            channelMode = ko.unwrap(rootParams.channelMode || componentParams.channelMode),
-            hthLinkageContext = ko.unwrap(rootParams.hthLinkageContext
-                || componentParams.hthLinkageContext);
-
-        // Reuse the existing mapping entry point while keeping its BCO flow unchanged.
-        // HTH delegates to a CASA-only account linkage policy and then API mapping.
-        if (channelMode === "HTH" || hthLinkageContext) {
-            // Dashboard navigation can only resolve components registered with their loader path.
-            // Register the complete HTH child flow once before the first HTH navigation.
-            rootParams.baseModel.registerComponent("hth-account-linkage", "account-access-management");
-            rootParams.baseModel.registerComponent("hth-api-service-mapping", "account-access-management");
-            rootParams.baseModel.registerComponent("review-hth-user-access", "account-access-management");
-            rootParams.baseModel.registerElement("confirm-screen");
-            rootParams.dashboard.loadComponent("hth-account-linkage", {
-                hthLinkageContext: hthLinkageContext,
-                summaryParams: rootParams.summaryParams || componentParams.summaryParams
-            });
-            return;
-        }
+        const self = this;
 
         ko.utils.extend(self, rootParams.rootModel);
         self.nls = resourceBundle;

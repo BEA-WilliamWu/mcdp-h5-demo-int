@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="backend_Build" default="build-all" basedir="." xmlns:ac="antlib:net.sf.antcontrib">
+    <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+    <import file="java_classpath.xml"/>
+    
+    <!-- global properties -->
+	<property name="dist.dir" value="../dist"/>
+	<property name="dist.ears.dir" value="../dist/ears/lib"/>
+	<property name="dist.channel.dir" value="../dist/channel"/>
+	<property name="dist.config.dir" value="../dist/config"/>
+	<property name="dist.config_cz.dir" value="../dist/config_cz"/>
+	<property name="dist.db.dir" value="../dist/db"/>
+	<property name="dist.swagger.dir" value="../dist/swagger"/>
+	<property name="classes.dir" value="${dist.dir}/classes"/>
+	<property name="jars.dir" value="${dist.dir}/jars"/>
+	<property name="base_ears.dir" value="../base_ears"/>
+	<property name="thirdparty_lib.dir" value="../middleware/lib/thirdparty" />
+	<property name="obdx.version" value="21.1.0.0.0"/>
+	<tstamp>
+		<format property="build.time" pattern="yyyyMMddHHmm"/>
+	</tstamp>
+    <!-- project list to be compiled in sequence -->
+	<property name="project.list" value="middleware/projects/framework/com.ofss.digx.cz.bea.appcore.dto,middleware/projects/framework/com.ofss.digx.cz.bea.framework.adapter,middleware/projects/framework/com.ofss.digx.cz.bea.appcore,middleware/projects/common/com.ofss.digx.cz.bea.enumeration,middleware/projects/common/com.ofss.digx.cz.bea.common,middleware/projects/common/com.ofss.digx.cz.bnk.app.xface,middleware/projects/common/com.ofss.digx.cz.bea.app.xface,middleware/projects/common/com.ofss.digx.cz.bea.extxface,middleware/projects/adapter/com.ofss.digx.cz.bea.adapter,middleware/projects/module/com.ofss.digx.cz.bnk.module.dda,middleware/projects/module/com.ofss.digx.cz.bea.module.finlimit,middleware/projects/module/com.ofss.digx.cz.bea.module.transactiontfa,middleware/projects/module/com.ofss.digx.cz.bea.module.hostuserdetails,middleware/projects/module/com.ofss.digx.cz.bea.module.party,middleware/projects/module/com.ofss.digx.cz.bea.module.sms,middleware/projects/module/com.ofss.digx.cz.bea.module.chatbot,middleware/projects/module/com.ofss.digx.cz.bea.module.common,middleware/projects/module/com.ofss.digx.cz.bea.module.config,middleware/projects/framework/com.ofss.digx.cz.bea.framework.domain,middleware/projects/module/com.ofss.digx.cz.bea.module.payments,middleware/projects/module/com.ofss.digx.cz.bea.module.td,middleware/projects/module/com.ofss.digx.cz.bea.module.ebpp,middleware/projects/module/com.ofss.digx.cz.bea.module.typhoonmaintenance,middleware/projects/common/com.ofss.digx.cz.bea.security.provider,middleware/projects/ext-xface/com.ofss.digx.cz.bnk.extxface.app.impl,middleware/projects/module/com.ofss.digx.cz.bea.module.company,middleware/projects/module/com.ofss.digx.cz.bea.module.cibaccount,middleware/projects/module/com.ofss.digx.cz.bea.module.authenticationrolemapping,middleware/projects/module/com.ofss.digx.cz.bea.module.security,middleware/projects/module/com.ofss.digx.cz.bea.module.merchant,middleware/projects/module/com.ofss.digx.cz.bea.module.fpsmerchant,middleware/projects/module/com.ofss.digx.cz.bea.module.approval,middleware/projects/module/com.ofss.digx.cz.bea.module.useronboarding,middleware/projects/module/com.ofss.digx.cz.bea.module.tradeloan,middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl,middleware/projects/module/com.ofss.digx.cz.bea.module.liquiditymanagement,middleware/projects/module/com.ofss.digx.cz.bea.module.lmengine,middleware/projects/module/com.ofss.digx.cz.bea.module.investment,middleware/projects/module/com.ofss.digx.cz.bea.domain.service.dispatch,middleware/projects/module/com.ofss.digx.cz.bea.module.dda,middleware/projects/module/com.ofss.digx.cz.bea.module.fps,middleware/projects/module/com.ofss.digx.cz.bea.module.itoken,middleware/projects/module/com.ofss.digx.cz.bea.module.account,middleware/projects/module/com.ofss.digx.cz.bea.module.fxrate,middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.sms.dbAuthenticator,middleware/projects/module/com.ofss.digx.cz.bea.module.ets,middleware/projects/module/com.ofss.digx.cz.bea.module.marketingwidget,middleware/projects/adapter/com.ofss.digx.cz.bea.adapter.impl,middleware/projects/module/com.ofss.digx.cz.bea.module.access,middleware/projects/module/com.ofss.digx.cz.bea.module.dashboard,middleware/projects/module/com.ofss.digx.cz.bea.module.bulktransactionupload,middleware/projects/module/com.ofss.digx.cz.bea.module.healthcheck,middleware/projects/module/com.ofss.digx.cz.bea.module.batchtransfer,middleware/projects/module/com.ofss.digx.cz.bea.module.report,middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost,middleware/projects/endpoint/com.ofss.digx.cz.bea.appx.service.rest,middleware/projects/module/com.ofss.digx.cz.bea.module.location,middleware/projects/framework/com.ofss.digx.cz.bea.appx.core.rest,middleware/projects/module/com.ofss.digx.cz.bea.scheduler.impl,middleware/projects/module/com.ofss.digx.cz.bea.framework.adapter.impl,middleware/projects/module/com.ofss.digx.cz.bea.module.fileupload"/>
+    
+    
+    <target name="init">
+    	<delete dir="${dist.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+    	<mkdir dir="${dist.ears.dir}"/>
+    	<mkdir dir="${dist.channel.dir}"/>
+    	<mkdir dir="${dist.config.dir}"/>
+    	<mkdir dir="${dist.config_cz.dir}"/>
+    	<mkdir dir="${dist.db.dir}"/>
+    	<mkdir dir="${dist.swagger.dir}"/>
+    	<mkdir dir="${classes.dir}"/>
+    	<mkdir dir="${jars.dir}"/>
+    </target>
+    
+    <!-- compile all projects and build jar -->
+    <target name="compile-all" depends="init">
+        <ac:foreach list="${project.list}" param="project.path" target="compile-java-project" />
+    </target>
+    <target name="compile-java-project">
+    	<echo message="Compiling ${project.path}"/>
+    	<mkdir dir="${classes.dir}/${project.path}"/>
+        <javac srcdir="../${project.path}/src" destdir="${classes.dir}/${project.path}" includeantruntime="false" listfiles="yes" encoding="cp1252" nowarn="on" compiler="modern" debug="on">
+        	<classpath>
+        		<path refid="java.classpath" />
+        		<fileset dir="${jars.dir}" includes="*.jar"/>
+        	</classpath>
+        </javac>
+    	<copy todir="${classes.dir}/${project.path}">
+    		<fileset dir="../${project.path}/src">
+    			<exclude name="**/*.java"/>
+    		</fileset>
+    	</copy>
+    	<condition property="resources.dir.exists">
+    		<available file="../${project.path}/resources" type="dir"></available>
+    	</condition>
+    	<antcall target="copy-resources">
+    		<param name="project.path" value="${project.path}"/>
+    	</antcall>
+    	<echo message="Packaging ${project.path} into JAR"/>
+    	<basename file="${project.path}" property="project.name"/>
+    	<jar destfile="${jars.dir}/${project.name}.jar" basedir="${classes.dir}/${project.path}">
+    		<manifest>
+    			<attribute name="Specification-Title" value="Oracle Banking Digital Experience" />
+    			<attribute name="Specification-Version" value="${obdx.version}" />
+    			<attribute name="Implementation-Title" value="${project.name}" />
+    			<attribute name="Implementation-Version" value="${build.time}" />
+    			<attribute name="Implementation-Vendor" value="Oracle Financial Services Software Ltd" />
+    			<attribute name="Extension-Name" value="${project.name}" />
+    			<attribute name="Built-By" value="HKBEA" />
+    		</manifest>
+    	</jar>
+    </target>
+    
+	<target name="copy-resources" if="resources.dir.exists">
+		<copy todir="${classes.dir}/${project.path}" >
+			<fileset dir="../${project.path}/resources">
+				<exclude name="**/*.java"/>
+			</fileset>
+		</copy>
+	</target>
+	
+	<!-- copy config_cz start -->
+	<target name="copy-config" depends="compile-all">
+		<copy todir="${dist.config_cz.dir}" >
+	    	<fileset dir="../config">
+	    		<exclude name=".project"/>
+	    	</fileset>
+	    </copy>
+		<copy todir="${dist.config.dir}" >
+		   	<fileset dir="../config_core">
+		   		<exclude name=".project"/>
+		   	</fileset>
+		</copy>
+	</target>
+	<!-- copy config_cz end -->
+	    	
+	
+    <!-- create ears -->
+    <target name="create-ears" depends="copy-config">
+        
+        <!-- obdx.cz.app.domain.ear start -->
+    	<echo message="Packaging obdx.cz.app.domain"/>
+        <ear destfile="${dist.ears.dir}/obdx.cz.app.domain.ear" basedir="${base_ears.dir}/obdx.cz.app.domain/EarContent" appxml="${base_ears.dir}/obdx.cz.app.domain/EarContent/META-INF/application.xml">
+            <manifest>
+        		<attribute name="Specification-Title" value="Oracle Banking Digital Experience" />
+        	    <attribute name="Specification-Version" value="${obdx.version}" />
+        	    <attribute name="Implementation-Title" value="obdx.cz.app.domain" />
+        	    <attribute name="Implementation-Version" value="1" />
+        		<attribute name="BuildNumber" value="1" />
+        	    <attribute name="Implementation-Vendor" value="Oracle Financial Services Software Ltd" />
+        	    <attribute name="Extension-Name" value="obdx.cz.app.domain" />
+        	    <attribute name="Built-By" value="HKBEA" />
+        	</manifest>
+        	
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.appcore.dto.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.framework.adapter.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.appcore.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.enumeration.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.common.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bnk.app.xface.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.app.xface.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.extxface.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.adapter.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bnk.module.dda.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.finlimit.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.transactiontfa.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.hostuserdetails.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.party.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.sms.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.chatbot.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.common.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.config.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.framework.domain.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.payments.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.td.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.ebpp.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.typhoonmaintenance.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.security.provider.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.company.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.cibaccount.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.authenticationrolemapping.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.security.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.merchant.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.fpsmerchant.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.approval.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.useronboarding.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.liquiditymanagement.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.lmengine.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.investment.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.domain.service.dispatch.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.dda.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.fps.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.itoken.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.account.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.fxrate.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.extxface.sms.dbAuthenticator.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.ets.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.marketingwidget.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.access.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.dashboard.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.bulktransactionupload.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.tradeloan.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.healthcheck.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.appx.service.rest.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.location.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.appx.core.rest.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.report.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.scheduler.impl.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.framework.adapter.impl.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.fileupload.jar" prefix="APP-INF/lib" />
+			<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.batchtransfer.jar" prefix="APP-INF/lib" />
+			<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.module.hosttohost.jar" prefix="APP-INF/lib" />
+        </ear>
+        <!-- obdx.cz.app.domain.ear end -->
+        
+
+    	
+    	
+    	
+    	
+        <!-- obdx.cz.extsystem.domain.ear start -->
+    	<echo message="Packaging obdx.cz.extsystem.domain"/>
+        <ear destfile="${dist.ears.dir}/obdx.cz.extsystem.domain.ear" basedir="${base_ears.dir}/obdx.cz.extsystem.domain/EarContent" appxml="${base_ears.dir}/obdx.cz.extsystem.domain/EarContent/META-INF/application.xml">
+            <manifest>
+        		<attribute name="Specification-Title" value="Oracle Banking Digital Experience" />
+        	    <attribute name="Specification-Version" value="${obdx.version}" />
+        	    <attribute name="Implementation-Title" value="obdx.cz.extsystem.domain" />
+        	    <attribute name="Implementation-Version" value="1" />
+        		<attribute name="BuildNumber" value="1" />
+        	    <attribute name="Implementation-Vendor" value="Oracle Financial Services Software Ltd" />
+        	    <attribute name="Extension-Name" value="obdx.cz.extsystem.domain" />
+        	    <attribute name="Built-By" value="HKBEA" />
+        	</manifest>
+        	
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.adapter.impl.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bea.extxface.app.impl.jar" prefix="APP-INF/lib" />
+        	<zipfileset dir="${jars.dir}" includes="com.ofss.digx.cz.bnk.extxface.app.impl.jar" prefix="APP-INF/lib" />
+        </ear>
+        <!-- obdx.cz.extsystem.domain.ear end -->
+    	
+
+    	
+    	
+    	
+    	
+        <!-- obdx.cz.thirdparty.app.domain.ear start -->
+    	<echo message="Packaging obdx.cz.thirdparty.app.domain"/>
+        <ear destfile="${dist.ears.dir}/obdx.cz.thirdparty.app.domain.ear" basedir="${base_ears.dir}/obdx.cz.thirdparty.app.domain/EarContent" appxml="${base_ears.dir}/obdx.cz.thirdparty.app.domain/EarContent/META-INF/application.xml">
+        	<manifest>
+        		<attribute name="Specification-Title" value="Oracle Banking Digital Experience" />
+        	    <attribute name="Specification-Version" value="${obdx.version}" />
+        	    <attribute name="Implementation-Title" value="obdx.cz.thirdparty.app.domain" />
+        	    <attribute name="Implementation-Version" value="1" />
+        		<attribute name="BuildNumber" value="1" />
+        	    <attribute name="Implementation-Vendor" value="Oracle Financial Services Software Ltd" />
+        	    <attribute name="Extension-Name" value="obdx.cz.thirdparty.app.domain" />
+        	    <attribute name="Built-By" value="HKBEA" />
+        	</manifest>
+        	
+        	<zipfileset dir="${thirdparty_lib.dir}" includes="*.jar" prefix="APP-INF/lib" />
+        </ear>
+        <!-- obdx.cz.thirdparty.app.domain.ear end -->
+     	
+    </target>
+    
+    <!-- default target -->
+    <target name="build-all" depends="create-ears">
+        <echo message="Build completed successfully!"/>
+    </target>
+    
+</project>

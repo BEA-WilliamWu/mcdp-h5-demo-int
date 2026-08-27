@@ -19,6 +19,11 @@ define([
             read = function (value) {
                 return ko.isObservable(value) ? value() : value;
             },
+            asArray = function (value) {
+                value = read(value);
+
+                return Array.isArray(value) ? value : [];
+            },
             context = read(params.hthLinkageContext) || {};
 
         self.nls = resourceBundle;
@@ -46,14 +51,18 @@ define([
         rootParams.dashboard.headerName(self.nls.pageTitle.accessManagement.replace("{user}", "HTH User"));
 
         const mapApi = function (api) {
+                api = api || {};
+
                 return Object.assign({}, api, {
                     selected: ko.observable(!!read(api.selected))
                 });
             },
             mapAccount = function (account) {
+                account = account || {};
+
                 return Object.assign({}, account, {
                     selected: ko.observable(!!read(account.selected)),
-                    apiServices: (account.apiServices || []).map(mapApi)
+                    apiServices: asArray(account.apiServices).map(mapApi)
                 });
             },
             showError = function (message) {
@@ -146,8 +155,11 @@ define([
             },
             initialize = function (data, requestedMode, originalAccounts) {
                 data = data || {};
+
                 const access = data.access || {},
-                    accounts = access.accounts || data.eligibleAccounts || [];
+                    accessAccounts = asArray(access.accounts),
+                    eligibleAccounts = asArray(data.eligibleAccounts),
+                    accounts = accessAccounts.length ? accessAccounts : eligibleAccounts;
 
                 self.access(access);
                 self.accounts(accounts.map(mapAccount));
@@ -174,10 +186,17 @@ define([
         }
 
         HthUserAccessModel.read(context).done(function (data) {
-            initialize(data);
+            try {
+                initialize(data);
+            } catch (error) {
+                // A malformed optional collection must not leave the page in an endless loading
+                // state. Keep the technical error out of the UI and show the standard load error.
+                showError();
+            } finally {
+                self.loading(false);
+            }
         }).fail(function () {
             showError();
-        }).always(function () {
             self.loading(false);
         });
     };

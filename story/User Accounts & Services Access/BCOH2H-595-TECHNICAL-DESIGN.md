@@ -122,8 +122,9 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 
 `review-hth-user-access` 同时支持 Maker Review 和 Checker Read-only Detail：
 
-- Maker 路径从当前页面参数组装 Record。
-- Approval 路径支持 Framework 的 `record`、`hostToHostUserAccessDTO` 和 `transactionSnapshot` Wrapper。
+- Maker 路径直接沿用 API Mapping 页面内存中的 Selected Account/API，不重新查询或替换选择。
+- Approval 路径优先读取 Framework 保存的 `transactionSnapshot`，并兼容 `record`、`access`、`hostToHostUserAccess` 和 `hostToHostUserAccessDTO` Wrapper。
+- Maker 与 Checker 使用同一套只读 Review 表格：CSA/TD Tab、Account Number、Currency、Account Type，以及每个 Account 下已选择的 API Service。
 - Task Code 决定默认 Action：`UAT_N_HUA_NEW`、`UAT_N_HUA_EDT`、`UAT_N_HUA_DEL`。
 - Delete Payload 的 `accounts` 为空。
 - 非 Delete Payload 只包含 Selected Account 和每个账户下 Selected API。
@@ -580,7 +581,8 @@ consulting/db/branch_change_history/20260825_HTH_User_Access/
 6. `4_HTH_User_Access_Repository_Adapters.sql`
 7. `5_HTH_User_Access_Error_Messages.sql`
 8. 已执行过旧版 Schema 的环境执行 `7_HTH_User_Access_Time_Deposit_Upgrade.sql`；全新安装跳过。
-9. `6_HTH_User_Access_Verification.sql`
+9. 已执行过旧版 Process SQL 的环境执行 `8_HTH_User_Access_Approval_OTP_Upgrade.sql`；全新安装跳过。
+10. `6_HTH_User_Access_Verification.sql`
 
 ### 10.1 Service 和 Entitlement
 
@@ -605,11 +607,13 @@ HostToHostUserAccess.delete
 
 | Task | Action | Aspects |
 | --- | --- | --- |
-| `UAT_N_HUA_NEW` | Create | approval, audit, blackout |
-| `UAT_N_HUA_EDT` | Edit | approval, audit, blackout |
-| `UAT_N_HUA_DEL` | Delete | approval, audit, blackout |
+| `UAT_N_HUA_NEW` | Create | approval, audit, blackout, 2fa |
+| `UAT_N_HUA_EDT` | Edit | approval, audit, blackout, 2fa |
+| `UAT_N_HUA_DEL` | Delete | approval, audit, blackout, 2fa |
 
-三项 Task 都挂在既有 `UAT` Parent，并在 `DIGX_CM_RESOURCE_TASK_REL` 映射到对应 Write Service。`SubmitHostToHostUserAccessApprovalAssembler` 同时注册到 Base 和 Override Configuration；`TAB_CHANGE_TASK_CODES` 合并加入三项 Task Code。
+三项 Task 都挂在既有 `UAT` Parent，并在 `DIGX_CM_RESOURCE_TASK_REL` 映射到对应 Write Service。`SubmitHostToHostUserAccessApprovalAssembler` 同时注册到 Base 和 Override Configuration；`TAB_CHANGE_TASK_CODES` 与 `CRM_ALLOWED_TASK_CODES` 都以合并方式加入三项 Task Code。后者让 HTH 复用 BCO User Access 的 CRM/One-Man-Bank Admin High Risk 审批评估路径。
+
+HTH Create/Edit/Delete 分别复制既有 BCO `UAT_N_CA/UAT_N_UA/UAT_N_DA` 的 `DIGX_AU_MAPPING` 和 `DIGX_AU_MAPPING_PARAM`。因此 Checker 点击 Approve 后沿用 BCO 当前环境配置的 Role、Determinant、Level 和 Signer OTP/iToken Challenge，不在 HTH 代码中另写 OTP 页面或硬编码 Authentication ID。
 
 三个 Write Service 同时声明 `PERFORM` 和 `APPROVE` Entitlement；前端 Task Mapping 将三个 Task Code 统一解析为 `review-hth-user-access`，保证 Checker、Pending Approval 和 Activity Log 详情都能加载相同的只读请求快照。
 

@@ -16,23 +16,47 @@ define([
     return function (rootParams) {
         const self = this,
             rootModel = rootParams.rootModel || {},
-            params = rootModel.params || rootModel,
-            transactionDetails = rootModel.transactionDetails
-                && ko.unwrap(rootModel.transactionDetails),
-            transactionSnapshot = transactionDetails && transactionDetails.transactionSnapshot,
-            data = params.data || {},
-            dataRecord = data.record || data.hostToHostUserAccess
-                || data.hostToHostUserAccessDTO,
-            // Prefer a framework-provided record wrapper, then the raw data wrapper, then the
-            // approval snapshot. params.access is a maker-screen fallback only.
-            recordSource = dataRecord || (Object.keys(data).length ? data : null)
-                || transactionSnapshot || ko.unwrap(params.access) || {},
-            record = ko.toJS(ko.unwrap(recordSource)),
             read = function (value) {
                 return ko.isObservable(value) ? value() : value;
             },
+            asObject = function (value) {
+                value = ko.toJS(read(value));
+
+                return value && typeof value === "object" ? value : {};
+            },
+            asArray = function (value) {
+                value = ko.toJS(read(value));
+
+                return Array.isArray(value) ? value : [];
+            },
+            params = asObject(rootModel.params || rootModel),
+            transactionDetails = asObject(rootModel.transactionDetails),
+            transactionSnapshot = asObject(transactionDetails.transactionSnapshot),
+            data = asObject(params.data),
+            unwrapRecord = function (source) {
+                source = asObject(source);
+
+                return asObject(source.record || source.hostToHostUserAccess
+                    || source.hostToHostUserAccessDTO || source.access || source);
+            },
+            recordCandidates = [data, transactionSnapshot, params.access],
+            recordSource = recordCandidates.map(unwrapRecord).filter(function (candidate) {
+                return Object.keys(candidate).length > 0;
+            })[0] || {},
+            record = asObject(recordSource),
+            normalizeApi = function (api) {
+                api = asObject(api);
+
+                return Object.assign({}, api, {
+                    apiMasterId: read(api.apiMasterId),
+                    apiCode: read(api.apiCode),
+                    apiName: read(api.apiName),
+                    displayOrder: read(api.displayOrder),
+                    selected: read(api.selected) !== false
+                });
+            },
             normalizeAccount = function (account) {
-                account = ko.toJS(account || {});
+                account = asObject(account);
 
                 const accountNumberObject = account.accountNumber,
                     canonicalNumber = String(accountNumberObject
@@ -57,7 +81,13 @@ define([
                         || canonicalNumber || "-",
                     accountType: accountType,
                     currency: currency,
-                    displayName: displayName
+                    displayName: displayName,
+                    displayCurrency: currency || "-",
+                    displayAccountType: displayName || (accountType === "TD"
+                        ? resourceBundle.navLabels.TD : accountType === "CSA"
+                            ? resourceBundle.navLabels.CASA : accountType || "-"),
+                    selected: read(account.selected) !== false,
+                    apiServices: asArray(account.apiServices).map(normalizeApi)
                 });
             },
             taskCode = ko.unwrap(params.taskCode || data.taskCode) || "";
@@ -65,7 +95,9 @@ define([
         self.nls = resourceBundle;
         self.context = ko.unwrap(params.hthLinkageContext) || record;
         self.summaryParams = params.summaryParams || {};
-        self.approvalMode = ko.observable(params.mode === "approval" || !!transactionSnapshot);
+
+        self.approvalMode = ko.observable(params.mode === "approval"
+            || Object.keys(transactionSnapshot).length > 0);
 
         self.action = read(params.action) || record.actionType
             || (taskCode === "UAT_N_HUA_DEL" ? "DELETE"
@@ -73,14 +105,43 @@ define([
 
         self.access = record;
 
-        self.allAccounts = (ko.toJS(ko.unwrap(params.accounts)) || record.accounts || [])
+        const makerAccounts = asArray(params.accounts),
+            snapshotAccounts = asArray(record.accounts);
+
+        // Maker review uses the exact in-memory selection from the API mapping step. Checker
+        // review uses the immutable transaction snapshot supplied by the approval framework.
+        self.allAccounts = (makerAccounts.length ? makerAccounts : snapshotAccounts)
             .map(normalizeAccount);
 
-        self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
+        self.originalAccounts = asArray(params.originalAccounts);
 
         self.accounts = self.allAccounts.filter(function (account) {
             return read(account.selected) !== false;
         });
+
+        self.activeAccountType = ko.observable(self.accounts.some(function (account) {
+            return account.accountType === "CSA";
+        }) ? "CSA" : "TD");
+
+        self.filteredAccounts = ko.pureComputed(function () {
+            return self.accounts.filter(function (account) {
+                return account.accountType === self.activeAccountType();
+            }).sort(function (left, right) {
+                return String(left.accountNumber).localeCompare(String(right.accountNumber));
+            });
+        });
+
+        self.noAccountsForActiveType = ko.pureComputed(function () {
+            return self.filteredAccounts().length === 0;
+        });
+
+        self.showCurrentAndSavings = function () {
+            self.activeAccountType("CSA");
+        };
+
+        self.showTimeDeposits = function () {
+            self.activeAccountType("TD");
+        };
 
         self.isSubmitting = ko.observable(false);
 

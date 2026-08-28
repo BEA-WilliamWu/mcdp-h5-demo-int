@@ -69,12 +69,28 @@ SELECT R.ID AS RESOURCE_ID, R.RESOURCE_TYPE, RA.ACTION_TYPE,
        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.%'
  ORDER BY R.RESOURCE_TYPE, R.ID, RA.ACTION_TYPE;
 
--- Expected: 3 tasks, each with approval/audit/blackout aspects.
+-- Expected: 3 tasks, each with approval/audit/blackout/2fa aspects (12 rows total).
 SELECT T.ID, T.NAME, T.PARENT_ID, A.ASPECT, A.ENABLED
   FROM DIGX_CM_TASK T
   JOIN DIGX_CM_TASK_ASPECTS A ON A.TASK_ID = T.ID
  WHERE T.ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
  ORDER BY T.ID, A.ASPECT;
+
+-- Expected: HTH mappings mirror the BCO Create/Edit/Delete mapping counts and authentication
+-- parameters. AUTH_TYPE_ID should include the site's standard Signer OTP / iToken challenge.
+SELECT M.TASK_ID, M.ENTITY_TYPE, M.ENTITY_VALUE, M.DETERMINANT_VALUE,
+       P.LEVEL_NO, P.AUTH_TYPE_ID
+  FROM DIGX_AU_MAPPING M
+  JOIN DIGX_AU_MAPPING_PARAM P ON P.MAP_ID = M.ID
+ WHERE M.TASK_ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
+ ORDER BY M.TASK_ID, M.DETERMINANT_VALUE, P.LEVEL_NO, P.AUTH_TYPE_ID;
+
+-- Expected: one row whose PROP_VALUE contains all three HTH task codes separated by '~'.
+SELECT PROP_ID, PREFERENCE_NAME, PROP_VALUE, DETERMINANT_VALUE
+  FROM DIGX_FW_CONFIG_ALL_O
+ WHERE PROP_ID = 'CRM_ALLOWED_TASK_CODES'
+   AND PREFERENCE_NAME = 'CRMConfiguration'
+   AND DETERMINANT_VALUE = 'N';
 
 -- Expected: 3 rows with submit/edit/delete resource names.
 SELECT RESOURCE_NAME, TASK_ID

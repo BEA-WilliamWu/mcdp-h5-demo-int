@@ -184,7 +184,9 @@ Runtime Allow 需要同一查询链全部 Active：
 - Search/Accounts/Submit/Edit/Delete Resource 与 Entitlement。
 - Maker/Checker Role Group Mapping。
 - `UAT_N_HUA_NEW`、`UAT_N_HUA_EDT`、`UAT_N_HUA_DEL` Task。
-- Approval、Audit、Blackout Task Aspects。
+- Approval、Audit、Blackout、2FA Task Aspects。
+- `CRM_ALLOWED_TASK_CODES` 中的 HTH Task 注册，使 CRM/One-Man-Bank 按 BCO User Access 的 Admin High Risk 路径评估。
+- 从既有 BCO User Access Task 复制的 Authentication Mapping 和 Signer OTP/iToken 参数。
 - Approval Assembler Base/Override Configuration。
 - 5 个 Repository Adapter Base/Override Configuration。
 - 12 个 Error Code，每个包含 English、Simplified Chinese、Traditional Chinese。
@@ -214,8 +216,9 @@ consulting/db/branch_change_history/20260825_HTH_User_Access/
 
 1. 不重跑 Schema，不删表。
 2. 执行 `7_HTH_User_Access_Time_Deposit_Upgrade.sql`，扩展两项 Account Type Constraint，并把两项 Account Unique Key 改为 `Account Type + Account Number`。
-3. 重跑可重复执行的 Error Message SQL以更新 004 文案。
-4. 执行 Verification SQL。
+3. 执行 `8_HTH_User_Access_Approval_OTP_Upgrade.sql`，为已存在的三个 HTH Task 补 `2fa` Aspect、CRM Allowed Task 配置，并复制 BCO Create/Edit/Delete 的 Authentication Mapping。
+4. 重跑可重复执行的 Error Message SQL以更新 004 文案。
+5. 执行 Verification SQL。
 
 ## 8. Verification
 

@@ -28,8 +28,9 @@ public class SubmitHostToHostUserAccessApprovalAssembler
   @Override
   public HostToHostUserAccessDTO fromDomainObject(Transaction transaction)
       throws Exception {
-    // Approval detail is reconstructed from the persisted request snapshot, not a generic
-    // transaction domain object. This direction is intentionally unsupported.
+    // The checker page receives the typed transactionSnapshot stored by the generic approval
+    // framework. Approved service execution independently reloads the immutable HTH request
+    // tables, so converting a bare transaction domain object back to a request is unnecessary.
     return null;
   }
 

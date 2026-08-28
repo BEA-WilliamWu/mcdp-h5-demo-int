@@ -17,15 +17,50 @@
     <!-- /ko -->
     <!-- ko ifnot: isDelete -->
     <page-section heading="[[$component.nls.headers.hthReviewMapping]]">
-        <!-- ko foreach: accounts -->
-        <div class="hth-review-account">
-            <h3 data-bind="text: (accountType === 'TD' ? $component.nls.fieldname.tdMapping : $component.nls.fieldname.casaMapping)
-                + ' - ' + accountNumberDisplay + (displayName ? ' - ' + displayName : '')"></h3>
-            <div data-bind="foreach: $component.selectedApis($data)">
-                <span class="hth-review-api" data-bind="text: apiName"></span>
-            </div>
+        <div class="hth-review-instructions" data-bind="text: nls.notes.UAC05_REVIEW"></div>
+        <div class="hth-account-tabs" role="tablist">
+            <button type="button" role="tab"
+                data-bind="click: showCurrentAndSavings,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
+                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
+                <span data-bind="text: nls.navLabels.CASA"></span>
+            </button>
+            <button type="button" role="tab"
+                data-bind="click: showTimeDeposits,
+                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
+                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
+                <span data-bind="text: nls.navLabels.TD"></span>
+            </button>
         </div>
+        <div class="hth-review-account-header">
+            <span class="hth-review-selection"></span>
+            <span data-bind="text: nls.headers.AccountNumber"></span>
+            <span data-bind="text: nls.headers.currency"></span>
+            <span data-bind="text: nls.headers.displayName"></span>
+        </div>
+        <!-- ko foreach: filteredAccounts -->
+        <details class="hth-review-account" open>
+            <summary>
+                <span class="hth-review-account-row">
+                    <span class="hth-review-selection">
+                        <input type="checkbox" checked disabled>
+                    </span>
+                    <span data-bind="text: accountNumberDisplay"></span>
+                    <span data-bind="text: displayCurrency"></span>
+                    <span data-bind="text: displayAccountType"></span>
+                </span>
+            </summary>
+            <div class="hth-review-api-heading" data-bind="text: $component.nls.fieldname.apiServices"></div>
+            <div class="hth-review-api-grid" data-bind="foreach: $component.selectedApis($data)">
+                <label class="hth-review-api">
+                    <input type="checkbox" checked disabled>
+                    <span data-bind="text: apiName"></span>
+                </label>
+            </div>
+        </details>
         <!-- /ko -->
+        <div class="hth-review-empty"
+            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
     </page-section>
     <!-- /ko -->
     <!-- ko ifnot: approvalMode -->

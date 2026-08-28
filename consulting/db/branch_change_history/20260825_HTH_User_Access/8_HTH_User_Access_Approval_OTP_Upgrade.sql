@@ -1,0 +1,137 @@
+-- BCOH2H-595: enable the standard BCO User Access checker OTP flow for an existing installation.
+--
+-- Run this file only when 3_HTH_User_Access_Process.sql was executed before HTH User Access was
+-- configured for 2FA. A fresh installation using the current process script does not need this
+-- upgrade. The script changes only HTH task aspects, the CRM allowed-task list, and HTH
+-- authentication mappings; it does not update or delete BCO mappings, HTH business data, or
+-- pending approval transactions.
+--
+-- The BCO Create/Edit/Delete authentication mappings are the source of truth. This keeps HTH on
+-- the same role, determinant, maintenance, level, and challenge configuration as BCO instead of
+-- embedding environment-specific IDs. Re-running is safe because only the three HTH mappings are
+-- replaced. Execute in the OBDX configuration schema and commit once at the end.
+
+MERGE INTO DIGX_CM_TASK_ASPECTS T
+USING (
+  SELECT 'UAT_N_HUA_NEW' TASK_ID, '2fa' ASPECT, 'Y' ENABLED FROM DUAL
+  UNION ALL
+  SELECT 'UAT_N_HUA_EDT', '2fa', 'Y' FROM DUAL
+  UNION ALL
+  SELECT 'UAT_N_HUA_DEL', '2fa', 'Y' FROM DUAL
+) S
+ON (T.TASK_ID = S.TASK_ID AND T.ASPECT = S.ASPECT)
+WHEN MATCHED THEN UPDATE SET T.ENABLED = S.ENABLED
+WHEN NOT MATCHED THEN INSERT (TASK_ID, ASPECT, ENABLED)
+VALUES (S.TASK_ID, S.ASPECT, S.ENABLED);
+
+MERGE INTO DIGX_FW_CONFIG_ALL_O T
+USING (
+  SELECT 'CRM_ALLOWED_TASK_CODES' PROP_ID,
+         'CRMConfiguration' PREFERENCE_NAME,
+         'N' DETERMINANT_VALUE
+    FROM DUAL
+) S
+ON (T.PROP_ID = S.PROP_ID
+    AND T.PREFERENCE_NAME = S.PREFERENCE_NAME
+    AND T.DETERMINANT_VALUE = S.DETERMINANT_VALUE)
+WHEN MATCHED THEN UPDATE SET
+  T.PROP_VALUE =
+    CASE
+      WHEN T.PROP_VALUE IS NULL OR TRIM(T.PROP_VALUE) IS NULL
+        THEN 'UAT_N_HUA_NEW~UAT_N_HUA_EDT~UAT_N_HUA_DEL'
+      ELSE T.PROP_VALUE
+        || CASE WHEN INSTR('~' || T.PROP_VALUE || '~', '~UAT_N_HUA_NEW~') = 0
+             THEN '~UAT_N_HUA_NEW' ELSE '' END
+        || CASE WHEN INSTR('~' || T.PROP_VALUE || '~', '~UAT_N_HUA_EDT~') = 0
+             THEN '~UAT_N_HUA_EDT' ELSE '' END
+        || CASE WHEN INSTR('~' || T.PROP_VALUE || '~', '~UAT_N_HUA_DEL~') = 0
+             THEN '~UAT_N_HUA_DEL' ELSE '' END
+    END,
+  T.LAST_UPDATED_BY = 'system',
+  T.LAST_UPDATED_DATE = SYSDATE
+WHEN NOT MATCHED THEN INSERT
+  (PROP_ID, PREFERENCE_NAME, PROP_VALUE, DETERMINANT_VALUE, CREATED_BY,
+   CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE)
+VALUES
+  (S.PROP_ID, S.PREFERENCE_NAME,
+   'UAT_N_HUA_NEW~UAT_N_HUA_EDT~UAT_N_HUA_DEL', S.DETERMINANT_VALUE,
+   'system', SYSDATE, 'system', SYSDATE);
+
+DELETE FROM DIGX_AU_MAPPING_PARAM
+ WHERE MAP_ID IN (
+   SELECT ID
+     FROM DIGX_AU_MAPPING
+    WHERE TASK_ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
+ );
+
+DELETE FROM DIGX_AU_MAPPING
+ WHERE TASK_ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL');
+
+DECLARE
+  L_NEXT_ID           NUMBER;
+  L_SOURCE_COUNT      NUMBER;
+  L_SOURCE_PARAM_COUNT NUMBER;
+BEGIN
+  SELECT NVL(MAX(TO_NUMBER(ID)), 0)
+    INTO L_NEXT_ID
+    FROM DIGX_AU_MAPPING
+   WHERE REGEXP_LIKE(ID, '^[0-9]+$');
+
+  FOR TASK_PAIR IN (
+    SELECT 'UAT_N_CA' SOURCE_TASK_ID, 'UAT_N_HUA_NEW' TARGET_TASK_ID FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_UA', 'UAT_N_HUA_EDT' FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_DA', 'UAT_N_HUA_DEL' FROM DUAL
+  ) LOOP
+    SELECT COUNT(*)
+      INTO L_SOURCE_COUNT
+      FROM DIGX_AU_MAPPING
+     WHERE TASK_ID = TASK_PAIR.SOURCE_TASK_ID;
+
+    IF L_SOURCE_COUNT = 0 THEN
+      RAISE_APPLICATION_ERROR(-20001,
+        'Missing BCO authentication mapping for task ' || TASK_PAIR.SOURCE_TASK_ID);
+    END IF;
+
+    SELECT COUNT(*)
+      INTO L_SOURCE_PARAM_COUNT
+      FROM DIGX_AU_MAPPING M
+      JOIN DIGX_AU_MAPPING_PARAM P ON P.MAP_ID = M.ID
+     WHERE M.TASK_ID = TASK_PAIR.SOURCE_TASK_ID;
+
+    IF L_SOURCE_PARAM_COUNT = 0 THEN
+      RAISE_APPLICATION_ERROR(-20002,
+        'Missing BCO authentication parameters for task ' || TASK_PAIR.SOURCE_TASK_ID);
+    END IF;
+
+    FOR SOURCE_MAPPING IN (
+      SELECT ID, MAINTENANCE_ID, ENTITY_VALUE, ENTITY_TYPE, DETERMINANT_VALUE,
+             OBJECT_STATUS
+        FROM DIGX_AU_MAPPING
+       WHERE TASK_ID = TASK_PAIR.SOURCE_TASK_ID
+       ORDER BY ID
+    ) LOOP
+      L_NEXT_ID := L_NEXT_ID + 1;
+
+      INSERT INTO DIGX_AU_MAPPING (
+        ID, MAINTENANCE_ID, ENTITY_VALUE, TASK_ID, ENTITY_TYPE,
+        DETERMINANT_VALUE, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
+        LAST_UPDATED_DATE, OBJECT_STATUS, OBJECT_VERSION_NUMBER
+      ) VALUES (
+        TO_CHAR(L_NEXT_ID), SOURCE_MAPPING.MAINTENANCE_ID,
+        SOURCE_MAPPING.ENTITY_VALUE, TASK_PAIR.TARGET_TASK_ID,
+        SOURCE_MAPPING.ENTITY_TYPE, SOURCE_MAPPING.DETERMINANT_VALUE,
+        'system', SYSDATE, 'system', SYSDATE, SOURCE_MAPPING.OBJECT_STATUS, 1
+      );
+
+      INSERT INTO DIGX_AU_MAPPING_PARAM (MAP_ID, LEVEL_NO, AUTH_TYPE_ID)
+      SELECT TO_CHAR(L_NEXT_ID), LEVEL_NO, AUTH_TYPE_ID
+        FROM DIGX_AU_MAPPING_PARAM
+       WHERE MAP_ID = SOURCE_MAPPING.ID;
+    END LOOP;
+  END LOOP;
+END;
+/
+
+COMMIT;

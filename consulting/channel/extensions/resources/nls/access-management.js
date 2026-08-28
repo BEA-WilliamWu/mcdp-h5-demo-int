@@ -164,6 +164,7 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
                     yes: "Yes",
                     no: "No",
                     copy: "Copy",
+                    apiServices: "API Services",
                     futureCASAAcc: "Link all existing and future Current & Savings Account(s)",
                     futureTDAcc: "Link all existing and future time deposit accounts",
                     futureLERAcc: "Link all existing and future Investment Account(s)",

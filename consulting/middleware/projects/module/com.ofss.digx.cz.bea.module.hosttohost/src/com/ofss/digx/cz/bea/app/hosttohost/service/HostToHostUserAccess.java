@@ -123,6 +123,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
   private static final String ASSOCIATED = "ASSOCIATED";
 
+  private static final String CORPORATE_USER_ROLE = "corporateuser";
+
   private static final String ACTIVE = "ACTIVE";
 
   private static final String NOT_SETUP = "NOT_SETUP";
@@ -771,9 +773,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     for (HostToHostUserAccessApiDTO api : eligibleApis) {
       eligibleApiByCode.put(api.getApiCode(), api);
     }
-    List<HostToHostUserAccessAccountDTO> eligibleAccounts = listEligibleAccounts(
-        sessionContext, request.getPartyId(), request.getAccessPartyId(),
-        request.getLinkageType(), eligibleApis);
+    List<HostToHostUserAccessAccountDTO> eligibleAccounts =
+        listEligibleAccountsForValidation(sessionContext, request.getPartyId(),
+            request.getAccessPartyId(), request.getLinkageType(), eligibleApis,
+            approvedExecution);
     Map<String, HostToHostUserAccessAccountDTO> eligibleAccountByKey =
         new HashMap<String, HostToHostUserAccessAccountDTO>();
     for (HostToHostUserAccessAccountDTO account : eligibleAccounts) {
@@ -836,6 +839,48 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
     if (selectedAccountCount == 0) {
       throw new Exception("DIGX_CZ_HTH_UA_009");
+    }
+  }
+
+  /**
+   * Resolves the current BCO account catalogue used to validate a maker selection.
+   *
+   * <p>The approval callback runs with the checker's enterprise role (for example,
+   * {@code administrator}). The standard BCO {@link AccountAccess} service uses that thread role
+   * to select its account repository: {@code corporateuser} uses the live corporate account
+   * catalogue, while an administrator can be routed to a relationship cache. The latter may not
+   * contain the maker's unchanged account and would incorrectly reject approval after Signer PIN.
+   *
+   * <p>For approved re-entry only, this method selects the same live account catalogue used by the
+   * maker screen. It does not bypass validation: account ownership, active status, supported type,
+   * and API eligibility are still rebuilt from current server-side data. The checker's original
+   * role is restored in all cases so no later service in the request is affected.
+   */
+  private List<HostToHostUserAccessAccountDTO> listEligibleAccountsForValidation(
+      SessionContext sessionContext, String partyId, String accessPartyId,
+      String linkageType, List<HostToHostUserAccessApiDTO> eligibleApis,
+      boolean approvedExecution) throws Exception {
+    if (!approvedExecution) {
+      return listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+          eligibleApis);
+    }
+
+    Object originalEnterpriseRole = com.ofss.fc.infra.thread.ThreadAttribute.get(
+        com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID);
+    try {
+      com.ofss.fc.infra.thread.ThreadAttribute.set(
+          com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID, CORPORATE_USER_ROLE);
+      return listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+          eligibleApis);
+    } finally {
+      if (originalEnterpriseRole == null) {
+        com.ofss.fc.infra.thread.ThreadAttribute.clear(
+            com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID);
+      } else {
+        com.ofss.fc.infra.thread.ThreadAttribute.set(
+            com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID,
+            originalEnterpriseRole);
+      }
     }
   }
 

@@ -67,20 +67,27 @@ define([
                     },
                     error: function (error) {
                         if (isApprovalRequiredResponse(error)) {
-                            deferred.resolve(normalizeApprovalRequiredResponse(error),
-                                "success", error);
+                            const normalizedResponse = normalizeApprovalRequiredResponse(error);
+
+                            deferred.resolve(normalizedResponse, "success", normalizedResponse);
 
                             return;
                         }
 
                         deferred.reject(error);
                     }
-                });
+                }),
+                transportPromise = requestOptions.data
+                    ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
 
-            if (requestOptions.data) {
-                baseService.add(requestOptions);
-            } else {
-                baseService.fetch(requestOptions);
+            // BaseService exposes a native Promise and also invokes the callback handlers above.
+            // This wrapper deliberately returns its jQuery Deferred, so consume the native rejection
+            // after the callback has routed it; otherwise an expected approval-required HTTP 400 is
+            // reported as an unhandled Promise even though the maker request was staged correctly.
+            if (transportPromise && typeof transportPromise.catch === "function") {
+                transportPromise.catch(function () {
+                    return null;
+                });
             }
 
             return deferred;

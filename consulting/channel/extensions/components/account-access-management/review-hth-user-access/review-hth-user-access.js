@@ -219,10 +219,11 @@ define([
                     message = response && response.message,
                     statusMessage = response && response.status && response.status.message,
                     responseCode = response && response.errorCode,
+                    messageDetail = message && typeof message === "object" && message.detail,
                     messageCode = typeof message === "string" ? message : message && message.code,
                     statusCode = typeof statusMessage === "string"
                         ? statusMessage : statusMessage && statusMessage.code,
-                    code = responseCode || messageCode || statusCode;
+                    code = messageDetail || responseCode || messageCode || statusCode;
 
                 rootParams.baseModel.showMessages(null,
                     [typeof code === "string" ? code : self.nls.info.hthSubmitFailed], "ERROR");

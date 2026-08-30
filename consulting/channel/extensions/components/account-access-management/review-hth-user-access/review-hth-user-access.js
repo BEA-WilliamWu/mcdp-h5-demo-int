@@ -1,11 +1,18 @@
 define([
+    "ojs/ojcore",
     "knockout",
     "../hth-account-linkage/model",
     "ojL10n!extensions/resources/nls/access-management",
     "extensions/generic/service-extension",
     "ojs/ojbutton",
+    "ojs/ojtable",
+    "ojs/ojrowexpander",
+    "ojs/ojflattenedtreedatagriddatasource",
+    "ojs/ojjsontreedatasource",
+    "ojs/ojflattenedtreetabledatasource",
+    "framework/elements/api/nav-bar/loader",
     "framework/elements/api/page-section/loader"
-], function (ko, HthUserAccessModel, resourceBundle, serviceExtension) {
+], function (oj, ko, HthUserAccessModel, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -33,13 +40,42 @@ define([
             transactionDetails = asObject(rootModel.transactionDetails),
             transactionSnapshot = asObject(transactionDetails.transactionSnapshot),
             data = asObject(params.data),
+            looksLikeAccessRecord = function (source) {
+                source = asObject(source);
+
+                return source.partyId !== undefined || source.closeId !== undefined
+                    || source.accessPartyId !== undefined || Array.isArray(source.accounts);
+            },
             unwrapRecord = function (source) {
                 source = asObject(source);
 
-                return asObject(source.record || source.hostToHostUserAccess
-                    || source.hostToHostUserAccessDTO || source.access || source);
+                const nestedRecord = source.record || source.hostToHostUserAccess
+                    || source.hostToHostUserAccessDTO || source.access,
+                    nestedTransactionDetails = asObject(source.transactionDetails),
+                    nestedSnapshot = source.transactionSnapshot
+                        || nestedTransactionDetails.transactionSnapshot;
+
+                if (nestedRecord) {
+                    return unwrapRecord(nestedRecord);
+                }
+
+                if (nestedSnapshot) {
+                    return unwrapRecord(nestedSnapshot);
+                }
+
+                if (source.data && source.data !== source) {
+                    const nestedData = unwrapRecord(source.data);
+
+                    if (looksLikeAccessRecord(nestedData)) {
+                        return nestedData;
+                    }
+                }
+
+                return looksLikeAccessRecord(source) ? source : {};
             },
-            recordCandidates = [data, transactionSnapshot, params.access],
+            // The platform transaction snapshot is the checker source of truth, matching BCO.
+            // Maker data is considered only when no snapshot exists.
+            recordCandidates = [transactionSnapshot, data, params.access, params],
             recordSource = recordCandidates.map(unwrapRecord).filter(function (candidate) {
                 return Object.keys(candidate).length > 0;
             })[0] || {},
@@ -90,11 +126,16 @@ define([
                     apiServices: asArray(account.apiServices).map(normalizeApi)
                 });
             },
-            taskCode = ko.unwrap(params.taskCode || data.taskCode) || "";
+            taskCode = ko.unwrap(params.taskCode || data.taskCode
+                || transactionDetails.taskCode || transactionDetails.taskId
+                || rootModel.taskCode) || "";
 
         self.nls = resourceBundle;
         self.context = ko.unwrap(params.hthLinkageContext) || record;
         self.summaryParams = params.summaryParams || {};
+
+        self.userIdDisplay = String(record.username || record.closeId
+            || self.context.username || self.context.closeId || "-").split("@")[0];
 
         self.approvalMode = ko.observable(params.mode === "approval"
             || Object.keys(transactionSnapshot).length > 0);
@@ -119,41 +160,94 @@ define([
             return read(account.selected) !== false;
         });
 
-        self.activeAccountType = ko.observable(self.accounts.some(function (account) {
+        self.activeAccountType = ko.observable();
+        self.filteredAccounts = ko.observableArray([]);
+        self.accountDataSource = ko.observable();
+
+        self.menuSelection = ko.observable(self.accounts.some(function (account) {
             return account.accountType === "CSA";
-        }) ? "CSA" : "TD");
+        }) ? "CASA" : "TRD");
 
-        self.filteredAccounts = ko.pureComputed(function () {
-            return self.accounts.filter(function (account) {
-                return account.accountType === self.activeAccountType();
-            }).sort(function (left, right) {
-                return String(left.accountNumber).localeCompare(String(right.accountNumber));
-            });
-        });
+        self.tabLists = ko.observableArray([{
+            id: "CASA",
+            label: self.nls.navLabels.CASA
+        }, {
+            id: "TRD",
+            label: self.nls.navLabels.TD
+        }]);
 
-        self.noAccountsForActiveType = ko.pureComputed(function () {
-            return self.filteredAccounts().length === 0;
-        });
-
-        self.showCurrentAndSavings = function () {
-            self.activeAccountType("CSA");
+        self.uiOptions = {
+            menuFloat: "right",
+            fullWidth: false,
+            defaultOption: self.menuSelection
         };
-
-        self.showTimeDeposits = function () {
-            self.activeAccountType("TD");
-        };
-
-        self.isSubmitting = ko.observable(false);
-
-        self.isDelete = ko.pureComputed(function () {
-            return self.action === "DELETE";
-        });
 
         self.selectedApis = function (account) {
             return (account.apiServices || []).filter(function (api) {
                 return read(api.selected) !== false;
             });
         };
+
+        const activateAccountType = function (accountType) {
+            const activeAccounts = self.accounts.filter(function (account) {
+                return account.accountType === accountType;
+            }).slice().sort(function (left, right) {
+                return String(left.accountNumber).localeCompare(String(right.accountNumber));
+            }),
+                accountTree = activeAccounts.map(function (account, index) {
+                    return {
+                        id: `hthReviewAccount_${accountType}_${index}`,
+                        attr: account,
+                        children: [{
+                            id: `hthReviewApis_${accountType}_${index}`,
+                            attr: {
+                                accountNumber: account.accountNumber,
+                                apiServices: self.selectedApis(account)
+                            }
+                        }]
+                    };
+                }),
+                treeOptions = {
+                    expanded: "all",
+                    columns: [
+                        "accountNumber",
+                        "currency",
+                        "displayName"
+                    ]
+                };
+
+            // Replace the rendered collection explicitly. Older OBDX JET builds can refresh the
+            // active tab class without re-rendering a containerless foreach backed by a
+            // pureComputed, leaving the previous tab's account rows visible.
+            self.activeAccountType(accountType);
+            self.filteredAccounts(activeAccounts);
+
+            self.accountDataSource(new oj.FlattenedTreeTableDataSource(
+                new oj.FlattenedTreeDataSource(new oj.JsonTreeDataSource(accountTree), treeOptions)
+            ));
+        };
+
+        self.noAccountsForActiveType = ko.pureComputed(function () {
+            return self.filteredAccounts().length === 0;
+        });
+
+        self.activateTab = function () {
+            activateAccountType(self.menuSelection() === "TRD" ? "TD" : "CSA");
+        };
+
+        const menuSelectionSubscription = self.menuSelection.subscribe(self.activateTab);
+
+        self.dispose = function () {
+            menuSelectionSubscription.dispose();
+        };
+
+        self.activateTab();
+
+        self.isSubmitting = ko.observable(false);
+
+        self.isDelete = ko.pureComputed(function () {
+            return self.action === "DELETE";
+        });
 
         self.payload = function () {
             // Descriptive fields are included for review display, but the backend re-resolves
@@ -166,7 +260,9 @@ define([
                 username: record.username || self.context.username,
                 fullName: record.fullName || self.context.fullName,
                 accessPartyName: record.accessPartyName || self.context.accessPartyName,
-                accounts: self.isDelete() ? [] : self.accounts.map(function (account, accountIndex) {
+                // Keep the selected account/API rows in DELETE snapshots as BCO does. The backend
+                // ignores them for deletion, but checker review and audit details remain complete.
+                accounts: self.accounts.map(function (account, accountIndex) {
                     return {
                         accountNumber: account.accountNumber,
                         maskedAccountNumber: account.maskedAccountNumber,
@@ -191,10 +287,12 @@ define([
             };
         };
 
-        rootParams.dashboard.headerName(self.action === "DELETE"
+        self.transactionName = self.action === "DELETE"
             ? self.nls.headers.deleteMappingTxnName
             : self.action === "EDIT" ? self.nls.headers.editMappingTxnName
-                : self.nls.headers.createMappingTxnName);
+                : self.nls.headers.createMappingTxnName;
+
+        rootParams.dashboard.headerName(self.transactionName);
 
         if (!self.approvalMode()) {
             rootParams.baseModel.registerElement("confirm-screen");
@@ -207,12 +305,18 @@ define([
 
             self.isSubmitting(true);
 
-            HthUserAccessModel.save(self.payload(), self.action).done(function (response, _status, jqXhr) {
+            HthUserAccessModel.save(self.payload(), self.action).done(function (response) {
+                // Approval-required is returned as HTTP 400 by this OBDX release but is normalized
+                // by the model to an accepted transaction response. Passing the original jqXHR to
+                // confirm-screen would make it parse the error transport as a transactionAction.
                 rootParams.dashboard.loadComponent("confirm-screen", {
-                    jqXHR: jqXhr,
                     transactionResponse: response,
                     hostReferenceNumber: response.status && response.status.externalReferenceNumber,
-                    transactionName: rootParams.dashboard.headerName()
+                    // BCO passes the action-specific transaction name to confirm-screen. Apart
+                    // from displaying the correct Create/Edit/Delete title, the shared component
+                    // uses it together with the platform reference number when the checker clicks
+                    // the Approve shortcut and reopens the immutable transaction snapshot.
+                    transactionName: self.transactionName
                 }, self);
             }).fail(function (error) {
                 const response = error && error.responseJSON ? error.responseJSON : error,

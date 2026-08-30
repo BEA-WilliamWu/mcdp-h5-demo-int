@@ -52,17 +52,6 @@
                       <span data-bind="text:selectedUserName"></span>
                     </div>
                   </div>
-                  <!-- ko if: $component.isHthMode -->
-                  <div class="oj-flex display-section">
-                    <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
-                      <label data-bind="text: nls.fieldname.userChannelType"></label>
-                    </div>
-
-                    <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-9">
-                      <span data-bind="text:selectedUserChannelType"></span>
-                    </div>
-                  </div>
-                  <!-- /ko -->
                   <!-- ko if: !$component.isCorpAdmin() && !$component.isHthMode() -->
                   <div class="oj-flex display-section">
                     <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
@@ -74,7 +63,7 @@
                     </div>
                   </div>
                   <!-- /ko -->
-                  <!-- ko if: $component.showCopyOptions && $component.setupNotCreated -->
+                  <!-- ko if: $component.showCopyOptions && ($component.setupNotCreated() || $component.isHthMode()) -->
                   <div class="oj-flex oj-sm-align-items-center display-section">
                     <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6 oj-sm-only-padding-1x-bottom">
                       <label data-bind="text: nls.headers.copyAccountAccessSetting"></label>
@@ -123,139 +112,140 @@
             <!-- ko with: $component.hthRelatedSummary -->
             <page-section heading="[[$component.nls.headers.ownAccount]]">
               <div class="hth-summary-card">
-                <div class="oj-flex oj-flex-items-pad display-section">
-                  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
-                    <label data-bind="text: $component.nls.fieldname.companyName"></label>
-                  </div>
-                  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-9">
-                    <span data-bind="text: accessPartyName"></span>
-                  </div>
+                <div class="hth-summary-company-header">
+                  <span class="hth-summary-company-label"
+                    data-bind="text: $component.nls.fieldname.companyName"></span>
+                  <span class="hth-summary-company-name" data-bind="text: accessPartyName"></span>
                 </div>
 
                 <!-- ko if: totalAccountCount > 0 -->
-                <div class="oj-flex oj-flex-items-pad hth-summary-row hth-summary-row-heading">
-                  <div class="oj-flex-item oj-sm-8">
-                    <span data-bind="text: $component.nls.fieldname.accountType"></span>
-                  </div>
-                  <div class="oj-flex-item oj-sm-4">
-                    <span data-bind="text: $component.nls.fieldname.mappedAccts"></span>
-                  </div>
-                </div>
-                <div class="oj-flex oj-flex-items-pad hth-summary-row">
-                  <div class="oj-flex-item oj-sm-8">
-                    <span data-bind="text: $component.nls.fieldname.casaMapping"></span>
-                  </div>
-                  <div class="oj-flex-item oj-sm-4">
-                    <span data-bind="text: casaAccountCount"></span>
-                  </div>
-                </div>
-                <div class="oj-flex oj-flex-items-pad hth-summary-row">
-                  <div class="oj-flex-item oj-sm-8">
-                    <span data-bind="text: $component.nls.fieldname.tdMapping"></span>
-                  </div>
-                  <div class="oj-flex-item oj-sm-4">
-                    <span data-bind="text: tdAccountCount"></span>
-                  </div>
+                <div class="hth-summary-table table-data">
+                  <oj-table :aria-label="[[$component.nls.headers.ownAccount]]"
+                    columns="[[[{headerText:$component.nls.fieldname.accountType,field:'accountType',
+                      renderer:$oj.KnockoutTemplateUtils.getRenderer('hth_summary_module_link',true)},
+                      {headerText:$component.nls.fieldname.mappedAccts,field:'mappedAccts'}]]]"
+                    selection-mode="[[{row:'none',column:'none'}]]" data="[[hthMappingDataSource]]">
+                    <caption class="hide-label" data-bind="text:$component.nls.headers.ownAccount"></caption>
+                  </oj-table>
                 </div>
                 <!-- /ko -->
 
                 <!-- ko if: totalAccountCount === 0 -->
-                <div class="oj-flex oj-flex-items-pad hth-summary-message">
+                <div class="hth-summary-message hth-summary-empty-message">
                   <span data-bind="text: $component.nls.info.userSetUp"></span>
                 </div>
                 <!-- /ko -->
 
-                <div class="oj-flex oj-flex-items-pad hth-summary-status">
-                  <span data-bind="text: $component.hthSetupStatusText($data)"></span>
-                </div>
-                <!-- ko if: hasPendingRequest -->
-                <div class="oj-flex oj-flex-items-pad hth-summary-message">
-                  <span data-bind="text: $component.hthPendingText($data)"></span>
+                <!-- ko if: $component.showUsersList() -->
+                <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center no-setup-section">
+                  <div class="oj-sm-align-self-center oj-sm-12 oj-md-6 oj-lg-6"></div>
+                  <div class="oj-sm-12 oj-md-6 oj-lg-6 oj-sm-align-self-center no-element-mar">
+                    <oj-select-one :placeholder="[[$component.nls.info.pleaseSelectUsername]]"
+                      value="{{copySourceUsername}}" required>
+                      <!-- ko foreach: $component.hthCopyCandidates -->
+                      <oj-option value="{{username}}"><span
+                          data-bind="text:$baseModel.format($component.nls.generic.common.userName,{firstName:firstName,lastName:lastName,userName:onlyUsername})"></span></oj-option>
+                      <!-- /ko -->
+                    </oj-select-one>
+                    <oj-button class="action-button-secondary"
+                      on-click="[[$component.copyHthAccess.bind($data, $data)]]">
+                      <span data-bind="text:$component.nls.fieldname.copy"></span>
+                    </oj-button>
+                  </div>
                 </div>
                 <!-- /ko -->
 
                 <!-- ko if: canMaintain && $component.displayEditButtons -->
-                <div class="oj-flex oj-flex-items-pad oj-sm-justify-content-flex-end">
+                <!-- ko if: totalAccountCount === 0 && !$component.showUsersList() -->
+                <div class="hth-summary-card-actions">
                   <oj-button class="help-button createBtn"
                     on-click="[[$component.openHthLinkage.bind($data, $data)]]">
                     <span data-bind="text: $component.nls.info.hthToLink"></span>
                   </oj-button>
                 </div>
                 <!-- /ko -->
+                <!-- /ko -->
               </div>
             </page-section>
             <!-- /ko -->
 
+            <!-- ko if: $component.hthAssociatedSummaries().length > 0 -->
             <page-section heading="[[$component.nls.headers.linkedpartyAccount]]">
               <div>
-                <!-- ko if: $component.hthAssociatedSummaries().length === 0 -->
-                <div class="oj-flex oj-flex-items-pad hth-summary-message">
-                  <span data-bind="text: nls.info.hthNoAssociatedCompanies"></span>
-                </div>
-                <!-- /ko -->
-
                 <!-- ko foreach: $component.hthAssociatedSummaries -->
                 <div class="hth-summary-card hth-associated-summary-card">
-                  <div class="oj-flex oj-flex-items-pad party-name-header">
-                    <div class="oj-flex-item oj-sm-12">
-                      <div class="party-name-font-weight" data-bind="text: accessPartyName"></div>
-                    </div>
+                  <div class="hth-summary-company-header">
+                    <span class="hth-summary-company-label"
+                      data-bind="text: $component.nls.fieldname.companyName"></span>
+                    <span class="hth-summary-company-name" data-bind="text: accessPartyName"></span>
                   </div>
 
                   <!-- ko if: totalAccountCount > 0 -->
-                  <div class="oj-flex oj-flex-items-pad hth-summary-row hth-summary-row-heading">
-                    <div class="oj-flex-item oj-sm-8">
-                      <span data-bind="text: $component.nls.fieldname.accountType"></span>
-                    </div>
-                    <div class="oj-flex-item oj-sm-4">
-                      <span data-bind="text: $component.nls.fieldname.mappedAccts"></span>
-                    </div>
-                  </div>
-                  <div class="oj-flex oj-flex-items-pad hth-summary-row">
-                    <div class="oj-flex-item oj-sm-8">
-                      <span data-bind="text: $component.nls.fieldname.casaMapping"></span>
-                    </div>
-                    <div class="oj-flex-item oj-sm-4">
-                      <span data-bind="text: casaAccountCount"></span>
-                    </div>
-                  </div>
-                  <div class="oj-flex oj-flex-items-pad hth-summary-row">
-                    <div class="oj-flex-item oj-sm-8">
-                      <span data-bind="text: $component.nls.fieldname.tdMapping"></span>
-                    </div>
-                    <div class="oj-flex-item oj-sm-4">
-                      <span data-bind="text: tdAccountCount"></span>
-                    </div>
+                  <div class="hth-summary-table table-data">
+                    <oj-table :aria-label="[[$component.nls.headers.linkedpartyAccount]]"
+                      columns="[[[{headerText:$component.nls.fieldname.accountType,field:'accountType',
+                        renderer:$oj.KnockoutTemplateUtils.getRenderer('hth_summary_module_link',true)},
+                        {headerText:$component.nls.fieldname.mappedAccts,field:'mappedAccts'}]]]"
+                      selection-mode="[[{row:'none',column:'none'}]]" data="[[hthMappingDataSource]]">
+                      <caption class="hide-label"
+                        data-bind="text:$component.nls.headers.linkedpartyAccount"></caption>
+                    </oj-table>
                   </div>
                   <!-- /ko -->
 
                   <!-- ko if: totalAccountCount === 0 -->
-                  <div class="oj-flex oj-flex-items-pad hth-summary-message">
+                  <div class="hth-summary-message hth-summary-empty-message">
                     <span data-bind="text: $component.nls.info.userLinkageSetUp"></span>
                   </div>
                   <!-- /ko -->
 
-                  <div class="oj-flex oj-flex-items-pad hth-summary-status">
-                    <span data-bind="text: $component.hthSetupStatusText($data)"></span>
-                  </div>
-                  <!-- ko if: hasPendingRequest -->
-                  <div class="oj-flex oj-flex-items-pad hth-summary-message">
-                    <span data-bind="text: $component.hthPendingText($data)"></span>
+                  <!-- ko if: $component.showUsersList() -->
+                  <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center no-setup-section">
+                    <div class="oj-sm-align-self-center oj-sm-12 oj-md-6 oj-lg-6"></div>
+                    <div class="oj-sm-12 oj-md-6 oj-lg-6 oj-sm-align-self-center no-element-mar">
+                      <oj-select-one :placeholder="[[$component.nls.info.pleaseSelectUsername]]"
+                        value="{{copySourceUsername}}" required>
+                        <!-- ko foreach: $component.hthCopyCandidates -->
+                        <oj-option value="{{username}}"><span
+                            data-bind="text:$baseModel.format($component.nls.generic.common.userName,{firstName:firstName,lastName:lastName,userName:onlyUsername})"></span></oj-option>
+                        <!-- /ko -->
+                      </oj-select-one>
+                      <oj-button class="action-button-secondary"
+                        on-click="[[$component.copyHthAccess.bind($data, $data)]]">
+                        <span data-bind="text:$component.nls.fieldname.copy"></span>
+                      </oj-button>
+                    </div>
                   </div>
                   <!-- /ko -->
 
                   <!-- ko if: canMaintain && $component.displayEditButtons -->
-                  <div class="oj-flex oj-flex-items-pad oj-sm-justify-content-flex-end">
+                  <!-- ko if: totalAccountCount === 0 && !$component.showUsersList() -->
+                  <div class="hth-summary-card-actions">
                     <oj-button class="help-button createBtn"
                       on-click="[[$component.openHthLinkage.bind($data, $data)]]">
                       <span data-bind="text: $component.nls.info.hthToLink"></span>
                     </oj-button>
                   </div>
                   <!-- /ko -->
+                  <!-- /ko -->
                 </div>
                 <!-- /ko -->
               </div>
             </page-section>
+            <!-- /ko -->
+
+            <script type="text/html" id="hth_summary_module_link">
+              <td>
+                <!-- ko if: $parent.canMaintain && $component.displayEditButtons() -->
+                <a href="#"
+                  data-bind="text:$context.row.accountType,
+                    click:$component.openHthLinkage.bind($data,$parent,$context.row)"></a>
+                <!-- /ko -->
+                <!-- ko ifnot: $parent.canMaintain && $component.displayEditButtons() -->
+                <span data-bind="text:$context.row.accountType"></span>
+                <!-- /ko -->
+              </td>
+            </script>
             <!-- /ko -->
 
             <div class="oj-flex oj-flex-items-pad button-container">

@@ -314,6 +314,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     if (requestDTO != null && referenceNumber != null) {
       requestDTO.setReferenceNumber(referenceNumber);
       setExternalReferenceNumber(referenceNumber);
+      response.getStatus().setReferenceNumber(referenceNumber);
       response.getStatus().setExternalReferenceNumber(referenceNumber);
     }
 
@@ -325,11 +326,12 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       }
       requestDTO.setReferenceNumber(referenceNumber);
       response.setAccess(requestDTO);
-      if (referenceNumber != null) {
-        response.getStatus().setExternalReferenceNumber(referenceNumber);
-        setExternalReferenceNumber(referenceNumber);
-      }
-      response.setStatus(buildStatus(transactionStatus));
+      /*
+       * Keep the response attached to the framework Status instance until
+       * checkResponsePolicy() has finished. The approval asserter writes the
+       * generated platform transaction reference into that same object. If it
+       * is replaced here, the quick-approval link receives no transaction ID.
+       */
     } catch (Exception e) {
       fillTransactionStatus(transactionStatus, e);
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
@@ -454,67 +456,74 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       SessionContext sessionContext, String partyId, String accessPartyId,
       String linkageType,
       List<HostToHostUserAccessApiDTO> eligibleApis) throws Exception {
-    // Reuse the same AccountAccess service and request model as the BCO account-linkage screen.
-    // The primary party is the company being maintained. For an ASSOCIATED context the selected
-    // company is supplied as a linked party; for RELATED it is the primary party and the linked
-    // party list stays empty. Calling PartyToAccountRelationship directly would bypass BCO's
-    // corporate-admin remote lookup and eligibility adapter, producing a different or stale list.
-    List<AccountType> accountTypes = new ArrayList<AccountType>();
-    accountTypes.add(AccountType.DEMAND_DEPOSIT);
-    accountTypes.add(AccountType.TERM_DEPOSIT);
-
-    AccountAccessListAccountsDTO request = new AccountAccessListAccountsDTO();
-    Party party = new Party();
-    party.setValue(partyId);
-    request.setParty(party);
-    request.setAccountTypes(accountTypes);
-    List<Party> linkedParties = new ArrayList<Party>();
-    if (ASSOCIATED.equals(linkageType)) {
-      Party linkedParty = new Party();
-      linkedParty.setValue(accessPartyId);
-      linkedParties.add(linkedParty);
-    }
-    request.setLinkedPartyList(linkedParties);
-
+    // Reuse BCO's AccountAccess request shape. RELATED reads the maintained company directly;
+    // ASSOCIATED keeps that company as the primary party and supplies the selected company as a
+    // linked party so the adapter can establish its remote-company identity before account lookup.
     IAccountAccess accountAccess = new AccountAccess();
-    AccountAccessListAccountsResponseDTO accountAccessResponse =
-        accountAccess.listAccounts(sessionContext, request);
     List<HostToHostUserAccessAccountDTO> result =
         new ArrayList<HostToHostUserAccessAccountDTO>();
-    // BCO can legitimately expose one account number in both CSA and TD; only an exact
-    // Account Type + Account Number duplicate is removed.
+    // Query the two BCO product groups separately. Some AccountAccess adapters return a combined
+    // account list when multiple types are requested and stamp every row with the current request
+    // type. That makes the same Current/Savings rows appear under the Time Deposit tab. A
+    // single-type request keeps the source lists separate; the stable CSA/TD value is assigned
+    // from that request only after the response row confirms the same account type.
+    AccountType[] requestedTypes = new AccountType[] {
+        AccountType.DEMAND_DEPOSIT, AccountType.TERM_DEPOSIT
+    };
     Set<String> seen = new HashSet<String>();
-    if (accountAccessResponse == null || accountAccessResponse.getAccounts() == null) {
-      return result;
-    }
-
     long order = 0L;
-    for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
-      if (partyAccounts == null || partyAccounts.getParty() == null
-          || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
-          || partyAccounts.getAccountsList() == null) {
+    for (AccountType requestedType : requestedTypes) {
+      String stableAccountType = toUserAccessAccountType(requestedType);
+      AccountAccessListAccountsDTO request = new AccountAccessListAccountsDTO();
+      Party party = new Party();
+      party.setValue(partyId);
+      request.setParty(party);
+      request.setAccountTypes(Collections.singletonList(requestedType));
+      List<Party> linkedParties = new ArrayList<Party>();
+      if (ASSOCIATED.equals(linkageType)) {
+        Party linkedParty = new Party();
+        linkedParty.setValue(accessPartyId);
+        linkedParties.add(linkedParty);
+      }
+      // The adapter iterates this collection without a null guard.
+      request.setLinkedPartyList(linkedParties);
+
+      AccountAccessListAccountsResponseDTO accountAccessResponse =
+          accountAccess.listAccounts(sessionContext, request);
+      if (accountAccessResponse == null || accountAccessResponse.getAccounts() == null) {
         continue;
       }
-      for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
-        String accountNumber = account == null || account.getAccountNumber() == null
-            ? null : normalize(account.getAccountNumber().getValue());
-        String accountType = toUserAccessAccountType(
-            account == null ? null : account.getAccountType());
-        if (accountNumber == null || accountType == null
-            || !seen.add(accountKey(accountType, accountNumber))) {
+
+      for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
+        if (partyAccounts == null || partyAccounts.getParty() == null
+            || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
+            || partyAccounts.getAccountsList() == null) {
           continue;
         }
-        HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
-        dto.setAccountNumber(accountNumber);
-        dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
-        dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
-            dto.getMaskedAccountNumber()));
-        dto.setAccountType(accountType);
-        dto.setCurrency(account.getCurrencyCode());
-        dto.setSelected(Boolean.FALSE);
-        dto.setDisplayOrder(Long.valueOf(order++));
-        dto.setApiServices(copyApis(eligibleApis));
-        result.add(dto);
+        for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
+          String accountNumber = account == null || account.getAccountNumber() == null
+              ? null : normalize(account.getAccountNumber().getValue());
+          String responseAccountType = toUserAccessAccountType(
+              account == null ? null : account.getAccountType());
+          if (!stableAccountType.equals(responseAccountType)) {
+            continue;
+          }
+          if (accountNumber == null
+              || !seen.add(accountKey(stableAccountType, accountNumber))) {
+            continue;
+          }
+          HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
+          dto.setAccountNumber(accountNumber);
+          dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
+          dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
+              dto.getMaskedAccountNumber()));
+          dto.setAccountType(stableAccountType);
+          dto.setCurrency(account.getCurrencyCode());
+          dto.setSelected(Boolean.FALSE);
+          dto.setDisplayOrder(Long.valueOf(order++));
+          dto.setApiServices(copyApis(eligibleApis));
+          result.add(dto);
+        }
       }
     }
     return result;

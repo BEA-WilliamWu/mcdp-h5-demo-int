@@ -1,13 +1,18 @@
 define([
+    "ojs/ojcore",
     "knockout",
+    "jquery",
     "./model",
     "ojL10n!extensions/resources/nls/access-management",
     "extensions/generic/service-extension",
     "ojs/ojbutton",
     "ojs/ojcheckboxset",
-    "ojs/ojdialog",
+    "ojs/ojtable",
+    "ojs/ojarraytabledatasource",
+    "framework/elements/api/modal-window/loader",
+    "framework/elements/api/nav-bar/loader",
     "framework/elements/api/page-section/loader"
-], function (ko, HthUserAccessModel, resourceBundle, serviceExtension) {
+], function (oj, ko, $, HthUserAccessModel, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -60,18 +65,41 @@ define([
 
         self.nls = resourceBundle;
         self.context = context;
+        self.userIdDisplay = String(context.username || context.closeId || "-").split("@")[0];
         self.summaryParams = params.summaryParams || {};
         self.loading = ko.observable(true);
         self.errorMessage = ko.observable("");
-        self.pendingRequest = ko.observable(false);
         self.access = ko.observable();
         self.accounts = ko.observableArray([]);
         self.mode = ko.observable("CREATE");
-        self.activeAccountType = ko.observable("CSA");
+
+        self.activeAccountType = ko.observable(
+            normalizeAccountType(context.initialAccountType) === "TD" ? "TD" : "CSA");
+
+        self.menuSelection = ko.observable(self.activeAccountType() === "TD" ? "TRD" : "CASA");
+
+        self.tabLists = ko.observableArray([{
+            id: "CASA",
+            label: self.nls.navLabels.CASA
+        }, {
+            id: "TRD",
+            label: self.nls.navLabels.TD
+        }]);
+
+        self.uiOptions = {
+            menuFloat: "right",
+            fullWidth: false,
+            defaultOption: self.menuSelection
+        };
+
+        self.accountDataSource = ko.observable(new oj.ArrayTableDataSource([], {
+            idAttribute: "accountNumber"
+        }));
+
         self.originalAccounts = [];
 
         self.isEditable = ko.pureComputed(function () {
-            return self.mode() !== "VIEW" && !self.pendingRequest();
+            return self.mode() !== "VIEW";
         });
 
         self.selectedCount = ko.pureComputed(function () {
@@ -96,9 +124,21 @@ define([
             });
         });
 
-        self.isActiveAccount = function (account) {
-            return String(read(account && account.accountType) || "").toUpperCase()
-                === self.activeAccountType();
+        const refreshAccountDataSource = function () {
+            self.accountDataSource(new oj.ArrayTableDataSource(self.filteredAccounts(), {
+                idAttribute: "accountNumber"
+            }));
+        };
+
+        self.activateTab = function () {
+            self.activeAccountType(self.menuSelection() === "TRD" ? "TD" : "CSA");
+            refreshAccountDataSource();
+        };
+
+        const menuSelectionSubscription = self.menuSelection.subscribe(self.activateTab);
+
+        self.dispose = function () {
+            menuSelectionSubscription.dispose();
         };
 
         self.activeAllSelection = ko.pureComputed(function () {
@@ -168,14 +208,6 @@ define([
             });
         };
 
-        self.showCurrentAndSavings = function () {
-            self.activeAccountType("CSA");
-        };
-
-        self.showTimeDeposits = function () {
-            self.activeAccountType("TD");
-        };
-
         self.edit = function () {
             self.mode("EDIT");
         };
@@ -198,7 +230,13 @@ define([
             });
         };
 
+        self.deleteClicked = function () {
+            $("#hthDeleteAccessModal").trigger("openModal");
+        };
+
         self.deleteAccess = function () {
+            $("#hthDeleteAccessModal").hide().trigger("closeModal");
+
             rootParams.dashboard.loadComponent("review-hth-user-access", {
                 hthLinkageContext: context,
                 summaryParams: self.summaryParams,
@@ -207,6 +245,10 @@ define([
                 originalAccounts: self.originalAccounts,
                 action: "DELETE"
             });
+        };
+
+        self.dismissDelete = function () {
+            $("#hthDeleteAccessModal").hide().trigger("closeModal");
         };
 
         const selectionState = function (accounts) {
@@ -240,10 +282,11 @@ define([
                 self.access(access);
                 self.accounts(accounts.map(mapAccount));
                 self.originalAccounts = ko.toJS(originalAccounts || accounts);
-                self.pendingRequest(!!data.pendingRequest);
 
                 self.mode(requestedMode || (context.setupStatus === "ACTIVE"
                     ? "VIEW" : "CREATE"));
+
+                refreshAccountDataSource();
             };
 
         self.cancel = function () {
@@ -261,17 +304,17 @@ define([
         };
 
         self.confirmDiscard = function () {
-            document.querySelector("#hthDiscardChangesDialog").close();
+            $("#hthDiscardChangesModal").hide().trigger("closeModal");
             rootParams.dashboard.loadComponent("summary", self.summaryParams);
         };
 
         self.dismissDiscard = function () {
-            document.querySelector("#hthDiscardChangesDialog").close();
+            $("#hthDiscardChangesModal").hide().trigger("closeModal");
         };
 
         self.back = function () {
             if (hasUnsavedChanges()) {
-                document.querySelector("#hthDiscardChangesDialog").open();
+                $("#hthDiscardChangesModal").trigger("openModal");
 
                 return;
             }
@@ -295,7 +338,7 @@ define([
 
         HthUserAccessModel.read(context).done(function (data) {
             try {
-                initialize(data);
+                initialize(data, read(params.action));
             } catch (error) {
                 // A malformed optional collection must not leave the page in an endless loading
                 // state. Keep the technical error out of the UI and show the standard load error.

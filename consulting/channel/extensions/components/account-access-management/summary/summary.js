@@ -2,6 +2,7 @@ define([
     "ojs/ojcore",
     "knockout",
     "./model",
+    "../hth-account-linkage/model",
     "ojL10n!extensions/resources/nls/access-management",
     "ojs/ojinputtext",
     "ojs/ojpopup",
@@ -15,7 +16,7 @@ define([
     "ojs/ojarraytabledatasource",
     "ojs/ojbutton",
     "framework/elements/api/page-section/loader"
-], function (oj, ko, ExclusionModel, resourceBundle) {
+], function (oj, ko, ExclusionModel, HthUserAccessModel, resourceBundle) {
     "use strict";
 
     return function viewModel(rootParams) {
@@ -113,6 +114,7 @@ define([
         self.hthRelatedSummary = ko.observable();
         self.hthAssociatedSummaries = ko.observableArray([]);
         self.hthLinkageContext = ko.observable();
+        self.hthCopyCandidates = ko.observableArray([]);
 
         self.hthEnterpriseDisabled = ko.pureComputed(function () {
             return self.hthEnterpriseStatus() && self.hthEnterpriseStatus() !== "ENABLE";
@@ -158,46 +160,37 @@ define([
             summary.casaAccountCount = Number(summary.accountCountByType.CSA || 0);
             summary.tdAccountCount = Number(summary.accountCountByType.TD || 0);
             summary.totalAccountCount = summary.casaAccountCount + summary.tdAccountCount;
+            // Keep the copy selection on the company row, as BCO does with its per-row
+            // copyAccountAccessSettingUserSelected array. Related and Associated companies must
+            // not share one global selection because the selected user may be configured for one
+            // company but not another.
+            summary.copySourceUsername = ko.observable();
 
-            summary.hasPendingRequest = Boolean(summary.pendingAction ||
-                String(summary.setupStatus || "").indexOf("PENDING_") === 0);
+            // Use the same Oracle JET table data source as the existing BCO summary. Keeping the
+            // HTH rows in an ArrayTableDataSource makes table spacing, headers and accessibility
+            // consistent with the rest of User Accounts & Services Access.
+            summary.hthMappingDataSource = new oj.ArrayTableDataSource([{
+                id: "CSA",
+                accountType: self.nls.fieldname.casaMapping,
+                mappedAccts: summary.casaAccountCount
+            }, {
+                id: "TD",
+                accountType: self.nls.fieldname.tdMapping,
+                mappedAccts: summary.tdAccountCount
+            }], {
+                idAttribute: "id"
+            });
 
-            summary.canMaintain = !self.hthEnterpriseDisabled() && !summary.hasPendingRequest &&
-                summary.setupStatus !== "ERROR";
+            // BCO does not add workflow state to the account summary. Keep this page focused on
+            // the effective access and let the platform transaction service reject a duplicate
+            // submission if another maker request is already pending.
+            summary.canMaintain = !self.hthEnterpriseDisabled()
+                && summary.setupStatus !== "ERROR";
 
             return summary;
         };
 
-        self.hthSetupStatusText = function (summary) {
-            const setupStatus = summary && summary.setupStatus;
-
-            if (setupStatus === "ACTIVE") {
-                return self.nls.info.hthActive;
-            }
-
-            if (setupStatus === "DISABLED") {
-                return self.nls.info.hthDisabled;
-            }
-
-            if (setupStatus && setupStatus.indexOf("PENDING_") === 0) {
-                return self.nls.info.hthPendingApproval;
-            }
-
-            return self.nls.info.hthNotSetup;
-        };
-
-        self.hthPendingText = function (summary) {
-            if (!summary || !summary.hasPendingRequest) {
-                return "";
-            }
-
-            return rootParams.baseModel.format(self.nls.info.hthPendingDetail, {
-                action: summary.pendingAction || "",
-                reference: summary.pendingReferenceNumber || "-"
-            });
-        };
-
-        self.buildHthLinkageContext = function (summary) {
+        self.buildHthLinkageContext = function (summary, accountRow) {
             // Preserve the complete backend context. In particular, accessPartyId differs from the
             // primary party for ASSOCIATED companies and must not be inferred by later screens.
             const context = {
@@ -210,7 +203,8 @@ define([
                 linkageType: summary.linkageType,
                 accessPartyId: summary.accessPartyId,
                 accessPartyName: summary.accessPartyName,
-                setupStatus: summary.setupStatus
+                setupStatus: summary.setupStatus,
+                initialAccountType: accountRow && accountRow.id
             };
 
             self.hthLinkageContext(context);
@@ -218,8 +212,8 @@ define([
             return context;
         };
 
-        self.openHthLinkage = function (summary) {
-            const context = self.buildHthLinkageContext(summary),
+        self.openHthLinkage = function (summary, accountRow) {
+            const context = self.buildHthLinkageContext(summary, accountRow),
                 navigationHandler = readValue(self.hthLinkageNavigationHandler);
 
             if (typeof navigationHandler === "function") {
@@ -237,7 +231,81 @@ define([
 
             rootParams.dashboard.loadComponent("hth-account-linkage", {
                 hthLinkageContext: context,
-                summaryParams: inputParams
+                summaryParams: inputParams,
+                action: summary.totalAccountCount > 0 ? "EDIT" : "CREATE"
+            });
+        };
+
+        // BCO lets an unconfigured user start from another configured user's access. HTH follows
+        // the same interaction, but copies only the selected company's account/API grants and
+        // always keeps the target user's CloseID in the new request.
+        self.copyHthAccess = function (summary) {
+            const selectedSource = ko.utils.arrayFirst(self.hthCopyCandidates(), function (candidate) {
+                return candidate.username === readValue(summary.copySourceUsername);
+            });
+
+            if (!selectedSource) {
+                rootParams.baseModel.showMessages(null, [self.nls.info.pleaseSelectUser], "ERROR");
+
+                return;
+            }
+
+            const targetContext = self.buildHthLinkageContext(summary),
+                sourceContext = Object.assign({}, targetContext, {
+                    closeId: selectedSource.closeId,
+                    username: selectedSource.username,
+                    fullName: selectedSource.fullName
+                }),
+                targetAction = summary.totalAccountCount > 0 ? "EDIT" : "CREATE";
+
+            HthUserAccessModel.read(targetContext).done(function (targetData) {
+                HthUserAccessModel.read(sourceContext).done(function (data) {
+                    const targetAccess = targetData && targetData.access ? targetData.access : {},
+                        targetAccounts = ko.toJS(targetAccess.accounts
+                            || (targetData && targetData.eligibleAccounts) || []),
+                        sourceAccess = data && data.access ? data.access : {},
+                        copiedAccounts = ko.toJS(sourceAccess.accounts
+                            || (data && data.eligibleAccounts) || []),
+                        hasCopiedAccess = copiedAccounts.some(function (account) {
+                            return account.selected === true;
+                        }),
+                        copiedAccess = Object.assign({}, targetAccess, sourceAccess, {
+                            partyId: targetContext.partyId,
+                            closeId: targetContext.closeId,
+                            username: targetContext.username,
+                            fullName: targetContext.fullName,
+                            accessPartyId: targetContext.accessPartyId,
+                            accessPartyName: targetContext.accessPartyName,
+                            linkageType: targetContext.linkageType,
+                            referenceNumber: null,
+                            accounts: copiedAccounts
+                        });
+
+                    if (!hasCopiedAccess) {
+                        rootParams.baseModel.showMessages(null, [self.nls.info.hthSelectAccount], "ERROR");
+
+                        return;
+                    }
+
+                    rootParams.baseModel.registerComponent("hth-account-linkage", "account-access-management");
+                    rootParams.baseModel.registerComponent("hth-api-service-mapping", "account-access-management");
+                    rootParams.baseModel.registerComponent("review-hth-user-access", "account-access-management");
+
+                    rootParams.dashboard.loadComponent("hth-account-linkage", {
+                        hthLinkageContext: targetContext,
+                        summaryParams: inputParams,
+                        preloadedAccess: copiedAccess,
+                        preloadedAccounts: copiedAccounts,
+                        originalAccounts: targetAccounts,
+                        action: targetAction
+                    });
+                }).fail(function () {
+                    rootParams.baseModel.showMessages(null,
+                        [self.nls.info.hthMaintenanceLoadError], "ERROR");
+                });
+            }).fail(function () {
+                rootParams.baseModel.showMessages(null,
+                    [self.nls.info.hthMaintenanceLoadError], "ERROR");
             });
         };
 
@@ -251,8 +319,14 @@ define([
                 .done(function (data) {
                     data = data || {};
                     self.hthEnterpriseStatus(data.enterpriseHthStatus || "DISABLE");
-                    self.hthRelatedSummary(normalizeHthSummary(data.related));
+
+                    const relatedSummary = normalizeHthSummary(data.related);
+
+                    self.hthRelatedSummary(relatedSummary);
                     self.hthAssociatedSummaries(ko.utils.arrayMap(data.associated || [], normalizeHthSummary));
+
+                    self.setupNotCreated(Boolean(relatedSummary
+                        && relatedSummary.setupStatus === "NOT_SETUP"));
                 })
                 .fail(function () {
                     self.hthSummaryError(self.nls.info.hthSummaryLoadError);
@@ -2623,13 +2697,58 @@ define([
 
         self.fetchAssociatedUserForDisplay = function () {
             ExclusionModel.fetchAssociatedUserForParty(isCorpAdmin ? partyId.value : self.partyID()).done(function (data) {
+                const normalizedSelectedUserId = String(self.selectedUserId() || "")
+                    .split("@")[0].trim().toUpperCase();
+
                 self.userDisplayList.removeAll();
+                self.accessCreatedUserDisplayList.removeAll();
+                self.hthCopyCandidates.removeAll();
 
                 if (data.userDTOList && data.userDTOList.length > 0) {
                     self.userDisplayList(data.userDTOList);
 
                     ko.utils.arrayForEach(self.userDisplayList(), function (item) {
-                        if (item.accountAccessSetupDone === true && item.username !== self.selectedUserId()) {
+                        const dictionaryValue = function (key) {
+                                let value = item[key];
+
+                                ko.utils.arrayForEach(item.dictionaryArray || [], function (dictionary) {
+                                    ko.utils.arrayForEach((dictionary && dictionary.nameValuePairDTOArray) || [],
+                                        function (pair) {
+                                            if (pair && (pair.name === key || pair.genericName === key)) {
+                                                value = pair.value;
+                                            }
+                                        });
+                                });
+
+                                return value;
+                            },
+                            closeId = dictionaryValue("closeId"),
+                            // CloseID is backed by HTH_USER_PROFILE and is therefore authoritative
+                            // even when a mixed SMS deployment does not yet expose userChannelType.
+                            userChannelType = String(dictionaryValue("userChannelType")
+                                || (closeId ? "HTH" : "BCO")).toUpperCase(),
+                            candidateUserId = String(item.username || "")
+                                .split("@")[0].trim().toUpperCase();
+
+                        // A valid HTH profile/CloseID is sufficient for showing the same-party
+                        // copy candidate. hthAccessSetupDone is an optional enrichment backed by
+                        // the active-grant repository and deliberately falls back to false when an
+                        // older HTH implementation JAR is present. Filtering on that flag made the
+                        // entire dropdown empty during a rolling deployment. The Copy action still
+                        // reads the selected company's effective HTH access and rejects an empty
+                        // source, so relaxing only the display filter cannot create invalid grants.
+                        if (self.isHthMode() && userChannelType === "HTH" && closeId
+                                && candidateUserId !== normalizedSelectedUserId) {
+                            self.hthCopyCandidates.push({
+                                username: item.username,
+                                closeId: closeId,
+                                firstName: item.firstName || "",
+                                lastName: item.lastName || "",
+                                fullName: `${item.firstName || ""} ${item.lastName || ""}`.trim(),
+                                onlyUsername: item.username.split("@")[0]
+                            });
+                        } else if (!self.isHthMode() && item.accountAccessSetupDone === true
+                                && item.username !== self.selectedUserId()) {
                             self.accessCreatedUserDisplayList().push({
                                 username: item.username,
                                 enrolledfor2fa: item.enrolledfor2fa,
@@ -2643,11 +2762,13 @@ define([
                         }
                     });
 
-                    if (self.accessCreatedUserDisplayList().length === 0) {
-                        self.showCopyOptions(false);
-                    } else {
-                        self.showCopyOptions(true);
-                    }
+                    self.hthCopyCandidates.sort(function (left, right) {
+                        return left.username.toLowerCase().localeCompare(right.username.toLowerCase());
+                    });
+
+                    self.showCopyOptions(self.isHthMode()
+                        ? self.hthCopyCandidates().length > 0
+                        : self.accessCreatedUserDisplayList().length > 0);
 
                 } else {
                     self.showCopyOptions(false);
@@ -2672,6 +2793,14 @@ define([
                 self.showUsersList(true);
             } else {
                 self.showUsersList(false);
+
+                if (self.hthRelatedSummary()) {
+                    self.hthRelatedSummary().copySourceUsername(null);
+                }
+
+                ko.utils.arrayForEach(self.hthAssociatedSummaries(), function (summary) {
+                    summary.copySourceUsername(null);
+                });
             }
         });
     };

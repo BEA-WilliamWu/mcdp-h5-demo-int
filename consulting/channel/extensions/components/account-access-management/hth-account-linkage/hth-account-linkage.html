@@ -1,103 +1,125 @@
-<div class="form-main-container">
-    <page-section>
-        <div class="hth-user-context">
-            <div class="oj-flex oj-flex-items-pad">
-                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userID"></label></div>
-                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.username || context.closeId"></span></div>
-            </div>
-            <div class="oj-flex oj-flex-items-pad">
-                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userName"></label></div>
-                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.fullName || '-'"></span></div>
-            </div>
-            <div class="oj-flex oj-flex-items-pad">
-                <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userChannelType"></label></div>
-                <div class="oj-flex-item oj-sm-8"><span data-bind="text: context.userChannelType || 'HTH'"></span></div>
-            </div>
-        </div>
-    </page-section>
+<div class="form-main-container mapping-module">
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.userID]]" value="[[userIdDisplay]]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.userName]]" value="[[context.fullName || '-']]">
+            </obdx-row>
+        </page-section>
+    </div>
 
-    <page-section heading="[[context.linkageType === 'ASSOCIATED' ? nls.fieldname.linkedModuleToMap : nls.fieldname.moduleToMap]]">
-        <div class="hth-account-instructions" data-bind="visible: !loading() && !errorMessage(), text: instructions"></div>
-        <!-- Keep the slotted DOM mounted so legacy Oracle JET observes asynchronous KO updates. -->
-        <div class="hth-account-message"
-            data-bind="visible: loading(), text: nls.info.hthSummaryLoading"></div>
-        <div class="hth-account-message"
-            data-bind="visible: errorMessage(), text: errorMessage"></div>
-        <div class="hth-account-message"
-            data-bind="visible: pendingRequest(), text: nls.info.hthPendingApproval"></div>
-        <div class="hth-account-tabs" role="tablist" data-bind="visible: !loading() && !errorMessage()">
-            <button type="button" role="tab"
-                data-bind="click: showCurrentAndSavings,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
-                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
-                <span data-bind="text: nls.navLabels.CASA"></span>
-            </button>
-            <button type="button" role="tab"
-                data-bind="click: showTimeDeposits,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
-                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
-                <span data-bind="text: nls.navLabels.TD"></span>
-            </button>
-        </div>
-        <div class="oj-flex oj-flex-items-pad hth-link-all" data-bind="visible: !loading() && !errorMessage()">
-            <oj-checkboxset class="oj-flex-item" value="[[activeAllSelection]]"
-                on-value-changed="[[$component.toggleAll]]" disabled="[[!isEditable()]]">
-                <oj-option id="hth_link_all_accounts" value="ALL">
-                    <span data-bind="text: nls.fieldname.mapallAccts"></span>
-                </oj-option>
-            </oj-checkboxset>
-        </div>
-        <table class="hth-account-table" data-bind="visible: !loading() && !errorMessage()">
-            <thead>
-                <tr>
-                    <th class="hth-select-column" data-bind="attr: { 'aria-label': nls.fieldname.mapAccts }"></th>
-                    <th><span data-bind="text: nls.headers.AccountNumber"></span></th>
-                    <th><span data-bind="text: nls.headers.currency"></span></th>
-                    <th><span data-bind="text: nls.headers.displayName"></span></th>
-                </tr>
-            </thead>
-            <tbody data-bind="foreach: accounts">
-                <tr data-bind="visible: $parent.isActiveAccount($data)">
-                    <td><input type="checkbox"
-                        data-bind="checked: selected, enable: $parent.isEditable,
-                            attr: { 'aria-label': $parent.nls.fieldname.mapAccts + ' ' + accountNumberDisplay }"></td>
-                    <td><span data-bind="text: accountNumberDisplay"></span></td>
-                    <td><span data-bind="text: displayCurrency"></span></td>
-                    <td><span data-bind="text: displayAccountType"></span></td>
-                </tr>
-            </tbody>
-        </table>
-        <div class="hth-account-message"
-            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
-    </page-section>
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section heading="[[context.linkageType === 'ASSOCIATED' ? nls.fieldname.linkedModuleToMap : nls.fieldname.moduleToMap]]">
+            <div class="oj-sm-12 word-break hth-account-instructions"
+                data-bind="visible: !loading() && !errorMessage(), text: instructions"></div>
+            <!-- Keep the slotted DOM mounted so legacy Oracle JET observes asynchronous KO updates. -->
+            <div class="hth-account-message"
+                data-bind="visible: loading(), text: nls.info.hthSummaryLoading"></div>
+            <div class="hth-account-message"
+                data-bind="visible: errorMessage(), text: errorMessage"></div>
+            <div data-bind="visible: !loading() && !errorMessage(), descendantsComplete: activateTab">
+                <div id="hth-account-linkage-tabs">
+                    <nav-bar class="oj-flex oj-flex-items-pad nav-bar-class" base-model="[[$baseModel]]"
+                        menu-options="[[$component.tabLists]]"
+                        nav-bar-description="[[nls.navLabels.navDescription]]"
+                        menu-float="[[uiOptions.menuFloat]]" full-width="[[uiOptions.fullWidth]]"
+                        default-option="{{uiOptions.defaultOption}}">
+                    </nav-bar>
+                </div>
+            </div>
 
-    <div class="button-container">
-        <!-- ko if: mode() === 'VIEW' && !pendingRequest() -->
+            <div class="oj-flex oj-flex-items-pad hth-link-all"
+                data-bind="visible: !loading() && !errorMessage()">
+                <oj-checkboxset class="oj-flex-item" value="[[activeAllSelection]]"
+                    on-value-changed="[[$component.toggleAll]]" disabled="[[!isEditable()]]">
+                    <oj-option id="hth_link_all_accounts" value="ALL">
+                        <span data-bind="text: nls.fieldname.mapallAccts"></span>
+                    </oj-option>
+                </oj-checkboxset>
+            </div>
+
+            <div class="oj-flex oj-flex-items-pad table-data"
+                data-bind="visible: !loading() && !errorMessage()">
+                <oj-table id="hthAccountsTable" :aria-label="[[nls.fieldname.moduleToMap]]"
+                    columns="[[[
+                        {headerText:'',field:'selected',renderer:$oj.KnockoutTemplateUtils.getRenderer('hthAccountCheckbox',true),style:'width:8%'},
+                        {headerText:nls.headers.AccountNumber,field:'accountNumber',renderer:$oj.KnockoutTemplateUtils.getRenderer('hthAccountNumber',true),style:'width:32%'},
+                        {headerText:nls.headers.currency,field:'displayCurrency',style:'width:20%'},
+                        {headerText:nls.headers.displayName,field:'displayAccountType',style:'width:40%'}
+                    ]]]" columns-default="[[{sortable:'enabled'}]]"
+                    selection-mode="[[{row:'none',column:'none'}]]" data="[[accountDataSource]]">
+                    <caption class="hide-label" data-bind="text:nls.fieldname.moduleToMap"></caption>
+                </oj-table>
+
+                <script type="text/html" id="hthAccountCheckbox">
+                    <td>
+                        <div class="oj-flex">
+                            <input type="checkbox"
+                                data-bind="checked:$context.row.selected,
+                                    enable:$component.isEditable,
+                                    attr:{id:'hthAccountCheckbox_' + $context.row.accountNumber,
+                                        'aria-label':$component.nls.fieldname.mapAccts + ' ' + $context.row.accountNumberDisplay}">
+                            <label class="oj-checkbox-label"
+                                data-bind="attr:{for:'hthAccountCheckbox_' + $context.row.accountNumber}"></label>
+                        </div>
+                    </td>
+                </script>
+
+                <script type="text/html" id="hthAccountNumber">
+                    <td><span data-bind="text:$context.row.accountNumberDisplay"></span></td>
+                </script>
+            </div>
+
+            <div class="hth-account-message"
+                data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
+        </page-section>
+    </div>
+
+    <div class="oj-flex oj-flex-items-pad button-container">
+        <!-- ko if: mode() === 'VIEW' -->
         <oj-button class="action-button-primary" on-click="[[$component.edit]]"><span data-bind="text: nls.headers.edit"></span></oj-button>
         <!-- /ko -->
-        <!-- ko if: !pendingRequest() -->
         <oj-button class="action-button-primary" on-click="[[$component.next]]" disabled="[[$component.nextDisabled]]"><span data-bind="text: nls.common.next"></span></oj-button>
-        <!-- /ko -->
-        <!-- ko if: mode() === 'VIEW' && !pendingRequest() -->
-        <oj-button class="action-button-secondary" on-click="[[$component.deleteAccess]]"><span data-bind="text: nls.headers.deleteHeader"></span></oj-button>
+        <!-- ko if: mode() === 'VIEW' -->
+        <oj-button class="action-button-secondary" on-click="[[$component.deleteClicked]]"><span data-bind="text: nls.headers.deleteHeader"></span></oj-button>
         <!-- /ko -->
         <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
         <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
     </div>
+</div>
 
-    <oj-dialog id="hthDiscardChangesDialog" role="alertdialog"
-        dialog-title="[[$component.nls.navLabels.confirm]]" cancel-behavior="escape"
-        resize-behavior="none">
-        <div slot="body">
-            <span data-bind="text: nls.info.hthDiscardChanges"></span>
+<modal-window class="message" dashboard="[[$dashboard]]" base-model="[[$baseModel]]"
+    dialog-id="[['hthDiscardChangesModal']]" header="[[nls.headers.backHeader]]">
+    <div class="form-main-container message-text">
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item"><span data-bind="text:nls.info.hthDiscardChanges"></span></div>
         </div>
-        <div slot="footer" class="button-container">
+        <div class="oj-flex oj-flex-items-pad button-container">
             <oj-button class="action-button-primary" on-click="[[$component.confirmDiscard]]">
-                <span data-bind="text: nls.headers.yes"></span>
+                <span data-bind="text:nls.common.yes"></span>
             </oj-button>
             <oj-button class="action-button-secondary" on-click="[[$component.dismissDiscard]]">
-                <span data-bind="text: nls.headers.no"></span>
+                <span data-bind="text:nls.common.no"></span>
             </oj-button>
         </div>
-    </oj-dialog>
-</div>
+    </div>
+</modal-window>
+
+<modal-window class="message" dashboard="[[$dashboard]]" base-model="[[$baseModel]]"
+    dialog-id="[['hthDeleteAccessModal']]" header="[[nls.headers.deleteHeader]]">
+    <div class="form-main-container message-text">
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item"><span data-bind="text:nls.info.hthDeleteWarning"></span></div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad button-container">
+            <oj-button class="action-button-primary" on-click="[[$component.deleteAccess]]">
+                <span data-bind="text:nls.navLabels.confirm"></span>
+            </oj-button>
+            <oj-button class="action-button-secondary" on-click="[[$component.dismissDelete]]">
+                <span data-bind="text:nls.common.cancel"></span>
+            </oj-button>
+        </div>
+    </div>
+</modal-window>

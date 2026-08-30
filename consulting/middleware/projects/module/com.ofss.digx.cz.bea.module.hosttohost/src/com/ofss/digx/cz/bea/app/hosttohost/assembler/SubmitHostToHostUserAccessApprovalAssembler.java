@@ -74,15 +74,17 @@ public class SubmitHostToHostUserAccessApprovalAssembler
     return null;
   }
 
-  private void setAdministrationDiscriminator(Transaction transaction) {
+  private void setAdministrationDiscriminator(Transaction transaction) throws Exception {
     try {
-      // Some supported framework releases do not expose a discriminator setter. Reflection keeps
-      // the compiled extension compatible while still marking the transaction when the field exists.
+      // Match the standard BCO User Account Access assembler: these requests belong in
+      // Administrative Maintenance for Pending Approvals, My Approval List and Activity Log.
       Field field = Transaction.class.getDeclaredField("discriminator");
       field.setAccessible(true);
       field.set(transaction, TransactionDiscriminator.ADMIN_MAINTENANCE);
-    } catch (ReflectiveOperationException ignored) {
-      // The approval framework applies its default discriminator on older releases.
+    } catch (ReflectiveOperationException | SecurityException reflectionFailure) {
+      // Do not silently fall back to PARTY_MAINTENANCE: that creates a valid platform transaction
+      // which the BCO administrative lists cannot retrieve, leaving an invisible pending request.
+      throw new Exception(reflectionFailure);
     }
   }
 

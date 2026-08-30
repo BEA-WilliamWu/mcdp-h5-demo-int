@@ -1,10 +1,17 @@
 define([
+    "ojs/ojcore",
     "knockout",
     "ojL10n!extensions/resources/nls/access-management",
     "extensions/generic/service-extension",
     "ojs/ojbutton",
+    "ojs/ojtable",
+    "ojs/ojrowexpander",
+    "ojs/ojflattenedtreedatagriddatasource",
+    "ojs/ojjsontreedatasource",
+    "ojs/ojflattenedtreetabledatasource",
+    "framework/elements/api/nav-bar/loader",
     "framework/elements/api/page-section/loader"
-], function (ko, resourceBundle, serviceExtension) {
+], function (oj, ko, resourceBundle, serviceExtension) {
     "use strict";
 
     /*
@@ -76,12 +83,31 @@ define([
 
         self.nls = resourceBundle;
         self.context = ko.unwrap(params.hthLinkageContext) || {};
+
+        self.userIdDisplay = String(self.context.username || self.context.closeId || "-")
+            .split("@")[0];
+
         self.summaryParams = params.summaryParams || {};
         self.access = ko.unwrap(params.access) || {};
         self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
         self.action = ko.observable(ko.unwrap(params.action) || "CREATE");
         self.editing = ko.observable(self.action() !== "VIEW");
         self.activeAccountType = ko.observable("CSA");
+        self.menuSelection = ko.observable("CASA");
+
+        self.tabLists = ko.observableArray([{
+            id: "CASA",
+            label: self.nls.navLabels.CASA
+        }, {
+            id: "TRD",
+            label: self.nls.navLabels.TD
+        }]);
+
+        self.uiOptions = {
+            menuFloat: "right",
+            fullWidth: false,
+            defaultOption: self.menuSelection
+        };
 
         self.isEditable = ko.pureComputed(function () {
             return self.editing();
@@ -93,20 +119,8 @@ define([
             return account.selected();
         }));
 
-        self.filteredAccounts = ko.pureComputed(function () {
-            return self.accounts().filter(function (account) {
-                return String(read(account.accountType) || "").toUpperCase()
-                    === self.activeAccountType();
-            }).sort(function (left, right) {
-                return String(read(left.accountNumber) || "")
-                    .localeCompare(String(read(right.accountNumber) || ""));
-            });
-        });
-
-        self.isActiveAccount = function (account) {
-            return String(read(account && account.accountType) || "").toUpperCase()
-                === self.activeAccountType();
-        };
+        self.filteredAccounts = ko.observableArray([]);
+        self.accountDataSource = ko.observable();
 
         self.noAccountsForActiveType = ko.pureComputed(function () {
             return self.filteredAccounts().length === 0;
@@ -116,6 +130,54 @@ define([
             return self.isEditable()
                 ? self.nls.notes.UAC07_CREATE_EDIT : self.nls.notes.UAC05_REVIEW;
         });
+
+        self.activateTab = function () {
+            const accountType = self.menuSelection() === "TRD" ? "TD" : "CSA",
+                activeAccounts = self.accounts().filter(function (account) {
+                    return String(read(account.accountType) || "").toUpperCase() === accountType;
+                }).slice().sort(function (left, right) {
+                    return String(read(left.accountNumber) || "")
+                        .localeCompare(String(read(right.accountNumber) || ""));
+                }),
+                accountTree = activeAccounts.map(function (account, index) {
+                    return {
+                        id: `hthApiAccount_${accountType}_${index}`,
+                        attr: account,
+                        children: [{
+                            id: `hthApiServices_${accountType}_${index}`,
+                            attr: {
+                                accountNumber: account.accountNumber,
+                                apiServices: account.apiServices
+                            }
+                        }]
+                    };
+                }),
+                treeOptions = {
+                    expanded: "all",
+                    columns: [
+                        "accountNumber",
+                        "currency",
+                        "displayName"
+                    ]
+                };
+
+            // Match the BCO tab lifecycle: replace the rendered collection after selection.
+            // This avoids stale rows on older Knockout/JET builds when only a computed filter changes.
+            self.activeAccountType(accountType);
+            self.filteredAccounts(activeAccounts);
+
+            self.accountDataSource(new oj.FlattenedTreeTableDataSource(
+                new oj.FlattenedTreeDataSource(new oj.JsonTreeDataSource(accountTree), treeOptions)
+            ));
+        };
+
+        const menuSelectionSubscription = self.menuSelection.subscribe(self.activateTab);
+
+        self.dispose = function () {
+            menuSelectionSubscription.dispose();
+        };
+
+        self.activateTab();
 
         rootParams.dashboard.headerName(self.nls.headers.hthApiMapping);
 
@@ -138,14 +200,6 @@ define([
                     api.selected(!!selectedCodes[api.apiCode]);
                 });
             });
-        };
-
-        self.showCurrentAndSavings = function () {
-            self.activeAccountType("CSA");
-        };
-
-        self.showTimeDeposits = function () {
-            self.activeAccountType("TD");
         };
 
         self.edit = function () {

@@ -1,73 +1,91 @@
-<div class="form-main-container">
+<div class="form-main-container mapping-module">
     <!-- ko ifnot: approvalMode -->
-    <div data-bind="template: { name: 'review-screen/review-banner-template', data: { header: nls.navLabels.review, reviewHeader: nls.info.hthReviewMessage } }"></div>
+    <div data-bind="template:{name:'review-screen/review-banner-template',data:{header:nls.navLabels.review,reviewHeader:nls.info.hthReviewMessage}}"></div>
     <!-- /ko -->
-    <page-section>
-        <div class="oj-flex oj-flex-items-pad">
-            <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.userID"></label></div>
-            <div class="oj-flex-item oj-sm-8"><span data-bind="text: access.username || access.closeId"></span></div>
-        </div>
-        <div class="oj-flex oj-flex-items-pad">
-            <div class="oj-flex-item oj-sm-4"><label data-bind="text: nls.fieldname.companyName"></label></div>
-            <div class="oj-flex-item oj-sm-8"><span data-bind="text: access.accessPartyName || access.accessPartyId"></span></div>
-        </div>
-    </page-section>
+
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.userID]]" value="[[userIdDisplay]]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.companyName]]"
+                value="[[access.accessPartyName || access.accessPartyId || '-']]">
+            </obdx-row>
+        </page-section>
+    </div>
+
     <!-- ko if: isDelete -->
-    <div class="hth-review-delete" data-bind="text: nls.info.hthDeleteWarning"></div>
+    <div class="oj-sm-padding-2x-horizontal">
+        <div class="hth-review-delete" data-bind="text:nls.info.hthDeleteWarning"></div>
+    </div>
     <!-- /ko -->
-    <!-- ko ifnot: isDelete -->
-    <page-section heading="[[$component.nls.headers.hthReviewMapping]]">
-        <div class="hth-review-instructions" data-bind="text: nls.notes.UAC05_REVIEW"></div>
-        <div class="hth-account-tabs" role="tablist">
-            <button type="button" role="tab"
-                data-bind="click: showCurrentAndSavings,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
-                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
-                <span data-bind="text: nls.navLabels.CASA"></span>
-            </button>
-            <button type="button" role="tab"
-                data-bind="click: showTimeDeposits,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
-                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
-                <span data-bind="text: nls.navLabels.TD"></span>
-            </button>
-        </div>
-        <div class="hth-review-account-header">
-            <span class="hth-review-selection"></span>
-            <span data-bind="text: nls.headers.AccountNumber"></span>
-            <span data-bind="text: nls.headers.currency"></span>
-            <span data-bind="text: nls.headers.displayName"></span>
-        </div>
-        <!-- ko foreach: filteredAccounts -->
-        <details class="hth-review-account" open>
-            <summary>
-                <span class="hth-review-account-row">
-                    <span class="hth-review-selection">
-                        <input type="checkbox" checked disabled>
-                    </span>
-                    <span data-bind="text: accountNumberDisplay"></span>
-                    <span data-bind="text: displayCurrency"></span>
-                    <span data-bind="text: displayAccountType"></span>
-                </span>
-            </summary>
-            <div class="hth-review-api-heading" data-bind="text: $component.nls.fieldname.apiServices"></div>
-            <div class="hth-review-api-grid" data-bind="foreach: $component.selectedApis($data)">
-                <label class="hth-review-api">
-                    <input type="checkbox" checked disabled>
-                    <span data-bind="text: apiName"></span>
-                </label>
+
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section heading="[[$component.nls.headers.hthReviewMapping]]">
+            <div class="oj-sm-12 word-break hth-review-instructions"
+                data-bind="text:nls.notes.UAC05_REVIEW"></div>
+
+            <div data-bind="descendantsComplete: activateTab">
+                <div id="hth-user-access-review-tabs">
+                    <nav-bar class="oj-flex oj-flex-items-pad nav-bar-class" base-model="[[$baseModel]]"
+                        menu-options="[[$component.tabLists]]"
+                        nav-bar-description="[[nls.navLabels.navDescription]]"
+                        menu-float="[[uiOptions.menuFloat]]" full-width="[[uiOptions.fullWidth]]"
+                        default-option="{{uiOptions.defaultOption}}">
+                    </nav-bar>
+                </div>
             </div>
-        </details>
-        <!-- /ko -->
-        <div class="hth-review-empty"
-            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
-    </page-section>
-    <!-- /ko -->
+
+            <div class="oj-flex oj-flex-items-pad table-data">
+                <oj-table id="hthReviewAccountsTable" :aria-label="[[nls.headers.hthReviewMapping]]"
+                    columns="[[[
+                        {headerText:nls.headers.AccountNumber,field:'accountNumber',style:'width:35%'},
+                        {headerText:nls.headers.currency,field:'currency',style:'width:20%'},
+                        {headerText:nls.headers.displayName,field:'displayName',style:'width:45%'}
+                    ]]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('hthReviewAccountRow',true)]]"
+                    data="[[accountDataSource]]">
+                    <caption class="hide-label" data-bind="text:nls.headers.hthReviewMapping"></caption>
+                </oj-table>
+
+                <script type="text/html" id="hthReviewAccountRow">
+                    <tr>
+                        <!-- ko if: $context.rowContext.depth === 1 -->
+                        <td>
+                            <oj-row-expander context="[[$context.rowContext]]"></oj-row-expander>
+                            <input type="checkbox" checked disabled
+                                data-bind="attr:{'aria-label':$component.nls.fieldname.mapAccts + ' ' + $context.row.accountNumberDisplay}">
+                            <span data-bind="text:$context.row.accountNumberDisplay"></span>
+                        </td>
+                        <td><span data-bind="text:$context.row.displayCurrency"></span></td>
+                        <td><span data-bind="text:$context.row.displayAccountType"></span></td>
+                        <!-- /ko -->
+                        <!-- ko if: $context.rowContext.depth === 2 -->
+                        <td colspan="3" class="hth-review-row-contents">
+                            <div class="hth-review-api-heading"
+                                data-bind="text:$component.nls.fieldname.apiServices"></div>
+                            <div class="hth-review-api-grid" data-bind="foreach:$context.row.apiServices">
+                                <label class="hth-review-api">
+                                    <input type="checkbox" checked disabled>
+                                    <span data-bind="text:apiName"></span>
+                                </label>
+                            </div>
+                        </td>
+                        <!-- /ko -->
+                    </tr>
+                </script>
+            </div>
+            <div class="hth-review-empty"
+                data-bind="visible:noAccountsForActiveType(),text:nls.headers.noAccountsAvailable"></div>
+        </page-section>
+    </div>
+
     <!-- ko ifnot: approvalMode -->
-    <div class="button-container">
-        <oj-button class="action-button-primary" on-click="[[$component.confirm]]" disabled="[[$component.isSubmitting]]"><span data-bind="text: nls.common.confirm"></span></oj-button>
-        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text: nls.common.cancel"></span></oj-button>
-        <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text: nls.common.back"></span></oj-button>
+    <div class="oj-flex oj-flex-items-pad button-container">
+        <oj-button class="action-button-primary" on-click="[[$component.confirm]]"
+            disabled="[[$component.isSubmitting]]"><span data-bind="text:nls.common.confirm"></span></oj-button>
+        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]"><span data-bind="text:nls.common.cancel"></span></oj-button>
+        <oj-button class="action-button-tertiary" on-click="[[$component.back]]"><span data-bind="text:nls.common.back"></span></oj-button>
     </div>
     <!-- /ko -->
 </div>

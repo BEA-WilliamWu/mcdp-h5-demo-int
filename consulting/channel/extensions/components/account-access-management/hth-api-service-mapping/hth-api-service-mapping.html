@@ -1,54 +1,84 @@
-<div class="form-main-container">
-    <page-section heading="[[$component.nls.headers.hthApiMapping]]">
-        <div class="hth-api-instructions" data-bind="text: instructions"></div>
-        <div class="hth-account-tabs" role="tablist">
-            <button type="button" role="tab"
-                data-bind="click: showCurrentAndSavings,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'CSA' },
-                    attr: { 'aria-selected': activeAccountType() === 'CSA' }">
-                <span data-bind="text: nls.navLabels.CASA"></span>
-            </button>
-            <button type="button" role="tab"
-                data-bind="click: showTimeDeposits,
-                    css: { 'hth-account-tab-active': activeAccountType() === 'TD' },
-                    attr: { 'aria-selected': activeAccountType() === 'TD' }">
-                <span data-bind="text: nls.navLabels.TD"></span>
-            </button>
-        </div>
-        <!-- ko if: isEditable -->
-        <div class="oj-flex oj-flex-items-pad">
-            <oj-button class="action-button-secondary" on-click="[[$component.applyFirstToAll]]">
-                <span data-bind="text: nls.fieldname.hthApplyFirstToAll"></span>
-            </oj-button>
-        </div>
-        <!-- /ko -->
-        <div class="hth-api-account-header">
-            <span data-bind="text: nls.headers.AccountNumber"></span>
-            <span data-bind="text: nls.headers.currency"></span>
-            <span data-bind="text: nls.headers.displayName"></span>
-        </div>
-        <!-- ko foreach: accounts -->
-        <details class="hth-api-account" role="treeitem"
-            data-bind="visible: $parent.isActiveAccount($data)">
-            <summary>
-                <span class="hth-api-account-row">
-                    <span data-bind="text: accountNumberDisplay"></span>
-                    <span data-bind="text: displayCurrency"></span>
-                    <span data-bind="text: displayAccountType"></span>
-                </span>
-            </summary>
-            <div class="hth-api-grid" role="group" data-bind="foreach: apiServices">
-                <label class="hth-api-option">
-                    <input type="checkbox" data-bind="checked: selected, enable: $component.isEditable">
-                    <span data-bind="text: apiName"></span>
-                </label>
+<div class="form-main-container mapping-module">
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.userID]]" value="[[userIdDisplay]]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.userName]]" value="[[context.fullName || '-']]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.companyName]]"
+                value="[[context.accessPartyName || context.accessPartyId || '-']]">
+            </obdx-row>
+        </page-section>
+    </div>
+
+    <div class="oj-sm-padding-2x-horizontal">
+        <page-section heading="[[$component.nls.headers.hthApiMapping]]">
+            <div class="oj-sm-12 word-break hth-api-instructions" data-bind="text: instructions"></div>
+
+            <div data-bind="descendantsComplete: activateTab">
+                <div id="hth-api-service-tabs">
+                    <nav-bar class="oj-flex oj-flex-items-pad nav-bar-class" base-model="[[$baseModel]]"
+                        menu-options="[[$component.tabLists]]"
+                        nav-bar-description="[[nls.navLabels.navDescription]]"
+                        menu-float="[[uiOptions.menuFloat]]" full-width="[[uiOptions.fullWidth]]"
+                        default-option="{{uiOptions.defaultOption}}">
+                    </nav-bar>
+                </div>
             </div>
-        </details>
-        <!-- /ko -->
-        <div class="hth-api-empty"
-            data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
-    </page-section>
-    <div class="button-container">
+
+            <!-- ko if: isEditable -->
+            <div class="oj-flex oj-flex-items-pad hth-api-copy-action">
+                <oj-button class="action-button-secondary" on-click="[[$component.applyFirstToAll]]">
+                    <span data-bind="text: nls.fieldname.hthApplyFirstToAll"></span>
+                </oj-button>
+            </div>
+            <!-- /ko -->
+
+            <div class="oj-flex oj-flex-items-pad table-data">
+                <oj-table id="hthApiServiceTable" :aria-label="[[nls.headers.hthApiMapping]]"
+                    columns="[[[
+                        {headerText:nls.headers.AccountNumber,field:'accountNumber',style:'width:35%'},
+                        {headerText:nls.headers.currency,field:'currency',style:'width:20%'},
+                        {headerText:nls.headers.displayName,field:'displayName',style:'width:45%'}
+                    ]]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('hthApiServiceRow',true)]]"
+                    data="[[accountDataSource]]">
+                    <caption class="hide-label" data-bind="text:nls.headers.hthApiMapping"></caption>
+                </oj-table>
+
+                <script type="text/html" id="hthApiServiceRow">
+                    <tr>
+                        <!-- ko if: $context.rowContext.depth === 1 -->
+                        <td>
+                            <oj-row-expander context="[[$context.rowContext]]"></oj-row-expander>
+                            <span data-bind="text:$context.row.accountNumberDisplay"></span>
+                        </td>
+                        <td><span data-bind="text:$context.row.displayCurrency"></span></td>
+                        <td><span data-bind="text:$context.row.displayAccountType"></span></td>
+                        <!-- /ko -->
+                        <!-- ko if: $context.rowContext.depth === 2 -->
+                        <td colspan="3" class="hth-api-row-contents">
+                            <div class="hth-api-heading" data-bind="text:$component.nls.fieldname.apiServices"></div>
+                            <div class="hth-api-grid" data-bind="foreach:$context.row.apiServices">
+                                <label class="hth-api-option">
+                                    <input type="checkbox"
+                                        data-bind="checked:selected,enable:$component.isEditable">
+                                    <span data-bind="text:apiName"></span>
+                                </label>
+                            </div>
+                        </td>
+                        <!-- /ko -->
+                    </tr>
+                </script>
+            </div>
+            <div class="hth-api-empty"
+                data-bind="visible: noAccountsForActiveType(), text: nls.headers.noAccountsAvailable"></div>
+        </page-section>
+    </div>
+
+    <div class="oj-flex oj-flex-items-pad button-container">
         <!-- ko ifnot: isEditable -->
         <oj-button class="action-button-primary" on-click="[[$component.edit]]"><span data-bind="text: nls.headers.edit"></span></oj-button>
         <!-- /ko -->

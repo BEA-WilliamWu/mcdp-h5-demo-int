@@ -28,7 +28,10 @@ define([
         },
         normalizeApprovalRequiredResponse = function (error) {
             const response = Object.assign({}, responseBody(error) || {}),
-                status = Object.assign({}, response.status || {});
+                status = Object.assign({}, response.status || {}),
+                access = response.access || {},
+                referenceNumber = response.referenceNumber || status.referenceNumber
+                    || access.referenceNumber || status.externalReferenceNumber;
 
             status.result = status.result || response.result || "SUCCESSFUL";
 
@@ -39,6 +42,15 @@ define([
 
             if (status.receiptAvailable === undefined) {
                 status.receiptAvailable = false;
+            }
+
+            // confirm-screen uses the platform reference as transactionId when the checker
+            // selects its quick-Approve action.  Older HTH responses expose that reference on
+            // the nested access DTO or as externalReferenceNumber, while BCO exposes the same
+            // value as status.referenceNumber.  Publish the canonical BCO shape to the UI.
+            if (referenceNumber) {
+                response.referenceNumber = referenceNumber;
+                status.referenceNumber = referenceNumber;
             }
 
             response.status = status;
@@ -69,7 +81,10 @@ define([
                         if (isApprovalRequiredResponse(error)) {
                             const normalizedResponse = normalizeApprovalRequiredResponse(error);
 
-                            deferred.resolve(normalizedResponse, "success", normalizedResponse);
+                            // Keep the jQuery Deferred callback contract intact: the third argument
+                            // is the transport jqXHR, while the first argument is the normalized
+                            // approval response consumed by the confirmation screen.
+                            deferred.resolve(normalizedResponse, "success", error);
 
                             return;
                         }

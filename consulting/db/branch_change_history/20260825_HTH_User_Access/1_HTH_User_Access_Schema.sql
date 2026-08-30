@@ -22,6 +22,13 @@
 -- exists, back out by dropping child tables in this order: HTH_USER_ACCESS_REQ_API,
 -- HTH_USER_ACCESS_REQ_ACCOUNT, HTH_USER_ACCESS_REQUEST, HTH_USER_ACCESS_ACCOUNT_API,
 -- HTH_USER_ACCESS_ACCOUNT. After data exists, use an approved migration; never drop these tables.
+--
+-- Runtime ownership note:
+--   HTH_USER_ACCESS_ACCOUNT and HTH_USER_ACCESS_ACCOUNT_API are the effective grant tables.
+--   The three HTH_USER_ACCESS_REQUEST* tables below are retained only for compatibility with
+--   environments that executed the original schema. The final application uses the platform
+--   DIGX_AP_TRANSACTION transactionSnapshot for maker/checker payload, pending status, duplicate
+--   detection, and checker re-entry; it does not write or read the legacy request tables.
 
 -- Effective Current and Savings or Time Deposit grants by HTH user and account-owning party.
 CREATE TABLE HTH_BEA.HTH_USER_ACCESS_ACCOUNT (
@@ -131,7 +138,8 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_ACCOUNT_API.LAST_UPDATED_BY IS
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_ACCOUNT_API.LAST_UPDATE_DATE IS
   'Date and time when the record was last updated.';
 
--- Immutable header snapshot submitted into the maker/checker workflow.
+-- Legacy request header retained for schema/deployment compatibility. Runtime approval payloads
+-- are stored in DIGX_AP_TRANSACTION.transactionSnapshot instead.
 CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQUEST (
   ID                    VARCHAR2(36 BYTE)  NOT NULL,
   TRANSACTION_ID        VARCHAR2(64 BYTE)  NOT NULL,
@@ -160,13 +168,13 @@ CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQUEST (
     (OBJECT_STATUS IN ('A', 'I'))
 );
 
--- Supports duplicate-pending detection and summary lookup by logical maintenance context.
+-- Legacy compatibility index; the final runtime uses the platform entity identifier and workflow.
 CREATE INDEX HTH_BEA.IX_HTH_UAR_CONTEXT
   ON HTH_BEA.HTH_USER_ACCESS_REQUEST
     (PARTY_ID, CLOSE_ID, ACCESS_PARTY_ID, LINKAGE_TYPE);
 
 COMMENT ON TABLE HTH_BEA.HTH_USER_ACCESS_REQUEST IS
-  'Immutable HTH user access approval request header snapshot.';
+  'Legacy HTH approval request header retained for compatibility; runtime uses the platform transaction snapshot.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQUEST.ID IS
   'Unique identifier of the approval request snapshot.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQUEST.TRANSACTION_ID IS
@@ -200,7 +208,7 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQUEST.LAST_UPDATED_BY IS
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQUEST.LAST_UPDATE_DATE IS
   'Date and time when the request snapshot was last updated.';
 
--- Account snapshot submitted with a maker request.
+-- Legacy request-account snapshot retained for schema/deployment compatibility.
 CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT (
   ID                         VARCHAR2(36 BYTE)  NOT NULL,
   HTH_USER_ACCESS_REQUEST_ID VARCHAR2(36 BYTE)  NOT NULL,
@@ -224,7 +232,7 @@ CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT (
 );
 
 COMMENT ON TABLE HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT IS
-  'Account snapshot submitted in an HTH user access approval request.';
+  'Legacy HTH request account snapshot retained for compatibility; final runtime does not read or write this table.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT.ID IS
   'Unique identifier of the request account snapshot.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT.HTH_USER_ACCESS_REQUEST_ID IS
@@ -248,7 +256,7 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT.LAST_UPDATED_BY IS
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_ACCOUNT.LAST_UPDATE_DATE IS
   'Date and time when the account snapshot was last updated.';
 
--- API code/name snapshot submitted under each request account.
+-- Legacy request-API snapshot retained for schema/deployment compatibility.
 CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQ_API (
   ID                         VARCHAR2(36 BYTE)  NOT NULL,
   HTH_USER_ACCESS_REQ_ACC_ID VARCHAR2(36 BYTE)  NOT NULL,
@@ -272,12 +280,12 @@ CREATE TABLE HTH_BEA.HTH_USER_ACCESS_REQ_API (
   CONSTRAINT CK_HTH_UARAPI_STATUS CHECK (OBJECT_STATUS IN ('A', 'I'))
 );
 
--- Supports approval revalidation and impact analysis by API master.
+-- Legacy compatibility index; final approval revalidation uses the platform transaction snapshot.
 CREATE INDEX HTH_BEA.IX_HTH_UARAPI_API
   ON HTH_BEA.HTH_USER_ACCESS_REQ_API (API_MASTER_ID);
 
 COMMENT ON TABLE HTH_BEA.HTH_USER_ACCESS_REQ_API IS
-  'API code/name snapshot submitted for an HTH user account.';
+  'Legacy HTH request API snapshot retained for compatibility; final runtime does not read or write this table.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_API.ID IS
   'Unique identifier of the request API snapshot.';
 COMMENT ON COLUMN HTH_BEA.HTH_USER_ACCESS_REQ_API.HTH_USER_ACCESS_REQ_ACC_ID IS

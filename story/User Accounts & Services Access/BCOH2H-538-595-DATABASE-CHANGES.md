@@ -5,12 +5,12 @@
 | Stories | BCOH2H-538、BCOH2H-595 |
 | 文档状态 | As Implemented |
 | 业务 Schema | `HTH_BEA` |
-| 更新时间 | 2026-08-28 |
+| 更新时间 | 2026-08-31 |
 
 ## 1. 变更结论
 
-- BCOH2H-538 不新增独立业务表。它读取既有 `HTH_USER_PROFILE`，并从 595 的生效表和审批请求表生成 Related/Associated Summary。
-- BCOH2H-595 新增 5 张业务表：2 张生效表、3 张 Maker Request Snapshot 表。
+- BCOH2H-538 不新增独立业务表。它读取既有 `HTH_USER_PROFILE`，并从 595 的生效表和平台 Approval Transaction Snapshot 生成 Related/Associated Summary。
+- 历史 Schema Script 创建 5 张业务表。最终运行时只读写 2 张生效表；3 张自定义 Request Snapshot 表由平台 `transactionSnapshot` 取代，仅为已执行过旧版 SQL 的环境保留，不再写入或读取。
 - 没有 `HTH_USER_ACCESS` Header 表。User/Company Context 直接保存在每个 Effective Account Grant 中，避免重复建模。
 - Account Type 只允许 `CSA`（Current and Savings）与 `TD`（Time Deposit）。
 - 5 张 Feature Table 均不包含 `OBJECT_VERSION_NUMBER`；平台公共配置表原有的 `OBJECT_VERSION_NUMBER` 继续保留并正常写入。
@@ -36,7 +36,7 @@ Effective Grants
 ├── HTH_USER_ACCESS_ACCOUNT
 └── HTH_USER_ACCESS_ACCOUNT_API
 
-Maker Request Snapshot
+Legacy Request Snapshot（兼容保留，运行时不使用）
 ├── HTH_USER_ACCESS_REQUEST
 ├── HTH_USER_ACCESS_REQ_ACCOUNT
 └── HTH_USER_ACCESS_REQ_API
@@ -93,9 +93,9 @@ Index：
 
 Unique Key 为 `(HTH_USER_ACCESS_ACCOUNT_ID, API_MASTER_ID)`；`IX_HTH_UAAA_API` 支持 API Disable 影响分析。
 
-### 3.3 `HTH_USER_ACCESS_REQUEST`
+### 3.3 Legacy `HTH_USER_ACCESS_REQUEST`
 
-Maker Request Header Snapshot。它保存审批所需的完整 Context，但不保存另一份 Approval Status；当前状态由 `TRANSACTION_ID` 关联 `DIGX_AP_TRANSACTION` 得到。
+旧设计的 Maker Request Header Snapshot。最终代码以平台 Approval Transaction 及其 `transactionSnapshot` 为唯一 Pending/Checker 数据源；本表只为已执行过旧版 Schema 的环境兼容保留。
 
 | Field | Type | 作用 |
 | --- | --- | --- |
@@ -109,11 +109,11 @@ Maker Request Header Snapshot。它保存审批所需的完整 Context，但不�
 | `ACCESS_PARTY_NAME` | `VARCHAR2(255)` | Company Name 显示快照。 |
 | `OBJECT_STATUS` 与审计字段 |  | Soft Status 与创建/更新审计。 |
 
-`IX_HTH_UAR_CONTEXT` 支持同一 Context Pending Request 检查。
+该表及 `IX_HTH_UAR_CONTEXT` 不再参与 Pending 判断、Checker Review 或 Approved Re-entry，也不保存第二份工作流状态。
 
-### 3.4 `HTH_USER_ACCESS_REQ_ACCOUNT`
+### 3.4 Legacy `HTH_USER_ACCESS_REQ_ACCOUNT`
 
-Maker 提交 Create/Edit 时的 Account Snapshot；Delete Request 没有 Account Child。
+旧设计的 Account Snapshot Child；最终代码不再写入或读取。
 
 | Field | Type | 作用 |
 | --- | --- | --- |
@@ -127,9 +127,9 @@ Maker 提交 Create/Edit 时的 Account Snapshot；Delete Request 没有 Account
 
 Unique Key 为 `(HTH_USER_ACCESS_REQUEST_ID, ACCOUNT_TYPE, ACCOUNT_NUMBER)`，Account Type Check Constraint 为 `IN ('CSA','TD')`。Account Type 必须进入唯一键，因为 BCO 可把同一个 Account Number 同时归入 CSA 和 TD。
 
-### 3.5 `HTH_USER_ACCESS_REQ_API`
+### 3.5 Legacy `HTH_USER_ACCESS_REQ_API`
 
-Maker 提交时每个 Request Account 下的 API Snapshot。
+旧设计的 API Snapshot Child；最终代码不再写入或读取。
 
 | Field | Type | 作用 |
 | --- | --- | --- |
@@ -147,15 +147,15 @@ Unique Key 为 `(HTH_USER_ACCESS_REQ_ACC_ID, API_MASTER_ID)`；`IX_HTH_UARAPI_AP
 
 ### Maker Submit
 
-1. Framework 生成 Approval Transaction。
+1. Framework 生成 Approval Transaction，并把经过校验的完整 DTO 序列化到平台 `transactionSnapshot`。
 2. Service 重新验证 Profile、Company Relationship、Account Ownership 和 Enterprise API Catalogue。
-3. 在一个独立 NONXA Transaction 中写 Request Header、Selected Accounts 和 Selected APIs。
-4. Snapshot 全部成功才 Commit；失败全部 Rollback。
+3. Approval Assembler 按 `(partyId, closeId, accessPartyId, linkageType)` 生成 Entity Identifier Hash，由平台执行与 BCO 相同的 Pending Duplicate Check。
+4. 不写三张 Legacy Request Table，也没有跨 `DIGX`/`HTH_BEA` 的双事务。
 5. Effective Tables 不变，因此 Pending 状态不会提前获得权限。
 
 ### Checker Approve
 
-1. 按 Framework Transaction ID 重新读取数据库 Snapshot。
+1. Framework 按 Transaction ID 读取平台 `transactionSnapshot`，并将原 Maker DTO 作为 Approved Service 参数传入。
 2. 使用审批时的当前 Profile、Relationship、Portfolio 和 API Catalogue 再验证。
 3. Create/Edit 先把旧 Effective Grants 设为 `I`，再复用或创建所选 CSA/TD Account/API Row 并设为 `A`。
 4. Delete 把 Context 下 API Row 和 Account Row 依次设为 `I`。
@@ -163,7 +163,7 @@ Unique Key 为 `(HTH_USER_ACCESS_REQ_ACC_ID, API_MASTER_ID)`；`IX_HTH_UARAPI_AP
 
 ### Checker Reject
 
-Reject 不进入 `APPROVED` Re-entry，Effective Tables 不变。Approval List 与 Activity Log 由三个 Task 的 Approval/Audit Aspect 记录。
+Reject 不进入 `APPROVED` Re-entry，Effective Tables 不变。Approval List、Duplicate Check 与 Activity Log 全部以平台 Transaction 为准。
 
 ## 5. Runtime Authorization Query
 

@@ -17,10 +17,10 @@ import java.util.List;
 /**
  * Converts HTH user-access requests into approval-framework transactions.
  *
- * <p>The entity identifier hashes the complete access context rather than an account number. This
- * keeps create/edit/delete requests for the same party, CloseID, account-owning party, and linkage
- * type in the same approval identity while avoiding exposure of those values in task metadata.
- * The detailed maker payload is persisted separately as an immutable database snapshot.
+ * <p>Like the standard BCO user-access flow, the approval framework owns both workflow state and
+ * the serialized maker DTO in {@code transactionSnapshot}. A hash of the complete HTH access
+ * context is stored as the entity identifier so the platform's standard duplicate check prevents
+ * concurrent maintenance of the same user/company relationship.
  */
 public class SubmitHostToHostUserAccessApprovalAssembler
     extends AbstractApprovalAssembler<HostToHostUserAccessDTO, Transaction> {
@@ -28,9 +28,7 @@ public class SubmitHostToHostUserAccessApprovalAssembler
   @Override
   public HostToHostUserAccessDTO fromDomainObject(Transaction transaction)
       throws Exception {
-    // The checker page receives the typed transactionSnapshot stored by the generic approval
-    // framework. Approved service execution independently reloads the immutable HTH request
-    // tables, so converting a bare transaction domain object back to a request is unnecessary.
+    // The checker page and approval re-entry receive the typed platform transactionSnapshot.
     return null;
   }
 
@@ -55,9 +53,9 @@ public class SubmitHostToHostUserAccessApprovalAssembler
     transaction.setPartyName(partyName);
     transaction = (PartyTransaction) super.toDomainObject(requestDTO, transaction);
 
-    List<String> identifiers = new ArrayList<String>();
-    identifiers.add(super.getHash(contextIdentifier(requestDTO)));
-    transaction.setEntityIdentifiers(identifiers);
+    List<String> entityIdentifiers = new ArrayList<String>();
+    entityIdentifiers.add(super.getHash(buildContextIdentifier(requestDTO)));
+    transaction.setEntityIdentifiers(entityIdentifiers);
     setAdministrationDiscriminator(transaction);
     return transaction;
   }
@@ -88,19 +86,23 @@ public class SubmitHostToHostUserAccessApprovalAssembler
     }
   }
 
-  private String contextIdentifier(HostToHostUserAccessDTO request) {
-    // All four values are required to distinguish RELATED from ASSOCIATED access belonging to the
-    // same HTH user. Account numbers are excluded because one request can contain many accounts.
-    return String.valueOf(request.getPartyId()) + "#" + String.valueOf(request.getCloseId())
-        + "#" + String.valueOf(request.getAccessPartyId()) + "#"
-        + String.valueOf(request.getLinkageType());
-  }
-
   private String normalize(String value) {
     if (value == null) {
       return null;
     }
     String normalized = value.trim();
     return normalized.isEmpty() ? null : normalized;
+  }
+
+  private String buildContextIdentifier(HostToHostUserAccessDTO requestDTO) {
+    return valueOrEmpty(requestDTO.getPartyId()) + "#"
+        + valueOrEmpty(requestDTO.getCloseId()) + "#"
+        + valueOrEmpty(requestDTO.getAccessPartyId()) + "#"
+        + valueOrEmpty(requestDTO.getLinkageType());
+  }
+
+  private String valueOrEmpty(String value) {
+    String normalized = normalize(value);
+    return normalized == null ? "" : normalized;
   }
 }

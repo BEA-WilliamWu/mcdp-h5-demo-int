@@ -8,7 +8,7 @@
 | 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
 | 前置依赖 | `HTH_USER_PROFILE`、`HTH_MANAGEMENT`、`HTH_MANAGEMENT_API`、`HTH_API_MASTER` 已在 `HTH_BEA` |
 | 关联 Story | BCOH2H-538 提供 HTH User Summary 和维护入口 |
-| 更新时间 | 2026-08-28 |
+| 更新时间 | 2026-08-31 |
 
 ## 1. 目标和范围
 
@@ -19,7 +19,7 @@
 - Related 和 Associated 两种 Company Context。
 - 只允许 CSA（Current and Savings）和 TD（Time Deposit）Account。
 - Account Selection、按账户 API Mapping、Review、Create/Edit/Delete。
-- Maker/Checker Request Snapshot 和 Approved Re-entry。
+- 与 BCO 一致的 Platform `transactionSnapshot` 和 Approved Re-entry。
 - 审批后生效的 Account/API Grant。
 - Summary、Account Detail 和 Runtime Authorization Repository Contract。
 - ORM、Repository Adapter、Permission、Task、Approval Assembler、Error NLS 和验证 SQL。
@@ -45,8 +45,7 @@ flowchart TB
     SERVICE --> REL["Party Relationship Domain"]
     SERVICE --> PORTFOLIO["BCO AccountAccess eligible account inventory"]
     SERVICE --> CATALOG["HTH_MANAGEMENT + HTH_MANAGEMENT_API + HTH_API_MASTER"]
-    SERVICE --> APPROVAL["OBDX Approval Framework"]
-    SERVICE --> REQUEST["3 Request Snapshot Tables"]
+    SERVICE --> APPROVAL["OBDX Approval Framework + transactionSnapshot"]
     APPROVAL -->|APPROVED re-entry| SERVICE
     SERVICE --> EFFECTIVE["2 Effective Grant Tables"]
     AUTH["HostToHostRuntimeAuthorizer"] --> EFFECTIVE
@@ -55,7 +54,7 @@ flowchart TB
 
 ### 2.1 Access Context
 
-所有页面、Service、Request 和 Effective Query 都使用完整 Context：
+所有页面、Service、Platform Snapshot 和 Effective Query 都使用完整 Context：
 
 ```text
 (partyId, closeId, accessPartyId, linkageType)
@@ -265,7 +264,8 @@ HostToHostUserAccessResponseDTO
 7. 调用与 BCO Account Linkage 页面相同的 `IAccountAccess.listAccounts()`：`partyId` 始终作为 Primary Party；RELATED 使用空的 Linked Party List，ASSOCIATED 把 `accessPartyId` 放入 Linked Party List。服务返回对应公司的 Eligible Demand Deposit 与 Term Deposit 后，分别映射为 CSA 和 TD。HTH 丢弃 BCO Task Tree，仅保留 Account Metadata 并挂接 HTH API Catalogue。
 8. 读取该 Context 下全部 Effective Account/API Row。
 9. 将 Effective Selection 合并到 Eligible Account/API。
-10. 查询相同 Context 是否有 Pending Request。
+10. 从 `DIGX_AP_TRANSACTION` 读取 HTH Task 的可操作 Pending 交易，并反序列化其
+    `transactionSnapshot` 匹配当前 Context。
 
 BCO AccountAccess 当前 Eligible Inventory 中不存在但 Effective 中仍 Active 的 Account，会以 Masked Account Number 补入响应并标记 Selected，使 View 能显示历史授权；Maker/Checker 校验时仍会调用相同的 AccountAccess Inventory 重新验证，不能继续审批已失效账户。
 
@@ -276,19 +276,14 @@ BCO AccountAccess 当前 Eligible Inventory 中不存在但 Effective 中仍 Act
 ```text
 checkAccessPolicy
 → determine maker or APPROVED re-entry
-→ maker: generate Reference Number
-→ approved: load Request Snapshot by Transaction ID
+→ maker: platform approval framework stores requestDTO as transactionSnapshot
+→ approved: receive the same server-side transactionSnapshot as requestDTO
 → validate current Profile/Enterprise/Relationship/Account/API/State
-→ maker: persist immutable Request Snapshot
 → approved: replace/deactivate Effective Grants
 → build standard response and response policy
 ```
 
-Reference Number 由 Java 生成：
-
-```text
-HUA + actionType 前 3 个字符 + UUID
-```
+Reference Number 使用平台 `DIGX_AP_TRANSACTION.TXN_ID`，不再生成第二套 HUA Reference。
 
 所有 Table `ID` 使用 `UUID.randomUUID().toString()`；不使用 Oracle Sequence。
 
@@ -299,7 +294,7 @@ HUA + actionType 前 3 个字符 + UUID
 | Profile 存在 | Y | Y | Y | Y |
 | Enterprise HTH Enable | Y | Y | Y | Y |
 | RELATED/ASSOCIATED Context 合法 | Y | Y | Y | Y |
-| 无其他 Pending Request | Y | Y | Y | Maker 已检查；按当前 Transaction 重入 |
+| 无其他 Pending Request | Platform Generic Duplicate | Platform Generic Duplicate | Platform Generic Duplicate | 当前 Transaction 重入 |
 | 当前 Active Context 不存在 | Y | N | N | 按 Action 重新检查 |
 | 当前 Active Context 存在 | N | Y | Y | 按 Action 重新检查 |
 | 至少一个 Account/API | Y | Y | N | Y/Y/N |
@@ -308,7 +303,7 @@ HUA + actionType 前 3 个字符 + UUID
 | API 属于当前 Enterprise Catalogue | Y | Y | N | Y |
 | Account Type + Account Number/API 无重复 | Y | Y | N | Y |
 
-Checker Approve 时重新从当前 BCO AccountAccess Eligible Inventory 和 Enterprise API Catalogue 校验，而不是直接信任 Maker Snapshot。Maker 提交后 Account 被关闭时，Approved Re-entry 失败并保留原 Effective Grant。
+Checker Approve 时使用平台保存的 Maker Snapshot，但仍重新从当前 BCO AccountAccess Eligible Inventory 和 Enterprise API Catalogue 校验。Maker 提交后 Account 被关闭时，Approved Re-entry 失败并保留原 Effective Grant。
 
 ## 6. 数据库设计
 
@@ -320,14 +315,14 @@ Checker Approve 时重新从当前 BCO AccountAccess Eligible Inventory 和 Ente
 HTH_BEA
 ```
 
-最终新增五张表，不是六张：
+Schema 历史脚本创建五张表；最终运行时主链路只使用两张 Effective Table：
 
 ```text
 Effective
 ├── HTH_USER_ACCESS_ACCOUNT
 └── HTH_USER_ACCESS_ACCOUNT_API
 
-Request Snapshot
+Legacy Request Snapshot（已部署环境兼容保留，不再写入或读取）
 ├── HTH_USER_ACCESS_REQUEST
 ├── HTH_USER_ACCESS_REQ_ACCOUNT
 └── HTH_USER_ACCESS_REQ_API
@@ -401,9 +396,9 @@ CHECK OBJECT_STATUS IN ('A','I')
 
 Index `IX_HTH_UAAA_API (API_MASTER_ID)` 支持 API Disable Impact Query。
 
-### 6.5 `HTH_USER_ACCESS_REQUEST`
+### 6.5 Legacy `HTH_USER_ACCESS_REQUEST`
 
-Maker Request Header Snapshot。
+旧设计的 Maker Request Header Snapshot。最终实现已由平台 `transactionSnapshot` 替代；表为兼容已执行的 Schema 保留，不能再作为 Pending、Checker Detail 或 Approved Re-entry 的数据源。
 
 | Column | Type | 约束/用途 |
 | --- | --- | --- |
@@ -419,11 +414,11 @@ Maker Request Header Snapshot。
 | `FULL_NAME` | `VARCHAR2(255)` | Review Display Snapshot。 |
 | `ACCESS_PARTY_NAME` | `VARCHAR2(255)` | Review Display Snapshot。 |
 
-`TRANSACTION_ID` 与 `DIGX_AP_TRANSACTION` 是逻辑关联，没有跨 Schema FK；Pending Query 使用 Join。Index `IX_HTH_UAR_CONTEXT` 支持同 Context Pending 检查。
+`TRANSACTION_ID` 与 `DIGX_AP_TRANSACTION` 是逻辑关联，没有跨 Schema FK。最终代码不再使用该表，避免 NONXA 双写不一致。
 
-### 6.6 `HTH_USER_ACCESS_REQ_ACCOUNT`
+### 6.6 Legacy `HTH_USER_ACCESS_REQ_ACCOUNT`
 
-Create/Edit Maker 提交时的 Account Snapshot；Delete 不写 Account Child。
+旧设计的 Account Snapshot Child；最终代码不再写入或读取。
 
 | Column | Type | 用途 |
 | --- | --- | --- |
@@ -436,9 +431,9 @@ Create/Edit Maker 提交时的 Account Snapshot；Delete 不写 Account Child。
 
 Unique Key：`(HTH_USER_ACCESS_REQUEST_ID, ACCOUNT_TYPE, ACCOUNT_NUMBER)`。BCO 可能把同一个 Account Number 同时放在 CSA 与 TD Tab，因此账户身份必须包含 Account Type。
 
-### 6.7 `HTH_USER_ACCESS_REQ_API`
+### 6.7 Legacy `HTH_USER_ACCESS_REQ_API`
 
-Account Snapshot 下的 API Snapshot。
+旧设计的 API Snapshot Child；最终代码不再写入或读取。
 
 | Column | Type | 用途 |
 | --- | --- | --- |
@@ -453,14 +448,13 @@ Unique Key：`(HTH_USER_ACCESS_REQ_ACC_ID, API_MASTER_ID)`；Index `IX_HTH_UARAP
 
 ### 6.8 Table 关系
 
+最终运行时关系只有 Profile、Effective Account 和 Effective API；三张 Legacy Request Table 的物理 FK 关系仅用于兼容旧 Schema，不属于新请求链路。
+
 ```mermaid
 erDiagram
     HTH_USER_PROFILE ||--o{ HTH_USER_ACCESS_ACCOUNT : identifies
     HTH_USER_ACCESS_ACCOUNT ||--o{ HTH_USER_ACCESS_ACCOUNT_API : grants
     HTH_API_MASTER ||--o{ HTH_USER_ACCESS_ACCOUNT_API : defines
-    HTH_USER_ACCESS_REQUEST ||--o{ HTH_USER_ACCESS_REQ_ACCOUNT : snapshots
-    HTH_USER_ACCESS_REQ_ACCOUNT ||--o{ HTH_USER_ACCESS_REQ_API : snapshots
-    HTH_API_MASTER ||--o{ HTH_USER_ACCESS_REQ_API : validates
 ```
 
 ## 7. Maker/Checker 和落表流程
@@ -469,24 +463,23 @@ erDiagram
 
 Maker 路径：
 
-1. Framework 建立 Approval Transaction 并把 Transaction ID 放入 Thread Attribute。
-2. Service 完成当前数据校验。
-3. 使用独立 `NONXA` Session 和 Transaction 写 Request Header、Account、API Snapshot。
-4. Header/Child 全部成功后 Commit；任一失败则 Rollback 整个 Snapshot。
-5. 同一 Transaction ID 再次进入时，先查询已存在 Snapshot 后直接返回，配合 Unique Key 保持 Idempotent。
+1. Service 对浏览器 DTO 完成 Profile、Relationship、Account Ownership 与 API Catalogue 校验。
+2. Approval Assembler 按完整 Context 生成 Entity Identifier Hash，与 BCO User Account Access 使用相同的平台 Duplicate Check。
+3. Framework 建立 `DIGX_AP_TRANSACTION`，并把完整 Maker DTO 序列化到该 Transaction 的 `transactionSnapshot`。
+4. Pending 阶段不写 Effective Table，也不写三张 Legacy Request Table。
+5. Approval List、Activity Log、重复判断和 Checker Detail 均读取同一平台 Transaction。
 
-Request Snapshot 代表 Maker 当时提交内容，之后不随 Effective Data 或 API Name 改变。
+Platform `transactionSnapshot` 代表 Maker 当时提交内容，之后不随 Effective Data 或 API Name 改变。
 
 ### 7.2 Approved Re-entry
 
 只有 Framework Thread Attribute 明确为 `APPROVED` 时进入生效分支：
 
-1. 从 Thread Attribute 读取 Transaction ID。
-2. 按 Transaction ID 读取 Active Request Header。
-3. 确认 Snapshot Action 与当前 Service Action 一致。
-4. 从三张 Request Table 重建 DTO，保留 Display Order。
-5. 使用当前 Profile、Relationship、BCO AccountAccess Eligible Inventory 和 API Catalogue 重新校验。
-6. Create/Edit 执行完整 Effective Replace；Delete 执行完整 Context Deactivate。
+1. Framework 按 Transaction ID 读取平台 Transaction。
+2. Framework 将其中的 `transactionSnapshot` 原样作为 Approved Service 的 DTO 参数传入。
+3. 当前 Task/Service 决定 Create、Edit 或 Delete Action，不从另一张业务表推断。
+4. Service 使用当前 Profile、Relationship、BCO AccountAccess Eligible Inventory 和 API Catalogue 重新校验。
+5. Create/Edit 执行完整 Effective Replace；Delete 执行完整 Context Deactivate。
 
 Reject 不进入 Approved Re-entry，因此不会修改 Effective Tables。
 
@@ -500,17 +493,22 @@ Reject 不进入 Approved Re-entry，因此不会修改 Effective Tables。
 4. 已有 Row 更新为 `A` 并保留原 `ID/CREATED_BY/CREATION_DATE`；没有则插入 UUID Row。
 5. API Grant 同样按 `(ACCOUNT_ID, API_MASTER_ID)` 复用或新建并设为 `A`。
 
-Delete 只执行步骤 1-2。完整历史由 Request Snapshot 保留，Effective Row 的 A/I 状态支持重复启用同一 `Account Type + Account Number` Business Key。
+Delete 只执行步骤 1-2。完整提交历史由平台 Transaction Snapshot 保留，Effective Row 的 A/I 状态支持重复启用同一 `Account Type + Account Number` Business Key。
 
 ## 8. ORM 和 Repository
 
 ### 8.1 Entity/ORM
 
-五组 Entity 与五张表一一对应：
+最终运行时 Entity 为两组 Effective Entity：
 
 ```text
 HthUserAccessAccount / Key
 HthUserAccessAccountApi / Key
+```
+
+以下三组 Legacy Entity/ORM 继续注册，只为了兼容已经执行的 Schema 和旧版本回滚；新 Service 不调用：
+
+```text
 HthUserAccessRequest / Key
 HthUserAccessRequestAccount / Key
 HthUserAccessRequestApi / Key
@@ -522,11 +520,16 @@ Feature Entity 没有 `@Version` 或 `OBJECT_VERSION_NUMBER` Mapping。
 
 ### 8.2 Repository Adapter
 
-最终注册五个 Adapter，不存在 Header Adapter：
+最终运行时调用两个 Effective Adapter：
 
 ```text
 HTH_USER_ACCESS_ACCOUNT_LOCAL_REPOSITORY_ADAPTER
 HTH_USER_ACCESS_ACCOUNT_API_LOCAL_REPOSITORY_ADAPTER
+```
+
+以下三个 Legacy Adapter 仍保持注册以兼容旧部署，但新 Service 不调用：
+
+```text
 HTH_USER_ACCESS_REQUEST_LOCAL_REPOSITORY_ADAPTER
 HTH_USER_ACCESS_REQ_ACCOUNT_LOCAL_REPOSITORY_ADAPTER
 HTH_USER_ACCESS_REQ_API_LOCAL_REPOSITORY_ADAPTER
@@ -538,9 +541,7 @@ HTH_USER_ACCESS_REQ_API_LOCAL_REPOSITORY_ADAPTER
 - `hasActiveByContext()`。
 - `listActiveSummary()`。
 - `isAuthorized()`。
-- `findPendingByContext()` / `listPendingSummary()`。
-- `findActiveByTransactionId()`。
-- `listByRequestId()` 重建 Account/API Snapshot。
+- Application Service 按三个 HTH Task Code 查询可操作的 `DIGX_AP_TRANSACTION`，再由 Transaction Domain 反序列化 `transactionSnapshot` 生成 Pending Summary。
 
 ## 9. Runtime Authorization
 
@@ -617,7 +618,7 @@ HTH Create/Edit/Delete 分别复制既有 BCO `UAT_N_CA/UAT_N_UA/UAT_N_DA` 的 `
 
 三个 Write Service 同时声明 `PERFORM` 和 `APPROVE` Entitlement；前端 Task Mapping 将三个 Task Code 统一解析为 `review-hth-user-access`，保证 Checker、Pending Approval 和 Activity Log 详情都能加载相同的只读请求快照。
 
-Approval Assembler 使用完整 Context 的 Hash 作为 Entity Identifier，不使用 Account Number，避免一项多账户请求产生不稳定身份或在 Task Metadata 暴露 Account Number。
+Approval Assembler 按完整 Context（Party、CloseID、Access Party、Linkage Type）生成一个 Hash Entity Identifier。平台据此执行与 BCO User Account Access 相同的 Generic Duplicate Check；同一 Context 有 `PENDING_APPROVAL` Transaction 时返回平台 `DIGX_AP_0062`。HTH 不再维护第二套 Duplicate 状态。Summary 只展示三个 HTH Task 中处于 `approval/P` 的可操作 Transaction，并从其 `transactionSnapshot` 读取 Context 和 Action。
 
 ## 11. Error Catalogue
 
@@ -632,10 +633,10 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 | `DIGX_CZ_HTH_UA_005` | Account 不属于 Access Party 或 Runtime 未授权。 |
 | `DIGX_CZ_HTH_UA_006` | API 无效或企业未启用。 |
 | `DIGX_CZ_HTH_UA_007` | Stale Version 文案保留；最终无 OVN 实现未抛出此 Code。 |
-| `DIGX_CZ_HTH_UA_008` | 同 Context 已有 Pending Request。 |
+| `DIGX_CZ_HTH_UA_008` | Legacy 保留；最终 Duplicate 由平台返回 `DIGX_AP_0062`。 |
 | `DIGX_CZ_HTH_UA_009` | 未选择 Account 或某 Account 未选择 API。 |
 | `DIGX_CZ_HTH_UA_010` | Create/Edit/Delete 当前状态不允许。 |
-| `DIGX_CZ_HTH_UA_011` | Approval Snapshot/Effective 状态不一致。 |
+| `DIGX_CZ_HTH_UA_011` | Legacy 保留；最终 Approved Re-entry 直接使用平台 Transaction Snapshot。 |
 | `DIGX_CZ_HTH_UA_012` | Pending 期间 Account 已关闭或失效。 |
 
 ## 12. 安全、性能和并发
@@ -644,7 +645,7 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 
 - 后端重新验证 Profile、Relationship、Account Ownership 和 API Eligibility。
 - Account Number 在数据库保存 Canonical Value；授权 BM/CM 维护页面与原 BCO 页面一致显示 Canonical Value，日志仍不得打印完整 Account Number。
-- Maker Snapshot 不能代替 Checker 时的当前状态校验。
+- Platform Transaction Snapshot 不能代替 Checker 时的当前状态校验。
 - Runtime Authorization Fail Closed。
 - UI 权限只控制显示，Service Access Policy 才是后端控制边界。
 
@@ -654,14 +655,13 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 - 复用 BCO `AccountAccess` 服务一次读取 Primary/Linked Party 的 Demand Deposit 与 Term Deposit，保证 HTH 与 BCO 在 RELATED/ASSOCIATED 场景中的可选账户范围一致。
 - Effective Account 按完整 Context 批量读取，API 按 Account ID 读取。
 - Summary 在数据库按 Context/Account Type 聚合，不返回账户明细。
-- Pending Summary 单次联查 Approval Transaction。
+- Pending Summary 先查询 HTH Approval Transaction，再反序列化少量可操作 Transaction Snapshot；不联查 Legacy Request Table。
 
 ### 12.3 Concurrency
 
 Feature Tables 不使用乐观锁版本号。当前并发保护由以下机制组成：
 
-- 同 Context Pending Request 检查。
-- Request `TRANSACTION_ID` 和 `REFERENCE_NO` Unique Key。
+- 平台 Entity Identifier + Generic Pending Duplicate Check。
 - Effective Account 和 API Business Key Unique Constraint。
 - Maker/Checker Task、Approval 和 Blackout Framework。
 - Approved Re-entry 前重新验证当前 Active State。
@@ -711,22 +711,22 @@ Verification 预期：
 
 ### 14.2 Repository
 
-- 五张 Entity/ORM CRUD 和 A/I Filter。
+- 两张 Effective Entity/ORM CRUD 和 A/I Filter。
 - Effective Context Unique Key 和 Reactivation。
 - Active Summary Aggregate。
-- Pending Approval Join。
-- Request Snapshot 按 Transaction ID/Request ID 完整重建。
+- Pending Approval 按 HTH Task/Workflow State 查询，并从 Platform Snapshot 还原 Context。
+- 三张 Legacy Request Table 保留时不被新 Service 写入。
 - Runtime Authorization 全链路 Allow/Deny。
 
 ### 14.3 Maker/Checker
 
-- Create/Edit/Delete Maker 只写 Request Snapshot，不提前改 Effective。
+- Create/Edit/Delete Maker 只创建 Platform Transaction Snapshot，不提前改 Effective。
 - Approve Create/Edit 完整替换 Effective Selection。
 - Approve Delete 先停用 API，再停用 Account。
 - Reject 不改 Effective。
-- Pending 期间重复提交返回 008。
+- Pending 期间重复提交由平台返回 `DIGX_AP_0062`。
 - Maker 后 Account/API/Relationship 失效时 Approve Fail Closed。
-- 重复 Transaction ID 不重复写 Snapshot。
+- Reject 不写 Effective；再次提交由平台当前 Transaction 状态决定。
 
 ### 14.4 Regression
 
@@ -743,7 +743,7 @@ Verification 预期：
 | Account Linkage | `hth-account-linkage` + Effective Account Table | UI/Repository |
 | 每账户 API Mapping | Nested `apiServices` + Account API Table | UI/API |
 | View/Edit/Delete | HTH Component State + 3 Write Services | E2E |
-| Maker/Checker | 3 Tasks + Assembler + Request Snapshot | Approval Test |
+| Maker/Checker | 3 Tasks + Assembler + Platform Transaction Snapshot | Approval Test |
 | Approved Effective Access | Soft Deactivate/Reactivate Replace | Repository Test |
 | Related/Associated | 完整四字段 Context + Relationship Validation | Integration Test |
 | Runtime Contract | Fail-closed Authorizer Query | Integration/Ingress Test |

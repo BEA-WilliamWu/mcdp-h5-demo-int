@@ -8,9 +8,9 @@ import java.util.List;
 /**
  * Create, edit, or delete request for one HTH user-access context.
  *
- * <p>The context is the tuple {@code (partyId, closeId, accessPartyId, linkageType)}. The maker
- * payload is validated and stored as an approval snapshot. During checker re-entry the service
- * reconstructs this DTO from that database snapshot rather than trusting a new browser payload.
+ * <p>The context is the tuple {@code (partyId, closeId, accessPartyId, linkageType)}. The platform
+ * approval framework stores the validated maker payload as {@code transactionSnapshot} and
+ * supplies that server-side snapshot during checker execution.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class HostToHostUserAccessDTO extends DomainObjectDTO {

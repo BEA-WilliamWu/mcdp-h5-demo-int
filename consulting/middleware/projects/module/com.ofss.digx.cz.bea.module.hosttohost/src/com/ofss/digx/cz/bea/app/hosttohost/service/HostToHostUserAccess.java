@@ -31,24 +31,12 @@ import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccountApi;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccountApiKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccountKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessPendingRecord;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequest;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestAccount;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestAccountKey;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestApi;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestApiKey;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessRequestKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessSummaryRecord;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfile;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfileKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessAccountApiRepository;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessAccountRepository;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessRequestAccountRepository;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessRequestApiRepository;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessRequestRepository;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserProfileRepository;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestAccountRepositoryAdapter;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestApiRepositoryAdapter;
-import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestRepositoryAdapter;
 import com.ofss.digx.datatype.complex.Party;
 import com.ofss.digx.enumeration.ModuleType;
 import com.ofss.digx.enumeration.accounts.AccountType;
@@ -58,10 +46,13 @@ import com.ofss.digx.enumeration.security.EntitlementCategory;
 import com.ofss.digx.enumeration.security.EntitlementSubCategory;
 import com.ofss.digx.enumeration.task.TaskAspect;
 import com.ofss.digx.enumeration.task.TaskType;
+import com.ofss.digx.framework.domain.transaction.Transaction;
+import com.ofss.digx.framework.domain.transaction.TransactionKey;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.digx.infra.thread.ThreadAttribute;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.infra.das.orm.DataAccessManager;
+import com.ofss.fc.infra.das.orm.Query;
 import com.ofss.fc.infra.das.orm.Session;
 import com.ofss.fc.infra.log.impl.MultiEntityLogger;
 import com.ofss.fc.service.response.TransactionStatus;
@@ -88,10 +79,10 @@ import java.util.logging.Logger;
  * or Time Deposit accounts. RELATED means both parties are the same; ASSOCIATED requires a
  * current party relationship.
  *
- * <p>Write operations use the OBDX maker/checker workflow. Maker execution validates the request
- * and stores an immutable database snapshot. Checker approval reloads and revalidates that
- * snapshot before replacing effective grants. Rejection never calls this service's approval
- * re-entry path and therefore does not change effective grants.
+ * <p>Write operations follow the standard BCO maker/checker model. The approval framework stores
+ * the maker DTO as the transaction snapshot and supplies that server-side snapshot during checker
+ * execution. The service revalidates the supplied snapshot before replacing effective grants.
+ * Rejection never calls the approval re-entry path and therefore does not change effective grants.
  */
 public class HostToHostUserAccess extends AbstractApplication implements IHostToHostUserAccess {
   private static final String THIS_COMPONENT_NAME = HostToHostUserAccess.class.getName();
@@ -144,6 +135,20 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   private static final String ACCOUNT_TYPE_CSA = "CSA";
 
   private static final String ACCOUNT_TYPE_TD = "TD";
+
+  private static final String TASK_CREATE = "UAT_N_HUA_NEW";
+
+  private static final String TASK_EDIT = "UAT_N_HUA_EDT";
+
+  private static final String TASK_DELETE = "UAT_N_HUA_DEL";
+
+  private static final String PENDING_APPROVAL = "PENDING_APPROVAL";
+
+  private static final String MODIFICATION_REQUESTED = "MODIFICATION_REQUESTED";
+
+  private static final String APPROVAL_STEP = "approval";
+
+  private static final String PROCESSING_PENDING = "P";
 
   /**
    * Builds the effective and pending access summary for every valid company context of an HTH
@@ -294,10 +299,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
    * Executes the maker or checker branch for all write actions.
    *
    * <p>Maker execution receives a browser DTO, validates it against current ownership and API
-   * configuration, then persists an immutable approval snapshot. Approved checker re-entry does
-   * not trust the re-entry DTO: it resolves the approval transaction ID, reloads the database
-   * snapshot, validates it again against current data, and only then changes effective grants.
-   * This prevents request tampering between submission and approval.
+   * configuration, after which the approval framework stores that DTO in the platform transaction
+   * snapshot. Approved checker re-entry receives the stored server-side snapshot, validates it
+   * again against current data, and only then changes effective grants.
    */
   private HostToHostUserAccessResponseDTO save(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
@@ -306,7 +310,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     response.setStatus(fetchStatus());
     TransactionStatus transactionStatus = fetchTransactionStatus();
     boolean approvedExecution = isApprovedExecution();
-    String referenceNumber = approvedExecution ? null : generateReferenceNumber(actionType);
+    String referenceNumber = normalize(readTransactionId());
     if (requestDTO != null && referenceNumber != null) {
       requestDTO.setReferenceNumber(referenceNumber);
       setExternalReferenceNumber(referenceNumber);
@@ -315,22 +319,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
     Interaction.begin(sessionContext);
     try {
-      HthUserAccessRequest approvalSnapshot = null;
-      if (approvedExecution) {
-        approvalSnapshot = HthUserAccessRequestRepository.getInstance()
-            .findActiveByTransactionId(readTransactionId());
-        if (approvalSnapshot == null || !actionType.equals(approvalSnapshot.getActionType())) {
-          throw new Exception("DIGX_CZ_HTH_UA_011");
-        }
-        requestDTO = loadRequestSnapshot(approvalSnapshot);
-        referenceNumber = approvalSnapshot.getReferenceNo();
-      }
       validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
       if (approvedExecution) {
         applyApprovedAccess(requestDTO, actionType, readUserId(sessionContext));
-      } else {
-        persistRequestSnapshot(requestDTO, actionType, referenceNumber,
-            requireTransactionId(), readUserId(sessionContext));
       }
       requestDTO.setReferenceNumber(referenceNumber);
       response.setAccess(requestDTO);
@@ -354,111 +345,6 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
     super.checkResponsePolicy(sessionContext, response);
     return response;
-  }
-
-  /**
-   * Reconstructs the approved request exclusively from the persisted header/account/API snapshot.
-   * Display order is retained so the checker sees the same logical selection submitted by maker.
-   */
-  private HostToHostUserAccessDTO loadRequestSnapshot(HthUserAccessRequest snapshot)
-      throws Exception {
-    HostToHostUserAccessDTO request = new HostToHostUserAccessDTO();
-    request.setPartyId(snapshot.getPartyId());
-    request.setCloseId(snapshot.getCloseId());
-    request.setAccessPartyId(snapshot.getAccessPartyId());
-    request.setLinkageType(snapshot.getLinkageType());
-    request.setUsername(snapshot.getUserName());
-    request.setFullName(snapshot.getFullName());
-    request.setAccessPartyName(snapshot.getAccessPartyName());
-    request.setReferenceNumber(snapshot.getReferenceNo());
-
-    List<HthUserAccessRequestAccount> accountRows =
-        HthUserAccessRequestAccountRepository.getInstance()
-            .listByRequestId(snapshot.getKey().getId());
-    Map<String, List<HthUserAccessRequestApi>> apiRowsByAccount =
-        groupRequestApisByAccount(HthUserAccessRequestApiRepository.getInstance()
-            .listByRequestId(snapshot.getKey().getId()));
-    List<HostToHostUserAccessAccountDTO> accounts =
-        new ArrayList<HostToHostUserAccessAccountDTO>();
-    if (accountRows != null) {
-      Collections.sort(accountRows, new Comparator<HthUserAccessRequestAccount>() {
-        @Override
-        public int compare(HthUserAccessRequestAccount left,
-            HthUserAccessRequestAccount right) {
-          return compareOrder(left.getDisplayOrder(), right.getDisplayOrder());
-        }
-      });
-      for (HthUserAccessRequestAccount accountRow : accountRows) {
-        if (!OBJECT_ACTIVE.equals(accountRow.getObjectStatus())) {
-          continue;
-        }
-        HostToHostUserAccessAccountDTO account = new HostToHostUserAccessAccountDTO();
-        account.setAccountNumber(accountRow.getAccountNumber());
-        account.setMaskedAccountNumber(maskAccountNumber(accountRow.getAccountNumber()));
-        account.setAccountType(accountRow.getAccountType());
-        account.setCurrency(accountRow.getCurrency());
-        account.setDisplayOrder(accountRow.getDisplayOrder());
-        account.setSelected(Boolean.TRUE);
-
-        List<HthUserAccessRequestApi> apiRows =
-            apiRowsByAccount.get(accountRow.getKey().getId());
-        List<HostToHostUserAccessApiDTO> apis =
-            new ArrayList<HostToHostUserAccessApiDTO>();
-        if (apiRows != null) {
-          Collections.sort(apiRows, new Comparator<HthUserAccessRequestApi>() {
-            @Override
-            public int compare(HthUserAccessRequestApi left,
-                HthUserAccessRequestApi right) {
-              return compareOrder(left.getDisplayOrder(), right.getDisplayOrder());
-            }
-          });
-          for (HthUserAccessRequestApi apiRow : apiRows) {
-            if (!OBJECT_ACTIVE.equals(apiRow.getObjectStatus())) {
-              continue;
-            }
-            HostToHostUserAccessApiDTO api = new HostToHostUserAccessApiDTO();
-            api.setApiMasterId(apiRow.getApiMasterId());
-            api.setApiCode(apiRow.getApiCode());
-            api.setApiName(apiRow.getApiName());
-            api.setDisplayOrder(apiRow.getDisplayOrder());
-            api.setSelected(Boolean.TRUE);
-            apis.add(api);
-          }
-        }
-        account.setApiServices(apis);
-        accounts.add(account);
-      }
-    }
-    request.setAccounts(accounts);
-    return request;
-  }
-
-  private Map<String, List<HthUserAccessRequestApi>> groupRequestApisByAccount(
-      List<HthUserAccessRequestApi> apiRows) {
-    Map<String, List<HthUserAccessRequestApi>> result =
-        new HashMap<String, List<HthUserAccessRequestApi>>();
-    if (apiRows == null) {
-      return result;
-    }
-    for (HthUserAccessRequestApi apiRow : apiRows) {
-      if (apiRow == null) {
-        continue;
-      }
-      String accountId = apiRow.getHthUserAccessRequestAccountId();
-      List<HthUserAccessRequestApi> accountApis = result.get(accountId);
-      if (accountApis == null) {
-        accountApis = new ArrayList<HthUserAccessRequestApi>();
-        result.put(accountId, accountApis);
-      }
-      accountApis.add(apiRow);
-    }
-    return result;
-  }
-
-  private int compareOrder(Long left, Long right) {
-    long leftValue = left == null ? Long.MAX_VALUE : left.longValue();
-    long rightValue = right == null ? Long.MAX_VALUE : right.longValue();
-    return leftValue == rightValue ? 0 : (leftValue < rightValue ? -1 : 1);
   }
 
   private void validateContext(String partyId, String closeId, String accessPartyId,
@@ -503,8 +389,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       mergeEffectiveGrants(access, effectiveAccounts, eligibleApis);
     }
 
-    HthUserAccessRequest pending = HthUserAccessRequestRepository.getInstance()
-        .findPendingByContext(partyId, closeId, accessPartyId, linkageType);
+    HthUserAccessPendingRecord pending = findPendingRequest(
+        partyId, closeId, accessPartyId, linkageType);
     response.setEnterpriseHthStatus(ENABLE);
     response.setEligibleApis(eligibleApis);
     response.setEligibleAccounts(access.getAccounts());
@@ -512,7 +398,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     response.setPendingRequest(Boolean.valueOf(pending != null));
     if (pending != null) {
       response.setPendingAction(pending.getActionType());
-      response.setPendingReferenceNumber(pending.getReferenceNo());
+      response.setPendingReferenceNumber(pending.getReferenceNumber());
     }
   }
 
@@ -745,11 +631,6 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     request.setAccessPartyId(accessPartyId);
     request.setLinkageType(linkageType);
 
-    if (!approvedExecution && HthUserAccessRequestRepository.getInstance()
-        .findPendingByContext(partyId, closeId, accessPartyId, linkageType) != null) {
-      throw new Exception("DIGX_CZ_HTH_UA_008");
-    }
-
     boolean active = HthUserAccessAccountRepository.getInstance()
         .hasActiveByContext(partyId, closeId, accessPartyId, linkageType);
     if (CREATE.equals(actionType) && active) {
@@ -881,126 +762,6 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
             com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID,
             originalEnterpriseRole);
       }
-    }
-  }
-
-  /**
-   * Persists one immutable maker snapshot in a dedicated NONXA transaction.
-   *
-   * <p>The approval framework may invoke the maker operation more than once for the same
-   * transaction. The transaction ID unique key and the initial lookup make the snapshot write
-   * idempotent. Header, account, and API rows are committed together; any failure rolls back the
-   * complete snapshot before the session is closed.
-   */
-  private void persistRequestSnapshot(HostToHostUserAccessDTO request,
-      String actionType, String referenceNumber, String transactionId, String userId)
-      throws Exception {
-    Session session = null;
-    boolean committed = false;
-    try {
-      session = DataAccessManager.getManager().openNewSession("NONXA");
-      session.beginTransaction();
-      LocalHthUserAccessRequestRepositoryAdapter requestAdapter =
-          LocalHthUserAccessRequestRepositoryAdapter.getInstance();
-      if (requestAdapter.findActiveByTransactionId(transactionId) != null) {
-        session.fetchCurrentTransaction().commit();
-        committed = true;
-        return;
-      }
-
-      String requestId = generateId();
-      HthUserAccessRequest snapshot = buildRequestSnapshot(request, actionType,
-          referenceNumber, transactionId, userId, requestId);
-      requestAdapter.create(snapshot);
-      session.flush();
-      if (!DELETE.equals(actionType)) {
-        persistRequestAccountSnapshots(request, requestId, userId);
-      }
-      session.flush();
-      session.fetchCurrentTransaction().commit();
-      committed = true;
-    } catch (java.lang.Exception e) {
-      throw e instanceof Exception ? (Exception) e : new Exception(e);
-    } finally {
-      if (session != null) {
-        try {
-          if (!committed) {
-            session.fetchCurrentTransaction().rollback();
-          }
-        } finally {
-          DataAccessManager.getManager().closeSession(session);
-        }
-      }
-    }
-  }
-
-  private HthUserAccessRequest buildRequestSnapshot(HostToHostUserAccessDTO request,
-      String actionType, String referenceNumber, String transactionId, String userId,
-      String requestId) {
-    HthUserAccessRequest row = new HthUserAccessRequest();
-    HthUserAccessRequestKey key = new HthUserAccessRequestKey();
-    key.setId(requestId);
-    row.setKey(key);
-    row.setTransactionId(transactionId);
-    row.setReferenceNo(referenceNumber);
-    row.setActionType(actionType);
-    row.setPartyId(request.getPartyId());
-    row.setCloseId(request.getCloseId());
-    row.setAccessPartyId(request.getAccessPartyId());
-    row.setLinkageType(request.getLinkageType());
-    row.setUserName(request.getUsername());
-    row.setFullName(request.getFullName());
-    row.setAccessPartyName(request.getAccessPartyName());
-    row.setObjectStatus(OBJECT_ACTIVE);
-    row.setCreatedBy(userId);
-    row.setLastUpdatedBy(userId);
-    return row;
-  }
-
-  private void persistRequestAccountSnapshots(HostToHostUserAccessDTO request,
-      String requestId, String userId) throws Exception {
-    Map<String, HostToHostUserAccessApiDTO> enterpriseApiByCode =
-        new HashMap<String, HostToHostUserAccessApiDTO>();
-    for (HostToHostUserAccessApiDTO api : listEnterpriseApis(request.getPartyId())) {
-      enterpriseApiByCode.put(api.getApiCode(), api);
-    }
-    long accountOrder = 0L;
-    for (HostToHostUserAccessAccountDTO account : selectedAccounts(request)) {
-      HthUserAccessRequestAccount accountRow = new HthUserAccessRequestAccount();
-      HthUserAccessRequestAccountKey accountKey = new HthUserAccessRequestAccountKey();
-      accountKey.setId(generateId());
-      accountRow.setKey(accountKey);
-      accountRow.setHthUserAccessRequestId(requestId);
-      accountRow.setAccountNumber(account.getAccountNumber());
-      accountRow.setAccountType(account.getAccountType());
-      accountRow.setCurrency(account.getCurrency());
-      accountRow.setDisplayOrder(account.getDisplayOrder() == null
-          ? Long.valueOf(accountOrder) : account.getDisplayOrder());
-      accountRow.setObjectStatus(OBJECT_ACTIVE);
-      accountRow.setCreatedBy(userId);
-      accountRow.setLastUpdatedBy(userId);
-      LocalHthUserAccessRequestAccountRepositoryAdapter.getInstance().create(accountRow);
-
-      long apiOrder = 0L;
-      for (HostToHostUserAccessApiDTO api : selectedApis(account)) {
-        HostToHostUserAccessApiDTO catalogApi = enterpriseApiByCode.get(api.getApiCode());
-        HthUserAccessRequestApi apiRow = new HthUserAccessRequestApi();
-        HthUserAccessRequestApiKey apiKey = new HthUserAccessRequestApiKey();
-        apiKey.setId(generateId());
-        apiRow.setKey(apiKey);
-        apiRow.setHthUserAccessRequestAccountId(accountKey.getId());
-        apiRow.setApiMasterId(catalogApi.getApiMasterId());
-        apiRow.setApiCode(catalogApi.getApiCode());
-        apiRow.setApiName(catalogApi.getApiName());
-        apiRow.setDisplayOrder(api.getDisplayOrder() == null
-            ? Long.valueOf(apiOrder) : api.getDisplayOrder());
-        apiRow.setObjectStatus(OBJECT_ACTIVE);
-        apiRow.setCreatedBy(userId);
-        apiRow.setLastUpdatedBy(userId);
-        LocalHthUserAccessRequestApiRepositoryAdapter.getInstance().create(apiRow);
-        apiOrder++;
-      }
-      accountOrder++;
     }
   }
 
@@ -1288,8 +1049,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       String partyId,
       String closeId,
       String enterpriseStatus) throws Exception {
-    List<HthUserAccessPendingRecord> records =
-        HthUserAccessRequestRepository.getInstance().listPendingSummary(partyId, closeId);
+    List<HthUserAccessPendingRecord> records = listPendingRequests(partyId, closeId);
     if (records == null) {
       return;
     }
@@ -1308,6 +1068,124 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         summary.setSetupStatus("PENDING_" + record.getActionType());
       }
     }
+  }
+
+  private HthUserAccessPendingRecord findPendingRequest(String partyId, String closeId,
+      String accessPartyId, String linkageType) throws Exception {
+    for (HthUserAccessPendingRecord record : listPendingRequests(partyId, closeId)) {
+      if (accessPartyId.equals(record.getAccessPartyId())
+          && linkageType.equals(record.getLinkageType())) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Reads actionable HTH approvals exclusively from the platform transaction and its snapshot.
+   *
+   * <p>The SQL first limits the result to live approval workflow rows. The domain read then
+   * deserializes the same {@link HostToHostUserAccessDTO} snapshot used by the checker screen and
+   * approved service re-entry. No status or request payload is copied to HTH feature tables.
+   */
+  private List<HthUserAccessPendingRecord> listPendingRequests(String partyId, String closeId)
+      throws Exception {
+    Session session = null;
+    boolean openedSession = false;
+    try {
+      if (DataAccessManager.getManager().isSessionOpen()) {
+        session = DataAccessManager.getManager().fetchCurrentSession();
+      } else {
+        session = DataAccessManager.getManager().openSession("DIGX");
+        openedSession = true;
+      }
+
+      Query query = session.createSQLQuery(
+          "SELECT T.TXN_ID, T.TXN_NAME FROM DIGX_AP_TRANSACTION T "
+              + "WHERE T.PARTY_ID = ? AND T.TXN_NAME IN (?, ?, ?) "
+              + "AND T.APPR_STATUS IN (?, ?) "
+              + "AND T.PROCESSING_CURRENT_STEP = ? AND T.PROCESSING_STATUS = ? "
+              + "ORDER BY T.CREATION_DATE DESC");
+      query.setParameter(1, partyId);
+      query.setParameter(2, TASK_CREATE);
+      query.setParameter(3, TASK_EDIT);
+      query.setParameter(4, TASK_DELETE);
+      query.setParameter(5, PENDING_APPROVAL);
+      query.setParameter(6, MODIFICATION_REQUESTED);
+      query.setParameter(7, APPROVAL_STEP);
+      query.setParameter(8, PROCESSING_PENDING);
+
+      Map<String, HthUserAccessPendingRecord> records =
+          new LinkedHashMap<String, HthUserAccessPendingRecord>();
+      List rows = query.list();
+      if (rows == null) {
+        return new ArrayList<HthUserAccessPendingRecord>();
+      }
+
+      for (Object rowValue : rows) {
+        Object[] row = (Object[]) rowValue;
+        String transactionId = normalize(row[0] == null ? null : String.valueOf(row[0]));
+        String taskId = normalize(row[1] == null ? null : String.valueOf(row[1]));
+        String actionType = actionForTask(taskId);
+        if (transactionId == null || actionType == null) {
+          continue;
+        }
+
+        TransactionKey key = new TransactionKey();
+        key.setId(transactionId);
+        Transaction transaction = new Transaction().read(key);
+        if (transaction == null
+            || !(transaction.getTransactionSnapshot() instanceof HostToHostUserAccessDTO)) {
+          LOGGER.log(Level.WARNING, FORMATTER.formatMessage(
+              "Ignoring HTH approval '%s' because its platform transaction snapshot is missing",
+              transactionId));
+          continue;
+        }
+
+        HostToHostUserAccessDTO snapshot =
+            (HostToHostUserAccessDTO) transaction.getTransactionSnapshot();
+        if (!partyId.equals(normalize(snapshot.getPartyId()))
+            || !closeId.equals(normalize(snapshot.getCloseId()))) {
+          continue;
+        }
+        String accessPartyId = normalize(snapshot.getAccessPartyId());
+        String linkageType = normalize(snapshot.getLinkageType());
+        if (accessPartyId == null || linkageType == null) {
+          continue;
+        }
+
+        String keyValue = contextKey(linkageType, accessPartyId);
+        if (records.containsKey(keyValue)) {
+          continue;
+        }
+        HthUserAccessPendingRecord record = new HthUserAccessPendingRecord();
+        record.setAccessPartyId(accessPartyId);
+        record.setLinkageType(linkageType);
+        record.setActionType(actionType);
+        record.setReferenceNumber(transactionId);
+        records.put(keyValue, record);
+      }
+      return new ArrayList<HthUserAccessPendingRecord>(records.values());
+    } catch (java.lang.Exception e) {
+      throw e instanceof Exception ? (Exception) e : new Exception(e);
+    } finally {
+      if (openedSession) {
+        DataAccessManager.getManager().closeSession(session);
+      }
+    }
+  }
+
+  private String actionForTask(String taskId) {
+    if (TASK_CREATE.equals(taskId)) {
+      return CREATE;
+    }
+    if (TASK_EDIT.equals(taskId)) {
+      return EDIT;
+    }
+    if (TASK_DELETE.equals(taskId)) {
+      return DELETE;
+    }
+    return null;
   }
 
   private Set<String> listAssociatedPartyIds(String partyId) throws Exception {
@@ -1369,21 +1247,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     return ApprovalStatus.APPROVED.toString().equals(String.valueOf(approvalStatus));
   }
 
-  private String generateReferenceNumber(String actionType) {
-    return "HUA" + actionType.substring(0, 3) + UUID.randomUUID().toString();
-  }
-
   private String generateId() {
     return UUID.randomUUID().toString();
-  }
-
-  private String requireTransactionId() {
-    String transactionId = normalize(readTransactionId());
-    if (transactionId == null) {
-      throw new IllegalStateException(
-          "Transaction reference number is not available from approval framework.");
-    }
-    return transactionId;
   }
 
   private String readTransactionId() {

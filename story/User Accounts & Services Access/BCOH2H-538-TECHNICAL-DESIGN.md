@@ -6,8 +6,8 @@
 | 功能 | HTH User Accounts & Services Access Summary |
 | 文档状态 | As Implemented |
 | 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
-| 依赖 Story | BCOH2H-595 提供 HTH User Access 生效表、Request Snapshot 和查询服务 |
-| 更新时间 | 2026-08-28 |
+| 依赖 Story | BCOH2H-595 提供 HTH User Access 生效表、平台 Transaction Snapshot 和查询服务 |
+| 更新时间 | 2026-08-31 |
 
 ## 1. 目标和范围
 
@@ -39,7 +39,7 @@
 5. HTH Summary 使用独立的 `hostToHostUserAccess/search` 服务，不查询 BCO Account Access API。
 6. Related 固定代表主 Party 本身；Associated 只来自当前 Party Relationship Domain 返回的关联 Party。
 7. BCO 是默认兼容分支。HTH 用户缺少 CloseID 时停止跳转，不允许错误地回退到 BCO 页面。
-8. BCOH2H-538 没有新增独立业务表；Summary 使用 BCOH2H-595 的五张表中的生效账户表和 Request Header。
+8. BCOH2H-538 没有新增独立业务表；Summary 使用 BCOH2H-595 的生效账户表和平台 Approval Transaction Snapshot。
 9. HTH Related/Associated 维护页复用 BCO `IAccountAccess.listAccounts()` 返回的企业 Eligible Account Inventory，仅保留 CSA/TD 并替换为 HTH API Tree，保证两个 Channel 的可选账户范围一致。
 
 ## 3. 组件和数据流
@@ -55,7 +55,7 @@ flowchart LR
     VALIDATION -->|HTH| SUMMARY["HTH Summary"]
     SUMMARY --> SEARCH["HostToHostUserAccess.search"]
     SEARCH --> EFFECTIVE
-    SEARCH --> REQUEST["HTH_USER_ACCESS_REQUEST + DIGX_AP_TRANSACTION"]
+    SEARCH --> REQUEST["DIGX_AP_TRANSACTION.transactionSnapshot"]
     SEARCH --> RELATION["Party Relationship Domain"]
 ```
 
@@ -73,7 +73,7 @@ flowchart LR
 | REST | `appx.hosttohost.service.HostToHostUserAccess` | 暴露 `/search`。 |
 | Application Service | `app.hosttohost.service.HostToHostUserAccess` | 校验 Profile、聚合生效数据和 Pending 状态。 |
 | Effective Repository | `LocalHthUserAccessAccountRepositoryAdapter` | 在数据库中按 Context 聚合 Active Account 数量。 |
-| Request Repository | `LocalHthUserAccessRequestRepositoryAdapter` | 联查 Approval Transaction，返回 Pending Context。 |
+| Pending Projection | `HostToHostUserAccess.listPendingRequests()` | 查询可操作的 HTH Approval Transaction，并从平台 Snapshot 还原 Pending Context。 |
 
 ## 4. 用户列表设计
 
@@ -283,7 +283,7 @@ GET /hostToHostUserAccess/search?partyId={partyId}&closeId={closeId}
 5. 初始化一个 RELATED Summary。
 6. 从 Party Relationship Domain 返回的当前关联 Party 初始化 ASSOCIATED Summary。
 7. 一次 Aggregate Query 读取所有 Active Effective Account Count。
-8. 一次 Join Query 读取所有 Pending Request Context。
+8. 一次查询读取三个 HTH Task 的可操作 Platform Transaction，并反序列化其 Snapshot 得到 Pending Context。
 9. 合并结果并执行 Response Policy。
 
 Summary Search 在企业 Disable 时仍返回数据结构，但状态保持 `DISABLED`，不开放维护入口。
@@ -299,7 +299,13 @@ Summary Search 在企业 Disable 时仍返回数据结构，但状态保持 `DIS
 | `PENDING_DELETE` | 当前 Context 有 Pending Delete。 | 删除审批前仍保留生效 Count。 |
 | `DISABLED` | Enterprise HTH 不是 `ENABLE`。 | 可以返回 Count，但禁止维护。 |
 
-Pending 状态来自 `HTH_USER_ACCESS_REQUEST` 联查 `DIGX_AP_TRANSACTION.APPR_STATUS IN ('PENDING_APPROVAL','MODIFICATION_REQUESTED')`。Request Row 本身不保存另一份 Approval Status。
+Pending 状态只来自 `DIGX_AP_TRANSACTION`，并同时满足：
+
+- `APPR_STATUS IN ('PENDING_APPROVAL','MODIFICATION_REQUESTED')`
+- `PROCESSING_CURRENT_STEP = 'approval'`
+- `PROCESSING_STATUS = 'P'`
+
+Service 再通过 Transaction Domain 反序列化 `transactionSnapshot`，用其中的 Party、CloseID、Access Party 与 Linkage Type 匹配 Summary Context。三张 Legacy HTH Request Table 不参与该判断。
 
 ## 7. Table 和查询设计
 
@@ -343,21 +349,18 @@ Repository 按 `linkageType#accessPartyId` 合并记录。若数据库中存在�
 ### 7.3 Pending Summary
 
 ```sql
-SELECT R.ACCESS_PARTY_ID,
-       R.LINKAGE_TYPE,
-       R.ACTION_TYPE,
-       R.REFERENCE_NO
-  FROM HTH_BEA.HTH_USER_ACCESS_REQUEST R
-  JOIN DIGX_AP_TRANSACTION T
-    ON T.TXN_ID = R.TRANSACTION_ID
- WHERE R.PARTY_ID = :partyId
-   AND R.CLOSE_ID = :closeId
-   AND R.OBJECT_STATUS = 'A'
+SELECT T.TXN_ID,
+       T.TXN_NAME
+  FROM DIGX_AP_TRANSACTION T
+ WHERE T.PARTY_ID = :partyId
+   AND T.TXN_NAME IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
    AND T.APPR_STATUS IN ('PENDING_APPROVAL', 'MODIFICATION_REQUESTED')
- ORDER BY R.CREATION_DATE DESC;
+   AND T.PROCESSING_CURRENT_STEP = 'approval'
+   AND T.PROCESSING_STATUS = 'P'
+ ORDER BY T.CREATION_DATE DESC;
 ```
 
-同一 Context 如果出现多条未结束记录，Repository 只采用最新一条进行 Summary 展示；写服务同时以 Pending Conflict 校验阻止正常情况下产生重复请求。
+每条结果再读取其 Platform `transactionSnapshot`，过滤 `closeId` 并按 `linkageType#accessPartyId` 去重。写服务不再维护第二套 Pending Conflict；重复创建由与 BCO 一样的 Platform Entity Identifier Duplicate Check 阻止。
 
 ## 8. 权限和错误处理
 
@@ -387,7 +390,7 @@ validation#user-list-details#summary
 | Access Policy Exception | 当前操作人没有 Search 权限。 | 由 Framework/REST Error Contract 处理。 |
 | Unexpected Repository Error | Profile、Effective 或 Pending 查询失败。 | 400；关闭 Channel Interaction 失败时为 500。 |
 
-`DIGX_CZ_HTH_UA_008` 不作为 Summary Error 返回；Pending 是正常响应状态。
+`DIGX_CZ_HTH_UA_008` 为 Legacy Error Code，不作为 Summary Error 返回；Pending 是正常响应状态，重复提交由平台 Generic Duplicate 返回 `DIGX_AP_0062`。
 
 ## 9. 非功能设计
 
@@ -458,6 +461,6 @@ validation#user-list-details#summary
 | HTH Summary | `HostToHostUserAccess.search` | API Test |
 | Related Count | `HTH_USER_ACCESS_ACCOUNT` Aggregate | Repository Test |
 | Associated Count | 当前 Party Relationship + Aggregate Result | Integration Test |
-| Pending 状态 | Request Header + Approval Transaction | Approval Test |
+| Pending 状态 | Platform Approval Transaction + `transactionSnapshot` | Approval Test |
 | To link | 完整 Navigation Context | UI Test |
 | BCO 不受影响 | 原 BCO Branch 保留 | Full Regression |

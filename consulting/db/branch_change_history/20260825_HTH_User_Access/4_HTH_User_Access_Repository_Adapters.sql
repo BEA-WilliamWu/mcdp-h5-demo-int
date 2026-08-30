@@ -3,6 +3,8 @@
 -- Execute in the OBDX configuration schema after the application classes are deployed. Base and
 -- OBDX_BU override rows must identify the same implementation class. The script commits once at
 -- the end; for backout, execute both DELETE blocks without the INSERT ALL statements.
+-- The three REQUEST adapter registrations are retained for backward deployment compatibility.
+-- The final service uses DIGX_AP_TRANSACTION.transactionSnapshot and does not call those adapters.
 
 DELETE FROM DIGX_FW_CONFIG_ALL_B
  WHERE CATEGORY_ID = 'repositoryadapterconfig'
@@ -46,8 +48,8 @@ INSERT ALL
   VALUES
     ('HTH_USER_ACCESS_REQUEST_LOCAL_REPOSITORY_ADAPTER', 'repositoryadapterconfig',
      'com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestRepositoryAdapter',
-     'N', 'Persists immutable maker request headers and reads pending approval state.',
-     'HTH access request repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
+     'N', 'Legacy adapter retained for compatibility; platform transaction snapshot is authoritative.',
+     'Legacy HTH access request repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
      NULL, 1, 'N', NULL)
   INTO DIGX_FW_CONFIG_ALL_B
     (PROP_ID, CATEGORY_ID, PROP_VALUE, FACTORY_SHIPPED_FLAG, PROP_COMMENTS,
@@ -57,8 +59,8 @@ INSERT ALL
   VALUES
     ('HTH_USER_ACCESS_REQ_ACCOUNT_LOCAL_REPOSITORY_ADAPTER', 'repositoryadapterconfig',
      'com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestAccountRepositoryAdapter',
-     'N', 'Persists account selections captured in an HTH maker request snapshot.',
-     'HTH request account snapshot repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
+     'N', 'Legacy request-account adapter retained for backward deployment compatibility.',
+     'Legacy HTH request account repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
      NULL, 1, 'N', NULL)
   INTO DIGX_FW_CONFIG_ALL_B
     (PROP_ID, CATEGORY_ID, PROP_VALUE, FACTORY_SHIPPED_FLAG, PROP_COMMENTS,
@@ -68,8 +70,8 @@ INSERT ALL
   VALUES
     ('HTH_USER_ACCESS_REQ_API_LOCAL_REPOSITORY_ADAPTER', 'repositoryadapterconfig',
      'com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthUserAccessRequestApiRepositoryAdapter',
-     'N', 'Persists API selections captured in an HTH maker request snapshot.',
-     'HTH request API snapshot repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
+     'N', 'Legacy request-API adapter retained for backward deployment compatibility.',
+     'Legacy HTH request API repository adapter', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
      NULL, 1, 'N', NULL)
 SELECT 1 FROM DUAL;
 

@@ -5,15 +5,15 @@
 | Stories | BCOH2H-538、BCOH2H-595 |
 | 文档状态 | As Implemented |
 | 业务 Schema | `HTH_BEA` |
-| 更新时间 | 2026-08-31 |
+| 更新时间 | 2026-09-01 |
 
 ## 1. 变更结论
 
 - BCOH2H-538 不新增独立业务表。它读取既有 `HTH_USER_PROFILE`，并从 595 的生效表和平台 Approval Transaction Snapshot 生成 Related/Associated Summary。
-- 历史 Schema Script 创建 5 张业务表。最终运行时只读写 2 张生效表；3 张自定义 Request Snapshot 表由平台 `transactionSnapshot` 取代，仅为已执行过旧版 SQL 的环境保留，不再写入或读取。
+- 最终 Schema 只创建 2 张生效表。3 张旧版自定义 Request Snapshot 表已由平台 `transactionSnapshot` 取代，并通过清理脚本从已部署环境删除。
 - 没有 `HTH_USER_ACCESS` Header 表。User/Company Context 直接保存在每个 Effective Account Grant 中，避免重复建模。
 - Account Type 只允许 `CSA`（Current and Savings）与 `TD`（Time Deposit）。
-- 5 张 Feature Table 均不包含 `OBJECT_VERSION_NUMBER`；平台公共配置表原有的 `OBJECT_VERSION_NUMBER` 继续保留并正常写入。
+- 2 张 Feature Table 均不包含 `OBJECT_VERSION_NUMBER`；平台公共配置表原有的 `OBJECT_VERSION_NUMBER` 继续保留并正常写入。
 - 每张 Feature Table 和每个 Field 都有 `COMMENT ON`。
 
 ## 2. 前置对象
@@ -35,11 +35,6 @@
 Effective Grants
 ├── HTH_USER_ACCESS_ACCOUNT
 └── HTH_USER_ACCESS_ACCOUNT_API
-
-Legacy Request Snapshot（兼容保留，运行时不使用）
-├── HTH_USER_ACCESS_REQUEST
-├── HTH_USER_ACCESS_REQ_ACCOUNT
-└── HTH_USER_ACCESS_REQ_API
 ```
 
 ### 3.1 `HTH_USER_ACCESS_ACCOUNT`
@@ -53,7 +48,9 @@ Legacy Request Snapshot（兼容保留，运行时不使用）
 | `CLOSE_ID` | `VARCHAR2(255)` | HTH User CloseID。 |
 | `ACCESS_PARTY_ID` | `VARCHAR2(64)` | 拥有被授权 Account 的 Party。 |
 | `LINKAGE_TYPE` | `VARCHAR2(16)` | `RELATED` 或 `ASSOCIATED`。 |
-| `ACCOUNT_NUMBER` | `VARCHAR2(64)` | Canonical Account Number；授权维护页面可按 BCO 方式显示，日志不得直接打印。 |
+| `ACCOUNT_NUMBER` | `VARCHAR2(64)` | BCO Canonical/Internal Account Number；Runtime Authorization Key，日志不得直接打印。 |
+| `ACCOUNT_NUMBER_FORMATTED` | `VARCHAR2(64)` | BCO External/Formatted Account Number；供显示及外部账号查询。 |
+| `PRODUCT_CODE` | `VARCHAR2(32)` | BCO Product Code；与 `ACCOUNT_TYPE` 分开保存。 |
 | `ACCOUNT_TYPE` | `VARCHAR2(8)` | `CSA` 或 `TD`。 |
 | `CURRENCY` | `VARCHAR2(3)` | 显示快照，不作为 Ownership 校验依据。 |
 | `OBJECT_STATUS` | `VARCHAR2(1)` | `A` Active、`I` Inactive。 |
@@ -76,6 +73,7 @@ CHECK OBJECT_STATUS IN ('A','I')
 Index：
 
 - `IX_HTH_UAA_ACCOUNT_NO`：Runtime Account Authorization Lookup。
+- `IX_HTH_UAA_ACCOUNT_FMT`：External/Formatted Account Runtime Authorization Lookup。
 - `IX_HTH_UAA_CONTEXT`：Summary、Detail、Soft Replace。
 
 ### 3.2 `HTH_USER_ACCESS_ACCOUNT_API`
@@ -93,56 +91,6 @@ Index：
 
 Unique Key 为 `(HTH_USER_ACCESS_ACCOUNT_ID, API_MASTER_ID)`；`IX_HTH_UAAA_API` 支持 API Disable 影响分析。
 
-### 3.3 Legacy `HTH_USER_ACCESS_REQUEST`
-
-旧设计的 Maker Request Header Snapshot。最终代码以平台 Approval Transaction 及其 `transactionSnapshot` 为唯一 Pending/Checker 数据源；本表只为已执行过旧版 Schema 的环境兼容保留。
-
-| Field | Type | 作用 |
-| --- | --- | --- |
-| `ID` | `VARCHAR2(36)` | UUID Primary Key。 |
-| `TRANSACTION_ID` | `VARCHAR2(64)` | OBDX Approval Transaction ID，Unique。 |
-| `REFERENCE_NO` | `VARCHAR2(64)` | UI、Approval List、Activity Log 使用的业务 Reference，Unique。 |
-| `ACTION_TYPE` | `VARCHAR2(16)` | `CREATE`、`EDIT`、`DELETE`。 |
-| `PARTY_ID` / `CLOSE_ID` |  | HTH User Context Snapshot。 |
-| `ACCESS_PARTY_ID` / `LINKAGE_TYPE` |  | Account-owning Company Context Snapshot。 |
-| `USER_NAME` / `FULL_NAME` |  | Checker Review 显示快照。 |
-| `ACCESS_PARTY_NAME` | `VARCHAR2(255)` | Company Name 显示快照。 |
-| `OBJECT_STATUS` 与审计字段 |  | Soft Status 与创建/更新审计。 |
-
-该表及 `IX_HTH_UAR_CONTEXT` 不再参与 Pending 判断、Checker Review 或 Approved Re-entry，也不保存第二份工作流状态。
-
-### 3.4 Legacy `HTH_USER_ACCESS_REQ_ACCOUNT`
-
-旧设计的 Account Snapshot Child；最终代码不再写入或读取。
-
-| Field | Type | 作用 |
-| --- | --- | --- |
-| `ID` | `VARCHAR2(36)` | UUID Primary Key。 |
-| `HTH_USER_ACCESS_REQUEST_ID` | `VARCHAR2(36)` | FK 到 Request Header。 |
-| `ACCOUNT_NUMBER` | `VARCHAR2(64)` | 提交时 Canonical Account。 |
-| `ACCOUNT_TYPE` | `VARCHAR2(8)` | `CSA` 或 `TD`。 |
-| `CURRENCY` | `VARCHAR2(3)` | 提交时显示快照。 |
-| `DISPLAY_ORDER` | `NUMBER` | Checker Review 顺序。 |
-| `OBJECT_STATUS` 与审计字段 |  | Soft Status 与创建/更新审计。 |
-
-Unique Key 为 `(HTH_USER_ACCESS_REQUEST_ID, ACCOUNT_TYPE, ACCOUNT_NUMBER)`，Account Type Check Constraint 为 `IN ('CSA','TD')`。Account Type 必须进入唯一键，因为 BCO 可把同一个 Account Number 同时归入 CSA 和 TD。
-
-### 3.5 Legacy `HTH_USER_ACCESS_REQ_API`
-
-旧设计的 API Snapshot Child；最终代码不再写入或读取。
-
-| Field | Type | 作用 |
-| --- | --- | --- |
-| `ID` | `VARCHAR2(36)` | UUID Primary Key。 |
-| `HTH_USER_ACCESS_REQ_ACC_ID` | `VARCHAR2(36)` | FK 到 Request Account。 |
-| `API_MASTER_ID` | `VARCHAR2(36)` | FK 到当前 API Master，Checker Approval 时重新验证。 |
-| `API_CODE` | `VARCHAR2(64)` | Maker 提交时 API Code 快照。 |
-| `API_NAME` | `VARCHAR2(255)` | Maker 提交时 API Name 快照。 |
-| `DISPLAY_ORDER` | `NUMBER` | Checker Review 顺序。 |
-| `OBJECT_STATUS` 与审计字段 |  | Soft Status 与创建/更新审计。 |
-
-Unique Key 为 `(HTH_USER_ACCESS_REQ_ACC_ID, API_MASTER_ID)`；`IX_HTH_UARAPI_API` 支持 API 影响分析。
-
 ## 4. Maker/Checker 数据变化
 
 ### Maker Submit
@@ -150,7 +98,7 @@ Unique Key 为 `(HTH_USER_ACCESS_REQ_ACC_ID, API_MASTER_ID)`；`IX_HTH_UARAPI_AP
 1. Framework 生成 Approval Transaction，并把经过校验的完整 DTO 序列化到平台 `transactionSnapshot`。
 2. Service 重新验证 Profile、Company Relationship、Account Ownership 和 Enterprise API Catalogue。
 3. Approval Assembler 按 `(partyId, closeId, accessPartyId, linkageType)` 生成 Entity Identifier Hash，由平台执行与 BCO 相同的 Pending Duplicate Check。
-4. 不写三张 Legacy Request Table，也没有跨 `DIGX`/`HTH_BEA` 的双事务。
+4. 不写 Feature-specific Request Table，也没有跨 `DIGX`/`HTH_BEA` 的双事务。
 5. Effective Tables 不变，因此 Pending 状态不会提前获得权限。
 
 ### Checker Approve
@@ -175,11 +123,11 @@ Runtime Allow 需要同一查询链全部 Active：
 - `HTH_MANAGEMENT` 且 `HTH_STATUS='ENABLE'`
 - `HTH_MANAGEMENT_API`
 
-查询 Key 为 `(PARTY_ID, CLOSE_ID, ACCOUNT_NUMBER, API_CODE)`。任何缺失、Inactive 或查询失败都 Deny。实际 HTH Gateway/Dispatcher 必须在解析出这四项后调用 `HostToHostRuntimeAuthorizer`；该外部 Ingress 不在当前 Repository 中。
+查询 Key 为 `(PARTY_ID, CLOSE_ID, ACCOUNT_NUMBER, API_CODE)`；Account Number 同时匹配 Internal `ACCOUNT_NUMBER` 与 External `ACCOUNT_NUMBER_FORMATTED`。任何缺失、Inactive 或查询失败都 Deny。实际 HTH Gateway/Dispatcher 必须在解析出这四项后调用 `HostToHostRuntimeAuthorizer`；该外部 Ingress 不在当前 Repository 中。
 
 ## 6. Configuration SQL
 
-除 5 张业务表外，交付 SQL 还维护：
+除 2 张业务表外，交付 SQL 还维护：
 
 - Search/Accounts/Submit/Edit/Delete Resource 与 Entitlement。
 - Maker/Checker Role Group Mapping。
@@ -188,7 +136,7 @@ Runtime Allow 需要同一查询链全部 Active：
 - `CRM_ALLOWED_TASK_CODES` 中的 HTH Task 注册，使 CRM/One-Man-Bank 按 BCO User Access 的 Admin High Risk 路径评估。
 - 从既有 BCO User Access Task 复制的 Authentication Mapping 和 Signer OTP/iToken 参数。
 - Approval Assembler Base/Override Configuration。
-- 5 个 Repository Adapter Base/Override Configuration。
+- 2 个 Repository Adapter Base/Override Configuration。
 - 12 个 Error Code，每个包含 English、Simplified Chinese、Traditional Chinese。
 
 这些平台表已有 `OBJECT_VERSION_NUMBER`，SQL 必须继续提供该 Column；不得删除公共表字段。
@@ -214,29 +162,32 @@ consulting/db/branch_change_history/20260825_HTH_User_Access/
 
 已执行旧版 Schema 的环境：
 
-1. 不重跑 Schema，不删表。
-2. 执行 `7_HTH_User_Access_Time_Deposit_Upgrade.sql`，扩展两项 Account Type Constraint，并把两项 Account Unique Key 改为 `Account Type + Account Number`。
+1. 不重跑 Schema。
+2. 执行 `7_HTH_User_Access_Time_Deposit_Upgrade.sql`，扩展 Effective Account Type Constraint，并把 Account Unique Key 改为 `Account Type + Account Number`。
 3. 执行 `8_HTH_User_Access_Approval_OTP_Upgrade.sql`，为已存在的三个 HTH Task 补 `2fa` Aspect、CRM Allowed Task 配置，并复制 BCO Create/Edit/Delete 的 Authentication Mapping。
-4. 重跑可重复执行的 Error Message SQL以更新 004 文案。
-5. 执行 Verification SQL。
+4. 执行 `9_HTH_User_Access_Remove_Legacy_Request_Tables.sql`，清理旧 Adapter 配置并按 Child-to-Parent 顺序删除三张未使用的 Request Table。
+5. 执行 `10_HTH_User_Access_Account_Metadata_Upgrade.sql`，增加 BCO Internal/External Account Number 与 Product Code Metadata。
+6. 重跑可重复执行的 Repository Adapter 和 Error Message SQL。
+7. 执行 Verification SQL。
 
 ## 8. Verification
 
 部署后至少检查：
 
-- 5 张 Table 全部位于 `HTH_BEA`。
-- 2 项 Account Type Constraint 为 Enabled，并同时包含 `CSA`、`TD`。
-- 2 项 Account Unique Key 都同时包含 `ACCOUNT_TYPE` 和 `ACCOUNT_NUMBER`。
+- 2 张 Effective Table 全部位于 `HTH_BEA`，三张 Legacy Request Table 不存在。
+- Effective Account Type Constraint 为 Enabled，并同时包含 `CSA`、`TD`。
+- Effective Account Unique Key 同时包含 `ACCOUNT_TYPE` 和 `ACCOUNT_NUMBER`。
+- `ACCOUNT_NUMBER`、`ACCOUNT_NUMBER_FORMATTED`、`PRODUCT_CODE` 三个 BCO Account Metadata Column 已部署。
 - 所有 Foreign Key 为 Enabled。
 - 8 个 Entitlement 与 8 个 Group Mapping。
 - 5 个 Service Resource、16 个 Resource Action Mapping。
 - 3 个 Task 都包含 Approval/Audit/Blackout。
-- 5 组 Repository Adapter Base/Override Configuration。
+- 2 组 Repository Adapter Base/Override Configuration。
 - 12 个 Error Code，每个 3 个 Locale。
 
 ## 9. 回滚原则
 
 - Configuration DML 使用 Feature-owned Key，可使用对应 Delete 条件回退。
-- Oracle DDL 自动提交；已有业务数据后不得直接 Drop 5 张表。
+- Oracle DDL 自动提交；不得直接 Drop 两张 Effective Grant Table。三张未使用的 Request Table 只通过幂等清理脚本删除。
 - TD Upgrade 不删除或转换旧 CSA 数据。若代码回滚，保留允许 TD 的 Constraint 不会破坏旧 CSA Row；但包含 TD 生效数据时，旧代码无法维护这些 Row，必须先制定业务数据回退方案。
 - 不得删除或修改平台公共表的 Column，包括 `OBJECT_VERSION_NUMBER`。

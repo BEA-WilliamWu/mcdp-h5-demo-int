@@ -263,6 +263,8 @@ define([
                 accounts: self.accounts.map(function (account, accountIndex) {
                     return {
                         accountNumber: account.accountNumber,
+                        accountNumberDisplay: account.accountNumberDisplay,
+                        productCode: account.productCode,
                         maskedAccountNumber: account.maskedAccountNumber,
                         displayName: account.displayName,
                         accountType: String(account.accountType || "").toUpperCase(),

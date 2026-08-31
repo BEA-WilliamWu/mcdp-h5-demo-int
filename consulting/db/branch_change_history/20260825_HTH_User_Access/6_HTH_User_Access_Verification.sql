@@ -5,13 +5,21 @@
 -- For an existing installation created by an older version of the schema script, execute
 -- 7_HTH_User_Access_Time_Deposit_Upgrade.sql before running these checks.
 
--- Expected: 5 rows.
+-- Expected: 2 rows.
 SELECT TABLE_NAME
   FROM ALL_TABLES
  WHERE OWNER = 'HTH_BEA'
    AND TABLE_NAME IN (
     'HTH_USER_ACCESS_ACCOUNT',
-    'HTH_USER_ACCESS_ACCOUNT_API',
+    'HTH_USER_ACCESS_ACCOUNT_API'
+   )
+ ORDER BY TABLE_NAME;
+
+-- Expected: no rows. Approval state belongs to DIGX_AP_TRANSACTION.transactionSnapshot.
+SELECT TABLE_NAME
+  FROM ALL_TABLES
+ WHERE OWNER = 'HTH_BEA'
+   AND TABLE_NAME IN (
     'HTH_USER_ACCESS_REQUEST',
     'HTH_USER_ACCESS_REQ_ACCOUNT',
     'HTH_USER_ACCESS_REQ_API'
@@ -24,22 +32,19 @@ SELECT OWNER, CONSTRAINT_NAME, TABLE_NAME, STATUS
  WHERE OWNER = 'HTH_BEA'
    AND TABLE_NAME IN (
     'HTH_USER_ACCESS_ACCOUNT',
-    'HTH_USER_ACCESS_ACCOUNT_API',
-    'HTH_USER_ACCESS_REQUEST',
-    'HTH_USER_ACCESS_REQ_ACCOUNT',
-    'HTH_USER_ACCESS_REQ_API'
+    'HTH_USER_ACCESS_ACCOUNT_API'
    )
    AND CONSTRAINT_TYPE = 'R'
    AND STATUS <> 'ENABLED';
 
--- Expected: 2 enabled check constraints; each SEARCH_CONDITION_VC contains both CSA and TD.
+-- Expected: 1 enabled check constraint; SEARCH_CONDITION_VC contains both CSA and TD.
 SELECT TABLE_NAME, CONSTRAINT_NAME, STATUS, SEARCH_CONDITION_VC
   FROM ALL_CONSTRAINTS
  WHERE OWNER = 'HTH_BEA'
-   AND CONSTRAINT_NAME IN ('CK_HTH_UAA_TYPE', 'CK_HTH_UARA_TYPE')
+   AND CONSTRAINT_NAME = 'CK_HTH_UAA_TYPE'
  ORDER BY TABLE_NAME;
 
--- Expected: 9 rows. ACCOUNT_TYPE must precede ACCOUNT_NUMBER in both unique business keys.
+-- Expected: 6 rows. ACCOUNT_TYPE must precede ACCOUNT_NUMBER in the effective business key.
 SELECT C.TABLE_NAME, C.CONSTRAINT_NAME, CC.POSITION, CC.COLUMN_NAME
   FROM ALL_CONSTRAINTS C
   JOIN ALL_CONS_COLUMNS CC
@@ -47,8 +52,34 @@ SELECT C.TABLE_NAME, C.CONSTRAINT_NAME, CC.POSITION, CC.COLUMN_NAME
    AND CC.CONSTRAINT_NAME = C.CONSTRAINT_NAME
    AND CC.TABLE_NAME = C.TABLE_NAME
  WHERE C.OWNER = 'HTH_BEA'
-   AND C.CONSTRAINT_NAME IN ('UK_HTH_UA_ACCOUNT', 'UK_HTH_UAR_ACCOUNT')
+   AND C.CONSTRAINT_NAME = 'UK_HTH_UA_ACCOUNT'
  ORDER BY C.TABLE_NAME, C.CONSTRAINT_NAME, CC.POSITION;
+
+-- Expected: 3 rows. Existing installations require
+-- 10_HTH_User_Access_Account_Metadata_Upgrade.sql before this check.
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'HTH_BEA'
+   AND TABLE_NAME = 'HTH_USER_ACCESS_ACCOUNT'
+   AND COLUMN_NAME IN ('ACCOUNT_NUMBER', 'ACCOUNT_NUMBER_FORMATTED', 'PRODUCT_CODE')
+ ORDER BY COLUMN_ID;
+
+-- Expected: 2 rows, one index for each accepted runtime account-number representation.
+SELECT INDEX_NAME, STATUS
+  FROM ALL_INDEXES
+ WHERE OWNER = 'HTH_BEA'
+   AND INDEX_NAME IN ('IX_HTH_UAA_ACCOUNT_NO', 'IX_HTH_UAA_ACCOUNT_FMT')
+ ORDER BY INDEX_NAME;
+
+-- Expected after existing grants have been refreshed: no rows. The masked projection makes this
+-- safe to include in deployment evidence without exposing account identifiers.
+SELECT ID, PARTY_ID, CLOSE_ID,
+       SUBSTR(ACCOUNT_NUMBER, 1, 4) || '***' || SUBSTR(ACCOUNT_NUMBER, -4)
+         AS MASKED_ACCOUNT_NUMBER
+  FROM HTH_BEA.HTH_USER_ACCESS_ACCOUNT
+ WHERE OBJECT_STATUS = 'A'
+   AND (ACCOUNT_NUMBER_FORMATTED IS NULL OR PRODUCT_CODE IS NULL)
+ ORDER BY LAST_UPDATE_DATE DESC;
 
 -- Expected: 8 entitlements and 8 UAT group mappings.
 SELECT E.ID AS ENTITLEMENT_ID, M.ENT_GROUP_ID
@@ -113,7 +144,7 @@ SELECT PROP_ID, PREFERENCE_NAME, PROP_VALUE, DETERMINANT_VALUE
        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.%'
  ORDER BY PROP_ID;
 
--- Expected: 5 base and 5 override Repository Adapter rows.
+-- Expected: 2 base and 2 override Repository Adapter rows.
 SELECT PROP_ID, PROP_VALUE
   FROM DIGX_FW_CONFIG_ALL_B
  WHERE CATEGORY_ID = 'repositoryadapterconfig'

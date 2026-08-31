@@ -12,6 +12,8 @@
       <basic attribute-type="java.lang.String" name="accessPartyId"><column name="ACCESS_PARTY_ID"/></basic>
       <basic attribute-type="java.lang.String" name="linkageType"><column name="LINKAGE_TYPE"/></basic>
       <basic attribute-type="java.lang.String" name="accountNumber"><column name="ACCOUNT_NUMBER"/></basic>
+      <basic attribute-type="java.lang.String" name="accountNumberFormatted"><column name="ACCOUNT_NUMBER_FORMATTED"/></basic>
+      <basic attribute-type="java.lang.String" name="productCode"><column name="PRODUCT_CODE"/></basic>
       <basic attribute-type="java.lang.String" name="accountType"><column name="ACCOUNT_TYPE"/></basic>
       <basic attribute-type="java.lang.String" name="currency"><column name="CURRENCY"/></basic>
       <basic attribute-type="java.lang.String" name="objectStatus"><column name="OBJECT_STATUS"/></basic>

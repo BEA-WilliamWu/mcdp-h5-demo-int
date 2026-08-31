@@ -21,15 +21,9 @@
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthCertificateRequestKey-embeddable.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserProfile.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserProfileKey-embeddable.orm.xml"/>
-	<!-- BCOH2H-595 effective grants followed by immutable maker approval snapshots. -->
+	<!-- BCOH2H-595 effective grants; approval snapshots use DIGX_AP_TRANSACTION. -->
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccount.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountKey-embeddable.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApi.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApiKey-embeddable.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequest.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestKey-embeddable.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestAccount.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestAccountKey-embeddable.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestApi.orm.xml"/>
-	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessRequestApiKey-embeddable.orm.xml"/>
 </mappings>

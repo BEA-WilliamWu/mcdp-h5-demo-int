@@ -186,7 +186,10 @@ public class LocalHthUserAccessAccountRepositoryAdapter
               + "ON HMA.HTH_MANAGEMENT_ID = HM.ID AND HMA.API_MASTER_ID = M.ID "
               + "AND HMA.OBJECT_STATUS = ? "
               + "WHERE A.PARTY_ID = ? AND A.CLOSE_ID = ? AND A.OBJECT_STATUS = ? "
-              + "AND A.ACCOUNT_NUMBER = ? AND M.API_CODE = ?");
+              + "AND (A.ACCOUNT_NUMBER = REGEXP_SUBSTR(?, '^[0-9]+') "
+              + "OR REPLACE(REPLACE(A.ACCOUNT_NUMBER_FORMATTED, '-', ''), ' ', '') = "
+              + "REPLACE(REPLACE(REGEXP_SUBSTR(?, '^[0-9]+'), '-', ''), ' ', '')) "
+              + "AND M.API_CODE = ?");
       query.setParameter(1, ACTIVE);
       query.setParameter(2, ACTIVE);
       query.setParameter(3, ACTIVE);
@@ -196,7 +199,8 @@ public class LocalHthUserAccessAccountRepositoryAdapter
       query.setParameter(7, closeId);
       query.setParameter(8, ACTIVE);
       query.setParameter(9, accountNumber);
-      query.setParameter(10, apiCode);
+      query.setParameter(10, accountNumber);
+      query.setParameter(11, apiCode);
       query.setMaxResults(1);
       List rows = query.list();
       return rows != null && !rows.isEmpty();

@@ -22,6 +22,7 @@ import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessResponseDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessSearchDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessSummaryDTO;
+import com.ofss.digx.cz.bea.common.util.CZAccountHelper;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiMaster;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiMasterKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthManagement;
@@ -52,6 +53,8 @@ import com.ofss.digx.framework.domain.transaction.TransactionKey;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.digx.infra.thread.ThreadAttribute;
 import com.ofss.fc.app.context.SessionContext;
+import com.ofss.fc.framework.domain.common.dto.Dictionary;
+import com.ofss.fc.framework.domain.common.dto.NameValuePairDTO;
 import com.ofss.fc.infra.das.orm.DataAccessManager;
 import com.ofss.fc.infra.das.orm.Query;
 import com.ofss.fc.infra.das.orm.Session;
@@ -136,6 +139,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   private static final String ACCOUNT_TYPE_CSA = "CSA";
 
   private static final String ACCOUNT_TYPE_TD = "TD";
+
+  private static final String PRODUCT_CODE_DICTIONARY_NAME =
+      "com.ofss.digx.cz.bea.app.access.dto.AccountExclusionDTO.productCode";
 
   private static final String TASK_CREATE = "UAT_N_HUA_NEW";
 
@@ -515,6 +521,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       selectedPartyAccounts.add(relatedPartyFallback);
     }
 
+    Map<String, AccountMetadata> accountMetadataByAlias =
+        listBcoAccountMetadata(accessPartyId);
     Set<String> seen = new HashSet<String>();
     long order = 0L;
     for (AccountsAccessListsDTO partyAccounts : selectedPartyAccounts) {
@@ -522,17 +530,31 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         continue;
       }
       for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
-        String accountNumber = account == null || account.getAccountNumber() == null
+        String sourceAccountNumber = account == null || account.getAccountNumber() == null
             ? null : normalize(account.getAccountNumber().getValue());
         String stableAccountType = toUserAccessAccountType(
             account == null ? null : account.getAccountType());
+        AccountMetadata accountMetadata = accountMetadataByAlias.get(
+            accountNumberLookupKey(sourceAccountNumber));
+        String productCode = firstNonBlank(
+            readAccountDictionaryValue(account, PRODUCT_CODE_DICTIONARY_NAME),
+            accountMetadata == null ? null : accountMetadata.productCode,
+            accountIdentifierProductCode(sourceAccountNumber));
+        String accountNumber = canonicalAccountNumber(firstNonBlank(
+            accountMetadata == null ? null : accountMetadata.accountNumber,
+            sourceAccountNumber, null), productCode);
+        String accountNumberDisplay = firstNonBlank(
+            accountMetadata == null ? null : accountMetadata.accountNumberFormatted,
+            externalAccountNumber(accountNumber, sourceAccountNumber), accountNumber);
         if (accountNumber == null || stableAccountType == null
             || !seen.add(accountKey(stableAccountType, accountNumber))) {
           continue;
         }
         HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
         dto.setAccountNumber(accountNumber);
-        dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
+        dto.setAccountNumberDisplay(accountNumberDisplay);
+        dto.setProductCode(productCode);
+        dto.setMaskedAccountNumber(maskAccountNumber(accountNumberDisplay));
         dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
             dto.getMaskedAccountNumber()));
         dto.setAccountType(stableAccountType);
@@ -554,6 +576,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         new LinkedHashMap<String, HostToHostUserAccessAccountDTO>();
     for (HostToHostUserAccessAccountDTO dto : access.getAccounts()) {
       dtoByAccount.put(accountKey(dto.getAccountType(), dto.getAccountNumber()), dto);
+      String displayAlias = normalizeAccountIdentifier(dto.getAccountNumberDisplay());
+      if (displayAlias != null) {
+        dtoByAccount.put(accountKey(dto.getAccountType(), displayAlias), dto);
+      }
     }
     if (effectiveAccounts == null) {
       return;
@@ -573,9 +599,17 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
           account.getAccountNumber());
       HostToHostUserAccessAccountDTO dto = dtoByAccount.get(effectiveAccountKey);
       if (dto == null) {
+        dto = dtoByAccount.get(accountKey(account.getAccountType(),
+            normalizeAccountIdentifier(account.getAccountNumberFormatted())));
+      }
+      if (dto == null) {
         dto = new HostToHostUserAccessAccountDTO();
         dto.setAccountNumber(account.getAccountNumber());
-        dto.setMaskedAccountNumber(maskAccountNumber(account.getAccountNumber()));
+        dto.setAccountNumberDisplay(firstNonBlank(account.getAccountNumberFormatted(),
+            externalAccountNumber(account.getAccountNumber(), account.getAccountNumber()),
+            account.getAccountNumber()));
+        dto.setProductCode(account.getProductCode());
+        dto.setMaskedAccountNumber(maskAccountNumber(dto.getAccountNumberDisplay()));
         dto.setDisplayName(dto.getMaskedAccountNumber());
         dto.setAccountType(account.getAccountType());
         dto.setCurrency(account.getCurrency());
@@ -689,6 +723,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     for (HostToHostUserAccessAccountDTO account : eligibleAccounts) {
       eligibleAccountByKey.put(accountKey(account.getAccountType(), account.getAccountNumber()),
           account);
+      String displayAlias = normalizeAccountIdentifier(account.getAccountNumberDisplay());
+      if (displayAlias != null) {
+        eligibleAccountByKey.put(accountKey(account.getAccountType(), displayAlias), account);
+      }
     }
 
     int selectedAccountCount = 0;
@@ -699,13 +737,12 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
           continue;
         }
         selectedAccountCount++;
-        String accountNumber = normalize(account.getAccountNumber());
+        String accountNumber = normalizeAccountIdentifier(account.getAccountNumber());
         String accountType = normalizeAccountType(account.getAccountType());
         if (!isSupportedAccountType(accountType)) {
           throw new Exception("DIGX_CZ_HTH_UA_004");
         }
-        if (accountNumber == null
-            || !selectedAccountKeys.add(accountKey(accountType, accountNumber))) {
+        if (accountNumber == null) {
           throw new Exception("DIGX_CZ_HTH_UA_005");
         }
         HostToHostUserAccessAccountDTO eligibleAccount =
@@ -714,7 +751,13 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
           throw new Exception(approvedExecution ? "DIGX_CZ_HTH_UA_012"
               : "DIGX_CZ_HTH_UA_005");
         }
-        account.setAccountNumber(accountNumber);
+        String canonicalAccountNumber = eligibleAccount.getAccountNumber();
+        if (!selectedAccountKeys.add(accountKey(accountType, canonicalAccountNumber))) {
+          throw new Exception("DIGX_CZ_HTH_UA_005");
+        }
+        account.setAccountNumber(canonicalAccountNumber);
+        account.setAccountNumberDisplay(eligibleAccount.getAccountNumberDisplay());
+        account.setProductCode(eligibleAccount.getProductCode());
         account.setAccountType(accountType);
         account.setMaskedAccountNumber(eligibleAccount.getMaskedAccountNumber());
         account.setDisplayName(eligibleAccount.getDisplayName());
@@ -824,6 +867,22 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         existingAccountByKey.put(accountKey(existingAccount.getAccountType(),
             existingAccount.getAccountNumber()), existingAccount);
       }
+      for (HthUserAccessAccount existingAccount : existingAccounts) {
+        String canonicalAlias = canonicalAccountNumber(existingAccount.getAccountNumber(),
+            existingAccount.getProductCode());
+        if (canonicalAlias != null && !existingAccountByKey.containsKey(
+            accountKey(existingAccount.getAccountType(), canonicalAlias))) {
+          existingAccountByKey.put(accountKey(existingAccount.getAccountType(), canonicalAlias),
+              existingAccount);
+        }
+        String displayAlias = normalizeAccountIdentifier(
+            existingAccount.getAccountNumberFormatted());
+        if (displayAlias != null && !existingAccountByKey.containsKey(
+            accountKey(existingAccount.getAccountType(), displayAlias))) {
+          existingAccountByKey.put(accountKey(existingAccount.getAccountType(), displayAlias),
+              existingAccount);
+        }
+      }
     }
     for (HostToHostUserAccessAccountDTO accountDTO : selectedAccounts(request)) {
       HthUserAccessAccount account = existingAccountByKey.get(
@@ -838,6 +897,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         account.setAccessPartyId(request.getAccessPartyId());
         account.setLinkageType(request.getLinkageType());
         account.setAccountNumber(accountDTO.getAccountNumber());
+        account.setAccountNumberFormatted(accountDTO.getAccountNumberDisplay());
+        account.setProductCode(accountDTO.getProductCode());
         account.setAccountType(accountDTO.getAccountType());
         account.setCurrency(accountDTO.getCurrency());
         account.setObjectStatus(OBJECT_ACTIVE);
@@ -845,6 +906,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
         account.setLastUpdatedBy(userId);
         HthUserAccessAccountRepository.getInstance().create(account);
       } else {
+        account.setAccountNumber(accountDTO.getAccountNumber());
+        account.setAccountNumberFormatted(accountDTO.getAccountNumberDisplay());
+        account.setProductCode(accountDTO.getProductCode());
         account.setAccountType(accountDTO.getAccountType());
         account.setCurrency(accountDTO.getCurrency());
         account.setObjectStatus(OBJECT_ACTIVE);
@@ -955,6 +1019,173 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
   private String accountKey(String accountType, String accountNumber) {
     return safe(normalizeAccountType(accountType)) + "#" + safe(normalize(accountNumber));
+  }
+
+  /**
+   * Loads the same identifier metadata maintained by BCO in DIGX_PI_PARTY_ACCOUNTS. Both the
+   * canonical/internal account number and the external/formatted account number are registered as
+   * aliases so an older approval snapshot can still be matched after this metadata was introduced.
+   */
+  @SuppressWarnings("unchecked")
+  private Map<String, AccountMetadata> listBcoAccountMetadata(String accessPartyId) {
+    Map<String, AccountMetadata> metadataByAlias =
+        new LinkedHashMap<String, AccountMetadata>();
+    Session session = null;
+    boolean openedSession = false;
+    try {
+      if (DataAccessManager.getManager().isSessionOpen()) {
+        session = DataAccessManager.getManager().fetchCurrentSession();
+      } else {
+        session = DataAccessManager.getManager().openSession("DIGX");
+        openedSession = true;
+      }
+      Query query = session.createSQLQuery(
+          "SELECT REGEXP_SUBSTR(A.ACCOUNT_NUMBER, '[^~]+', 1, 1), "
+              + "A.ACCOUNT_NUMBER_FORMATTED, "
+              + "NVL(A.PRODUCT_CODE, CASE WHEN "
+              + "REGEXP_SUBSTR(A.ACCOUNT_NUMBER, '[^~]+', 1, 3) IS NOT NULL THEN "
+              + "REGEXP_SUBSTR(A.ACCOUNT_NUMBER, '[^~]+', 1, 2) END) "
+              + "FROM DIGX_PI_PARTY_ACCOUNTS A "
+              + "WHERE (TRIM(A.PARTYID) = ? OR TRIM(A.PARENT_PARTY_ID) = ?) "
+              + "AND UPPER(NVL(A.STATUS, 'ACTIVE')) = 'ACTIVE' "
+              + "ORDER BY CASE WHEN TRIM(A.PARTYID) = ? THEN 0 ELSE 1 END");
+      query.setParameter(1, accessPartyId);
+      query.setParameter(2, accessPartyId);
+      query.setParameter(3, accessPartyId);
+      List rows = query.list();
+      if (rows == null) {
+        return metadataByAlias;
+      }
+      for (Object rowValue : rows) {
+        Object[] row = (Object[]) rowValue;
+        AccountMetadata metadata = new AccountMetadata();
+        metadata.productCode = normalize(row[2] == null ? null : String.valueOf(row[2]));
+        metadata.accountNumber = canonicalAccountNumber(
+            row[0] == null ? null : String.valueOf(row[0]), metadata.productCode);
+        metadata.accountNumberFormatted = normalize(
+            row[1] == null ? null : String.valueOf(row[1]));
+        if (metadata.accountNumberFormatted == null) {
+          metadata.accountNumberFormatted = externalAccountNumber(
+              metadata.accountNumber, metadata.accountNumber);
+        }
+        addAccountMetadataAlias(metadataByAlias, metadata.accountNumber, metadata);
+        addAccountMetadataAlias(metadataByAlias, metadata.accountNumberFormatted, metadata);
+        addAccountMetadataAlias(metadataByAlias,
+            row[0] == null ? null : String.valueOf(row[0]), metadata);
+      }
+    } catch (java.lang.Exception e) {
+      // AccountAccess remains authoritative. Its product-code dictionary and the standard account
+      // conversion helper below provide a safe fallback if catalogue metadata cannot be read.
+      LOGGER.log(Level.WARNING, FORMATTER.formatMessage(
+          "Unable to load BCO account identifier metadata for party '%s'", accessPartyId), e);
+    } finally {
+      if (openedSession) {
+        DataAccessManager.getManager().closeSession(session);
+      }
+    }
+    return metadataByAlias;
+  }
+
+  private void addAccountMetadataAlias(Map<String, AccountMetadata> metadataByAlias,
+      String accountNumber, AccountMetadata metadata) {
+    String alias = accountNumberLookupKey(accountNumber);
+    if (alias != null && !metadataByAlias.containsKey(alias)) {
+      metadataByAlias.put(alias, metadata);
+    }
+  }
+
+  private String readAccountDictionaryValue(AccountFilterDTO account, String genericName) {
+    if (account == null || account.getDictionaryArray() == null) {
+      return null;
+    }
+    for (Dictionary dictionary : account.getDictionaryArray()) {
+      if (dictionary == null || dictionary.getNameValuePairDTOArray() == null) {
+        continue;
+      }
+      for (NameValuePairDTO value : dictionary.getNameValuePairDTOArray()) {
+        if (value != null && (genericName.equals(value.getGenericName())
+            || "productCode".equals(value.getName()))) {
+          return normalize(value.getValue());
+        }
+      }
+    }
+    return null;
+  }
+
+  private String canonicalAccountNumber(String accountNumber, String productCode) {
+    String normalized = normalizeAccountIdentifier(accountNumber);
+    if (normalized == null || (normalized.length() == 18 && normalized.startsWith("00150"))) {
+      return normalized;
+    }
+    if ((normalized.length() == 14 || normalized.length() == 15)
+        && normalized.startsWith("015")) {
+      String converted = CZAccountHelper.ext2intAccNo(normalized,
+          CZAccountHelper.convPrdcode2EASATypeAIO(productCode));
+      return normalize(converted);
+    }
+    return normalized;
+  }
+
+  private String externalAccountNumber(String canonicalAccountNumber, String sourceAccountNumber) {
+    String source = normalizeAccountIdentifier(sourceAccountNumber);
+    if (source != null && (source.length() == 14 || source.length() == 15)
+        && source.startsWith("015")) {
+      return source;
+    }
+    String canonical = normalizeAccountIdentifier(canonicalAccountNumber);
+    if (canonical != null && canonical.length() == 18 && canonical.startsWith("00150")) {
+      return normalize(CZAccountHelper.int2extFullAccNo(canonical));
+    }
+    return source;
+  }
+
+  private String accountNumberLookupKey(String accountNumber) {
+    return normalizeAccountIdentifier(accountNumber);
+  }
+
+  private String accountIdentifierComponent(String accountNumber, int componentIndex) {
+    String normalized = normalize(accountNumber);
+    if (normalized == null) {
+      return null;
+    }
+    String[] components = normalized.split("~", -1);
+    return componentIndex >= 0 && componentIndex < components.length
+        ? normalize(components[componentIndex]) : null;
+  }
+
+  private String accountIdentifierProductCode(String accountNumber) {
+    return accountIdentifierComponent(accountNumber, 2) == null
+        ? null : accountIdentifierComponent(accountNumber, 1);
+  }
+
+  /** Removes transport-only composition and display punctuation without changing account digits. */
+  private String normalizeAccountIdentifier(String accountNumber) {
+    String normalized = normalize(accountNumber);
+    if (normalized == null) {
+      return null;
+    }
+    int separator = normalized.indexOf('~');
+    if (separator >= 0) {
+      normalized = normalized.substring(0, separator);
+    }
+    normalized = normalized.replace("-", "").replace(" ", "").trim();
+    String upper = normalized.toUpperCase();
+    String[] knownTypeSuffixes = {"CSA", "TRD", "TD"};
+    for (String suffix : knownTypeSuffixes) {
+      if (upper.endsWith(suffix)) {
+        String candidate = normalized.substring(0, normalized.length() - suffix.length());
+        if (candidate.matches("[0-9]{14,15}|[0-9]{18}")) {
+          return candidate;
+        }
+      }
+    }
+    return normalized;
+  }
+
+  private static final class AccountMetadata {
+    private String accountNumber;
+    private String accountNumberFormatted;
+    private String productCode;
   }
 
   private void validateRequest(String partyId, String closeId) throws Exception {

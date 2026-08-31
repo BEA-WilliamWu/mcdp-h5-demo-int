@@ -19,6 +19,8 @@ public class HthUserAccessAccount extends AbstractDomainObject implements IPersi
   private String accessPartyId;
   private String linkageType;
   private String accountNumber;
+  private String accountNumberFormatted;
+  private String productCode;
   private String accountType;
   private String currency;
   private String objectStatus;
@@ -69,6 +71,22 @@ public class HthUserAccessAccount extends AbstractDomainObject implements IPersi
 
   public void setAccountNumber(String accountNumber) {
     this.accountNumber = accountNumber;
+  }
+
+  public String getAccountNumberFormatted() {
+    return accountNumberFormatted;
+  }
+
+  public void setAccountNumberFormatted(String accountNumberFormatted) {
+    this.accountNumberFormatted = accountNumberFormatted;
+  }
+
+  public String getProductCode() {
+    return productCode;
+  }
+
+  public void setProductCode(String productCode) {
+    this.productCode = productCode;
   }
 
   public String getAccountType() {

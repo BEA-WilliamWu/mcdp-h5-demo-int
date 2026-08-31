@@ -7,15 +7,18 @@ import java.util.List;
 /**
  * Account-level selection used by HTH user access maintenance and approval snapshots.
  *
- * <p>The account number is the canonical value used for server-side ownership validation;
- * {@code maskedAccountNumber} and {@code displayName} are presentation-only values. Both Current
- * and Savings (CSA) and Time Deposit (TD) accounts are supported. The nested API list records the
- * services selected for this account.
+ * <p>{@code accountNumber} is the canonical/internal value used for server-side ownership
+ * validation, while {@code accountNumberDisplay} preserves the external/formatted value from the
+ * BCO account catalogue. {@code productCode} is retained as separate account metadata and must not
+ * be overloaded into {@code accountType}. Both Current and Savings (CSA) and Time Deposit (TD)
+ * accounts are supported. The nested API list records the services selected for this account.
  */
 public class HostToHostUserAccessAccountDTO extends DomainObjectDTO {
   private static final long serialVersionUID = 1032528897282091210L;
 
   private String accountNumber;
+  private String accountNumberDisplay;
+  private String productCode;
   private String maskedAccountNumber;
   private String displayName;
   private String accountType;
@@ -31,6 +34,22 @@ public class HostToHostUserAccessAccountDTO extends DomainObjectDTO {
 
   public void setAccountNumber(String accountNumber) {
     this.accountNumber = accountNumber;
+  }
+
+  public String getAccountNumberDisplay() {
+    return accountNumberDisplay;
+  }
+
+  public void setAccountNumberDisplay(String accountNumberDisplay) {
+    this.accountNumberDisplay = accountNumberDisplay;
+  }
+
+  public String getProductCode() {
+    return productCode;
+  }
+
+  public void setProductCode(String productCode) {
+    this.productCode = productCode;
   }
 
   public String getMaskedAccountNumber() {

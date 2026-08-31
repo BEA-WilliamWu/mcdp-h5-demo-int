@@ -456,74 +456,65 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       SessionContext sessionContext, String partyId, String accessPartyId,
       String linkageType,
       List<HostToHostUserAccessApiDTO> eligibleApis) throws Exception {
-    // Reuse BCO's AccountAccess request shape. RELATED reads the maintained company directly;
-    // ASSOCIATED keeps that company as the primary party and supplies the selected company as a
-    // linked party so the adapter can establish its remote-company identity before account lookup.
+    // Reuse BCO's AccountAccess query as the single source of eligible accounts. HTH requests the
+    // two product groups supported by these stories in one platform call, then maps the returned
+    // account type on each row to the HTH stable values. This keeps the RELATED account population
+    // identical to BCO without exposing BCO-only products such as loans or investments.
     IAccountAccess accountAccess = new AccountAccess();
     List<HostToHostUserAccessAccountDTO> result =
         new ArrayList<HostToHostUserAccessAccountDTO>();
-    // Query the two BCO product groups separately. Some AccountAccess adapters return a combined
-    // account list when multiple types are requested and stamp every row with the current request
-    // type. That makes the same Current/Savings rows appear under the Time Deposit tab. A
-    // single-type request keeps the source lists separate; the stable CSA/TD value is assigned
-    // from that request only after the response row confirms the same account type.
-    AccountType[] requestedTypes = new AccountType[] {
-        AccountType.DEMAND_DEPOSIT, AccountType.TERM_DEPOSIT
-    };
+    AccountAccessListAccountsDTO request = new AccountAccessListAccountsDTO();
+    Party party = new Party();
+    party.setValue(partyId);
+    request.setParty(party);
+    List<AccountType> supportedAccountTypes = new ArrayList<AccountType>();
+    supportedAccountTypes.add(AccountType.DEMAND_DEPOSIT);
+    supportedAccountTypes.add(AccountType.TERM_DEPOSIT);
+    request.setAccountTypes(supportedAccountTypes);
+
+    List<Party> linkedParties = new ArrayList<Party>();
+    if (ASSOCIATED.equals(linkageType)) {
+      Party linkedParty = new Party();
+      linkedParty.setValue(accessPartyId);
+      linkedParties.add(linkedParty);
+    }
+    // The platform adapter iterates this collection without a null guard.
+    request.setLinkedPartyList(linkedParties);
+
+    AccountAccessListAccountsResponseDTO accountAccessResponse =
+        accountAccess.listAccounts(sessionContext, request);
+    if (accountAccessResponse == null || accountAccessResponse.getAccounts() == null) {
+      return result;
+    }
+
     Set<String> seen = new HashSet<String>();
     long order = 0L;
-    for (AccountType requestedType : requestedTypes) {
-      String stableAccountType = toUserAccessAccountType(requestedType);
-      AccountAccessListAccountsDTO request = new AccountAccessListAccountsDTO();
-      Party party = new Party();
-      party.setValue(partyId);
-      request.setParty(party);
-      request.setAccountTypes(Collections.singletonList(requestedType));
-      List<Party> linkedParties = new ArrayList<Party>();
-      if (ASSOCIATED.equals(linkageType)) {
-        Party linkedParty = new Party();
-        linkedParty.setValue(accessPartyId);
-        linkedParties.add(linkedParty);
-      }
-      // The adapter iterates this collection without a null guard.
-      request.setLinkedPartyList(linkedParties);
-
-      AccountAccessListAccountsResponseDTO accountAccessResponse =
-          accountAccess.listAccounts(sessionContext, request);
-      if (accountAccessResponse == null || accountAccessResponse.getAccounts() == null) {
+    for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
+      if (partyAccounts == null || partyAccounts.getParty() == null
+          || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
+          || partyAccounts.getAccountsList() == null) {
         continue;
       }
-
-      for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
-        if (partyAccounts == null || partyAccounts.getParty() == null
-            || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
-            || partyAccounts.getAccountsList() == null) {
+      for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
+        String accountNumber = account == null || account.getAccountNumber() == null
+            ? null : normalize(account.getAccountNumber().getValue());
+        String stableAccountType = toUserAccessAccountType(
+            account == null ? null : account.getAccountType());
+        if (accountNumber == null || stableAccountType == null
+            || !seen.add(accountKey(stableAccountType, accountNumber))) {
           continue;
         }
-        for (AccountFilterDTO account : partyAccounts.getAccountsList()) {
-          String accountNumber = account == null || account.getAccountNumber() == null
-              ? null : normalize(account.getAccountNumber().getValue());
-          String responseAccountType = toUserAccessAccountType(
-              account == null ? null : account.getAccountType());
-          if (!stableAccountType.equals(responseAccountType)) {
-            continue;
-          }
-          if (accountNumber == null
-              || !seen.add(accountKey(stableAccountType, accountNumber))) {
-            continue;
-          }
-          HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
-          dto.setAccountNumber(accountNumber);
-          dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
-          dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
-              dto.getMaskedAccountNumber()));
-          dto.setAccountType(stableAccountType);
-          dto.setCurrency(account.getCurrencyCode());
-          dto.setSelected(Boolean.FALSE);
-          dto.setDisplayOrder(Long.valueOf(order++));
-          dto.setApiServices(copyApis(eligibleApis));
-          result.add(dto);
-        }
+        HostToHostUserAccessAccountDTO dto = new HostToHostUserAccessAccountDTO();
+        dto.setAccountNumber(accountNumber);
+        dto.setMaskedAccountNumber(maskAccountNumber(accountNumber));
+        dto.setDisplayName(firstNonBlank(account.getDisplayName(), null,
+            dto.getMaskedAccountNumber()));
+        dto.setAccountType(stableAccountType);
+        dto.setCurrency(account.getCurrencyCode());
+        dto.setSelected(Boolean.FALSE);
+        dto.setDisplayOrder(Long.valueOf(order++));
+        dto.setApiServices(copyApis(eligibleApis));
+        result.add(dto);
       }
     }
     return result;

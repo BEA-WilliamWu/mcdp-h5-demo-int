@@ -15,6 +15,8 @@ define([
      */
     const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
         APPROVAL_ACCEPTED_STATUS = 202,
+        APPROVAL_REFERENCE_RETRY_COUNT = 3,
+        APPROVAL_REFERENCE_RETRY_DELAY = 200,
         baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
         responseBody = function (error) {
@@ -26,6 +28,20 @@ define([
                 message = response.message || status.message;
 
             return !!(message && message.code === APPROVAL_REQUIRED_CODE);
+        },
+        publishReferenceNumber = function (response, referenceNumber) {
+            const normalizedReference = referenceNumber === undefined || referenceNumber === null
+                ? "" : String(referenceNumber).trim();
+
+            if (!normalizedReference) {
+                return response;
+            }
+
+            response.referenceNumber = normalizedReference;
+            response.status = response.status || {};
+            response.status.referenceNumber = normalizedReference;
+
+            return response;
         },
         normalizeApprovalRequiredResponse = function (error) {
             const response = Object.assign({}, responseBody(error) || {}),
@@ -49,15 +65,77 @@ define([
             // selects its quick-Approve action.  Older HTH responses expose that reference on
             // the nested access DTO or as externalReferenceNumber, while BCO exposes the same
             // value as status.referenceNumber.  Publish the canonical BCO shape to the UI.
-            if (referenceNumber) {
-                response.referenceNumber = referenceNumber;
-                status.referenceNumber = referenceNumber;
-            }
-
             response.status = status;
+            publishReferenceNumber(response, referenceNumber);
             baseModel.injectProps(response, "getResponseStatus", APPROVAL_ACCEPTED_STATUS);
 
             return response;
+        },
+        hydrateApprovalReference = function (response, context) {
+            const deferred = $.Deferred(),
+                currentReference = response.referenceNumber
+                    || response.status && response.status.referenceNumber;
+
+            if (currentReference || !context || !context.partyId || !context.closeId
+                    || !context.accessPartyId || !context.linkageType) {
+                deferred.resolve(response);
+
+                return deferred;
+            }
+
+            let attempts = 0;
+
+            const readPendingReference = function () {
+                attempts += 1;
+
+                const transportPromise = baseService.fetch({
+                    url: baseModel.QueryParams.add("hostToHostUserAccess/accounts", {
+                        partyId: context.partyId,
+                        closeId: context.closeId,
+                        accessPartyId: context.accessPartyId,
+                        linkageType: context.linkageType
+                    }),
+                    version: "cz/v1",
+                    success: function (data) {
+                        const referenceNumber = data && (data.pendingReferenceNumber
+                            || data.referenceNumber
+                            || data.status && data.status.referenceNumber);
+
+                        if (referenceNumber) {
+                            publishReferenceNumber(response, referenceNumber);
+                            deferred.resolve(response);
+
+                            return;
+                        }
+
+                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
+                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
+                        } else {
+                            deferred.resolve(response);
+                        }
+                    },
+                    error: function () {
+                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
+                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
+                        } else {
+                            deferred.resolve(response);
+                        }
+                    }
+                });
+
+                // BaseService invokes the callbacks above and also returns a native Promise. Consume
+                // its rejection because an unavailable follow-up lookup must not replace the already
+                // accepted maker response with an unhandled Promise.
+                if (transportPromise && typeof transportPromise.catch === "function") {
+                    transportPromise.catch(function () {
+                        return null;
+                    });
+                }
+            };
+
+            readPendingReference();
+
+            return deferred;
         },
         isFailureResponse = function (data) {
             const result = data && data.status && data.status.result
@@ -67,6 +145,7 @@ define([
         },
         request = function (options) {
             const deferred = $.Deferred(),
+                approvalContext = options.approvalContext,
                 requestOptions = Object.assign({}, options, {
                     version: "cz/v1",
                     success: function (data, status, jqXhr) {
@@ -82,19 +161,33 @@ define([
                         if (isApprovalRequiredResponse(error)) {
                             const normalizedResponse = normalizeApprovalRequiredResponse(error);
 
-                            // Keep the jQuery Deferred callback contract intact: the third argument
-                            // is the transport jqXHR, while the first argument is the normalized
-                            // approval response consumed by the confirmation screen.
-                            deferred.resolve(normalizedResponse, "success", error);
+                            // The exception mapper used by this OBDX release drops the platform
+                            // reference number from its HTTP 400 body. Read the just-created pending
+                            // transaction for the exact HTH user/context before showing the shared
+                            // confirmation screen, whose quick-Approve action requires that ID.
+                            hydrateApprovalReference(normalizedResponse, approvalContext)
+                                .done(function (hydratedResponse) {
+                                    // Keep the jQuery Deferred callback contract intact: the third
+                                    // argument is the transport jqXHR, while the first is the
+                                    // normalized approval response consumed by confirm-screen.
+                                    deferred.resolve(hydratedResponse, "success", error);
+                                });
 
                             return;
                         }
 
                         deferred.reject(error);
                     }
-                }),
-                transportPromise = requestOptions.data
-                    ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
+                });
+
+            let transportPromise;
+
+            // approvalContext is local metadata for resolving the platform transaction reference;
+            // it is not part of BaseService's transport contract.
+            delete requestOptions.approvalContext;
+
+            transportPromise = requestOptions.data
+                ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
 
             // BaseService exposes a native Promise and also invokes the callback handlers above.
             // This wrapper deliberately returns its jQuery Deferred, so consume the native rejection
@@ -288,7 +381,13 @@ define([
             return request({
                 url: "hostToHostUserAccess/" + (action === "EDIT"
                     ? "edit" : action === "DELETE" ? "delete" : "submit"),
-                data: JSON.stringify(payload)
+                data: JSON.stringify(payload),
+                approvalContext: {
+                    partyId: payload.partyId,
+                    closeId: payload.closeId,
+                    accessPartyId: payload.accessPartyId,
+                    linkageType: payload.linkageType
+                }
             });
         }
     };

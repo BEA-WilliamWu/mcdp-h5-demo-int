@@ -111,7 +111,14 @@ define([
             self.isPrintUser(true);
         }
 
-        self.transactionID = self.params.transactionResponse ? self.params.transactionResponse.referenceNumber || self.params.transactionResponse.status.referenceNumber : self.params.jqXHR.responseJSON.referenceNumber || self.params.jqXHR.responseJSON.status.referenceNumber;
+        self.transactionID = self.params.transactionResponse
+            ? self.params.transactionResponse.referenceNumber
+                || self.params.transactionResponse.pendingReferenceNumber
+                || self.params.transactionResponse.status
+                    && self.params.transactionResponse.status.referenceNumber
+            : self.params.jqXHR.responseJSON.referenceNumber
+                || self.params.jqXHR.responseJSON.status
+                    && self.params.jqXHR.responseJSON.status.referenceNumber;
 
         self.testFPS = self.params.confirmScreenExtensions && self.params.confirmScreenExtensions.isOMB ? self.params.network : self.params.jqXHR && self.params.jqXHR.responseJSON && self.params.jqXHR.responseJSON.transactionAction && self.params.jqXHR.responseJSON.transactionAction.transactionDTO && self.params.jqXHR.responseJSON.transactionAction.transactionDTO.transactionSnapshot && self.params.jqXHR.responseJSON.transactionAction.transactionDTO.transactionSnapshot.paymentDetails && self.params.jqXHR.responseJSON.transactionAction.transactionDTO.transactionSnapshot.paymentDetails.network;
 
@@ -692,6 +699,10 @@ define([
         };
 
         self.openApprovalPage = function () {
+            if (!self.transactionID) {
+                return;
+            }
+
             rootParams.dashboard.loadComponent("transaction-detail", {
                 transactionId: self.transactionID,
                 type: self.transactionName,

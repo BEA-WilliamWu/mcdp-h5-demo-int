@@ -1,0 +1,215 @@
+<!-- ko if: !$component.params.confirmationType || ($component.params.confirmationType && $component.params.confirmationType.version !== "v2") -->
+<div id="confirmScreenPrint" class="form-main-container confirm-screen">
+
+  <!--Common Section for all modules-->
+<div class="oj-sm-padding-2x-horizontal"
+  data-bind="template: { name: 'confirm-screen/confirm-screen-banner', data: $component.headerMessages}"></div>
+
+ <!-- ko if: $component.marketBannerParams() -->
+<marketing-banner widget-id="[[marketBannerParams().widgetId]]" base-model="[[marketBannerParams().baseModel]]"
+  dashboard="[[marketBannerParams().dashboard]]" formatter="[[marketBannerParams().formatter]]"
+  menu-option-select="[[marketBannerParams().menuOptionSelect]]" filter-menu="[[marketBannerParams().filterMenu]]"
+  dashboard-name="[[marketBannerParams().dashboardName]]">
+</marketing-banner>
+<!-- /ko -->
+  <!-- ko ifnot: $component.confirmScreenExtensions && $component.confirmScreenExtensions.is3ColumnsMode -->
+  <div class="oj-flex oj-flex-items confirm-screen__messageContainer confirm-screen-messageContainer">
+    <div class="oj-flex-item confirm-screen-messageContainer__message">
+
+      <!-- ko if:$component.transactionID -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.referenceNo]]" value="[[$component.transactionID]]"
+        data-class="[['oj-sm-12']]" data-id="[['referenceNo']]">
+      </obdx-row> <!-- /ko -->
+
+      <!-- ko ifnot:$component.isFPSMerchant-->
+      <!-- ko if:$component.hostReferenceNumber && !$component.FPSreferenceNo()-->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.hostReferenceID]]" value="[[$component.hostReferenceNumber]]"
+        data-class="[['oj-sm-12']]" data-id="[['hostReferenceNo']]">
+      </obdx-row> <!-- /ko -->
+      <!-- /ko -->
+
+      <!-- ko if:$component.hostReferenceNumber && $component.FPSreferenceNo()-->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.fpsReferenceID]]" value="[[$component.hostReferenceNumber]]"
+        data-class="[['oj-sm-12']]" data-id="[['hostReferenceNo']]">
+      </obdx-row> <!-- /ko -->
+
+      <!-- ko if:$component.srNo -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.serviceRequestNumber]]" value="[[$component.srNo]]"
+        data-class="[['oj-sm-12']]" data-id="[['srNo']]">
+      </obdx-row> <!-- /ko -->
+
+      <!-- ko if: $component.isStatusWordRequired -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.statusWord]]"
+        value="[[$component.getStatusMessage($component.params.transactionResponse || $component.params.jqXHR)]]"
+        data-class="[['oj-sm-12']]" data-id="[['status']]">
+      </obdx-row> <!-- /ko -->
+
+      <!-- ko if:$component.reason() -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.reason]]" value="[[$component.reason()]]"
+        data-class="[['oj-sm-12']]" data-id="[['reason']]">
+      </obdx-row> <!-- /ko -->
+      <!-- ko if:$component.exchangeRate -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.exchangeRate]]" value="[[$component.exchangeRate]]"
+        data-class="[['oj-sm-12']]" data-id="[['exchangeRate']]">
+      </obdx-row> <!-- /ko -->
+
+        <!-- ko if:$component.isUserManagementUsersUpdate() && $component.itokenRemarks() -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.remark1]]" value="[[$component.itokenRemarks]]"
+        data-class="[['oj-sm-12']]" data-id="[['remarksid']]">
+      </obdx-row> <!-- /ko -->
+
+
+      <!-- ko if:$component.remarks && !($component.isUserManagementUsersUpdate() && $component.itokenRemarks()) -->
+      <!-- ko if:$component.params.jqXHR.responseJSON.transactionAction.action === 'APPROVE' -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.remark1]]" value="[[$component.remarks]]"
+        data-class="[['oj-sm-12']]" data-id="[['remarksid']]">
+      </obdx-row> <!-- /ko -->
+      <!-- ko if:$component.params.jqXHR.responseJSON.transactionAction.action === 'REJECT' -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.remark2]]" value="[[$component.remarks]]"
+        data-class="[['oj-sm-12']]" data-id="[['remarksid']]">
+      </obdx-row> <!-- /ko -->
+      <!-- ko if:$component.params.jqXHR.responseJSON.transactionAction && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.lastUpdatedBy && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.lastUpdatedBy === 'SYSTEMWITHDRAW' -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.remark4]]" value="[[$component.remarks]]"
+        data-class="[['oj-sm-12']]" data-id="[['remarksid']]">
+      </obdx-row> <!-- /ko -->
+      <!-- ko if:$component.params.jqXHR.responseJSON.transactionAction.action === 'REQUEST_MODIFICATION' -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+        label="[[$component.confirmScreenResources.confirm.remark3]]" value="[[$component.remarks]]"
+        data-class="[['oj-sm-12']]" data-id="[['remarksid']]">
+      </obdx-row> <!-- /ko -->
+      <!-- /ko -->
+    </div>
+  </div>
+  <!-- /ko -->
+
+  <!-- ko ifnot: $component.confirmScreenExtensions -->
+  <div data-bind="template: { name: 'buttonTemplate'}"></div> <!-- /ko -->
+
+  <!-- ko if: $component.confirmScreenExtensions -->
+
+      <!-- ko if: $component.confirmScreenExtensions.resourceBundle-->
+      <div
+        data-bind="template:{name: $component.confirmScreenExtensions.template , data : $component.confirmScreenExtensions}">
+      </div>
+      <div data-bind="template: { name: 'buttonTemplate'}"></div> <!-- /ko -->
+
+      <!-- ko ifnot: $component.confirmScreenExtensions.resourceBundle -->
+      <div
+        data-bind="template:{name: $component.confirmScreenExtensions.template , data : $component.confirmScreenExtensions.data}">
+      </div><!-- /ko -->
+      <!-- /ko -->
+
+  <!-- ko if: $component.feedbackTemplateDTO -->
+  <oj-button class="action-button-secondary" on-click="[[$component.showFeedbackOverlay]]">
+    <span data-bind="text:$component.confirmScreenResources.confirm.feedback"></span>
+  </oj-button> <!-- /ko -->
+</div>
+<script type="text/html" id="buttonTemplate">
+ <!-- ko if: !$component.buttonTemplate  &&  $component.transactionName !=="CDC Accounts and Services" -->
+ <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant User Maintenance - Create" -->
+    <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant User Maintenance - Edit" -->
+     <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant User Maintenance - Delete" -->
+      <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant User Maintenance - Edit PIN Mapping" -->
+      <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant Maintenance - Create" -->
+      <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant Maintenance - Edit" -->
+      <!-- ko if: !$component.buttonTemplate  && $component.transactionName !=="Merchant Maintenance - Delete" -->
+<div class="oj-flex oj-flex-items-pad margin-bottom-32 button-container">
+  <oj-button class="action-button-primary" on-click="[[$component.handleOk]]">
+    <span data-bind="text:$component.confirmScreenResources.generic.common.ok"></span>
+  </oj-button>
+</div>
+<!-- /ko -->
+ <!-- /ko -->
+   <!-- /ko -->
+    <!-- /ko -->
+     <!-- /ko -->
+      <!-- /ko -->
+       <!-- /ko -->
+<!-- /ko -->
+<!-- ko if: !$component.buttonTemplate  && $component.transactionName ==="CDC Accounts and Services" -->
+<div class="oj-flex-item">
+  <div class="oj-flex oj-flex-items-pad">
+    <div
+      class="oj-flex-item"
+      data-bind="text:$component.confirmScreenResources.confirm.actions.nextAction"
+    ></div>
+  </div>
+  <div class="oj-flex oj-flex-items-pad">
+    <ul class="confirm-screen__list">
+      <li>
+        <a
+          href="#"
+          data-bind="click:$dashboard.switchModule.bind($data, null)"
+        >
+          <img
+            data-bind="attr:{'alt':$baseModel.format($component.confirmScreenResources.confirm.actions.clickHere,{details:$component.confirmScreenResources.confirm.actions.goToDashboard}),'title':$component.confirmScreenResources.confirm.actions.goToDashboard},loadImage:'dashboard/quick-access/dashboard.svg'"
+          />
+          <div
+            data-bind="text:$component.confirmScreenResources.confirm.actions.goToDashboard"
+          ></div>
+        </a>
+      </li></ul></div></div>
+<!-- /ko -->
+
+
+
+<!-- ko if: $component.buttonTemplate -->
+<div class="oj-flex-item">
+  <div data-bind="template:{name: $component.buttonTemplate}"></div>
+</div> <!-- /ko -->
+</script>
+
+<!-- ko if: $component.renderFeedbackModule -->
+<div
+  data-bind="component:{name: 'feedback-capture', params:{taskCode: $component.confirmScreenExtensions.taskCode, feedback: $component.feedbackTemplateDTO()}}">
+</div> <!-- /ko -->
+<!-- /ko -->
+
+<!-- ko if: $component.params.confirmationType && $component.params.confirmationType.version === "v2" -->
+<div data-bind="component:{name: $component.params.confirmationType.name, params:{ rootModel: $data }}"></div>
+<!-- /ko -->
+
+<!-- ko if: showModal()  -->
+<modal-window dashboard="[[$dashboard]]" base-model="[[$baseModel]]" dialog-id="[['confirm-modal']]"
+  header="[[confirmationModalData.header]]" close-handler="[[confirmationModalData.closeHandler]]"
+  modal-window-ready="[[confirmationModalData.openHandler]]">
+  <div data-bind="component: {name:confirmationModalData.componentName , params:{rootModel:$data}}"></div>
+</modal-window>
+<!-- /ko -->
+<!-- ko ifnot: $component.params.jqXHR -->
+  <!-- ko if: $component.transactionID && (($component.params.transactionResponse.status.message.code && $component.params.transactionResponse.status.message.code==="DIGX_APPROVAL_REQUIRED") || $component.params.transactionResponse.getResponseStatus() === 202) && $component.transactionName !=="User Accounts & Services Access"  -->
+  <!-- ko if: $dashboard.userData.userProfile.roles.includes("Checker") || $dashboard.userData.userProfile.roles.includes("SYSADM_TL") || $dashboard.userData.userProfile.roles.includes("Migrated_SYSADM_TL") || $dashboard.userData.userProfile.roles.includes("Approver_TL") || $dashboard.userData.userProfile.roles.includes("AP_TL")-->
+  <!-- ko if: !$component.buttonTemplate  &&  $component.transactionName !=="CDC Accounts and Services" -->
+  <!-- <div id="tmp" class="margin-bottom-32">
+  </div> -->
+  <!-- /ko -->
+  <div class="oj-sm-margin-2x-horizontal margin-bottom-32 approval-button-container">
+  <div class="oj-sm-12 button-container">
+  <oj-button class="action-button-secondary" on-click="[[$component.openApprovalPage]]" bea-id="btn_ConfirmScreen_approve">
+    <span data-bind="text:$component.confirmScreenResources.confirm.completed"></span>
+  </oj-button>
+  </div>
+  </div>
+  <!-- /ko -->
+  <!-- /ko -->
+<!-- /ko -->
+<!-- ko if: isPrintUser()  -->
+<div class="oj-sm-margin-2x-horizontal approval-button-container">
+  <div class="oj-sm-12 button-container">
+  <oj-button class="action-button-secondary" on-click="[[$component.printPage]]" bea-id="btn_ConfirmScreen_approve">
+    <span data-bind="text:$component.confirmScreenResources.confirm.saveAsHtml"></span>
+  </oj-button>
+  </div>
+  </div>
+  <!-- /ko -->

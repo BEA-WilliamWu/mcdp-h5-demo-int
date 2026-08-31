@@ -180,13 +180,11 @@ define([
                     }
                 });
 
-            let transportPromise;
-
             // approvalContext is local metadata for resolving the platform transaction reference;
             // it is not part of BaseService's transport contract.
             delete requestOptions.approvalContext;
 
-            transportPromise = requestOptions.data
+            const transportPromise = requestOptions.data
                 ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
 
             // BaseService exposes a native Promise and also invokes the callback handlers above.

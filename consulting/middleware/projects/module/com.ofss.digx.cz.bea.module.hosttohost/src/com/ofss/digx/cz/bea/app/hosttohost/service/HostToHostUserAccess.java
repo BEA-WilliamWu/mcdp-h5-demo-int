@@ -38,6 +38,7 @@ import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessAcc
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserAccessAccountRepository;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserProfileRepository;
 import com.ofss.digx.datatype.complex.Party;
+import com.ofss.digx.enumeration.access.AccessLevel;
 import com.ofss.digx.enumeration.ModuleType;
 import com.ofss.digx.enumeration.accounts.AccountType;
 import com.ofss.digx.enumeration.approval.ApprovalStatus;
@@ -456,10 +457,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       SessionContext sessionContext, String partyId, String accessPartyId,
       String linkageType,
       List<HostToHostUserAccessApiDTO> eligibleApis) throws Exception {
-    // Reuse BCO's AccountAccess query as the single source of eligible accounts. HTH requests the
-    // two product groups supported by these stories in one platform call, then maps the returned
-    // account type on each row to the HTH stable values. This keeps the RELATED account population
-    // identical to BCO without exposing BCO-only products such as loans or investments.
+    // Reuse BCO's AccountAccess query as the single source of eligible accounts. The complete
+    // request type set intentionally matches channel/summary/model.js. Some deployed adapters use
+    // that complete set while assembling party/linkage rows, so asking for CSA and TRD alone can
+    // produce a different catalogue. HTH filters the response back to the two supported products.
     IAccountAccess accountAccess = new AccountAccess();
     List<HostToHostUserAccessAccountDTO> result =
         new ArrayList<HostToHostUserAccessAccountDTO>();
@@ -470,6 +471,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     List<AccountType> supportedAccountTypes = new ArrayList<AccountType>();
     supportedAccountTypes.add(AccountType.DEMAND_DEPOSIT);
     supportedAccountTypes.add(AccountType.TERM_DEPOSIT);
+    supportedAccountTypes.add(AccountType.LOAN);
+    supportedAccountTypes.add(AccountType.VAM_ENABLED_REAL);
+    supportedAccountTypes.add(AccountType.VIRTUAL);
+    supportedAccountTypes.add(AccountType.LM_ENABLED_REAL);
     request.setAccountTypes(supportedAccountTypes);
 
     List<Party> linkedParties = new ArrayList<Party>();
@@ -487,12 +492,33 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       return result;
     }
 
+    List<AccountsAccessListsDTO> selectedPartyAccounts =
+        new ArrayList<AccountsAccessListsDTO>();
+    AccountsAccessListsDTO relatedPartyFallback = null;
+    for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
+      if (partyAccounts == null) {
+        continue;
+      }
+      String responsePartyId = partyAccounts.getParty() == null
+          ? null : normalize(partyAccounts.getParty().getValue());
+      if (accessPartyId.equals(responsePartyId)) {
+        selectedPartyAccounts.add(partyAccounts);
+      } else if (RELATED.equals(linkageType) && relatedPartyFallback == null
+          && AccessLevel.PARTY.equals(partyAccounts.getAccessLevel())) {
+        // BCO treats the PARTY row as the primary company. Some platform versions leave its
+        // party value empty; allow that same row only for RELATED access. ASSOCIATED access must
+        // always match accessPartyId exactly so accounts from another company cannot leak in.
+        relatedPartyFallback = partyAccounts;
+      }
+    }
+    if (selectedPartyAccounts.isEmpty() && relatedPartyFallback != null) {
+      selectedPartyAccounts.add(relatedPartyFallback);
+    }
+
     Set<String> seen = new HashSet<String>();
     long order = 0L;
-    for (AccountsAccessListsDTO partyAccounts : accountAccessResponse.getAccounts()) {
-      if (partyAccounts == null || partyAccounts.getParty() == null
-          || !accessPartyId.equals(normalize(partyAccounts.getParty().getValue()))
-          || partyAccounts.getAccountsList() == null) {
+    for (AccountsAccessListsDTO partyAccounts : selectedPartyAccounts) {
+      if (partyAccounts.getAccountsList() == null) {
         continue;
       }
       for (AccountFilterDTO account : partyAccounts.getAccountsList()) {

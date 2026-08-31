@@ -87,15 +87,16 @@
   padding: 1rem;
 }
 
-.hth-summary-empty-message {
-  border-bottom: 1px solid var(--base-border-default);
+.hth-summary-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
 }
 
-.hth-summary-card-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding: 1rem 0 0;
-  border-top: 1px solid var(--base-border-default);
+.hth-summary-inline-actions oj-select-one {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .hth-associated-summary-card {
@@ -111,5 +112,10 @@
 @media (max-width: 767px) {
   .hth-summary-company-header {
     grid-template-columns: 1fr;
+  }
+
+  .hth-summary-inline-actions {
+    justify-content: flex-start;
+    margin-top: 1rem;
   }
 }

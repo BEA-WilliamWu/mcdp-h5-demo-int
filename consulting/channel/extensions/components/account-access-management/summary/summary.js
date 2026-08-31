@@ -1,6 +1,7 @@
 define([
     "ojs/ojcore",
     "knockout",
+    "jquery",
     "./model",
     "../hth-account-linkage/model",
     "ojL10n!extensions/resources/nls/access-management",
@@ -16,7 +17,7 @@ define([
     "ojs/ojarraytabledatasource",
     "ojs/ojbutton",
     "framework/elements/api/page-section/loader"
-], function (oj, ko, ExclusionModel, HthUserAccessModel, resourceBundle) {
+], function (oj, ko, $, ExclusionModel, HthUserAccessModel, resourceBundle) {
     "use strict";
 
     return function viewModel(rootParams) {
@@ -101,8 +102,64 @@ define([
         self.displayEditButtons = ko.observable(false);
 
         const readValue = function (value) {
-            return ko.isObservable(value) ? value() : value;
-        };
+                return ko.isObservable(value) ? value() : value;
+            },
+            hthPartyId = function (value) {
+                value = readValue(value);
+
+                if (value && typeof value === "object") {
+                    value = readValue(value.value) || readValue(value.displayValue);
+                }
+
+                return String(value || "");
+            },
+            userScopedAssociatedSummaries = function (summaries, accountAccessResponse) {
+                const summariesByParty = {},
+                    orderedSummaries = [],
+                    seen = {};
+
+                summaries.forEach(function (summary) {
+                    summariesByParty[hthPartyId(summary && summary.accessPartyId)] = summary;
+                });
+
+                // Match BCO's user access page exactly: with userId supplied, associated
+                // companies are represented by USERLINKAGE rows. Do not fall back to LINKAGE,
+                // which is the party-level catalogue and would expose every related company.
+                ((accountAccessResponse && accountAccessResponse.accounts) || [])
+                    .forEach(function (partyRow) {
+                        const accessLevel = String(readValue(partyRow.accessLevel) || "")
+                                .toUpperCase(),
+                            partyId = hthPartyId(partyRow.party);
+                        let summary = summariesByParty[partyId];
+
+                        if (accessLevel !== "USERLINKAGE" || !partyId || seen[partyId]) {
+                            return;
+                        }
+
+                        // The BCO accountAccess response is authoritative for which associated
+                        // companies belong to this user. HTH summary is only an enrichment source:
+                        // a company with no HTH record yet is exactly the company that must remain
+                        // available for the first "To link" maintenance.
+                        summary = summary || {
+                            linkageType: "ASSOCIATED",
+                            accessPartyId: partyId,
+                            accessPartyName: readValue(partyRow.partyName) || partyId,
+                            setupStatus: "NOT_SETUP",
+                            accountCountByType: {
+                                CSA: 0,
+                                TD: 0
+                            }
+                        };
+
+                        summary.accessPartyName = readValue(partyRow.partyName)
+                            || summary.accessPartyName || partyId;
+
+                        seen[partyId] = true;
+                        orderedSummaries.push(summary);
+                    });
+
+                return orderedSummaries;
+            };
 
         self.isHthMode = ko.pureComputed(function () {
             return String(readValue(self.channelMode) || "BCO").toUpperCase() === "HTH";
@@ -358,20 +415,39 @@ define([
         };
 
         self.loadHthSummary = function () {
+            const partyIdForQuery = readValue(self.partyID),
+                userIdForQuery = String(readValue(self.selectedUserId) || "").trim();
+
             self.hthSummaryLoading(true);
             self.hthSummaryError("");
             self.hthRelatedSummary(null);
             self.hthAssociatedSummaries([]);
 
-            ExclusionModel.readHthUserAccessSummary(readValue(self.partyID), readValue(self.closeId))
-                .done(function (data) {
+            if (!userIdForQuery) {
+                self.hthSummaryError(self.nls.info.hthMissingUserId);
+                self.hthSummaryLoading(false);
+
+                return;
+            }
+
+            $.when(
+                ExclusionModel.readHthUserAccessSummary(partyIdForQuery, readValue(self.closeId)),
+                ExclusionModel.readAllUserAccountDetails(partyIdForQuery, userIdForQuery)
+            ).done(function (data, accountAccessResponse) {
                     data = data || {};
                     self.hthEnterpriseStatus(data.enterpriseHthStatus || "DISABLE");
 
-                    const relatedSummary = normalizeHthSummary(data.related);
+                    const relatedSummary = normalizeHthSummary(data.related),
+                        associatedSummaries = ko.utils.arrayMap(
+                            userScopedAssociatedSummaries(data.associated || [],
+                                accountAccessResponse), normalizeHthSummary);
 
                     self.hthRelatedSummary(relatedSummary);
-                    self.hthAssociatedSummaries(ko.utils.arrayMap(data.associated || [], normalizeHthSummary));
+
+                    // Keep BCO's row model: every user-scoped USERLINKAGE company owns its summary,
+                    // copy choice and direct maintenance action. No extra company-selection step is
+                    // introduced between the summary and account-linkage screens.
+                    self.hthAssociatedSummaries(associatedSummaries);
 
                     self.setupNotCreated(Boolean(relatedSummary
                         && relatedSummary.setupStatus === "NOT_SETUP"));

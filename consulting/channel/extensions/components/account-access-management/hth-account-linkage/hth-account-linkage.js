@@ -54,12 +54,16 @@ define([
             accountNumberDisplay = function (account, canonicalValue) {
                 const value = read(account && account.accountNumber),
                     suppliedDisplay = read(account && account.accountNumberDisplay)
-                        || (value && typeof value === "object" ? read(value.displayValue) : ""),
-                    displaySource = suppliedDisplay || canonicalValue,
-                    converted = displaySource && serviceExtension.int2extAccNo(
-                        String(displaySource), "Y");
+                        || (value && typeof value === "object" ? read(value.displayValue) : "");
 
-                return converted || suppliedDisplay || canonicalValue || "-";
+                if (suppliedDisplay) {
+                    return suppliedDisplay;
+                }
+
+                const converted = canonicalValue && serviceExtension.int2extAccNo(
+                    String(canonicalValue), "Y");
+
+                return converted || canonicalValue || "-";
             },
             context = read(params.hthLinkageContext) || {};
 
@@ -118,9 +122,6 @@ define([
             return self.accounts().filter(function (account) {
                 return String(read(account.accountType) || "").toUpperCase()
                     === self.activeAccountType();
-            }).sort(function (left, right) {
-                return String(read(left.accountNumber) || "")
-                    .localeCompare(String(read(right.accountNumber) || ""));
             });
         });
 

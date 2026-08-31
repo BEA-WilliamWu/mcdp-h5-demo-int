@@ -108,12 +108,12 @@ define([
                     suppliedDisplay = account.accountNumberDisplay
                         || (accountNumberObject && typeof accountNumberObject === "object"
                             ? accountNumberObject.displayValue : ""),
-                    convertedDisplay = serviceExtension.int2extAccNo(
-                        String(suppliedDisplay || canonicalNumber), "Y");
+                    convertedDisplay = !suppliedDisplay && canonicalNumber
+                        ? serviceExtension.int2extAccNo(String(canonicalNumber), "Y") : "";
 
                 return Object.assign({}, account, {
                     accountNumber: canonicalNumber,
-                    accountNumberDisplay: convertedDisplay || suppliedDisplay
+                    accountNumberDisplay: suppliedDisplay || convertedDisplay
                         || canonicalNumber || "-",
                     accountType: accountType,
                     currency: currency,
@@ -191,8 +191,6 @@ define([
         const activateAccountType = function (accountType) {
             const activeAccounts = self.accounts.filter(function (account) {
                 return account.accountType === accountType;
-            }).slice().sort(function (left, right) {
-                return String(left.accountNumber).localeCompare(String(right.accountNumber));
             }),
                 accountTree = activeAccounts.map(function (account, index) {
                     return {

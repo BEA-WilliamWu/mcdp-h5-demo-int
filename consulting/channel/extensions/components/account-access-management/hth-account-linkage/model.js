@@ -1,8 +1,9 @@
 define([
     "jquery",
     "baseService",
-    "baseModel"
-], function ($, BaseService, BaseModel) {
+    "baseModel",
+    "../summary/model"
+], function ($, BaseService, BaseModel, AccountAccessModel) {
     "use strict";
 
     /*
@@ -106,18 +107,182 @@ define([
             }
 
             return deferred;
+        },
+        readValue = function (value) {
+            return value && typeof value === "object"
+                ? value.value || value.displayValue || "" : value || "";
+        },
+        normalizeAccountType = function (value) {
+            const accountType = String(value || "").toUpperCase();
+
+            if (accountType === "TRD" || accountType === "TERM_DEPOSIT") {
+                return "TD";
+            }
+
+            if (accountType === "DEMAND_DEPOSIT") {
+                return "CSA";
+            }
+
+            return accountType;
+        },
+        accountKey = function (account) {
+            return `${normalizeAccountType(account && account.accountType)}:${String(
+                readValue(account && account.accountNumber))}`;
+        },
+        findBcoPartyAccounts = function (bcoResponse, context) {
+            const partyRows = bcoResponse && Array.isArray(bcoResponse.accounts)
+                    ? bcoResponse.accounts : [],
+                accessPartyId = String(context.accessPartyId || ""),
+                exactMatch = partyRows.filter(function (row) {
+                    return String(readValue(row && row.party)) === accessPartyId;
+                })[0];
+
+            if (exactMatch) {
+                return exactMatch;
+            }
+
+            // Older AccountAccess responses omit party on the primary company row. For RELATED
+            // access that non-linkage row is still unambiguous. ASSOCIATED access must always
+            // match accessPartyId so an account from another company can never be displayed.
+            if (String(context.linkageType || "").toUpperCase() === "RELATED") {
+                return partyRows.filter(function (row) {
+                    return ["LINKAGE", "USERLINKAGE"].indexOf(String(
+                        (row && row.accessLevel) || "").toUpperCase()) === -1;
+                })[0] || (partyRows.length === 1 ? partyRows[0] : null);
+            }
+
+            return null;
+        },
+        mergeBcoAccountCatalogue = function (hthResponse, bcoResponse, context) {
+            hthResponse = hthResponse || {};
+
+            const access = hthResponse.access || {},
+                hthAccounts = Array.isArray(access.accounts) ? access.accounts
+                    : Array.isArray(hthResponse.eligibleAccounts)
+                        ? hthResponse.eligibleAccounts : [],
+                eligibleApis = Array.isArray(hthResponse.eligibleApis)
+                    ? hthResponse.eligibleApis : [],
+                existingByKey = {},
+                bcoPartyAccounts = findBcoPartyAccounts(bcoResponse, context),
+                bcoAccounts = bcoPartyAccounts && Array.isArray(bcoPartyAccounts.accountsList)
+                    ? bcoPartyAccounts.accountsList : [],
+                seen = {},
+                mergedAccounts = [];
+
+            hthAccounts.forEach(function (account) {
+                existingByKey[accountKey(account)] = account;
+            });
+
+            // AccountAccess is the same catalogue used by BCO. Preserve its row order and display
+            // metadata exactly; HTH contributes only the API catalogue and effective selections.
+            bcoAccounts.forEach(function (bcoAccount) {
+                const accountType = normalizeAccountType(bcoAccount && bcoAccount.accountType),
+                    accountNumber = String(readValue(bcoAccount && bcoAccount.accountNumber)),
+                    key = `${accountType}:${accountNumber}`;
+
+                if ((accountType !== "CSA" && accountType !== "TD")
+                        || !accountNumber || seen[key]) {
+                    return;
+                }
+
+                seen[key] = true;
+
+                const existing = existingByKey[key] || {},
+                    accountNumberObject = bcoAccount.accountNumber,
+                    accountNumberDisplay = accountNumberObject
+                        && typeof accountNumberObject === "object"
+                        ? accountNumberObject.displayValue : "",
+                    sourceApis = Array.isArray(existing.apiServices)
+                        ? existing.apiServices : eligibleApis;
+
+                mergedAccounts.push(Object.assign({}, existing, {
+                    accountNumber: accountNumber,
+                    accountNumberDisplay: accountNumberDisplay || accountNumber,
+                    maskedAccountNumber: existing.maskedAccountNumber
+                        || accountNumberDisplay || "",
+                    accountType: accountType,
+                    currency: bcoAccount.currencyCode || bcoAccount.currency
+                        || existing.currency || "",
+                    displayName: bcoAccount.displayName || existing.displayName || "",
+                    selected: existing.selected === true,
+                    displayOrder: mergedAccounts.length,
+                    apiServices: sourceApis.map(function (api) {
+                        return Object.assign({}, api, {
+                            selected: api.selected === true
+                        });
+                    })
+                }));
+            });
+
+            access.accounts = mergedAccounts;
+            hthResponse.access = access;
+            hthResponse.eligibleAccounts = mergedAccounts;
+
+            return hthResponse;
+        },
+        readBcoAccounts = function (context) {
+            const deferred = $.Deferred(),
+                userId = String(context.username || "").trim(),
+                params = {
+                    partyId: context.partyId,
+                    userId: userId
+                };
+
+            if (!userId) {
+                deferred.reject({
+                    message: "The selected user's BCO identifier is missing."
+                });
+
+                return deferred;
+            }
+
+            // Invoke the BCO model itself instead of maintaining a second copy of its URL or
+            // parameter logic. The userId is essential: the party-only call returns the complete
+            // corporate catalogue and therefore displays more accounts than BCO's user page.
+            AccountAccessModel.readAllUserAccountDetails(params.partyId, params.userId)
+                .done(function (data) {
+                    if (isFailureResponse(data)) {
+                        deferred.reject(data);
+
+                        return;
+                    }
+
+                    deferred.resolve(data);
+                })
+                .fail(function (error) {
+                    deferred.reject(error);
+                });
+
+            return deferred;
         };
 
     return {
         read: function (context) {
-            return request({
+            const deferred = $.Deferred();
+
+            request({
                 url: baseModel.QueryParams.add("hostToHostUserAccess/accounts", {
                     partyId: context.partyId,
                     closeId: context.closeId,
                     accessPartyId: context.accessPartyId,
                     linkageType: context.linkageType
                 })
+            }).done(function (hthResponse) {
+                readBcoAccounts(context).done(function (bcoResponse) {
+                    try {
+                        deferred.resolve(mergeBcoAccountCatalogue(
+                            hthResponse, bcoResponse, context));
+                    } catch (error) {
+                        deferred.reject(error);
+                    }
+                }).fail(function (error) {
+                    deferred.reject(error);
+                });
+            }).fail(function (error) {
+                deferred.reject(error);
             });
+
+            return deferred;
         },
         save: function (payload, action) {
             return request({

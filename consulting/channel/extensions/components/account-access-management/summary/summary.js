@@ -236,6 +236,53 @@ define([
             });
         };
 
+        const normalizeHthAccountType = function (value) {
+                const accountType = String(readValue(value) || "").toUpperCase();
+
+                return accountType === "TRD" || accountType === "TERM_DEPOSIT" ? "TD"
+                    : accountType === "DEMAND_DEPOSIT" ? "CSA" : accountType;
+            },
+            hthAccountNumber = function (account) {
+                const accountNumber = readValue(account && account.accountNumber),
+                    value = accountNumber && typeof accountNumber === "object"
+                        ? readValue(accountNumber.value) || readValue(accountNumber.displayValue) || ""
+                        : accountNumber || "";
+
+                return String(value);
+            },
+            hthAccountKey = function (account) {
+                return `${normalizeHthAccountType(account && account.accountType)}:${hthAccountNumber(account)}`;
+            },
+            copyHthSelections = function (targetAccounts, sourceAccounts) {
+                const sourceByAccount = {};
+
+                sourceAccounts.forEach(function (sourceAccount) {
+                    sourceByAccount[hthAccountKey(sourceAccount)] = sourceAccount;
+                });
+
+                return targetAccounts.map(function (targetAccount) {
+                    const sourceAccount = sourceByAccount[hthAccountKey(targetAccount)],
+                        sourceApis = {};
+
+                    if (sourceAccount) {
+                        (sourceAccount.apiServices || []).forEach(function (api) {
+                            sourceApis[String(readValue(api.apiCode) || "")] = api;
+                        });
+                    }
+
+                    return Object.assign({}, targetAccount, {
+                        selected: !!sourceAccount && readValue(sourceAccount.selected) === true,
+                        apiServices: (targetAccount.apiServices || []).map(function (api) {
+                            const sourceApi = sourceApis[String(readValue(api.apiCode) || "")];
+
+                            return Object.assign({}, api, {
+                                selected: !!sourceApi && readValue(sourceApi.selected) === true
+                            });
+                        })
+                    });
+                });
+            };
+
         // BCO lets an unconfigured user start from another configured user's access. HTH follows
         // the same interaction, but copies only the selected company's account/API grants and
         // always keeps the target user's CloseID in the new request.
@@ -264,8 +311,9 @@ define([
                         targetAccounts = ko.toJS(targetAccess.accounts
                             || (targetData && targetData.eligibleAccounts) || []),
                         sourceAccess = data && data.access ? data.access : {},
-                        copiedAccounts = ko.toJS(sourceAccess.accounts
+                        sourceAccounts = ko.toJS(sourceAccess.accounts
                             || (data && data.eligibleAccounts) || []),
+                        copiedAccounts = copyHthSelections(targetAccounts, sourceAccounts),
                         hasCopiedAccess = copiedAccounts.some(function (account) {
                             return account.selected === true;
                         }),

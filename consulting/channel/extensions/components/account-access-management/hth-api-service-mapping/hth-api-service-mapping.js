@@ -61,13 +61,14 @@ define([
                             ? read(accountNumberObject.displayValue) : ""),
                     accountType = normalizeAccountType(account.accountType),
                     currency = read(account.currency) || read(account.currencyCode) || "",
-                    displayName = read(account.displayName) || "";
+                    displayName = read(account.displayName) || "",
+                    convertedDisplay = !suppliedDisplay && canonicalNumber
+                        ? serviceExtension.int2extAccNo(String(canonicalNumber), "Y") : "";
 
                 return Object.assign({}, account, {
                     accountNumber: canonicalNumber,
-                    accountNumberDisplay: serviceExtension.int2extAccNo(
-                        String(suppliedDisplay || canonicalNumber), "Y")
-                        || suppliedDisplay || canonicalNumber || "-",
+                    accountNumberDisplay: suppliedDisplay || convertedDisplay
+                        || canonicalNumber || "-",
                     maskedAccountNumber: read(account.maskedAccountNumber) || "",
                     accountType: accountType,
                     currency: currency,
@@ -135,9 +136,6 @@ define([
             const accountType = self.menuSelection() === "TRD" ? "TD" : "CSA",
                 activeAccounts = self.accounts().filter(function (account) {
                     return String(read(account.accountType) || "").toUpperCase() === accountType;
-                }).slice().sort(function (left, right) {
-                    return String(read(left.accountNumber) || "")
-                        .localeCompare(String(read(right.accountNumber) || ""));
                 }),
                 accountTree = activeAccounts.map(function (account, index) {
                     return {

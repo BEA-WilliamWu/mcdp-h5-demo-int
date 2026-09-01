@@ -42,4 +42,8 @@
 // Match BCO: the list finishes at its last item, without a second trailing divider.
 #hthApiServiceTable tbody {
   border-bottom: 0;
+
+  tr:last-child {
+    border-bottom: 0;
+  }
 }

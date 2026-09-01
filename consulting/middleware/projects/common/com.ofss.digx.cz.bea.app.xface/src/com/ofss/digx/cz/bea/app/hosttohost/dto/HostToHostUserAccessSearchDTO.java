@@ -24,6 +24,8 @@ public class HostToHostUserAccessSearchDTO extends DomainObjectDTO {
 
   private String linkageType;
 
+  private Boolean approvalReferenceOnly;
+
   public String getPartyId() {
     return partyId;
   }
@@ -62,5 +64,13 @@ public class HostToHostUserAccessSearchDTO extends DomainObjectDTO {
 
   public void setLinkageType(String linkageType) {
     this.linkageType = linkageType;
+  }
+
+  public Boolean getApprovalReferenceOnly() {
+    return approvalReferenceOnly;
+  }
+
+  public void setApprovalReferenceOnly(Boolean approvalReferenceOnly) {
+    this.approvalReferenceOnly = approvalReferenceOnly;
   }
 }

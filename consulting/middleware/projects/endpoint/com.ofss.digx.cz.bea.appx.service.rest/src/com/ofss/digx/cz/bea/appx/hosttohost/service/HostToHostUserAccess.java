@@ -155,7 +155,9 @@ public class HostToHostUserAccess extends AbstractRESTApplication
       @Parameter(description = "Party owning the eligible accounts")
       @QueryParam("accessPartyId") String accessPartyId,
       @Parameter(description = "Company context: RELATED or ASSOCIATED")
-      @QueryParam("linkageType") String linkageType) {
+      @QueryParam("linkageType") String linkageType,
+      @Parameter(description = "Return only a platform-ready pending approval reference")
+      @QueryParam("approvalReferenceOnly") Boolean approvalReferenceOnly) {
     Response response = null;
     ChannelInteraction interaction = null;
     ChannelContext context = null;
@@ -169,6 +171,7 @@ public class HostToHostUserAccess extends AbstractRESTApplication
       request.setUsername(username);
       request.setAccessPartyId(accessPartyId);
       request.setLinkageType(linkageType);
+      request.setApprovalReferenceOnly(approvalReferenceOnly);
       HostToHostUserAccessResponseDTO result =
           new com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess()
               .accounts(context.getSessionContext(), request);

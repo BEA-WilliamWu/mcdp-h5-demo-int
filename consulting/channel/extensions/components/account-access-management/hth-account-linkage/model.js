@@ -15,7 +15,7 @@ define([
      */
     const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
         APPROVAL_ACCEPTED_STATUS = 202,
-        APPROVAL_REFERENCE_RETRY_COUNT = 6,
+        APPROVAL_REFERENCE_RETRY_COUNT = 25,
         APPROVAL_REFERENCE_RETRY_DELAY = 400,
         baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
@@ -76,15 +76,13 @@ define([
                 currentReference = response.referenceNumber
                     || (response.status && response.status.referenceNumber);
 
-            if (currentReference) {
-                deferred.resolve(response);
-
-                return deferred;
-            }
-
             if (!context || !context.partyId || !context.closeId || !context.accessPartyId
                     || !context.linkageType || !context.username) {
-                deferred.reject(response);
+                if (currentReference) {
+                    deferred.resolve(response);
+                } else {
+                    deferred.reject(response);
+                }
 
                 return deferred;
             }
@@ -100,9 +98,11 @@ define([
                         closeId: context.closeId,
                         accessPartyId: context.accessPartyId,
                         linkageType: context.linkageType,
-                        username: context.username
+                        username: context.username,
+                        approvalReferenceOnly: "true"
                     }),
                     version: "cz/v1",
+                    throttle: false,
                     success: function (data) {
                         const referenceNumber = data && (data.pendingReferenceNumber
                             || data.referenceNumber

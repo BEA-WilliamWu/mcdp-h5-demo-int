@@ -232,8 +232,12 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       if (username == null) {
         throw new Exception("DIGX_CZ_HTH_UA_001");
       }
-      populateAccountsResponse(response, sessionContext, partyId, closeId,
-          username, accessPartyId, linkageType);
+      if (Boolean.TRUE.equals(requestDTO.getApprovalReferenceOnly())) {
+        populatePendingApprovalResponse(response, partyId, closeId, accessPartyId, linkageType);
+      } else {
+        populateAccountsResponse(response, sessionContext, partyId, closeId,
+            username, accessPartyId, linkageType);
+      }
       response.setStatus(buildStatus(transactionStatus));
     } catch (Exception e) {
       fillTransactionStatus(transactionStatus, e);
@@ -1108,6 +1112,17 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
   }
 
+  private void populatePendingApprovalResponse(HostToHostUserAccessResponseDTO response,
+      String partyId, String closeId, String accessPartyId, String linkageType) throws Exception {
+    HthUserAccessPendingRecord pending = findPendingRequest(
+        partyId, closeId, accessPartyId, linkageType);
+    response.setPendingRequest(Boolean.valueOf(pending != null));
+    if (pending != null) {
+      response.setPendingAction(pending.getActionType());
+      response.setPendingReferenceNumber(pending.getReferenceNumber());
+    }
+  }
+
   private String readAccountDictionaryValue(AccountFilterDTO account, String genericName) {
     if (account == null || account.getDictionaryArray() == null) {
       return null;
@@ -1376,6 +1391,8 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
               + "WHERE T.PARTY_ID = ? AND T.TXN_NAME IN (?, ?, ?) "
               + "AND T.APPR_STATUS IN (?, ?) "
               + "AND T.PROCESSING_CURRENT_STEP = ? AND T.PROCESSING_STATUS = ? "
+              + "AND EXISTS (SELECT 1 FROM DIGX_AP_TXN_WORKFLOW_SNAPSHOT W "
+              + "WHERE W.TXN_ID = T.TXN_ID AND W.SEQUENCE_NO = T.APPR_STEP_NO) "
               + "ORDER BY T.CREATION_DATE DESC");
       query.setParameter(1, partyId);
       query.setParameter(2, TASK_CREATE);

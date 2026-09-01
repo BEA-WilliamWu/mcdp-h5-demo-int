@@ -10,7 +10,7 @@ public interface IHostToHostUserAccess {
 
   /** Reads account and API details for one related or associated company context. */
   Response accounts(String partyId, String closeId, String username, String accessPartyId,
-      String linkageType);
+      String linkageType, Boolean approvalReferenceOnly);
 
   /** Starts a create approval transaction. */
   Response submit(HostToHostUserAccessDTO requestDTO);

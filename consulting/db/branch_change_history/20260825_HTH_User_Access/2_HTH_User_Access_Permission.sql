@@ -1,5 +1,6 @@
 -- BCOH2H-538 / BCOH2H-595: base permission setup for HTH User Accounts & Services Access.
--- Run this before the separate maker and checker grant scripts.
+-- Grants are derived from the equivalent BCO User/Linked User Account Access policies below;
+-- environment-specific maker/checker grant scripts are optional overrides only.
 -- Re-runnable: only mappings and resources owned by this feature are replaced.
 -- Existing shared User Account Access UI resources are reused and are not deleted.
 -- Execute in the OBDX configuration schema, or through deployment synonyms with direct DML grants.
@@ -281,5 +282,87 @@ INSERT ALL
   INTO DIGX_AZ_ENTGROUP_ENT_MAPPING (ENT_GROUP_ID, ENTITLEMENT_ID)
   VALUES ('UAT', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete_Approve')
 SELECT 1 FROM DUAL;
+
+-- 8. Grant HTH User Access to the same policies as the corresponding BCO User Account Access
+-- operations. This keeps HTH authorization aligned with BCO without environment-specific
+-- usernames or application-role IDs. Section 1 removes the old HTH policy mappings, so this
+-- step is required on every re-run of the permission script.
+INSERT INTO DIGX_AZ_POLICY_ENT_MAP (ENTITLEMENT_ID, POLICY_ID)
+SELECT DISTINCT M.TARGET_ENTITLEMENT_ID, P.POLICY_ID
+  FROM (
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.read_Perform'
+             AS SOURCE_ENTITLEMENT_ID,
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.search_View'
+             AS TARGET_ENTITLEMENT_ID
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.read_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.accounts_View'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.create_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.submit_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.create_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.submit_Approve'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.update_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.edit_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.update_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.edit_Approve'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.delete_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.party.user.UserAccountAccess.delete_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete_Approve'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.read_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.search_View'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.read_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.accounts_View'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.create_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.submit_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.create_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.submit_Approve'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.update_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.edit_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.update_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.edit_Approve'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.delete_Perform',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete_Perform'
+      FROM DUAL
+    UNION ALL
+    SELECT 'com.ofss.digx.app.access.service.account.linkedParty.user.LinkedUserAccountAccess.delete_Approve',
+           'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete_Approve'
+      FROM DUAL
+  ) M
+  JOIN DIGX_AZ_POLICY_ENT_MAP P
+    ON P.ENTITLEMENT_ID = M.SOURCE_ENTITLEMENT_ID
+ WHERE NOT EXISTS (
+       SELECT 1
+         FROM DIGX_AZ_POLICY_ENT_MAP H
+        WHERE H.ENTITLEMENT_ID = M.TARGET_ENTITLEMENT_ID
+          AND H.POLICY_ID = P.POLICY_ID
+ );
 
 COMMIT;

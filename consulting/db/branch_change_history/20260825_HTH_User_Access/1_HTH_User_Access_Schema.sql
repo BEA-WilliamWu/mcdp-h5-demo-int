@@ -11,11 +11,10 @@
 -- Package execution order:
 --   1. This schema script.
 --   2. 2_HTH_User_Access_Permission.sql.
---   3. The environment-specific Maker and Checker grant scripts.
---   4. 3_HTH_User_Access_Process.sql.
---   5. 4_HTH_User_Access_Repository_Adapters.sql.
---   6. 5_HTH_User_Access_Error_Messages.sql.
---   7. 6_HTH_User_Access_Verification.sql.
+--   3. 3_HTH_User_Access_Process.sql.
+--   4. 4_HTH_User_Access_Repository_Adapters.sql.
+--   5. 5_HTH_User_Access_Error_Messages.sql.
+--   6. 6_HTH_User_Access_Verification.sql.
 --
 -- This is a one-time DDL script. Do not re-run after the objects have been created.
 -- Oracle DDL commits implicitly and cannot be rolled back as one transaction. Before business data

@@ -90,6 +90,14 @@ SELECT E.ID AS ENTITLEMENT_ID, M.ENT_GROUP_ID
        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.%'
  ORDER BY E.ID;
 
+-- Expected: every HTH entitlement has the same policy count as its corresponding BCO operation.
+SELECT PEM.ENTITLEMENT_ID, COUNT(DISTINCT PEM.POLICY_ID) AS POLICY_COUNT
+  FROM DIGX_AZ_POLICY_ENT_MAP PEM
+ WHERE PEM.ENTITLEMENT_ID LIKE
+       'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.%'
+ GROUP BY PEM.ENTITLEMENT_ID
+ ORDER BY PEM.ENTITLEMENT_ID;
+
 -- Expected: 5 SVC resources and 16 resource-action mappings
 -- (8 UI mappings plus 8 service mappings).
 SELECT R.ID AS RESOURCE_ID, R.RESOURCE_TYPE, RA.ACTION_TYPE,
@@ -101,7 +109,8 @@ SELECT R.ID AS RESOURCE_ID, R.RESOURCE_TYPE, RA.ACTION_TYPE,
  ORDER BY R.RESOURCE_TYPE, R.ID, RA.ACTION_TYPE;
 
 -- Expected: 3 tasks, each with approval/audit/blackout/2fa aspects (12 rows total).
-SELECT T.ID, T.NAME, T.PARENT_ID, A.ASPECT, A.ENABLED
+SELECT T.ID, T.NAME, T.PARENT_ID, T.TASK_TYPE, T.MODULE_TYPE,
+       A.ASPECT, A.ENABLED
   FROM DIGX_CM_TASK T
   JOIN DIGX_CM_TASK_ASPECTS A ON A.TASK_ID = T.ID
  WHERE T.ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')

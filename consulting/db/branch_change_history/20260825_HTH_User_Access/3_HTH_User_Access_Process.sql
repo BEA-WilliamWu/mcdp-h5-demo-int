@@ -54,7 +54,7 @@ INSERT INTO DIGX_CM_TASK
    CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
    OBJECT_VERSION_NUMBER)
 VALUES
-  ('UAT_N_HUA_NEW', 'HTH User Access - Create', 'UAT', 'Y', 'MAINTENANCE',
+  ('UAT_N_HUA_NEW', 'HTH User Access - Create', 'UAT', 'Y', 'ADMINISTRATION',
    'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
 
 INSERT INTO DIGX_CM_TASK
@@ -62,7 +62,7 @@ INSERT INTO DIGX_CM_TASK
    CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
    OBJECT_VERSION_NUMBER)
 VALUES
-  ('UAT_N_HUA_EDT', 'HTH User Access - Edit', 'UAT', 'Y', 'MAINTENANCE',
+  ('UAT_N_HUA_EDT', 'HTH User Access - Edit', 'UAT', 'Y', 'ADMINISTRATION',
    'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
 
 INSERT INTO DIGX_CM_TASK
@@ -70,7 +70,7 @@ INSERT INTO DIGX_CM_TASK
    CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
    OBJECT_VERSION_NUMBER)
 VALUES
-  ('UAT_N_HUA_DEL', 'HTH User Access - Delete', 'UAT', 'Y', 'MAINTENANCE',
+  ('UAT_N_HUA_DEL', 'HTH User Access - Delete', 'UAT', 'Y', 'ADMINISTRATION',
    'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
 
 -- 3. Enable the same approval controls used by BCO User Access. The 2fa aspect delegates the

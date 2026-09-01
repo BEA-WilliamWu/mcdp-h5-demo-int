@@ -221,8 +221,14 @@ define([
                 return;
             }
 
+            const nextContext = Object.assign({}, context, {
+                // Preserve the tab that the user is reviewing. BCO re-opens the API mapping on
+                // the selected account type instead of resetting every journey to Current/Savings.
+                initialAccountType: self.activeAccountType()
+            });
+
             rootParams.dashboard.loadComponent("hth-api-service-mapping", {
-                hthLinkageContext: context,
+                hthLinkageContext: nextContext,
                 summaryParams: self.summaryParams,
                 access: self.access(),
                 accounts: self.accounts(),

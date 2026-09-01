@@ -64,6 +64,7 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
                     hthNotSetup: "Not set up",
                     hthPendingDetail: "Pending {action}. Reference: {reference}",
                     hthToLink: "To link",
+                    hthSelectAssociatedCompany: "Please select an associated company.",
                     hthLinkageRequires595: "HTH account linkage maintenance is not available in this deployment.",
                     hthMaintenanceLoadError: "The HTH account and service access could not be loaded. Please try again.",
                     hthSelectAccount: "Select at least one Current and Savings or Time Deposit account.",

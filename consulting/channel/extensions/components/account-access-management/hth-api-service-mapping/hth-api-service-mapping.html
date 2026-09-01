@@ -7,10 +7,12 @@
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
                 label="[[nls.fieldname.userName]]" value="[[context.fullName || '-']]">
             </obdx-row>
+            <!-- ko if: context.linkageType === 'ASSOCIATED' -->
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
-                label="[[nls.fieldname.companyName]]"
+                label="[[nls.fieldname.linkedPartyName]]"
                 value="[[context.accessPartyName || context.accessPartyId || '-']]">
             </obdx-row>
+            <!-- /ko -->
         </page-section>
     </div>
 
@@ -45,7 +47,6 @@
                         {headerText:nls.headers.displayName,field:'displayName',style:'width:45%'}
                     ]]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('hthApiServiceRow',true)]]"
                     data="[[accountDataSource]]">
-                    <caption class="hide-label" data-bind="text:nls.headers.hthApiMapping"></caption>
                 </oj-table>
 
                 <script type="text/html" id="hthApiServiceRow">

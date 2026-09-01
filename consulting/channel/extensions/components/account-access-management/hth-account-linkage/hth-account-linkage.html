@@ -7,6 +7,12 @@
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
                 label="[[nls.fieldname.userName]]" value="[[context.fullName || '-']]">
             </obdx-row>
+            <!-- ko if: context.linkageType === 'ASSOCIATED' -->
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.linkedPartyName]]"
+                value="[[context.accessPartyName || context.accessPartyId || '-']]">
+            </obdx-row>
+            <!-- /ko -->
         </page-section>
     </div>
 
@@ -50,7 +56,6 @@
                         {headerText:nls.headers.displayName,field:'displayAccountType',style:'width:40%'}
                     ]]]" columns-default="[[{sortable:'enabled'}]]"
                     selection-mode="[[{row:'none',column:'none'}]]" data="[[accountDataSource]]">
-                    <caption class="hide-label" data-bind="text:nls.fieldname.moduleToMap"></caption>
                 </oj-table>
 
                 <script type="text/html" id="hthAccountCheckbox">

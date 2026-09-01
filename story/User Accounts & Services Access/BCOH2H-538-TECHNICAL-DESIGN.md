@@ -5,9 +5,10 @@
 | Story | BCOH2H-538 |
 | 功能 | HTH User Accounts & Services Access Summary |
 | 文档状态 | As Implemented |
-| 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
+| 实现基线 | 当前分支 HTH User Access 实现；Story 边界与后续 596/782/785 设计保持一致 |
 | 依赖 Story | BCOH2H-595 提供 HTH User Access 生效表、平台 Transaction Snapshot 和查询服务 |
-| 更新时间 | 2026-08-31 |
+| 后续 Story | BCOH2H-596 Associated Create；BCOH2H-782 Related Edit；BCOH2H-785 Associated Edit |
+| 更新时间 | 2026-09-01（Story PDF、当前代码及后续设计复核） |
 
 ## 1. 目标和范围
 
@@ -17,15 +18,19 @@
 
 - 用户列表返回并展示 `userChannelType`、`closeId` 和 HTH Access Setup 状态。
 - 点击 Username 时按 `HTH` / `BCO` 分流。
-- HTH Summary 显示用户、企业 HTH 状态、Related 和 Associated 公司上下文。
+- HTH Summary 显示用户、企业 HTH 状态、Related 和用户级 Associated 公司上下文。
 - Summary 分别统计审批后生效的 Current and Savings (`CSA`) 与 Time Deposit (`TD`) Grant。
-- Pending Create/Edit/Delete 单独显示，不提前计入生效数量。
-- `To link` 把完整 HTH Context 传入 BCOH2H-595 维护流程。
+- Pending Create/Edit/Delete 不提前计入生效数量；审批状态由平台 Pending Approval / Activity Log
+  展示，Summary 不新增一套 Workflow 状态栏。
+- Related `To link` 把完整 HTH Context 传入 BCOH2H-595；Associated Create 由 BCOH2H-596
+  定义，但复用同一 HTH 维护组件底座。
+- HTH 账户/公司范围与 BCO 对同一 `partyId + userId` 的 Account Access 结果保持一致。
 - 保留原 BCO API、账户类型、Task Mapping 和页面逻辑。
 
 不在本 Story 内处理：
 
-- Account/API Checkbox、Review、Maker/Checker 和生效数据写入，这些由 BCOH2H-595 实现。
+- Account/API Checkbox、Review、Maker/Checker 和生效数据写入；共用底座由 BCOH2H-595 实现，
+  Associated/Edit 的具体 AC 分别由 596/782/785 定义。
 - 企业 HTH Enable/Disable、Certificate、UAM Client 和 API Master Maintenance。
 - CloseID 生成规则；本功能只读取已有 `HTH_USER_PROFILE`。
 - 修改 BCO `DIGX_AM_*` 数据结构。
@@ -36,11 +41,19 @@
 2. 当前既有流程保存 `CLOSE_ID = UserExtensionData.userID`，因此使用 Party + User ID 匹配 Profile。
 3. 标准 User List DTO 不新增固定字段；HTH 扩展值写入 `dictionaryArray`，降低对原响应 Contract 的影响。
 4. `hthAccessSetupDone` 来自有效账户授权，不使用 Enterprise HTH Enable 状态，也不使用 Profile 是否存在代替。
-5. HTH Summary 使用独立的 `hostToHostUserAccess/search` 服务，不查询 BCO Account Access API。
-6. Related 固定代表主 Party 本身；Associated 只来自当前 Party Relationship Domain 返回的关联 Party。
+5. HTH Summary 并行读取 `hostToHostUserAccess/search` 与 BCO
+   `accountAccess?partyId={partyId}&userId={userId}`：前者提供 HTH Effective/Pending Projection，
+   后者提供与 BCO 一致的用户级公司范围、展示元数据和顺序；不执行原 BCO 多 Account Type Batch。
+6. Related 固定代表主 Party 本身；Associated UI 只采用 BCO `USERLINKAGE`，后端仍用当前
+   Party Relationship Domain 做第二重合法性校验。不能回退到企业级 `LINKAGE`。
 7. BCO 是默认兼容分支。HTH 用户缺少 CloseID 时停止跳转，不允许错误地回退到 BCO 页面。
 8. BCOH2H-538 没有新增独立业务表；Summary 使用 BCOH2H-595 的生效账户表和平台 Approval Transaction Snapshot。
 9. HTH Related/Associated 维护页复用 BCO `IAccountAccess.listAccounts()` 返回的企业 Eligible Account Inventory，仅保留 CSA/TD 并替换为 HTH API Tree，保证两个 Channel 的可选账户范围一致。
+10. 尚未配置的 Associated Company 如何收拢及选择由 BCOH2H-596 定义；538 只负责提供
+    BCO 同源的用户级候选范围，不把所有企业 Relationship 当作用户候选。
+
+Story PDF 的 AC5/AC6 标题误写为 “via BCO Channel type”，但 Given/Then 内容、页面名称和
+前置步骤都指向 HTH 配置。本设计按 HTH Approval/Rejection 处理；BCO 仍走原流程。
 
 ## 3. 组件和数据流
 
@@ -54,9 +67,13 @@ flowchart LR
     VALIDATION -->|BCO| BCO["原 BCO Summary"]
     VALIDATION -->|HTH| SUMMARY["HTH Summary"]
     SUMMARY --> SEARCH["HostToHostUserAccess.search"]
+    SUMMARY --> BCO_SCOPE["BCO accountAccess(partyId,userId)"]
     SEARCH --> EFFECTIVE
     SEARCH --> REQUEST["DIGX_AP_TRANSACTION.transactionSnapshot"]
     SEARCH --> RELATION["Party Relationship Domain"]
+    BCO_SCOPE --> COMPOSE["USERLINKAGE scope + BCO order"]
+    SEARCH --> COMPOSE
+    COMPOSE --> VIEW["HTH Summary View"]
 ```
 
 ### 3.1 主要代码位置
@@ -68,8 +85,8 @@ flowchart LR
 | HTH Profile Repository | `LocalHthUserProfileRepositoryAdapter.java` | 按 Party 读取 Profile；提供 Active CloseID 查询实现。 |
 | User List UI | `common/user-list-details/user-list-details.js` | 解析 Dictionary，标准化 HTH/BCO User View Model。 |
 | Routing | `account-access-management/validation/validation.js` | 构建 HTH Policy，校验 CloseID，选择 Summary 分支。 |
-| Summary UI | `account-access-management/summary/summary.js/.html` | 渲染 HTH Related/Associated、数量和 Pending 状态。 |
-| Summary Model | `account-access-management/summary/model.js` | 调用 `hostToHostUserAccess/search`。 |
+| Summary UI | `account-access-management/summary/summary.js/.html` | 合并 HTH Effective Summary 与 BCO 用户级 Account Access，渲染 Related/Associated 和数量。 |
+| Summary Model | `account-access-management/summary/model.js` | 调用 `hostToHostUserAccess/search` 与 `readAllUserAccountDetails(partyId,userId)`。 |
 | REST | `appx.hosttohost.service.HostToHostUserAccess` | 暴露 `/search`。 |
 | Application Service | `app.hosttohost.service.HostToHostUserAccess` | 校验 Profile、聚合生效数据和 Pending 状态。 |
 | Effective Repository | `LocalHthUserAccessAccountRepositoryAdapter` | 在数据库中按 Context 聚合 Active Account 数量。 |
@@ -193,13 +210,20 @@ listActiveAccessCloseIds(String partyId)
 
 ### 5.3 HTH Summary
 
-Summary 在 `isHthMode()` 为 true 时只调用：
+Summary 在 `isHthMode()` 为 true 时并行调用：
 
 ```http
 GET cz/v1/hostToHostUserAccess/search?partyId={partyId}&closeId={closeId}
+
+GET accountAccess?partyId={partyId}&userId={userId}
+    &accountType=CSA&accountType=TRD&accountType=LON
+    &accountType=VER&accountType=VRA&accountType=LER
 ```
 
-它不会执行原 BCO 的 CSA/TRD/LON/VER/VRA/LER Batch 查询。
+第一项提供 HTH Profile/Enterprise/Effective Count/Pending Projection；第二项是 BCO 对目标用户的
+权威 Account Access 模型（底层仍沿用 BCO/BG3/Anolva 账户来源），用于筛选 `USERLINKAGE`
+Associated Company 并保持 BCO 行顺序。它不会
+执行原 BCO Summary 的多请求 Batch，也不会使用 BCO Task Tree 作为 HTH API 权限。
 
 UI 对每个 Summary 计算：
 
@@ -207,11 +231,21 @@ UI 对每个 Summary 计算：
 casaAccountCount = accountCountByType.CSA or 0
 tdAccountCount = accountCountByType.TD or 0
 totalAccountCount = casaAccountCount + tdAccountCount
-hasPendingRequest = pendingAction exists or setupStatus starts with PENDING_
-canMaintain = enterprise enabled AND no pending request AND status != ERROR
+canMaintain = enterprise enabled AND setupStatus != ERROR
 ```
 
-只有具备维护 UI 权限并且 `canMaintain=true` 时显示 `To link`。
+只有具备维护 UI 权限并且 `canMaintain=true` 时显示维护入口。与 BCO Summary 一致，HTH Summary
+不显示额外 Pending 文案，也不依赖前端隐藏按钮解决并发；相同 Context 的重复提交由平台
+Entity Identifier / `DIGX_AP_0062` 最终拦截。
+
+Associated 展示集合由以下规则组成：
+
+```text
+BCO USERLINKAGE ∩ 当前有效 Party Relationship
+```
+
+HTH Search 的 Associated Summary 只负责补充 Count/Status。后续 596 把未配置公司收拢为单一
+`To link` + Company Selector；已配置公司才进入可编辑 Summary 行。
 
 ### 5.4 Navigation Context
 
@@ -281,7 +315,8 @@ GET /hostToHostUserAccess/search?partyId={partyId}&closeId={closeId}
 3. 验证 `(partyId, closeId)` 存在于 `HTH_USER_PROFILE`。
 4. 查询 `HTH_MANAGEMENT` 得到企业 `ENABLE` / `DISABLE` 状态。
 5. 初始化一个 RELATED Summary。
-6. 从 Party Relationship Domain 返回的当前关联 Party 初始化 ASSOCIATED Summary。
+6. 从 Party Relationship Domain 返回当前合法 ASSOCIATED Summary Candidate；Channel 再与 BCO
+   `USERLINKAGE` 相交，避免暴露只属于企业而未分配给目标用户的关联公司。
 7. 一次 Aggregate Query 读取所有 Active Effective Account Count。
 8. 一次查询读取三个 HTH Task 的可操作 Platform Transaction，并反序列化其 Snapshot 得到 Pending Context。
 9. 合并结果并执行 Response Policy。
@@ -425,7 +460,8 @@ validation#user-list-details#summary
 4. 刷新 Authorization/Configuration Cache 或按环境要求重启 Managed Server。
 5. 执行 HTH Smoke Test 和 BCO Regression Test。
 
-代码回滚时恢复旧 Channel/SMS/Host-to-Host JAR。五张 HTH User Access 表和 Approval History 不应随代码回滚而删除；它们由数据库回滚计划单独处理。
+代码回滚时恢复旧 Channel/SMS/Host-to-Host JAR。两张 HTH User Access Effective Table 和平台
+Approval History 不应随代码回滚而删除；它们由数据库回滚计划单独处理。
 
 当前实现没有 `HTH_USER_ACCESS_ENABLED` Feature Flag，文档和运行手册不能依赖不存在的开关。
 
@@ -439,8 +475,9 @@ validation#user-list-details#summary
 - HTH 用户缺少 CloseID 时停止跳转。
 - Profile 存在但无 Active Grant 时 Setup 为 false、Summary 为 `NOT_SETUP`。
 - Related 与多个 Associated Party 的 Count 不混用。
-- Related/Associated Summary 同时显示 CSA 与 TD 数量；无授权时仍使用原未设置文案。
-- Pending Create/Edit/Delete 不改变生效 Count，并禁止 `To link`。
+- Associated 候选只来自目标用户的 BCO `USERLINKAGE`，不回退到 `LINKAGE`。
+- Related/Associated Summary 同时显示 CSA 与 TD 数量；未配置 Associated 公司按 596 收拢处理。
+- Pending Create/Edit/Delete 不改变生效 Count；重复维护由平台 Duplicate Check 拦截。
 - Enterprise Disable 时显示 `DISABLED`，不显示维护按钮。
 - Invalid/Expired Associated Relationship 的历史 Grant 不暴露。
 - 新 SMS + 旧 Host-to-Host 实现时无 Linkage Error，Setup 保守为 false。
@@ -460,7 +497,11 @@ validation#user-list-details#summary
 | HTH User Setup 状态 | Active CloseID Optional Capability | Repository/Compatibility Test |
 | HTH Summary | `HostToHostUserAccess.search` | API Test |
 | Related Count | `HTH_USER_ACCESS_ACCOUNT` Aggregate | Repository Test |
-| Associated Count | 当前 Party Relationship + Aggregate Result | Integration Test |
+| Related/Associated 列表与 BCO 一致 | BCO user-scoped Account Access；Associated 只取 `USERLINKAGE` | Integration/UI Test |
+| Associated Count | `USERLINKAGE` ∩ 当前 Party Relationship + Aggregate Result | Integration Test |
 | Pending 状态 | Platform Approval Transaction + `transactionSnapshot` | Approval Test |
 | To link | 完整 Navigation Context | UI Test |
+| HTH API Service List | 企业 Active `HTH_MANAGEMENT_API` + `HTH_API_MASTER` Tree（由 595 底座提供） | API/UI Test |
+| Checker Approve | 平台 Task/Snapshot 批准后才写 Effective Grant | Approval Test |
+| Checker Reject | 不写 Effective Grant；平台 Approval List/Activity Log 保留结果 | Approval Test |
 | BCO 不受影响 | 原 BCO Branch 保留 | Full Regression |

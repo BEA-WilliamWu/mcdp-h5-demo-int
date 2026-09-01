@@ -18,6 +18,8 @@ public class HostToHostUserAccessSearchDTO extends DomainObjectDTO {
 
   private String closeId;
 
+  private String username;
+
   private String accessPartyId;
 
   private String linkageType;
@@ -36,6 +38,14 @@ public class HostToHostUserAccessSearchDTO extends DomainObjectDTO {
 
   public void setCloseId(String closeId) {
     this.closeId = closeId;
+  }
+
+  public String getUsername() {
+    return username;
+  }
+
+  public void setUsername(String username) {
+    this.username = username;
   }
 
   public String getAccessPartyId() {

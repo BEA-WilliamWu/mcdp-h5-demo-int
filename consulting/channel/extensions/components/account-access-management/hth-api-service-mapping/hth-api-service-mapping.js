@@ -93,8 +93,12 @@ define([
         self.originalAccounts = ko.toJS(ko.unwrap(params.originalAccounts)) || [];
         self.action = ko.observable(ko.unwrap(params.action) || "CREATE");
         self.editing = ko.observable(self.action() !== "VIEW");
-        self.activeAccountType = ko.observable("CSA");
-        self.menuSelection = ko.observable("CASA");
+
+        self.activeAccountType = ko.observable(
+            normalizeAccountType(self.context.initialAccountType) === "TD" ? "TD" : "CSA");
+
+        self.menuSelection = ko.observable(
+            self.activeAccountType() === "TD" ? "TRD" : "CASA");
 
         self.tabLists = ko.observableArray([{
             id: "CASA",

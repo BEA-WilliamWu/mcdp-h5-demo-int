@@ -109,6 +109,16 @@
   border-bottom: 0;
 }
 
+.hth-associated-create-row {
+  padding-top: 1rem;
+  border-top: 1px solid var(--base-border-default);
+}
+
+.hth-associated-company-modal oj-select-one {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 767px) {
   .hth-summary-company-header {
     grid-template-columns: 1fr;

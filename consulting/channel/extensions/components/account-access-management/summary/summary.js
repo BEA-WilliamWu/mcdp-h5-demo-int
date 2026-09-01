@@ -16,6 +16,7 @@ define([
     "ojs/ojjsontreedatasource",
     "ojs/ojarraytabledatasource",
     "ojs/ojbutton",
+    "framework/elements/api/modal-window/loader",
     "framework/elements/api/page-section/loader"
 ], function (oj, ko, $, ExclusionModel, HthUserAccessModel, resourceBundle) {
     "use strict";
@@ -170,8 +171,14 @@ define([
         self.hthEnterpriseStatus = ko.observable();
         self.hthRelatedSummary = ko.observable();
         self.hthAssociatedSummaries = ko.observableArray([]);
+        self.hthAssociatedCreateCandidates = ko.observableArray([]);
+        self.hthSelectedAssociatedPartyId = ko.observable();
         self.hthLinkageContext = ko.observable();
         self.hthCopyCandidates = ko.observableArray([]);
+
+        self.hthAssociatedCompanyNotSelected = ko.pureComputed(function () {
+            return !readValue(self.hthSelectedAssociatedPartyId);
+        });
 
         self.hthEnterpriseDisabled = ko.pureComputed(function () {
             return self.hthEnterpriseStatus() && self.hthEnterpriseStatus() !== "ENABLE";
@@ -289,7 +296,41 @@ define([
             rootParams.dashboard.loadComponent("hth-account-linkage", {
                 hthLinkageContext: context,
                 summaryParams: inputParams,
-                action: summary.totalAccountCount > 0 ? "EDIT" : "CREATE"
+                // Match BCO: an existing context opens read-only. The Edit action on the
+                // linkage page is what turns it into a replacement request.
+                action: summary.totalAccountCount > 0 ? "VIEW" : "CREATE"
+            });
+        };
+
+        self.openHthAssociatedCompanySelector = function () {
+            self.hthSelectedAssociatedPartyId(null);
+            $("#hthAssociatedCompanyModal").trigger("openModal");
+        };
+
+        self.dismissHthAssociatedCompanySelector = function () {
+            self.hthSelectedAssociatedPartyId(null);
+            $("#hthAssociatedCompanyModal").hide().trigger("closeModal");
+        };
+
+        self.createHthAssociatedLinkage = function () {
+            const selectedPartyId = hthPartyId(self.hthSelectedAssociatedPartyId),
+                summary = ko.utils.arrayFirst(self.hthAssociatedCreateCandidates(),
+                    function (candidate) {
+                        return hthPartyId(candidate.accessPartyId) === selectedPartyId;
+                    });
+
+            if (!summary) {
+                rootParams.baseModel.showMessages(null,
+                    [self.nls.info.hthSelectAssociatedCompany], "ERROR");
+
+                return;
+            }
+
+            $("#hthAssociatedCompanyModal").hide().trigger("closeModal");
+            self.hthSelectedAssociatedPartyId(null);
+
+            self.openHthLinkage(summary, {
+                id: "CSA"
             });
         };
 
@@ -422,6 +463,7 @@ define([
             self.hthSummaryError("");
             self.hthRelatedSummary(null);
             self.hthAssociatedSummaries([]);
+            self.hthAssociatedCreateCandidates([]);
 
             if (!userIdForQuery) {
                 self.hthSummaryError(self.nls.info.hthMissingUserId);
@@ -440,14 +482,28 @@ define([
                     const relatedSummary = normalizeHthSummary(data.related),
                         associatedSummaries = ko.utils.arrayMap(
                             userScopedAssociatedSummaries(data.associated || [],
-                                accountAccessResponse), normalizeHthSummary);
+                                accountAccessResponse), normalizeHthSummary),
+                        configuredAssociatedSummaries = [],
+                        associatedCreateCandidates = [];
+
+                    ko.utils.arrayForEach(associatedSummaries, function (summary) {
+                        if (summary.totalAccountCount > 0) {
+                            configuredAssociatedSummaries.push(summary);
+                        } else if (String(summary.setupStatus || "")
+                                .toUpperCase().indexOf("PENDING_") !== 0
+                                && summary.setupStatus !== "ERROR"
+                                && summary.setupStatus !== "DISABLED") {
+                            associatedCreateCandidates.push(summary);
+                        }
+                    });
 
                     self.hthRelatedSummary(relatedSummary);
 
-                    // Keep BCO's row model: every user-scoped USERLINKAGE company owns its summary,
-                    // copy choice and direct maintenance action. No extra company-selection step is
-                    // introduced between the summary and account-linkage screens.
-                    self.hthAssociatedSummaries(associatedSummaries);
+                    // Match BCO's two-level interaction. Only configured companies become
+                    // summary rows. Unconfigured USERLINKAGE companies stay in the single
+                    // Company Selector opened by "To link".
+                    self.hthAssociatedSummaries(configuredAssociatedSummaries);
+                    self.hthAssociatedCreateCandidates(associatedCreateCandidates);
 
                     self.setupNotCreated(Boolean(relatedSummary
                         && relatedSummary.setupStatus === "NOT_SETUP"));

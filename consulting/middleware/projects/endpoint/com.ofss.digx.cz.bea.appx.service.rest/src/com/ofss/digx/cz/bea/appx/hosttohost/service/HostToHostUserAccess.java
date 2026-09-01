@@ -150,6 +150,8 @@ public class HostToHostUserAccess extends AbstractRESTApplication
       @QueryParam("partyId") String partyId,
       @Parameter(description = "HTH user CloseID")
       @QueryParam("closeId") String closeId,
+      @Parameter(description = "Selected BCO user identifier used by Account Access")
+      @QueryParam("username") String username,
       @Parameter(description = "Party owning the eligible accounts")
       @QueryParam("accessPartyId") String accessPartyId,
       @Parameter(description = "Company context: RELATED or ASSOCIATED")
@@ -164,6 +166,7 @@ public class HostToHostUserAccess extends AbstractRESTApplication
       HostToHostUserAccessSearchDTO request = new HostToHostUserAccessSearchDTO();
       request.setPartyId(partyId);
       request.setCloseId(closeId);
+      request.setUsername(username);
       request.setAccessPartyId(accessPartyId);
       request.setLinkageType(linkageType);
       HostToHostUserAccessResponseDTO result =

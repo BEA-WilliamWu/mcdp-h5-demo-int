@@ -15,8 +15,8 @@ define([
      */
     const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
         APPROVAL_ACCEPTED_STATUS = 202,
-        APPROVAL_REFERENCE_RETRY_COUNT = 3,
-        APPROVAL_REFERENCE_RETRY_DELAY = 200,
+        APPROVAL_REFERENCE_RETRY_COUNT = 6,
+        APPROVAL_REFERENCE_RETRY_DELAY = 400,
         baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
         responseBody = function (error) {
@@ -74,11 +74,17 @@ define([
         hydrateApprovalReference = function (response, context) {
             const deferred = $.Deferred(),
                 currentReference = response.referenceNumber
-                    || response.status && response.status.referenceNumber;
+                    || (response.status && response.status.referenceNumber);
 
-            if (currentReference || !context || !context.partyId || !context.closeId
-                    || !context.accessPartyId || !context.linkageType) {
+            if (currentReference) {
                 deferred.resolve(response);
+
+                return deferred;
+            }
+
+            if (!context || !context.partyId || !context.closeId || !context.accessPartyId
+                    || !context.linkageType || !context.username) {
+                deferred.reject(response);
 
                 return deferred;
             }
@@ -93,13 +99,14 @@ define([
                         partyId: context.partyId,
                         closeId: context.closeId,
                         accessPartyId: context.accessPartyId,
-                        linkageType: context.linkageType
+                        linkageType: context.linkageType,
+                        username: context.username
                     }),
                     version: "cz/v1",
                     success: function (data) {
                         const referenceNumber = data && (data.pendingReferenceNumber
                             || data.referenceNumber
-                            || data.status && data.status.referenceNumber);
+                            || (data.status && data.status.referenceNumber));
 
                         if (referenceNumber) {
                             publishReferenceNumber(response, referenceNumber);
@@ -111,14 +118,14 @@ define([
                         if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
                             setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
                         } else {
-                            deferred.resolve(response);
+                            deferred.reject(response);
                         }
                     },
                     error: function () {
                         if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
                             setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
                         } else {
-                            deferred.resolve(response);
+                            deferred.reject(response);
                         }
                     }
                 });
@@ -171,6 +178,12 @@ define([
                                     // argument is the transport jqXHR, while the first is the
                                     // normalized approval response consumed by confirm-screen.
                                     deferred.resolve(hydratedResponse, "success", error);
+                                })
+                                .fail(function () {
+                                    // A confirmation without the platform transaction ID cannot
+                                    // support BCO's quick-Approve flow. Preserve the failed
+                                    // transport instead of showing a false success.
+                                    deferred.reject(error);
                                 });
 
                             return;
@@ -216,30 +229,49 @@ define([
 
             return accountType;
         },
-        accountKey = function (account) {
-            return `${normalizeAccountType(account && account.accountType)}:${String(
-                readValue(account && account.accountNumber))}`;
+        normalizeAccountNumber = function (value) {
+            return String(value || "").split("~")[0].replace(/[- ]/g, "").trim();
+        },
+        accountNumberValues = function (account) {
+            const accountNumber = account && account.accountNumber,
+                candidates = accountNumber && typeof accountNumber === "object"
+                    ? [accountNumber.value, accountNumber.displayValue]
+                    : [accountNumber, account && account.accountNumberDisplay],
+                values = [];
+
+            candidates.forEach(function (candidate) {
+                const normalized = normalizeAccountNumber(readValue(candidate));
+
+                if (normalized && values.indexOf(normalized) === -1) {
+                    values.push(normalized);
+                }
+            });
+
+            return values;
         },
         findBcoPartyAccounts = function (bcoResponse, context) {
             const partyRows = bcoResponse && Array.isArray(bcoResponse.accounts)
                     ? bcoResponse.accounts : [],
                 accessPartyId = String(context.accessPartyId || ""),
+                expectedAccessLevel = String(context.linkageType || "").toUpperCase()
+                    === "ASSOCIATED" ? "USERLINKAGE" : "USER",
                 exactMatch = partyRows.filter(function (row) {
-                    return String(readValue(row && row.party)) === accessPartyId;
+                    return String(readValue(row && row.party)) === accessPartyId
+                        && String(readValue(row && row.accessLevel)).toUpperCase()
+                            === expectedAccessLevel;
                 })[0];
 
             if (exactMatch) {
                 return exactMatch;
             }
 
-            // Older AccountAccess responses omit party on the primary company row. For RELATED
-            // access that non-linkage row is still unambiguous. ASSOCIATED access must always
-            // match accessPartyId so an account from another company can never be displayed.
+            // Older AccountAccess responses omit party on the primary USER row. That row is still
+            // unambiguous for RELATED access. ASSOCIATED access must match both USERLINKAGE and
+            // accessPartyId so a party-wide LINKAGE catalogue can never leak into the user screen.
             if (String(context.linkageType || "").toUpperCase() === "RELATED") {
                 return partyRows.filter(function (row) {
-                    return ["LINKAGE", "USERLINKAGE"].indexOf(String(
-                        (row && row.accessLevel) || "").toUpperCase()) === -1;
-                })[0] || (partyRows.length === 1 ? partyRows[0] : null);
+                    return String(readValue(row && row.accessLevel)).toUpperCase() === "USER";
+                })[0] || null;
             }
 
             return null;
@@ -261,14 +293,18 @@ define([
                 mergedAccounts = [];
 
             hthAccounts.forEach(function (account) {
-                existingByKey[accountKey(account)] = account;
+                accountNumberValues(account).forEach(function (accountNumber) {
+                    existingByKey[`${normalizeAccountType(account.accountType)}:${accountNumber}`]
+                        = account;
+                });
             });
 
             // AccountAccess is the same catalogue used by BCO. Preserve its row order and display
             // metadata exactly; HTH contributes only the API catalogue and effective selections.
             bcoAccounts.forEach(function (bcoAccount) {
                 const accountType = normalizeAccountType(bcoAccount && bcoAccount.accountType),
-                    accountNumber = String(readValue(bcoAccount && bcoAccount.accountNumber)),
+                    bcoAccountNumbers = accountNumberValues(bcoAccount),
+                    accountNumber = bcoAccountNumbers[0] || "",
                     key = `${accountType}:${accountNumber}`;
 
                 if ((accountType !== "CSA" && accountType !== "TD")
@@ -278,7 +314,9 @@ define([
 
                 seen[key] = true;
 
-                const existing = existingByKey[key] || {},
+                const existing = bcoAccountNumbers.map(function (candidate) {
+                        return existingByKey[`${accountType}:${candidate}`];
+                    }).filter(Boolean)[0] || {},
                     accountNumberObject = bcoAccount.accountNumber,
                     accountNumberDisplay = accountNumberObject
                         && typeof accountNumberObject === "object"
@@ -287,8 +325,12 @@ define([
                         ? existing.apiServices : eligibleApis;
 
                 mergedAccounts.push(Object.assign({}, existing, {
-                    accountNumber: accountNumber,
-                    accountNumberDisplay: accountNumberDisplay || accountNumber,
+                    // Keep the backend canonical identifier for persistence while retaining BCO's
+                    // display alias and row order. This also preserves existing selections when
+                    // AccountAccess returns the 15-digit alias and HTH stores the 18-digit form.
+                    accountNumber: existing.accountNumber || accountNumber,
+                    accountNumberDisplay: accountNumberDisplay
+                        || existing.accountNumberDisplay || accountNumber,
                     maskedAccountNumber: existing.maskedAccountNumber
                         || accountNumberDisplay || "",
                     accountType: accountType,
@@ -356,7 +398,8 @@ define([
                     partyId: context.partyId,
                     closeId: context.closeId,
                     accessPartyId: context.accessPartyId,
-                    linkageType: context.linkageType
+                    linkageType: context.linkageType,
+                    username: context.username
                 })
             }).done(function (hthResponse) {
                 readBcoAccounts(context).done(function (bcoResponse) {
@@ -384,7 +427,8 @@ define([
                     partyId: payload.partyId,
                     closeId: payload.closeId,
                     accessPartyId: payload.accessPartyId,
-                    linkageType: payload.linkageType
+                    linkageType: payload.linkageType,
+                    username: payload.username
                 }
             });
         }

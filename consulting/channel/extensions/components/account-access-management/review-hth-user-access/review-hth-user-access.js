@@ -51,6 +51,7 @@ define([
 
                 const nestedRecord = source.record || source.hostToHostUserAccess
                     || source.hostToHostUserAccessDTO || source.access,
+                    nestedTransaction = source.transactionDTO || source.transaction,
                     nestedTransactionDetails = asObject(source.transactionDetails),
                     nestedSnapshot = source.transactionSnapshot
                         || nestedTransactionDetails.transactionSnapshot;
@@ -61,6 +62,10 @@ define([
 
                 if (nestedSnapshot) {
                     return unwrapRecord(nestedSnapshot);
+                }
+
+                if (nestedTransaction) {
+                    return unwrapRecord(nestedTransaction);
                 }
 
                 if (source.data && source.data !== source) {
@@ -75,7 +80,9 @@ define([
             },
             // The platform transaction snapshot is the checker source of truth, matching BCO.
             // Maker data is considered only when no snapshot exists.
-            recordCandidates = [transactionSnapshot, data, params.access, params],
+            paramsTransactionDetails = asObject(params.transactionDetails),
+            recordCandidates = [transactionSnapshot,
+                paramsTransactionDetails.transactionSnapshot, data, params.access, params],
             recordSource = recordCandidates.map(unwrapRecord).filter(function (candidate) {
                 return Object.keys(candidate).length > 0;
             })[0] || {},
@@ -138,7 +145,9 @@ define([
             || self.context.username || self.context.closeId || "-").split("@")[0];
 
         self.approvalMode = ko.observable(params.mode === "approval"
-            || Object.keys(transactionSnapshot).length > 0);
+            || Object.keys(transactionSnapshot).length > 0
+            || Object.keys(paramsTransactionDetails).length > 0
+            || !!taskCode);
 
         self.action = read(params.action) || record.actionType
             || (taskCode === "UAT_N_HUA_DEL" ? "DELETE"

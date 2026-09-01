@@ -223,13 +223,17 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     try {
       String partyId = normalize(requestDTO == null ? null : requestDTO.getPartyId());
       String closeId = normalize(requestDTO == null ? null : requestDTO.getCloseId());
+      String username = normalize(requestDTO == null ? null : requestDTO.getUsername());
       String accessPartyId = normalize(
           requestDTO == null ? null : requestDTO.getAccessPartyId());
       String linkageType = normalize(
           requestDTO == null ? null : requestDTO.getLinkageType());
       validateContext(partyId, closeId, accessPartyId, linkageType, true);
+      if (username == null) {
+        throw new Exception("DIGX_CZ_HTH_UA_001");
+      }
       populateAccountsResponse(response, sessionContext, partyId, closeId,
-          accessPartyId, linkageType);
+          username, accessPartyId, linkageType);
       response.setStatus(buildStatus(transactionStatus));
     } catch (Exception e) {
       fillTransactionStatus(transactionStatus, e);
@@ -377,10 +381,10 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
   private void populateAccountsResponse(HostToHostUserAccessResponseDTO response,
       SessionContext sessionContext, String partyId, String closeId,
-      String accessPartyId, String linkageType) throws Exception {
+      String username, String accessPartyId, String linkageType) throws Exception {
     List<HostToHostUserAccessApiDTO> eligibleApis = listEnterpriseApis(partyId);
     List<HostToHostUserAccessAccountDTO> eligibleAccounts =
-        listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+        listEligibleAccounts(sessionContext, partyId, username, accessPartyId, linkageType,
             eligibleApis);
     List<HthUserAccessAccount> effectiveAccounts = HthUserAccessAccountRepository
         .getInstance().listByContext(partyId, closeId, accessPartyId, linkageType);
@@ -390,7 +394,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     access.setCloseId(closeId);
     access.setAccessPartyId(accessPartyId);
     access.setLinkageType(linkageType);
-    access.setUsername(closeId);
+    access.setUsername(username);
     access.setAccessPartyName(fetchPartyName(accessPartyId));
     access.setAccounts(eligibleAccounts);
 
@@ -460,7 +464,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   }
 
   private List<HostToHostUserAccessAccountDTO> listEligibleAccounts(
-      SessionContext sessionContext, String partyId, String accessPartyId,
+      SessionContext sessionContext, String partyId, String username, String accessPartyId,
       String linkageType,
       List<HostToHostUserAccessApiDTO> eligibleApis) throws Exception {
     // Reuse BCO's AccountAccess query as the single source of eligible accounts. The complete
@@ -474,6 +478,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     Party party = new Party();
     party.setValue(partyId);
     request.setParty(party);
+    request.setUserId(username);
     List<AccountType> supportedAccountTypes = new ArrayList<AccountType>();
     supportedAccountTypes.add(AccountType.DEMAND_DEPOSIT);
     supportedAccountTypes.add(AccountType.TERM_DEPOSIT);
@@ -507,13 +512,17 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       }
       String responsePartyId = partyAccounts.getParty() == null
           ? null : normalize(partyAccounts.getParty().getValue());
-      if (accessPartyId.equals(responsePartyId)) {
+      boolean expectedUserScope = ASSOCIATED.equals(linkageType)
+          ? AccessLevel.USERLINKAGE.equals(partyAccounts.getAccessLevel())
+          : AccessLevel.USER.equals(partyAccounts.getAccessLevel());
+      if (accessPartyId.equals(responsePartyId) && expectedUserScope) {
         selectedPartyAccounts.add(partyAccounts);
       } else if (RELATED.equals(linkageType) && relatedPartyFallback == null
-          && AccessLevel.PARTY.equals(partyAccounts.getAccessLevel())) {
-        // BCO treats the PARTY row as the primary company. Some platform versions leave its
-        // party value empty; allow that same row only for RELATED access. ASSOCIATED access must
-        // always match accessPartyId exactly so accounts from another company cannot leak in.
+          && AccessLevel.USER.equals(partyAccounts.getAccessLevel())) {
+        // BCO treats the USER row as the selected user's primary company. Some platform versions
+        // leave its party value empty; allow that same user-scoped row only for RELATED access.
+        // ASSOCIATED access must always match accessPartyId exactly so accounts from another
+        // company cannot leak in.
         relatedPartyFallback = partyAccounts;
       }
     }
@@ -683,11 +692,16 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
     String partyId = normalize(request.getPartyId());
     String closeId = normalize(request.getCloseId());
+    String username = normalize(request.getUsername());
     String accessPartyId = normalize(request.getAccessPartyId());
     String linkageType = normalize(request.getLinkageType());
     validateContext(partyId, closeId, accessPartyId, linkageType, true);
+    if (username == null) {
+      throw new Exception("DIGX_CZ_HTH_UA_001");
+    }
     request.setPartyId(partyId);
     request.setCloseId(closeId);
+    request.setUsername(username);
     request.setAccessPartyId(accessPartyId);
     request.setLinkageType(linkageType);
 
@@ -716,7 +730,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
     List<HostToHostUserAccessAccountDTO> eligibleAccounts =
         listEligibleAccountsForValidation(sessionContext, request.getPartyId(),
-            request.getAccessPartyId(), request.getLinkageType(), eligibleApis,
+            request.getUsername(), request.getAccessPartyId(), request.getLinkageType(), eligibleApis,
             approvedExecution);
     Map<String, HostToHostUserAccessAccountDTO> eligibleAccountByKey =
         new HashMap<String, HostToHostUserAccessAccountDTO>();
@@ -807,11 +821,11 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
    * role is restored in all cases so no later service in the request is affected.
    */
   private List<HostToHostUserAccessAccountDTO> listEligibleAccountsForValidation(
-      SessionContext sessionContext, String partyId, String accessPartyId,
+      SessionContext sessionContext, String partyId, String username, String accessPartyId,
       String linkageType, List<HostToHostUserAccessApiDTO> eligibleApis,
       boolean approvedExecution) throws Exception {
     if (!approvedExecution) {
-      return listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+      return listEligibleAccounts(sessionContext, partyId, username, accessPartyId, linkageType,
           eligibleApis);
     }
 
@@ -820,7 +834,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     try {
       com.ofss.fc.infra.thread.ThreadAttribute.set(
           com.ofss.fc.infra.thread.ThreadAttribute.ENTERPRISE_ROLE_ID, CORPORATE_USER_ROLE);
-      return listEligibleAccounts(sessionContext, partyId, accessPartyId, linkageType,
+      return listEligibleAccounts(sessionContext, partyId, username, accessPartyId, linkageType,
           eligibleApis);
     } finally {
       if (originalEnterpriseRole == null) {

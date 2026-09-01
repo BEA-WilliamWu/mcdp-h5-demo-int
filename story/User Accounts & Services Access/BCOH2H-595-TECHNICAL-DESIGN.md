@@ -3,26 +3,34 @@
 | 项目 | 内容 |
 | --- | --- |
 | Story | BCOH2H-595 |
-| 功能 | HTH User Account Linkage and API Service Access |
+| 功能 | Related Account Summary Create + HTH Account/API Access 共用底座 |
 | 文档状态 | As Implemented |
-| 实现基线 | 当前分支 BCOH2H-538 / BCOH2H-595 最终实现 |
+| 实现基线 | 当前分支 HTH User Access 最终实现 |
 | 前置依赖 | `HTH_USER_PROFILE`、`HTH_MANAGEMENT`、`HTH_MANAGEMENT_API`、`HTH_API_MASTER` 已在 `HTH_BEA` |
 | 关联 Story | BCOH2H-538 提供 HTH User Summary 和维护入口 |
-| 更新时间 | 2026-08-31 |
+| 后续 Story | BCOH2H-596 Associated Create；BCOH2H-782 Related Edit；BCOH2H-785 Associated Edit |
+| 更新时间 | 2026-09-01（Story PDF、当前代码及后续设计复核） |
 
 ## 1. 目标和范围
 
-为一个 HTH 用户设置可访问的 Current and Savings Account 与 Time Deposit Account，以及每个账户允许调用的 HTH API Service。
+为一个尚未配置 Related Account Access 的 HTH 用户设置可访问的 Current and Savings Account 与
+Time Deposit Account，以及每个账户允许调用的 HTH API Service；Maker 提交审批、Checker 批准后
+才成为 Effective Access，并在 Related Account Summary 显示账户数量。
+
+BCOH2H-595 的验收边界是 **Related Create**。当前实现把 Context、组件、Endpoint 和审批底座抽成
+可复用能力，因此代码同时支持 Associated 及 Edit/Delete，但它们分别由 596、782、785 或其他
+维护 Story 验收，不能混入 595 的 Story 完成定义。
 
 已实现范围：
 
-- Related 和 Associated 两种 Company Context。
+- 595 验收路径固定 `linkageType=RELATED`、`accessPartyId=partyId`。
 - 只允许 CSA（Current and Savings）和 TD（Time Deposit）Account。
-- Account Selection、按账户 API Mapping、Review、Create/Edit/Delete。
+- Account Selection、按账户 API Mapping、Review 和 Create。
 - 与 BCO 一致的 Platform `transactionSnapshot` 和 Approved Re-entry。
 - 审批后生效的 Account/API Grant。
 - Summary、Account Detail 和 Runtime Authorization Repository Contract。
-- ORM、Repository Adapter、Permission、Task、Approval Assembler、Error NLS 和验证 SQL。
+- 共用底座包含 Related/Associated Context 以及 Create/Edit/Delete Service；595 只验收 Related Create。
+- ORM、Repository Adapter、Permission、Create Task、Approval Assembler、Error NLS 和验证 SQL。
 - 保留 BCO Account Access 原流程。
 
 不在本 Story 内处理：
@@ -33,6 +41,7 @@
 - HTH API 的业务处理实现。
 - User Scope API。最终数据模型按 Account Scope 实现，每项 API Grant 必须属于一个 Account Grant。
 - CloseID 生成规则。
+- Associated Create（596）、Related Edit（782）、Associated Edit（785）的页面与 AC。
 
 ## 2. 最终架构
 
@@ -74,6 +83,9 @@ flowchart TB
 - `username`、`fullName`、`accessPartyName` 是显示快照，不是关联 Key。
 - 最终实现没有 `objectVersionNumber`，前端和 DTO 都不传该字段。
 
+对于本 Story，所有 Maker/Checker、Duplicate、Effective Query 和 Summary 验证固定使用 RELATED
+规则。ASSOCIATED 规则是共用底座说明，不是 595 的验收分支。
+
 ## 3. 前端设计
 
 ### 3.1 组件流程
@@ -86,7 +98,22 @@ flowchart LR
     E --> F["confirm-screen"]
 ```
 
-HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules` 继续只服务 BCO，避免 HTH Template 与旧 BCO Binding 同时初始化。
+HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules` 保持 BCO-only，避免 HTH
+Template 与旧 BCO Binding 同时初始化。
+
+### 3.1.1 Summary Entry 与 Copy
+
+Related Account Summary 不显示 Company Name。未配置时只显示一条
+`No related account(s) linked to the user.`，并与 `To link` 保持同一行；点击后以
+`linkageType=RELATED`、`accessPartyId=partyId` 进入 Create。
+
+Story 截图中的 “Would you like to copy the access settings from another user?” 沿用 BCO 交互：
+
+- Candidate User 仍来自同一 Party 的 BCO User Scope；
+- 复制按标准化 `Account Type + Canonical Account Number` 和 `apiCode` 匹配；
+- 只复制账户/API 选择，不复制 Source User 的 `closeId`、Reference 或 Context；
+- Target 始终保持当前用户的 RELATED Context；
+- Copy 后仍进入正常 Review 和 Maker/Checker，不直接写 Effective 表。
 
 ### 3.2 Account Linkage
 
@@ -94,9 +121,11 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 
 行为：
 
-- `setupStatus=ACTIVE` 时初始 Mode 为 `VIEW`，否则为 `CREATE`。
+- 595 从未配置 Related Summary 的 `To link` 进入，初始 Mode 为 `CREATE`；共用组件在
+  `setupStatus=ACTIVE` 时可初始化为 `VIEW`，供后续 Edit Story 使用。
 - 默认进入 Current and Savings Tab，只显示 CSA；可切换 Time Deposit Tab，只显示 TD。
-- Pending Request 时禁止编辑。
+- Summary/Linkage 不新增 Pending 状态展示或仅靠隐藏按钮处理并发；相同 Context 的重复提交由
+  平台 Entity Identifier / `DIGX_AP_0062` 拦截。
 - `Edit` 把 Mode 改为 `EDIT`。
 - `Link All` 只修改 Account Selection。
 - `Next` 至少要求一个 Selected Account。
@@ -117,6 +146,10 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 - Back 返回 Account 页面时保留内存中的 Account/API Selection，不重新读取数据库。
 - `Save` 完成选择校验并进入 Review；`Confirm` 才提交 Maker Request。
 
+Story PDF 的页面命名把 Account 选择页称为 “Related Accounts settings”，下一页称为
+“Related Account(s)-Linkages”。当前组件分别为 `hth-account-linkage` 与
+`hth-api-service-mapping`，业务步骤一致；595 默认 CSA，TD 通过第二 Tab 进入。
+
 ### 3.4 Review 和提交
 
 `review-hth-user-access` 同时支持 Maker Review 和 Checker Read-only Detail：
@@ -128,6 +161,12 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 - Delete Payload 的 `accounts` 为空。
 - 非 Delete Payload 只包含 Selected Account 和每个账户下 Selected API。
 - 提交成功加载标准 `confirm-screen`，Reference Number 取 `status.externalReferenceNumber`。
+- Canonical REST 成功为 HTTP 201。当前 OBDX 版本也可能把“请求已成功建立并需要审批”返回为
+  HTTP 400 + `DIGX_APPROVAL_REQUIRED`；Channel 仅在 Body 表示 `SUCCESSFUL`，并能从响应或针对
+  当前 Context 的 `/accounts` 查询解析平台 Transaction Reference 时，将其规范化为 Confirmation。
+  其他 HTTP 400 必须显示错误，不能误报成功。
+- Quick Approve 使用上述平台 Reference 作为 Transaction ID，并通过 HTH Task Mapping 打开
+  `review-hth-user-access`，避免通用 Detail 因缺少 `transactionId` 显示空白页。
 
 实际 Maker Payload：
 
@@ -171,7 +210,7 @@ HTH Summary 直接注册并加载独立的 HTH 组件链；原 `mapping-modules`
 
 | 文件/组件 | 最终职责 |
 | --- | --- |
-| `mapping-modules/mapping-modules.js` | 保留 BCO 分支，新增 HTH Entry Routing。 |
+| `mapping-modules/mapping-modules.js` | 保持原 BCO-only；HTH 不通过该组件初始化。 |
 | `hth-account-linkage/*` | Account 读取、选择、View/Edit/Delete 和 Back State。 |
 | `hth-api-service-mapping/*` | 每账户 API Selection。 |
 | `review-hth-user-access/*` | Maker/Checker Review 和 Submit。 |
@@ -198,6 +237,10 @@ cz/v1/hostToHostUserAccess
 | POST | `/delete` | Delete Approval。 | 201 |
 
 Application `Exception` 当前由 REST Facade 映射为 400；关闭 Channel Interaction 失败映射为 500。当前实现没有把 Pending 返回为 202，也没有单独把 State Conflict 映射为 409。
+
+传输兼容层会把满足严格条件的 `DIGX_APPROVAL_REQUIRED` 响应在前端规范化成“语义已接受”，
+但不会改变 REST Facade 的真实 HTTP 400。技术排查必须同时看 HTTP Status、Business Result、
+Message Code 和 Platform Reference，不能只按 HTTP 400 判定业务失败。
 
 ### 4.2 Accounts Response
 
@@ -271,6 +314,11 @@ HostToHostUserAccessResponseDTO
     `transactionSnapshot` 匹配当前 Context。
 
 BCO AccountAccess 当前 Eligible Inventory 中不存在但 Effective 中仍 Active 的 Account，会以 Masked Account Number 补入响应并标记 Selected，使 View 能显示历史授权；Maker/Checker 校验时仍会调用相同的 AccountAccess Inventory 重新验证，不能继续审批已失效账户。
+
+Channel 为保持与 BCO 页面完全相同的用户级范围、展示字段和顺序，还会用同一
+`partyId + userId` 调用 BCO `readAllUserAccountDetails()`，再以标准化
+`Account Type + Canonical Account Number` 合并 HTH Selection/API。后端 `IAccountAccess` 仍是
+Ownership/Eligibility 的最终验证来源；前端合并不能扩大可授权范围。
 
 ### 5.2 Write Service
 
@@ -583,7 +631,9 @@ SQL 创建 12 个 Error Code，每项包含 English、Simplified Chinese 和 Tra
 ### 12.1 Security
 
 - 后端重新验证 Profile、Relationship、Account Ownership 和 API Eligibility。
-- Account Number 在数据库保存 Canonical Value；授权 BM/CM 维护页面与原 BCO 页面一致显示 Canonical Value，日志仍不得打印完整 Account Number。
+- Account Number 在数据库保存 Canonical Value，同时保存 BCO External/Formatted Value 和
+  Product Code；维护页面直接复用 BCO Display Metadata/Order，不自行按长度拼接账号。
+  日志仍不得打印完整 Account Number。
 - Platform Transaction Snapshot 不能代替 Checker 时的当前状态校验。
 - Runtime Authorization Fail Closed。
 - UI 权限只控制显示，Service Access Policy 才是后端控制边界。
@@ -643,10 +693,13 @@ Verification 预期：
 ### 14.1 Unit/UI
 
 - HTH Entry 不进入 BCO Task Mapping。
+- Related Summary 不显示 Company Name；未配置时提示文字与 `To link` 同一行。
+- Related `To link` 进入 CREATE，默认 CSA，CSA/TD 使用不同 Data Source。
 - Account/API Selection、Apply First to All、Back 和 Cancel State 正确。
 - 每个 Selected Account 至少一项 API。
 - Delete Payload 不带 Account Child。
 - Review 支持 Maker 和 Approval Wrapper。
+- `DIGX_APPROVAL_REQUIRED` 只有在拿到平台 Reference 时才进入成功页；Quick Approve 可加载 Checker Detail。
 
 ### 14.2 Repository
 
@@ -678,13 +731,15 @@ Verification 预期：
 
 | Story 要求 | 最终实现 | 验证方式 |
 | --- | --- | --- |
+| Related Create 入口 | Related Summary 单一 `To link` + 完整 RELATED Context | UI Test |
 | CSA/TD-only | BCO AccountAccess Demand/Term Deposit Inventory + Server `CSA`/`TD` Validation | API/E2E |
 | Account Linkage | `hth-account-linkage` + Effective Account Table | UI/Repository |
 | 每账户 API Mapping | Nested `apiServices` + Account API Table | UI/API |
-| View/Edit/Delete | HTH Component State + 3 Write Services | E2E |
-| Maker/Checker | 3 Tasks + Assembler + Platform Transaction Snapshot | Approval Test |
-| Approved Effective Access | Soft Deactivate/Reactivate Replace | Repository Test |
-| Related/Associated | 完整四字段 Context + Relationship Validation | Integration Test |
+| Review/Confirmation | HTH Review + 标准 Confirmation/Platform Reference | E2E |
+| Maker/Checker | `UAT_N_HUA_NEW` + Assembler + Platform Transaction Snapshot | Approval Test |
+| Approved Effective Access | Related Context Soft Deactivate/Reactivate Replace | Repository Test |
+| Approval List / Activity Log | 平台 Transaction 单一来源 | Integration Test |
+| 批准后 Summary | RELATED CSA/TD Effective Count 聚合 | Integration Test |
 | Runtime Contract | Fail-closed Authorizer Query | Integration/Ingress Test |
-| SQL 规范 | HTH_BEA、5 表、全字段 Comment、Feature Table 无 OVN | DBA Review |
+| SQL 规范 | HTH_BEA、2 张 Effective 表、全字段 Comment、Feature Table 无 OVN | DBA Review |
 | BCO 不受影响 | 独立 HTH Branch 和 Table | Full Regression |

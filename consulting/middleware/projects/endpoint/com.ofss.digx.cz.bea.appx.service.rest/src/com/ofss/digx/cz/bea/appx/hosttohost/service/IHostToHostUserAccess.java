@@ -9,7 +9,7 @@ public interface IHostToHostUserAccess {
   Response search(String partyId, String closeId);
 
   /** Reads account and API details for one related or associated company context. */
-  Response accounts(String partyId, String closeId, String accessPartyId,
+  Response accounts(String partyId, String closeId, String username, String accessPartyId,
       String linkageType);
 
   /** Starts a create approval transaction. */

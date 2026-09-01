@@ -9,9 +9,15 @@
                 label="[[nls.fieldname.userID]]" value="[[userIdDisplay]]">
             </obdx-row>
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
-                label="[[nls.fieldname.companyName]]"
+                label="[[nls.fieldname.userName]]"
+                value="[[access.fullName || context.fullName || '-']]">
+            </obdx-row>
+            <!-- ko if: (access.linkageType || context.linkageType) === 'ASSOCIATED' -->
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+                label="[[nls.fieldname.linkedPartyName]]"
                 value="[[access.accessPartyName || access.accessPartyId || '-']]">
             </obdx-row>
+            <!-- /ko -->
         </page-section>
     </div>
 

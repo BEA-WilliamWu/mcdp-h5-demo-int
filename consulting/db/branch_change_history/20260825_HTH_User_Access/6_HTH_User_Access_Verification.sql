@@ -171,14 +171,6 @@ SELECT PROP_ID, PREFERENCE_NAME, PROP_VALUE, DETERMINANT_VALUE
    AND PREFERENCE_NAME = 'DayOneConfig'
    AND DETERMINANT_VALUE = 'OBDX_BU';
 
--- Expected: no rows. A PARTY_MAINTENANCE HTH row is invisible to the BCO Administrative lists.
-SELECT TXN_ID, TXN_NAME, DISCRIMINATOR, APPR_STATUS,
-       PROCESSING_CURRENT_STEP, PROCESSING_STATUS, CREATED_BY, CREATION_DATE
-  FROM DIGX_AP_TRANSACTION
- WHERE TXN_NAME IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
-   AND NVL(DISCRIMINATOR, 'UNKNOWN') <> 'ADMIN_MAINTENANCE'
- ORDER BY CREATION_DATE DESC;
-
 -- Diagnostic for issue 3. A newly submitted approval must be present here immediately after the
 -- HTTP 400 / DIGX_APPROVAL_REQUIRED response; creation is synchronous, not a queue-fed insert.
 -- Pending Approvals additionally requires a checker row and a workflow snapshot whose SEQUENCE_NO

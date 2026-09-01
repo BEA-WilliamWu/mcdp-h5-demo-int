@@ -200,18 +200,7 @@ INSERT ALL
      '01', 'system', SYSDATE, 'system', SYSDATE)
 SELECT 1 FROM DUAL;
 
--- 6. Repair transactions created while the approval-assembler preference was not yet visible to
--- the application cache. ApprovalAssemblers is loaded from DIGX_FW_CONFIG_ALL_B by Preferences.xml
--- and is cached for 36,000,000 ms. Without a cache refresh/restart, the platform default creates
--- a valid PARTY_MAINTENANCE transaction which neither BCO Administrative Pending Approvals nor
--- Administrative Activity Log can list. The custom assembler prevents this for new requests;
--- this update moves already-created HTH snapshots to the same discriminator used by BCO.
-UPDATE DIGX_AP_TRANSACTION
-   SET DISCRIMINATOR = 'ADMIN_MAINTENANCE'
- WHERE TXN_NAME IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
-   AND NVL(DISCRIMINATOR, 'UNKNOWN') <> 'ADMIN_MAINTENANCE';
-
--- 7. Ensure transaction-list conversion handles the three new task codes.
+-- 6. Ensure transaction-list conversion handles the three new task codes.
 MERGE INTO DIGX_FW_CONFIG_ALL_O T
 USING (
   SELECT 'TAB_CHANGE_TASK_CODES' PROP_ID,
@@ -242,7 +231,7 @@ VALUES
    'UAT_N_HUA_NEW,UAT_N_HUA_EDT,UAT_N_HUA_DEL', S.DETERMINANT_VALUE,
    'system', SYSDATE, 'system', SYSDATE);
 
--- 8. Allow the three HTH maintenance tasks through the same CRM / One-Man-Bank evaluation entry
+-- 7. Allow the three HTH maintenance tasks through the same CRM / One-Man-Bank evaluation entry
 -- used by BCO User Access. Keep the delimiter used by the existing configuration value.
 MERGE INTO DIGX_FW_CONFIG_ALL_O T
 USING (
@@ -277,7 +266,7 @@ VALUES
    'UAT_N_HUA_NEW~UAT_N_HUA_EDT~UAT_N_HUA_DEL', S.DETERMINANT_VALUE,
    'system', SYSDATE, 'system', SYSDATE);
 
--- 9. Reuse BCO User Access authentication mappings so HTH Create/Edit/Delete follow the same
+-- 8. Reuse BCO User Access authentication mappings so HTH Create/Edit/Delete follow the same
 -- checker Signer OTP / iToken flow. Copying the source mappings preserves every configured role,
 -- determinant, maintenance ID, authentication type, and level instead of hard-coding one site.
 DECLARE

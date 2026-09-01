@@ -31,7 +31,6 @@
 
 .hth-review-api {
   padding: 0.75rem 0;
-  border-bottom: 1px solid var(--base-border-default);
 }
 
 .hth-review-empty {
@@ -41,4 +40,13 @@
 .hth-review-delete {
   padding: 1rem;
   background: var(--base-background-primary);
+}
+
+// Match the BCO review list, which has no trailing divider after its final row.
+#hthReviewAccountsTable tbody {
+  border-bottom: 0;
+
+  tr:last-child {
+    border-bottom: 0;
+  }
 }

@@ -13,6 +13,12 @@
   margin: 0.5rem 0 1.25rem;
 }
 
+// BCO nests its account table below the page-section flex content, so it does not receive the
+// shared page-section trailing padding. Remove that extra space from the equivalent HTH table.
+#hthAccountTableContainer {
+  padding-bottom: 0;
+}
+
 #hthAccountsTable {
   width: 100%;
 

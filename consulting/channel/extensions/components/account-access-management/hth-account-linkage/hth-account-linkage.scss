@@ -15,4 +15,9 @@
 
 #hthAccountsTable {
   width: 100%;
+
+  // BCO account lists end at the final row without an additional trailing divider.
+  tbody {
+    border-bottom: 0;
+  }
 }

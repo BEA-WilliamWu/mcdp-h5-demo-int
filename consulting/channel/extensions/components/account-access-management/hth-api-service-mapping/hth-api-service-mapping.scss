@@ -26,7 +26,6 @@
 
 .hth-api-option {
   padding: 0.75rem 0;
-  border-bottom: 1px solid var(--base-border-default);
 }
 
 .hth-api-option input[type="checkbox"] {
@@ -38,4 +37,9 @@
 
 .hth-api-empty {
   padding: 1rem 0;
+}
+
+// Match BCO: the list finishes at its last item, without a second trailing divider.
+#hthApiServiceTable tbody {
+  border-bottom: 0;
 }

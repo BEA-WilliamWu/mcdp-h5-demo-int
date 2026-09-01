@@ -1,2 +1,2 @@
 /* HTH account linkage deliberately reuses the BCO page-section, nav-bar, oj-table and button classes. Only spacing that is specific to the HTH account source is defined here. */
-.hth-account-instructions{margin-bottom:1.5rem;line-height:1.45}.hth-account-message{padding:1rem 0}.hth-link-all{margin:.5rem 0 1.25rem}#hthAccountsTable{width:100%}
+.hth-account-instructions{margin-bottom:1.5rem;line-height:1.45}.hth-account-message{padding:1rem 0}.hth-link-all{margin:.5rem 0 1.25rem}#hthAccountsTable{width:100%}#hthAccountsTable tbody{border-bottom:0}

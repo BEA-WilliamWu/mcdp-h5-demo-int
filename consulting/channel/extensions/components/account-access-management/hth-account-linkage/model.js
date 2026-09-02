@@ -10,11 +10,134 @@ define([
      * Keep the HTH request on the same BaseService context while the shared OMB/2FA component is
      * open. BaseService replays that exact context after OTP and adds the OMB transaction header;
      * 412/417 are therefore intermediate authentication challenges, not completed failures.
+     *
+     * Some deployed OBDX releases return a successfully staged approval as HTTP 400 with
+     * DIGX_APPROVAL_REQUIRED. BCO treats that outcome as the normal HTTP 202 confirmation
+     * contract, so HTH normalizes only that specific response after any OMB/2FA replay completes.
+     * The follow-up lookup resolves only after the asynchronous approval worker has created the
+     * checker details required by Pending Approvals.
      */
-    const baseService = BaseService.getInstance(),
+    const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
+        APPROVAL_ACCEPTED_STATUS = 202,
+        APPROVAL_REFERENCE_RETRY_COUNT = 75,
+        APPROVAL_REFERENCE_RETRY_DELAY = 400,
+        baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
+        responseBody = function (error) {
+            return error && error.responseJSON ? error.responseJSON : error;
+        },
         isAuthenticationChallenge = function (error) {
             return !!(error && (error.status === 412 || error.status === 417));
+        },
+        isApprovalRequiredResponse = function (error) {
+            const response = responseBody(error) || {},
+                status = response.status || {},
+                message = response.message || status.message;
+
+            return !!(message && message.code === APPROVAL_REQUIRED_CODE);
+        },
+        publishReferenceNumber = function (response, referenceNumber) {
+            const normalizedReference = referenceNumber === undefined || referenceNumber === null
+                ? "" : String(referenceNumber).trim();
+
+            if (!normalizedReference) {
+                return response;
+            }
+
+            response.referenceNumber = normalizedReference;
+            response.status = response.status || {};
+            response.status.referenceNumber = normalizedReference;
+
+            return response;
+        },
+        normalizeApprovalRequiredResponse = function (error) {
+            const response = Object.assign({}, responseBody(error) || {}),
+                status = Object.assign({}, response.status || {}),
+                access = response.access || {},
+                referenceNumber = response.referenceNumber || status.referenceNumber
+                    || access.referenceNumber || status.externalReferenceNumber;
+
+            status.result = status.result || response.result || "SUCCESSFUL";
+
+            status.message = status.message || response.message || {
+                code: APPROVAL_REQUIRED_CODE,
+                type: "INFO"
+            };
+
+            if (status.receiptAvailable === undefined) {
+                status.receiptAvailable = false;
+            }
+
+            response.status = status;
+            publishReferenceNumber(response, referenceNumber);
+            baseModel.injectProps(response, "getResponseStatus", APPROVAL_ACCEPTED_STATUS);
+
+            return response;
+        },
+        hydrateApprovalReference = function (response, context) {
+            const deferred = $.Deferred();
+
+            if (!context || !context.partyId || !context.closeId || !context.accessPartyId
+                    || !context.linkageType || !context.username) {
+                deferred.resolve(response);
+
+                return deferred;
+            }
+
+            let attempts = 0;
+
+            const readPendingReference = function () {
+                attempts += 1;
+
+                const transportPromise = baseService.fetch({
+                    url: baseModel.QueryParams.add("hostToHostUserAccess/accounts", {
+                        partyId: context.partyId,
+                        closeId: context.closeId,
+                        accessPartyId: context.accessPartyId,
+                        linkageType: context.linkageType,
+                        username: context.username,
+                        approvalReferenceOnly: "true"
+                    }),
+                    version: "cz/v1",
+                    throttle: false,
+                    showMessage: false,
+                    success: function (data) {
+                        const referenceNumber = data && (data.pendingReferenceNumber
+                            || data.referenceNumber
+                            || (data.status && data.status.referenceNumber));
+
+                        if (referenceNumber) {
+                            publishReferenceNumber(response, referenceNumber);
+                            deferred.resolve(response);
+
+                            return;
+                        }
+
+                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
+                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
+                        } else {
+                            deferred.reject();
+                        }
+                    },
+                    error: function () {
+                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
+                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
+                        } else {
+                            deferred.reject();
+                        }
+                    }
+                });
+
+                if (transportPromise && typeof transportPromise.catch === "function") {
+                    transportPromise.catch(function () {
+                        return null;
+                    });
+                }
+            };
+
+            readPendingReference();
+
+            return deferred;
         },
         isFailureResponse = function (data) {
             const result = data && data.status && data.status.result
@@ -24,6 +147,7 @@ define([
         },
         request = function (options) {
             const deferred = $.Deferred(),
+                approvalContext = options.approvalContext,
                 requestOptions = Object.assign({}, options, {
                     version: "cz/v1",
                     success: function (data, status, jqXhr) {
@@ -40,11 +164,27 @@ define([
                             return;
                         }
 
+                        if (isApprovalRequiredResponse(error)) {
+                            hydrateApprovalReference(
+                                normalizeApprovalRequiredResponse(error), approvalContext)
+                                .done(function (normalizedResponse) {
+                                    deferred.resolve(normalizedResponse, "success", error);
+                                }).fail(function () {
+                                    deferred.reject();
+                                });
+
+                            return;
+                        }
+
                         deferred.reject(error);
                     }
-                }),
-                transportPromise = requestOptions.data
-                    ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
+                });
+
+            // Local lookup metadata is not part of BaseService's request contract.
+            delete requestOptions.approvalContext;
+
+            const transportPromise = requestOptions.data
+                ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
 
             // BaseService owns the shared authentication modal and request replay. Callbacks above
             // expose its final result through the existing jQuery contract used by these screens.
@@ -266,7 +406,15 @@ define([
             return request({
                 url: "hostToHostUserAccess/" + (action === "EDIT"
                     ? "edit" : action === "DELETE" ? "delete" : "submit"),
-                data: JSON.stringify(payload)
+                data: JSON.stringify(payload),
+                showMessage: false,
+                approvalContext: {
+                    partyId: payload.partyId,
+                    closeId: payload.closeId,
+                    accessPartyId: payload.accessPartyId,
+                    linkageType: payload.linkageType,
+                    username: payload.username
+                }
             });
         }
     };

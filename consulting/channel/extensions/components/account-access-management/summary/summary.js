@@ -114,46 +114,9 @@ define([
 
                 return String(value || "");
             },
-            normalizeHthCatalogueAccountType = function (value) {
-                const accountType = String(readValue(value) || "").toUpperCase();
-
-                return accountType === "TRD" || accountType === "TERM_DEPOSIT" ? "TD"
-                    : accountType === "DEMAND_DEPOSIT" ? "CSA" : accountType;
-            },
-            bcoAccountIsMapped = function (account) {
-                return (account.tasks || []).some(function (taskGroup) {
-                    return (taskGroup.childTasks || []).some(function (task) {
-                        return readValue(task.allowed) === true;
-                    });
-                });
-            },
-            bcoAccountCountByType = function (partyRow) {
-                const counts = {
-                    CSA: 0,
-                    TD: 0
-                };
-
-                ((partyRow && partyRow.accountsList) || []).forEach(function (account) {
-                    const accountType = normalizeHthCatalogueAccountType(account.accountType);
-
-                    // Use the same definition as BCO's mapped-account summary. HTH supports only
-                    // Current and Savings and Time Deposit, so the other BCO product rows are
-                    // deliberately ignored after the common accountAccess response is received.
-                    if ((accountType === "CSA" || accountType === "TD")
-                            && bcoAccountIsMapped(account)) {
-                        counts[accountType] += 1;
-                    }
-                });
-
-                return counts;
-            },
             bcoScopedHthSummary = function (hthSummary, partyRow, linkageType,
                 defaultPartyId) {
-                const effectiveCounts = Object.assign({
-                        CSA: 0,
-                        TD: 0
-                    }, hthSummary && hthSummary.accountCountByType),
-                    accessPartyId = hthPartyId(partyRow && partyRow.party)
+                const accessPartyId = hthPartyId(partyRow && partyRow.party)
                         || hthPartyId(hthSummary && hthSummary.accessPartyId)
                         || hthPartyId(defaultPartyId),
                     summary = Object.assign({}, hthSummary || {});
@@ -165,22 +128,16 @@ define([
                     || summary.accessPartyName || accessPartyId;
 
                 summary.setupStatus = summary.setupStatus || "NOT_SETUP";
-                summary.effectiveAccountCountByType = effectiveCounts;
-                summary.accountCountByType = bcoAccountCountByType(partyRow);
+
+                // The common BCO accountAccess response supplies the user-scoped company
+                // catalogue and its ordering only. Mapped HTH counts must continue to come from
+                // the HTH summary; BCO function grants are a different configuration domain.
+                summary.accountCountByType = Object.assign({
+                    CSA: 0,
+                    TD: 0
+                }, hthSummary && hthSummary.accountCountByType);
 
                 return summary;
-            },
-            userScopedRelatedSummary = function (summary, accountAccessResponse,
-                defaultPartyId) {
-                const relatedRow = ((accountAccessResponse && accountAccessResponse.accounts) || [])
-                    .filter(function (partyRow) {
-                        return String(readValue(partyRow.accessLevel) || "").toUpperCase()
-                            === "USER";
-                    })[0];
-
-                return relatedRow
-                    ? bcoScopedHthSummary(summary, relatedRow, "RELATED", defaultPartyId)
-                    : null;
             },
             userScopedAssociatedSummaries = function (summaries, accountAccessResponse) {
                 const summariesByParty = {},
@@ -223,14 +180,8 @@ define([
         self.hthEnterpriseStatus = ko.observable();
         self.hthRelatedSummary = ko.observable();
         self.hthAssociatedSummaries = ko.observableArray([]);
-        self.hthAssociatedCreateCandidates = ko.observableArray([]);
-        self.hthSelectedAssociatedPartyId = ko.observable();
         self.hthLinkageContext = ko.observable();
         self.hthCopyCandidates = ko.observableArray([]);
-
-        self.hthAssociatedCompanyNotSelected = ko.pureComputed(function () {
-            return !readValue(self.hthSelectedAssociatedPartyId);
-        });
 
         self.hthEnterpriseDisabled = ko.pureComputed(function () {
             return self.hthEnterpriseStatus() && self.hthEnterpriseStatus() !== "ENABLE";
@@ -277,13 +228,7 @@ define([
             summary.tdAccountCount = Number(summary.accountCountByType.TD || 0);
             summary.totalAccountCount = summary.casaAccountCount + summary.tdAccountCount;
 
-            summary.effectiveAccountCountByType = summary.effectiveAccountCountByType
-                || summary.accountCountByType;
-
-            summary.effectiveAccountCount = Number(summary.effectiveAccountCountByType.CSA || 0)
-                + Number(summary.effectiveAccountCountByType.TD || 0);
-
-            summary.hasHthAccess = summary.effectiveAccountCount > 0;
+            summary.hasHthAccess = summary.totalAccountCount > 0;
             // Keep the copy selection on the company row, as BCO does with its per-row
             // copyAccountAccessSettingUserSelected array. Related and Associated companies must
             // not share one global selection because the selected user may be configured for one
@@ -359,38 +304,6 @@ define([
                 // Match BCO: an existing context opens read-only. The Edit action on the
                 // linkage page is what turns it into a replacement request.
                 action: summary.hasHthAccess ? "VIEW" : "CREATE"
-            });
-        };
-
-        self.openHthAssociatedCompanySelector = function () {
-            self.hthSelectedAssociatedPartyId(null);
-            $("#hthAssociatedCompanyModal").trigger("openModal");
-        };
-
-        self.dismissHthAssociatedCompanySelector = function () {
-            self.hthSelectedAssociatedPartyId(null);
-            $("#hthAssociatedCompanyModal").hide().trigger("closeModal");
-        };
-
-        self.createHthAssociatedLinkage = function () {
-            const selectedPartyId = hthPartyId(self.hthSelectedAssociatedPartyId),
-                summary = ko.utils.arrayFirst(self.hthAssociatedCreateCandidates(),
-                    function (candidate) {
-                        return hthPartyId(candidate.accessPartyId) === selectedPartyId;
-                    });
-
-            if (!summary) {
-                rootParams.baseModel.showMessages(null,
-                    [self.nls.info.hthSelectAssociatedCompany], "ERROR");
-
-                return;
-            }
-
-            $("#hthAssociatedCompanyModal").hide().trigger("closeModal");
-            self.hthSelectedAssociatedPartyId(null);
-
-            self.openHthLinkage(summary, {
-                id: "CSA"
             });
         };
 
@@ -523,7 +436,6 @@ define([
             self.hthSummaryError("");
             self.hthRelatedSummary(null);
             self.hthAssociatedSummaries([]);
-            self.hthAssociatedCreateCandidates([]);
 
             if (!userIdForQuery) {
                 self.hthSummaryError(self.nls.info.hthMissingUserId);
@@ -539,32 +451,13 @@ define([
                     data = data || {};
                     self.hthEnterpriseStatus(data.enterpriseHthStatus || "DISABLE");
 
-                    const relatedSummary = normalizeHthSummary(userScopedRelatedSummary(
-                            data.related, accountAccessResponse, partyIdForQuery)),
+                    const relatedSummary = normalizeHthSummary(data.related),
                         associatedSummaries = ko.utils.arrayMap(
                             userScopedAssociatedSummaries(data.associated || [],
-                                accountAccessResponse), normalizeHthSummary),
-                        configuredAssociatedSummaries = [],
-                        associatedCreateCandidates = [];
-
-                    ko.utils.arrayForEach(associatedSummaries, function (summary) {
-                        if (summary.hasHthAccess) {
-                            configuredAssociatedSummaries.push(summary);
-                        } else if (String(summary.setupStatus || "")
-                                .toUpperCase().indexOf("PENDING_") !== 0
-                                && summary.setupStatus !== "ERROR"
-                                && summary.setupStatus !== "DISABLED") {
-                            associatedCreateCandidates.push(summary);
-                        }
-                    });
+                                accountAccessResponse), normalizeHthSummary);
 
                     self.hthRelatedSummary(relatedSummary);
-
-                    // Match BCO's two-level interaction. Only configured companies become
-                    // summary rows. Unconfigured USERLINKAGE companies stay in the single
-                    // Company Selector opened by "To link".
-                    self.hthAssociatedSummaries(configuredAssociatedSummaries);
-                    self.hthAssociatedCreateCandidates(associatedCreateCandidates);
+                    self.hthAssociatedSummaries(associatedSummaries);
 
                     self.setupNotCreated(Boolean(relatedSummary
                         && relatedSummary.setupStatus === "NOT_SETUP"));

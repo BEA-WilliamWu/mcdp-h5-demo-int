@@ -67,7 +67,6 @@
   gap: 1rem;
   padding: 0.85rem 1rem;
   background-color: var(--base-background-primary);
-  border-bottom: 1px solid var(--base-border-default);
 }
 
 .hth-summary-company-label,
@@ -108,12 +107,8 @@
 }
 
 .hth-associated-create-row {
+  margin-bottom: 0;
   padding-top: 1rem;
-}
-
-.hth-associated-company-modal oj-select-one {
-  width: 100%;
-  margin-top: 0.75rem;
 }
 
 @media (max-width: 767px) {

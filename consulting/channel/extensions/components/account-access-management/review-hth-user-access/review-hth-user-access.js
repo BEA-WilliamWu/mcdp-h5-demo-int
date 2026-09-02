@@ -314,12 +314,11 @@ define([
 
             self.isSubmitting(true);
 
-            HthUserAccessModel.save(self.payload(), self.action).done(function (
-                response, status, jqXhr) {
-                // BCO hands the final replay response to the shared confirmation screen as jqXHR.
-                // Its status.referenceNumber is the platform transaction id used by quick Approve.
+            HthUserAccessModel.save(self.payload(), self.action).done(function (response) {
+                // The shared confirm screen accepts BaseService response DTOs and uses the
+                // normalized 202 status/reference for the same quick-Approve flow as BCO.
                 rootParams.dashboard.loadComponent("confirm-screen", {
-                    jqXHR: jqXhr,
+                    transactionResponse: response,
                     hostReferenceNumber: response.status && response.status.externalReferenceNumber,
                     transactionName: self.transactionName
                 }, self);

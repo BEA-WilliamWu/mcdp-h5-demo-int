@@ -48,59 +48,38 @@ DELETE FROM DIGX_CM_TASK_ASPECTS
 DELETE FROM DIGX_CM_TASK
  WHERE ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL');
 
--- 2. Register tasks under the existing User Account Access parent task UAT.
+-- 2. Register the HTH tasks from the corresponding BCO User Account Access task definitions.
+-- Copying the platform-owned workflow attributes keeps TASK_TYPE, MODULE_TYPE, executable/status,
+-- and future BCO configuration changes aligned without maintaining a second hard-coded profile.
 INSERT INTO DIGX_CM_TASK
   (ID, NAME, PARENT_ID, EXECUTABLE, TASK_TYPE, MODULE_TYPE, CREATED_BY,
    CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
    OBJECT_VERSION_NUMBER)
-VALUES
-  ('UAT_N_HUA_NEW', 'HTH User Access - Create', 'UAT', 'Y', 'ADMINISTRATION',
-   'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
+SELECT P.TARGET_TASK_ID, P.TARGET_TASK_NAME, S.PARENT_ID, S.EXECUTABLE,
+       S.TASK_TYPE, S.MODULE_TYPE, 'ofssuser', SYSDATE, 'ofssuser', SYSDATE,
+       S.OBJECT_STATUS, S.OBJECT_VERSION_NUMBER
+  FROM DIGX_CM_TASK S
+  JOIN (
+    SELECT 'UAT_N_CA' SOURCE_TASK_ID, 'UAT_N_HUA_NEW' TARGET_TASK_ID,
+           'HTH User Access - Create' TARGET_TASK_NAME FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_UA', 'UAT_N_HUA_EDT', 'HTH User Access - Edit' FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_DA', 'UAT_N_HUA_DEL', 'HTH User Access - Delete' FROM DUAL
+  ) P ON P.SOURCE_TASK_ID = S.ID;
 
-INSERT INTO DIGX_CM_TASK
-  (ID, NAME, PARENT_ID, EXECUTABLE, TASK_TYPE, MODULE_TYPE, CREATED_BY,
-   CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
-   OBJECT_VERSION_NUMBER)
-VALUES
-  ('UAT_N_HUA_EDT', 'HTH User Access - Edit', 'UAT', 'Y', 'ADMINISTRATION',
-   'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
-
-INSERT INTO DIGX_CM_TASK
-  (ID, NAME, PARENT_ID, EXECUTABLE, TASK_TYPE, MODULE_TYPE, CREATED_BY,
-   CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_STATUS,
-   OBJECT_VERSION_NUMBER)
-VALUES
-  ('UAT_N_HUA_DEL', 'HTH User Access - Delete', 'UAT', 'Y', 'ADMINISTRATION',
-   'BO', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
-
--- 3. Enable the same approval controls used by BCO User Access. The 2fa aspect delegates the
--- actual challenge to the platform authentication mapping configured in section 8.
-INSERT ALL
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_NEW', 'approval', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_NEW', 'audit', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_NEW', 'blackout', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_NEW', '2fa', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_EDT', 'approval', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_EDT', 'audit', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_EDT', 'blackout', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_EDT', '2fa', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_DEL', 'approval', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_DEL', 'audit', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_DEL', 'blackout', 'Y')
-  INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
-  VALUES ('UAT_N_HUA_DEL', '2fa', 'Y')
-SELECT 1 FROM DUAL;
+-- 3. Copy the complete BCO task-aspect set instead of hard-coding approval/2FA behavior. This is
+-- the configuration consumed by the approval response policy and checker-details setup.
+INSERT INTO DIGX_CM_TASK_ASPECTS (TASK_ID, ASPECT, ENABLED)
+SELECT P.TARGET_TASK_ID, A.ASPECT, A.ENABLED
+  FROM DIGX_CM_TASK_ASPECTS A
+  JOIN (
+    SELECT 'UAT_N_CA' SOURCE_TASK_ID, 'UAT_N_HUA_NEW' TARGET_TASK_ID FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_UA', 'UAT_N_HUA_EDT' FROM DUAL
+    UNION ALL
+    SELECT 'UAT_N_DA', 'UAT_N_HUA_DEL' FROM DUAL
+  ) P ON P.SOURCE_TASK_ID = A.TASK_ID;
 
 -- 4. Link each write resource to its workflow task.
 INSERT INTO DIGX_CM_RESOURCE_TASK_REL

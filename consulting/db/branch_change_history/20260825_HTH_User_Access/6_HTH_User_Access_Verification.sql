@@ -108,13 +108,46 @@ SELECT R.ID AS RESOURCE_ID, R.RESOURCE_TYPE, RA.ACTION_TYPE,
        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.%'
  ORDER BY R.RESOURCE_TYPE, R.ID, RA.ACTION_TYPE;
 
--- Expected: 3 tasks, each with approval/audit/blackout/2fa aspects (12 rows total).
+-- Expected: 3 tasks. TASK_TYPE, MODULE_TYPE and aspects are copied from the corresponding BCO
+-- Create/Edit/Delete tasks by 3_HTH_User_Access_Process.sql.
 SELECT T.ID, T.NAME, T.PARENT_ID, T.TASK_TYPE, T.MODULE_TYPE,
        A.ASPECT, A.ENABLED
   FROM DIGX_CM_TASK T
   JOIN DIGX_CM_TASK_ASPECTS A ON A.TASK_ID = T.ID
  WHERE T.ID IN ('UAT_N_HUA_NEW', 'UAT_N_HUA_EDT', 'UAT_N_HUA_DEL')
  ORDER BY T.ID, A.ASPECT;
+
+-- Expected: no rows. Any output is an HTH task aspect that differs from its BCO source task.
+WITH TASK_PAIRS AS (
+  SELECT 'UAT_N_CA' SOURCE_TASK_ID, 'UAT_N_HUA_NEW' TARGET_TASK_ID FROM DUAL
+  UNION ALL
+  SELECT 'UAT_N_UA', 'UAT_N_HUA_EDT' FROM DUAL
+  UNION ALL
+  SELECT 'UAT_N_DA', 'UAT_N_HUA_DEL' FROM DUAL
+), ASPECT_DIFFERENCES AS (
+  SELECT P.TARGET_TASK_ID, S.ASPECT, S.ENABLED, 'MISSING_FROM_HTH' DIFFERENCE
+    FROM TASK_PAIRS P
+    JOIN DIGX_CM_TASK_ASPECTS S ON S.TASK_ID = P.SOURCE_TASK_ID
+   WHERE NOT EXISTS (
+     SELECT 1 FROM DIGX_CM_TASK_ASPECTS T
+      WHERE T.TASK_ID = P.TARGET_TASK_ID
+        AND T.ASPECT = S.ASPECT
+        AND T.ENABLED = S.ENABLED
+   )
+  UNION ALL
+  SELECT P.TARGET_TASK_ID, T.ASPECT, T.ENABLED, 'EXTRA_IN_HTH'
+    FROM TASK_PAIRS P
+    JOIN DIGX_CM_TASK_ASPECTS T ON T.TASK_ID = P.TARGET_TASK_ID
+   WHERE NOT EXISTS (
+     SELECT 1 FROM DIGX_CM_TASK_ASPECTS S
+      WHERE S.TASK_ID = P.SOURCE_TASK_ID
+        AND S.ASPECT = T.ASPECT
+        AND S.ENABLED = T.ENABLED
+   )
+)
+SELECT TARGET_TASK_ID, ASPECT, ENABLED, DIFFERENCE
+  FROM ASPECT_DIFFERENCES
+ ORDER BY TARGET_TASK_ID, ASPECT, DIFFERENCE;
 
 -- Expected: HTH mappings mirror the BCO Create/Edit/Delete mapping counts and authentication
 -- parameters. AUTH_TYPE_ID should include the site's standard Signer OTP / iToken challenge.
@@ -181,7 +214,7 @@ SELECT PROP_ID, PREFERENCE_NAME, PROP_VALUE, DETERMINANT_VALUE
    AND DETERMINANT_VALUE = 'OBDX_BU';
 
 -- Diagnostic for issue 3. A newly submitted approval must be present here immediately after the
--- HTTP 400 / DIGX_APPROVAL_REQUIRED response; creation is synchronous, not a queue-fed insert.
+-- HTH write returns ACCEPTED with DIGX_APPROVAL_REQUIRED; creation is synchronous.
 -- Pending Approvals additionally requires a checker row and a workflow snapshot whose SEQUENCE_NO
 -- equals APPR_STEP_NO. Activity Log only needs the transaction row and the correct discriminator.
 SELECT T.TXN_ID, T.TXN_NAME, T.DISCRIMINATOR, T.APPR_STATUS, T.APPR_STEP_NO,

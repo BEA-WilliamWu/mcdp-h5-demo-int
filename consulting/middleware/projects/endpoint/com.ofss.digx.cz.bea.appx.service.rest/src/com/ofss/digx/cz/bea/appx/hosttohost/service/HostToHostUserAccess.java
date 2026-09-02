@@ -9,6 +9,7 @@ import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessResponseDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessSearchDTO;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.infra.log.impl.MultiEntityLogger;
+import com.ofss.fc.service.response.TransactionStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -213,9 +214,9 @@ public class HostToHostUserAccess extends AbstractRESTApplication
   @Operation(summary = "Submit HTH user access edit for approval",
       operationId = "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.edit")
   @ApiResponses({
-      @ApiResponse(responseCode = "201", description = "HTH user access edit submitted",
+      @ApiResponse(responseCode = "200", description = "HTH user access edit submitted",
           content = @Content(mediaType = "application/json",
-              schema = @Schema(implementation = HostToHostUserAccessResponseDTO.class))),
+              schema = @Schema(implementation = TransactionStatus.class))),
       @ApiResponse(responseCode = "400", description = "Validation failure",
           content = @Content(mediaType = "application/json",
               schema = @Schema(implementation = Status.class)))
@@ -232,9 +233,9 @@ public class HostToHostUserAccess extends AbstractRESTApplication
   @Operation(summary = "Submit HTH user access deletion for approval",
       operationId = "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.delete")
   @ApiResponses({
-      @ApiResponse(responseCode = "201", description = "HTH user access deletion submitted",
+      @ApiResponse(responseCode = "200", description = "HTH user access deletion submitted",
           content = @Content(mediaType = "application/json",
-              schema = @Schema(implementation = HostToHostUserAccessResponseDTO.class))),
+              schema = @Schema(implementation = TransactionStatus.class))),
       @ApiResponse(responseCode = "400", description = "Validation failure",
           content = @Content(mediaType = "application/json",
               schema = @Schema(implementation = Status.class)))
@@ -253,15 +254,17 @@ public class HostToHostUserAccess extends AbstractRESTApplication
       interaction.begin(context);
       com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess service =
           new com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess();
-      HostToHostUserAccessResponseDTO result;
       if ("edit".equals(action)) {
-        result = service.edit(context.getSessionContext(), requestDTO);
+        TransactionStatus result = service.edit(context.getSessionContext(), requestDTO);
+        response = buildResponse(result, Response.Status.OK);
       } else if ("delete".equals(action)) {
-        result = service.delete(context.getSessionContext(), requestDTO);
+        TransactionStatus result = service.delete(context.getSessionContext(), requestDTO);
+        response = buildResponse(result, Response.Status.OK);
       } else {
-        result = service.submit(context.getSessionContext(), requestDTO);
+        HostToHostUserAccessResponseDTO result =
+            service.submit(context.getSessionContext(), requestDTO);
+        response = buildResponse(result, Response.Status.CREATED);
       }
-      response = buildResponse(result, Response.Status.CREATED);
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while processing HTH user access action '%s'", action), e);

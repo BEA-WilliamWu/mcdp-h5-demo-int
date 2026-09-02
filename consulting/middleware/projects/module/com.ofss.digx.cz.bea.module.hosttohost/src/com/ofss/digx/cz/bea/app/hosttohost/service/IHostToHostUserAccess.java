@@ -5,6 +5,7 @@ import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessResponseDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessSearchDTO;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.app.context.SessionContext;
+import com.ofss.fc.service.response.TransactionStatus;
 
 /** Application-service contract for HTH user account and API access maintenance. */
 public interface IHostToHostUserAccess {
@@ -24,12 +25,12 @@ public interface IHostToHostUserAccess {
       HostToHostUserAccessDTO requestDTO) throws Exception;
 
   /** Submits replacement of existing HTH access to the maker/checker workflow. */
-  HostToHostUserAccessResponseDTO edit(
+  TransactionStatus edit(
       SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO) throws Exception;
 
   /** Submits soft deletion of existing HTH access to the maker/checker workflow. */
-  HostToHostUserAccessResponseDTO delete(
+  TransactionStatus delete(
       SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO) throws Exception;
 }

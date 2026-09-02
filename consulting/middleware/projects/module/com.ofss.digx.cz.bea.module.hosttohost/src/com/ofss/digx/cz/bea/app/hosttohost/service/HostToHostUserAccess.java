@@ -271,7 +271,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       type = TaskType.ADMINISTRATION)
   public HostToHostUserAccessResponseDTO submit(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO) throws Exception {
-    return save(sessionContext, requestDTO, SUBMIT_SERVICE_ID, CREATE);
+    return saveResponse(sessionContext, requestDTO, SUBMIT_SERVICE_ID, CREATE);
   }
 
   /** Submits full replacement of an existing access context for approval. */
@@ -287,9 +287,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       aspects = {TaskAspect.APPROVALS, TaskAspect.AUDIT, TaskAspect.BLACKOUT,
           TaskAspect.TWO_FACTOR_AUTHENTICATION},
       type = TaskType.ADMINISTRATION)
-  public HostToHostUserAccessResponseDTO edit(SessionContext sessionContext,
+  public TransactionStatus edit(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO) throws Exception {
-    return save(sessionContext, requestDTO, EDIT_SERVICE_ID, EDIT);
+    return saveStatus(sessionContext, requestDTO, EDIT_SERVICE_ID, EDIT);
   }
 
   /** Submits soft deletion of an existing access context for approval. */
@@ -305,9 +305,9 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       aspects = {TaskAspect.APPROVALS, TaskAspect.AUDIT, TaskAspect.BLACKOUT,
           TaskAspect.TWO_FACTOR_AUTHENTICATION},
       type = TaskType.ADMINISTRATION)
-  public HostToHostUserAccessResponseDTO delete(SessionContext sessionContext,
+  public TransactionStatus delete(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO) throws Exception {
-    return save(sessionContext, requestDTO, DELETE_SERVICE_ID, DELETE);
+    return saveStatus(sessionContext, requestDTO, DELETE_SERVICE_ID, DELETE);
   }
 
   /**
@@ -318,7 +318,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
    * snapshot. Approved checker re-entry receives the stored server-side snapshot, validates it
    * again against current data, and only then changes effective grants.
    */
-  private HostToHostUserAccessResponseDTO save(SessionContext sessionContext,
+  private HostToHostUserAccessResponseDTO saveResponse(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
     super.checkAccessPolicy(serviceId, sessionContext, requestDTO);
     HostToHostUserAccessResponseDTO response = new HostToHostUserAccessResponseDTO();
@@ -349,19 +349,66 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
        */
     } catch (Exception e) {
       fillTransactionStatus(transactionStatus, e);
+      response.setStatus(buildStatus(transactionStatus));
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while processing HTH user access action '%s' for party '%s'",
           actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
-      throw e;
     } catch (RuntimeException e) {
       fillTransactionStatus(transactionStatus, e);
-      throw new Exception(e);
+      response.setStatus(buildStatus(transactionStatus));
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Runtime exception while processing HTH user access action '%s' for party '%s'",
+          actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
     } finally {
       Interaction.close();
     }
 
     super.checkResponsePolicy(sessionContext, response);
     return response;
+  }
+
+  /**
+   * Uses the same response-policy contract as BCO User Account Access update/delete.
+   *
+   * <p>The approval framework mutates {@link TransactionStatus} to ACCEPTED and attaches the
+   * generated reference number before the REST layer returns. Passing a separate response DTO for
+   * edit/delete caused DIGX_APPROVAL_REQUIRED to escape as HTTP 400 even though the transaction had
+   * already been staged.
+   */
+  private TransactionStatus saveStatus(SessionContext sessionContext,
+      HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
+    super.checkAccessPolicy(serviceId, sessionContext, requestDTO);
+    TransactionStatus transactionStatus = fetchTransactionStatus();
+    boolean approvedExecution = isApprovedExecution();
+    String referenceNumber = normalize(readTransactionId());
+    if (requestDTO != null && referenceNumber != null) {
+      requestDTO.setReferenceNumber(referenceNumber);
+      setExternalReferenceNumber(referenceNumber);
+    }
+
+    Interaction.begin(sessionContext);
+    try {
+      validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
+      if (approvedExecution) {
+        applyApprovedAccess(requestDTO, actionType, readUserId(sessionContext));
+      }
+      requestDTO.setReferenceNumber(referenceNumber);
+    } catch (Exception e) {
+      fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Exception while processing HTH user access action '%s' for party '%s'",
+          actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
+    } catch (RuntimeException e) {
+      fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Runtime exception while processing HTH user access action '%s' for party '%s'",
+          actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
+    } finally {
+      Interaction.close();
+    }
+
+    super.checkResponsePolicy(sessionContext, transactionStatus);
+    return transactionStatus;
   }
 
   private void validateContext(String partyId, String closeId, String accessPartyId,

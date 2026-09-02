@@ -238,7 +238,11 @@ define([
         };
 
         self.deleteClicked = function () {
-            $("#hthDeleteAccessModal").trigger("openModal");
+            // Match BCO delete: qualify OMB before exposing the confirmation action so the later
+            // delete POST enters the shared 2FA flow with the correct task context.
+            serviceExtension.checkTransactionQualifiesOMB("UAT_N_HUA_DEL").then(function () {
+                $("#hthDeleteAccessModal").trigger("openModal");
+            });
         };
 
         self.deleteAccess = function () {

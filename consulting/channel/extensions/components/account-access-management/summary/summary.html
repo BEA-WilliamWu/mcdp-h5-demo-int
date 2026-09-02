@@ -187,7 +187,7 @@
                 </div>
                 <!-- /ko -->
 
-                <!-- ko if: $component.hthAssociatedCreateCandidates().length > 0 -->
+                <!-- ko if: $component.hthAssociatedSummaries().length === 0 && $component.hthAssociatedCreateCandidates().length > 0 -->
                 <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center no-setup-section hth-associated-create-row">
                   <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-9">
                     <span data-bind="text: $component.nls.info.userLinkageSetUp"></span>

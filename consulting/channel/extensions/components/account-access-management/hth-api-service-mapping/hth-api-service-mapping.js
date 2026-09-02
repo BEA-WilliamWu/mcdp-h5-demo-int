@@ -230,13 +230,20 @@ define([
                 return;
             }
 
-            rootParams.dashboard.loadComponent("review-hth-user-access", {
-                hthLinkageContext: self.context,
-                summaryParams: self.summaryParams,
-                access: self.access,
-                accounts: self.allAccounts,
-                originalAccounts: self.originalAccounts,
-                action: self.action()
+            const taskCode = self.action() === "EDIT"
+                ? "UAT_N_HUA_EDT" : "UAT_N_HUA_NEW";
+
+            // BCO qualifies create/edit for OMB before opening its review screen. Use the HTH
+            // task code but keep the same shared service so OTP can replay the later POST context.
+            serviceExtension.checkTransactionQualifiesOMB(taskCode).then(function () {
+                rootParams.dashboard.loadComponent("review-hth-user-access", {
+                    hthLinkageContext: self.context,
+                    summaryParams: self.summaryParams,
+                    access: self.access,
+                    accounts: self.allAccounts,
+                    originalAccounts: self.originalAccounts,
+                    action: self.action()
+                });
             });
         };
 

@@ -314,17 +314,13 @@ define([
 
             self.isSubmitting(true);
 
-            HthUserAccessModel.save(self.payload(), self.action).done(function (response) {
-                // Approval-required is returned as HTTP 400 by this OBDX release but is normalized
-                // by the model to an accepted transaction response. Passing the original jqXHR to
-                // confirm-screen would make it parse the error transport as a transactionAction.
+            HthUserAccessModel.save(self.payload(), self.action).done(function (
+                response, status, jqXhr) {
+                // BCO hands the final replay response to the shared confirmation screen as jqXHR.
+                // Its status.referenceNumber is the platform transaction id used by quick Approve.
                 rootParams.dashboard.loadComponent("confirm-screen", {
-                    transactionResponse: response,
+                    jqXHR: jqXhr,
                     hostReferenceNumber: response.status && response.status.externalReferenceNumber,
-                    // BCO passes the action-specific transaction name to confirm-screen. Apart
-                    // from displaying the correct Create/Edit/Delete title, the shared component
-                    // uses it together with the platform reference number when the checker clicks
-                    // the Approve shortcut and reopens the immutable transaction snapshot.
                     transactionName: self.transactionName
                 }, self);
             }).fail(function (error) {

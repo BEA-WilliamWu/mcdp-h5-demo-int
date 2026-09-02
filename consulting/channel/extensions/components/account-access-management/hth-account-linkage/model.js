@@ -7,142 +7,14 @@ define([
     "use strict";
 
     /*
-     * HTH access transport wrapper. OBDX can return a successful HTTP status with a failed business
-     * status, so both transport and response status are normalized into the same Deferred failure
-     * path consumed by the view models. Approval-required is the one exception: older OBDX releases
-     * report a successfully staged maker request as HTTP 400 with DIGX_APPROVAL_REQUIRED. That
-     * transport response is normalized to the standard HTTP 202 confirmation contract.
+     * Keep the HTH request on the same BaseService context while the shared OMB/2FA component is
+     * open. BaseService replays that exact context after OTP and adds the OMB transaction header;
+     * 412/417 are therefore intermediate authentication challenges, not completed failures.
      */
-    const APPROVAL_REQUIRED_CODE = "DIGX_APPROVAL_REQUIRED",
-        APPROVAL_ACCEPTED_STATUS = 202,
-        APPROVAL_REFERENCE_RETRY_COUNT = 25,
-        APPROVAL_REFERENCE_RETRY_DELAY = 400,
-        baseService = BaseService.getInstance(),
+    const baseService = BaseService.getInstance(),
         baseModel = BaseModel.getInstance(),
-        responseBody = function (error) {
-            return error && error.responseJSON ? error.responseJSON : error;
-        },
-        isApprovalRequiredResponse = function (error) {
-            const response = responseBody(error) || {},
-                status = response.status || {},
-                message = response.message || status.message;
-
-            return !!(message && message.code === APPROVAL_REQUIRED_CODE);
-        },
-        publishReferenceNumber = function (response, referenceNumber) {
-            const normalizedReference = referenceNumber === undefined || referenceNumber === null
-                ? "" : String(referenceNumber).trim();
-
-            if (!normalizedReference) {
-                return response;
-            }
-
-            response.referenceNumber = normalizedReference;
-            response.status = response.status || {};
-            response.status.referenceNumber = normalizedReference;
-
-            return response;
-        },
-        normalizeApprovalRequiredResponse = function (error) {
-            const response = Object.assign({}, responseBody(error) || {}),
-                status = Object.assign({}, response.status || {}),
-                access = response.access || {},
-                referenceNumber = response.referenceNumber || status.referenceNumber
-                    || access.referenceNumber || status.externalReferenceNumber;
-
-            status.result = status.result || response.result || "SUCCESSFUL";
-
-            status.message = status.message || response.message || {
-                code: APPROVAL_REQUIRED_CODE,
-                type: "INFO"
-            };
-
-            if (status.receiptAvailable === undefined) {
-                status.receiptAvailable = false;
-            }
-
-            // confirm-screen uses the platform reference as transactionId when the checker
-            // selects its quick-Approve action.  Older HTH responses expose that reference on
-            // the nested access DTO or as externalReferenceNumber, while BCO exposes the same
-            // value as status.referenceNumber.  Publish the canonical BCO shape to the UI.
-            response.status = status;
-            publishReferenceNumber(response, referenceNumber);
-            baseModel.injectProps(response, "getResponseStatus", APPROVAL_ACCEPTED_STATUS);
-
-            return response;
-        },
-        hydrateApprovalReference = function (response, context) {
-            const deferred = $.Deferred(),
-                currentReference = response.referenceNumber
-                    || (response.status && response.status.referenceNumber);
-
-            if (!context || !context.partyId || !context.closeId || !context.accessPartyId
-                    || !context.linkageType || !context.username) {
-                if (currentReference) {
-                    deferred.resolve(response);
-                } else {
-                    deferred.reject(response);
-                }
-
-                return deferred;
-            }
-
-            let attempts = 0;
-
-            const readPendingReference = function () {
-                attempts += 1;
-
-                const transportPromise = baseService.fetch({
-                    url: baseModel.QueryParams.add("hostToHostUserAccess/accounts", {
-                        partyId: context.partyId,
-                        closeId: context.closeId,
-                        accessPartyId: context.accessPartyId,
-                        linkageType: context.linkageType,
-                        username: context.username,
-                        approvalReferenceOnly: "true"
-                    }),
-                    version: "cz/v1",
-                    throttle: false,
-                    success: function (data) {
-                        const referenceNumber = data && (data.pendingReferenceNumber
-                            || data.referenceNumber
-                            || (data.status && data.status.referenceNumber));
-
-                        if (referenceNumber) {
-                            publishReferenceNumber(response, referenceNumber);
-                            deferred.resolve(response);
-
-                            return;
-                        }
-
-                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
-                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
-                        } else {
-                            deferred.reject(response);
-                        }
-                    },
-                    error: function () {
-                        if (attempts < APPROVAL_REFERENCE_RETRY_COUNT) {
-                            setTimeout(readPendingReference, APPROVAL_REFERENCE_RETRY_DELAY);
-                        } else {
-                            deferred.reject(response);
-                        }
-                    }
-                });
-
-                // BaseService invokes the callbacks above and also returns a native Promise. Consume
-                // its rejection because an unavailable follow-up lookup must not replace the already
-                // accepted maker response with an unhandled Promise.
-                if (transportPromise && typeof transportPromise.catch === "function") {
-                    transportPromise.catch(function () {
-                        return null;
-                    });
-                }
-            };
-
-            readPendingReference();
-
-            return deferred;
+        isAuthenticationChallenge = function (error) {
+            return !!(error && (error.status === 412 || error.status === 417));
         },
         isFailureResponse = function (data) {
             const result = data && data.status && data.status.result
@@ -152,7 +24,6 @@ define([
         },
         request = function (options) {
             const deferred = $.Deferred(),
-                approvalContext = options.approvalContext,
                 requestOptions = Object.assign({}, options, {
                     version: "cz/v1",
                     success: function (data, status, jqXhr) {
@@ -165,45 +36,18 @@ define([
                         deferred.resolve(data, status, jqXhr);
                     },
                     error: function (error) {
-                        if (isApprovalRequiredResponse(error)) {
-                            const normalizedResponse = normalizeApprovalRequiredResponse(error);
-
-                            // The exception mapper used by this OBDX release drops the platform
-                            // reference number from its HTTP 400 body. Read the just-created pending
-                            // transaction for the exact HTH user/context before showing the shared
-                            // confirmation screen, whose quick-Approve action requires that ID.
-                            hydrateApprovalReference(normalizedResponse, approvalContext)
-                                .done(function (hydratedResponse) {
-                                    // Keep the jQuery Deferred callback contract intact: the third
-                                    // argument is the transport jqXHR, while the first is the
-                                    // normalized approval response consumed by confirm-screen.
-                                    deferred.resolve(hydratedResponse, "success", error);
-                                })
-                                .fail(function () {
-                                    // A confirmation without the platform transaction ID cannot
-                                    // support BCO's quick-Approve flow. Preserve the failed
-                                    // transport instead of showing a false success.
-                                    deferred.reject(error);
-                                });
-
+                        if (isAuthenticationChallenge(error)) {
                             return;
                         }
 
                         deferred.reject(error);
                     }
-                });
+                }),
+                transportPromise = requestOptions.data
+                    ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
 
-            // approvalContext is local metadata for resolving the platform transaction reference;
-            // it is not part of BaseService's transport contract.
-            delete requestOptions.approvalContext;
-
-            const transportPromise = requestOptions.data
-                ? baseService.add(requestOptions) : baseService.fetch(requestOptions);
-
-            // BaseService exposes a native Promise and also invokes the callback handlers above.
-            // This wrapper deliberately returns its jQuery Deferred, so consume the native rejection
-            // after the callback has routed it; otherwise an expected approval-required HTTP 400 is
-            // reported as an unhandled Promise even though the maker request was staged correctly.
+            // BaseService owns the shared authentication modal and request replay. Callbacks above
+            // expose its final result through the existing jQuery contract used by these screens.
             if (transportPromise && typeof transportPromise.catch === "function") {
                 transportPromise.catch(function () {
                     return null;
@@ -369,10 +213,10 @@ define([
                 return deferred;
             }
 
-            // Invoke the BCO model itself instead of maintaining a second copy of its URL or
-            // parameter logic. The userId is essential: the party-only call returns the complete
-            // corporate catalogue and therefore displays more accounts than BCO's user page.
-            AccountAccessModel.readAllUserAccountDetails(params.partyId, params.userId)
+            // Invoke the exact BCO user-access query. Product filtering is intentionally done
+            // after this shared response so HTH sees the same company/account catalogue and row
+            // order as BCO, while exposing only CSA and Time Deposit in its own screens.
+            AccountAccessModel.readUserAccountAccess(params.userId, params.partyId)
                 .done(function (data) {
                     if (isFailureResponse(data)) {
                         deferred.reject(data);
@@ -422,14 +266,7 @@ define([
             return request({
                 url: "hostToHostUserAccess/" + (action === "EDIT"
                     ? "edit" : action === "DELETE" ? "delete" : "submit"),
-                data: JSON.stringify(payload),
-                approvalContext: {
-                    partyId: payload.partyId,
-                    closeId: payload.closeId,
-                    accessPartyId: payload.accessPartyId,
-                    linkageType: payload.linkageType,
-                    username: payload.username
-                }
+                data: JSON.stringify(payload)
             });
         }
     };

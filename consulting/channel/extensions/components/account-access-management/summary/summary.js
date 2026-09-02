@@ -114,6 +114,74 @@ define([
 
                 return String(value || "");
             },
+            normalizeHthCatalogueAccountType = function (value) {
+                const accountType = String(readValue(value) || "").toUpperCase();
+
+                return accountType === "TRD" || accountType === "TERM_DEPOSIT" ? "TD"
+                    : accountType === "DEMAND_DEPOSIT" ? "CSA" : accountType;
+            },
+            bcoAccountIsMapped = function (account) {
+                return (account.tasks || []).some(function (taskGroup) {
+                    return (taskGroup.childTasks || []).some(function (task) {
+                        return readValue(task.allowed) === true;
+                    });
+                });
+            },
+            bcoAccountCountByType = function (partyRow) {
+                const counts = {
+                    CSA: 0,
+                    TD: 0
+                };
+
+                ((partyRow && partyRow.accountsList) || []).forEach(function (account) {
+                    const accountType = normalizeHthCatalogueAccountType(account.accountType);
+
+                    // Use the same definition as BCO's mapped-account summary. HTH supports only
+                    // Current and Savings and Time Deposit, so the other BCO product rows are
+                    // deliberately ignored after the common accountAccess response is received.
+                    if ((accountType === "CSA" || accountType === "TD")
+                            && bcoAccountIsMapped(account)) {
+                        counts[accountType] += 1;
+                    }
+                });
+
+                return counts;
+            },
+            bcoScopedHthSummary = function (hthSummary, partyRow, linkageType,
+                defaultPartyId) {
+                const effectiveCounts = Object.assign({
+                        CSA: 0,
+                        TD: 0
+                    }, hthSummary && hthSummary.accountCountByType),
+                    accessPartyId = hthPartyId(partyRow && partyRow.party)
+                        || hthPartyId(hthSummary && hthSummary.accessPartyId)
+                        || hthPartyId(defaultPartyId),
+                    summary = Object.assign({}, hthSummary || {});
+
+                summary.linkageType = linkageType;
+                summary.accessPartyId = accessPartyId;
+
+                summary.accessPartyName = readValue(partyRow && partyRow.partyName)
+                    || summary.accessPartyName || accessPartyId;
+
+                summary.setupStatus = summary.setupStatus || "NOT_SETUP";
+                summary.effectiveAccountCountByType = effectiveCounts;
+                summary.accountCountByType = bcoAccountCountByType(partyRow);
+
+                return summary;
+            },
+            userScopedRelatedSummary = function (summary, accountAccessResponse,
+                defaultPartyId) {
+                const relatedRow = ((accountAccessResponse && accountAccessResponse.accounts) || [])
+                    .filter(function (partyRow) {
+                        return String(readValue(partyRow.accessLevel) || "").toUpperCase()
+                            === "USER";
+                    })[0];
+
+                return relatedRow
+                    ? bcoScopedHthSummary(summary, relatedRow, "RELATED", defaultPartyId)
+                    : null;
+            },
             userScopedAssociatedSummaries = function (summaries, accountAccessResponse) {
                 const summariesByParty = {},
                     orderedSummaries = [],
@@ -130,33 +198,17 @@ define([
                     .forEach(function (partyRow) {
                         const accessLevel = String(readValue(partyRow.accessLevel) || "")
                                 .toUpperCase(),
-                            partyId = hthPartyId(partyRow.party);
-                        let summary = summariesByParty[partyId];
+                            partyId = hthPartyId(partyRow.party),
+                            hthSummary = summariesByParty[partyId];
 
                         if (accessLevel !== "USERLINKAGE" || !partyId || seen[partyId]) {
                             return;
                         }
 
-                        // The BCO accountAccess response is authoritative for which associated
-                        // companies belong to this user. HTH summary is only an enrichment source:
-                        // a company with no HTH record yet is exactly the company that must remain
-                        // available for the first "To link" maintenance.
-                        summary = summary || {
-                            linkageType: "ASSOCIATED",
-                            accessPartyId: partyId,
-                            accessPartyName: readValue(partyRow.partyName) || partyId,
-                            setupStatus: "NOT_SETUP",
-                            accountCountByType: {
-                                CSA: 0,
-                                TD: 0
-                            }
-                        };
-
-                        summary.accessPartyName = readValue(partyRow.partyName)
-                            || summary.accessPartyName || partyId;
-
                         seen[partyId] = true;
-                        orderedSummaries.push(summary);
+
+                        orderedSummaries.push(bcoScopedHthSummary(hthSummary, partyRow,
+                            "ASSOCIATED", partyId));
                     });
 
                 return orderedSummaries;
@@ -224,6 +276,14 @@ define([
             summary.casaAccountCount = Number(summary.accountCountByType.CSA || 0);
             summary.tdAccountCount = Number(summary.accountCountByType.TD || 0);
             summary.totalAccountCount = summary.casaAccountCount + summary.tdAccountCount;
+
+            summary.effectiveAccountCountByType = summary.effectiveAccountCountByType
+                || summary.accountCountByType;
+
+            summary.effectiveAccountCount = Number(summary.effectiveAccountCountByType.CSA || 0)
+                + Number(summary.effectiveAccountCountByType.TD || 0);
+
+            summary.hasHthAccess = summary.effectiveAccountCount > 0;
             // Keep the copy selection on the company row, as BCO does with its per-row
             // copyAccountAccessSettingUserSelected array. Related and Associated companies must
             // not share one global selection because the selected user may be configured for one
@@ -298,7 +358,7 @@ define([
                 summaryParams: inputParams,
                 // Match BCO: an existing context opens read-only. The Edit action on the
                 // linkage page is what turns it into a replacement request.
-                action: summary.totalAccountCount > 0 ? "VIEW" : "CREATE"
+                action: summary.hasHthAccess ? "VIEW" : "CREATE"
             });
         };
 
@@ -401,7 +461,7 @@ define([
                     username: selectedSource.username,
                     fullName: selectedSource.fullName
                 }),
-                targetAction = summary.totalAccountCount > 0 ? "EDIT" : "CREATE";
+                targetAction = summary.hasHthAccess ? "EDIT" : "CREATE";
 
             HthUserAccessModel.read(targetContext).done(function (targetData) {
                 HthUserAccessModel.read(sourceContext).done(function (data) {
@@ -474,12 +534,13 @@ define([
 
             $.when(
                 ExclusionModel.readHthUserAccessSummary(partyIdForQuery, readValue(self.closeId)),
-                ExclusionModel.readAllUserAccountDetails(partyIdForQuery, userIdForQuery)
+                ExclusionModel.readUserAccountAccess(userIdForQuery, partyIdForQuery)
             ).done(function (data, accountAccessResponse) {
                     data = data || {};
                     self.hthEnterpriseStatus(data.enterpriseHthStatus || "DISABLE");
 
-                    const relatedSummary = normalizeHthSummary(data.related),
+                    const relatedSummary = normalizeHthSummary(userScopedRelatedSummary(
+                            data.related, accountAccessResponse, partyIdForQuery)),
                         associatedSummaries = ko.utils.arrayMap(
                             userScopedAssociatedSummaries(data.associated || [],
                                 accountAccessResponse), normalizeHthSummary),
@@ -487,7 +548,7 @@ define([
                         associatedCreateCandidates = [];
 
                     ko.utils.arrayForEach(associatedSummaries, function (summary) {
-                        if (summary.totalAccountCount > 0) {
+                        if (summary.hasHthAccess) {
                             configuredAssociatedSummaries.push(summary);
                         } else if (String(summary.setupStatus || "")
                                 .toUpperCase().indexOf("PENDING_") !== 0

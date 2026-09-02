@@ -100,18 +100,15 @@
 }
 
 .hth-associated-summary-card {
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--base-border-default);
+  padding-bottom: 0;
 }
 
 .hth-associated-summary-card:last-child {
   margin-bottom: 0;
-  border-bottom: 0;
 }
 
 .hth-associated-create-row {
   padding-top: 1rem;
-  border-top: 1px solid var(--base-border-default);
 }
 
 .hth-associated-company-modal oj-select-one {

@@ -1,5 +1,11 @@
 package com.ofss.digx.cz.bea.app.hosttohost.assembler;
 
+import com.ofss.digx.app.adapter.AdapterFactoryConfigurator;
+import com.ofss.digx.app.adapter.IAdapterFactory;
+import com.ofss.digx.app.party.adapter.IPartyDetailsAdapter;
+import com.ofss.digx.app.party.dto.PersonalInfoDTO;
+import com.ofss.digx.common.constants.CommonAdapterConstants;
+import com.ofss.digx.common.constants.CommonAdapterFactoryConstants;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessDTO;
 import com.ofss.digx.enumeration.approval.TransactionDiscriminator;
 import com.ofss.digx.framework.domain.transaction.PartyName;
@@ -13,6 +19,8 @@ import com.ofss.fc.infra.exception.FatalException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Converts HTH user-access requests into approval-framework transactions.
@@ -24,6 +32,15 @@ import java.util.List;
  */
 public class SubmitHostToHostUserAccessApprovalAssembler
     extends AbstractApprovalAssembler<HostToHostUserAccessDTO, Transaction> {
+
+  private static final String THIS_COMPONENT_NAME =
+      SubmitHostToHostUserAccessApprovalAssembler.class.getName();
+
+  private transient com.ofss.fc.infra.log.impl.MultiEntityLogger formatter =
+      com.ofss.fc.infra.log.impl.MultiEntityLogger.getUniqueInstance();
+
+  private transient Logger logger = com.ofss.fc.infra.log.impl.MultiEntityLogger
+      .getUniqueInstance().getLogger(THIS_COMPONENT_NAME);
 
   @Override
   public HostToHostUserAccessDTO fromDomainObject(Transaction transaction)
@@ -40,17 +57,7 @@ public class SubmitHostToHostUserAccessApprovalAssembler
     }
     PartyTransaction transaction = new PartyTransaction();
     transaction.setPartyId(requestDTO.getPartyId());
-    PartyName partyName = new PartyName();
-    String displayName = normalize(requestDTO.getFullName());
-    if (displayName == null) {
-      displayName = normalize(requestDTO.getUsername());
-    }
-    if (displayName == null) {
-      displayName = requestDTO.getCloseId();
-    }
-    partyName.setFirstName(displayName);
-    partyName.setFullName(displayName);
-    transaction.setPartyName(partyName);
+    transaction.setPartyName(fetchPartyName(requestDTO.getPartyId()));
     transaction = (PartyTransaction) super.toDomainObject(requestDTO, transaction);
 
     List<String> entityIdentifiers = new ArrayList<String>();
@@ -72,6 +79,30 @@ public class SubmitHostToHostUserAccessApprovalAssembler
       throws FatalException {
     // The HTH flow uses the typed HostToHostUserAccessDTO conversion above.
     return null;
+  }
+
+  /** Fetches the company name for the transaction party, matching BCO User Account Access. */
+  private PartyName fetchPartyName(String partyId) {
+    PartyName partyName = null;
+    try {
+      IAdapterFactory adapterFactory = AdapterFactoryConfigurator.getInstance()
+          .getAdapterFactory(CommonAdapterFactoryConstants.PARTY_DETAILS_ADAPTER_FACTORY);
+      IPartyDetailsAdapter partyDetailsAdapter = (IPartyDetailsAdapter) adapterFactory
+          .getAdapter(CommonAdapterConstants.PARTY_DETAILS_ADAPTER);
+      PersonalInfoDTO personalInfo = partyDetailsAdapter.fetchPersonalInformation(partyId);
+      if (personalInfo != null) {
+        partyName = new PartyName();
+        partyName.setFirstName(personalInfo.getFirstName());
+        partyName.setMiddleName(personalInfo.getMiddleName());
+        partyName.setLastName(personalInfo.getLastName());
+        partyName.setSalutation(personalInfo.getSalutation());
+        partyName.setFullName(personalInfo.getFullName());
+      }
+    } catch (Exception e) {
+      logger.log(Level.SEVERE,
+          formatter.formatMessage("Exception occurred while fetching party name."), e);
+    }
+    return partyName;
   }
 
   private void setAdministrationDiscriminator(Transaction transaction) throws Exception {

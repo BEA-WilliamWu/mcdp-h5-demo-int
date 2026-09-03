@@ -1,5 +1,14 @@
 /* HTH account linkage deliberately reuses the BCO page-section, nav-bar, oj-table and
  * button classes. Only spacing that is specific to the HTH account source is defined here. */
+// Match linked-user-access-exclusion's user/company header without changing related accounts.
+.hth-associated-user-details {
+  margin-bottom: 2rem;
+}
+
+.hth-associated-selected-user-details {
+  margin-bottom: 1.4rem;
+}
+
 .hth-account-instructions {
   margin-bottom: 1.5rem;
   line-height: 1.45;

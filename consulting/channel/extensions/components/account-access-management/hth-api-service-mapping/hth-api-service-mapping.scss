@@ -1,4 +1,13 @@
 /* The page frame, tabs and actions use the same shared components as BCO. */
+// Keep the associated user/company header consistent through all HTH steps.
+.hth-associated-user-details {
+  margin-bottom: 2rem;
+}
+
+.hth-associated-selected-user-details {
+  margin-bottom: 1.4rem;
+}
+
 .hth-api-instructions {
   margin-bottom: 1.5rem;
   line-height: 1.45;

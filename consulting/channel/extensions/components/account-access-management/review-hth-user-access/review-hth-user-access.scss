@@ -1,5 +1,14 @@
 /* The review frame, tabs and actions reuse the BCO components; these rules cover the
  * HTH-specific account-to-API hierarchy only. */
+// Keep the associated user/company header consistent through all HTH steps.
+.hth-associated-user-details {
+  margin-bottom: 2rem;
+}
+
+.hth-associated-selected-user-details {
+  margin-bottom: 1.4rem;
+}
+
 .hth-review-instructions {
   margin-bottom: 1.5rem;
   line-height: 1.45;

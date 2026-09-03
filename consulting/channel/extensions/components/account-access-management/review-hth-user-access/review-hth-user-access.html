@@ -4,21 +4,63 @@
     <!-- /ko -->
 
     <div class="oj-sm-padding-2x-horizontal">
+        <!-- ko ifnot: (access.linkageType || context.linkageType) === 'ASSOCIATED' -->
         <page-section>
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
                 label="[[nls.fieldname.userID]]" value="[[userIdDisplay]]">
             </obdx-row>
             <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
-                label="[[nls.fieldname.userName]]"
-                value="[[access.fullName || context.fullName || '-']]">
+                label="[[nls.fieldname.userName]]" value="[[access.fullName || context.fullName || '-']]">
             </obdx-row>
-            <!-- ko if: (access.linkageType || context.linkageType) === 'ASSOCIATED' -->
-            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
-                label="[[nls.fieldname.linkedPartyName]]"
-                value="[[access.accessPartyName || access.accessPartyId || '-']]">
-            </obdx-row>
-            <!-- /ko -->
         </page-section>
+        <!-- /ko -->
+        <!-- ko if: (access.linkageType || context.linkageType) === 'ASSOCIATED' -->
+        <page-section>
+            <!-- Keep the BCO user/company layout inside one composite slot. -->
+            <div>
+                <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center hth-associated-user-details">
+                    <div class="oj-flex-item oj-sm-5 oj-md-5 oj-lg-5">
+                        <div class="oj-flex oj-flex-items-pad">
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6">
+                                <oj-label><span data-bind="text:nls.fieldname.userID"></span></oj-label>
+                            </div>
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6">
+                                <span data-bind="text:userIdDisplay"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="oj-flex-item oj-sm-2 oj-md-2 oj-lg-2">
+                        <div class="oj-flex oj-flex-items-pad oj-sm-justify-content-center">
+                            <img width="32" height="32" alt="" aria-hidden="true"
+                                data-bind="loadImage:'cz/account-services/account-services.svg'">
+                        </div>
+                    </div>
+                    <div class="oj-flex-item oj-sm-5 oj-md-5 oj-lg-5">
+                        <div class="oj-flex oj-flex-items-pad">
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6">
+                                <oj-label><span data-bind="text:nls.fieldname.linkedPartyName"></span></oj-label>
+                            </div>
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6 word-break">
+                                <span data-bind="text:access.accessPartyName || context.accessPartyName || access.accessPartyId || context.accessPartyId || '-'"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="oj-flex oj-flex-items-pad hth-associated-selected-user-details">
+                    <div class="oj-flex-item oj-sm-12 oj-md-5 oj-lg-5">
+                        <div class="oj-flex oj-flex-items-pad">
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6">
+                                <oj-label><span data-bind="text:nls.fieldname.userName"></span></oj-label>
+                            </div>
+                            <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-6">
+                                <span data-bind="text:access.fullName || context.fullName || '-'"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </page-section>
+        <!-- /ko -->
     </div>
 
     <!-- ko if: isDelete -->

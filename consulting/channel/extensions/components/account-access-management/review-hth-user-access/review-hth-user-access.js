@@ -296,10 +296,18 @@ define([
             };
         };
 
-        self.transactionName = self.action === "DELETE"
-            ? self.nls.headers.deleteMappingTxnName
-            : self.action === "EDIT" ? self.nls.headers.editMappingTxnName
-                : self.nls.headers.createMappingTxnName;
+        const transactionNames = (record.linkageType || self.context.linkageType) === "ASSOCIATED"
+            ? {
+                CREATE: self.nls.headers.createAcctSetupTransactionName,
+                EDIT: self.nls.headers.editAcctSetupTransactionName,
+                DELETE: self.nls.headers.deleteAcctSetupTransactionName
+            } : {
+                CREATE: self.nls.headers.createMappingTxnName,
+                EDIT: self.nls.headers.editMappingTxnName,
+                DELETE: self.nls.headers.deleteMappingTxnName
+            };
+
+        self.transactionName = transactionNames[self.action] || transactionNames.CREATE;
 
         rootParams.dashboard.headerName(self.transactionName);
 
@@ -316,10 +324,15 @@ define([
 
             HthUserAccessModel.save(self.payload(), self.action).done(function (
                 response, status, jqXhr) {
-                // BCO hands the final replay response to the shared confirmation screen as jqXHR.
-                // Its status.referenceNumber is the platform transaction id used by quick Approve.
+                // The shared BCO quick-Approve branch requires transactionResponse, not jqXHR.
+                // Success callbacks run before BaseService decorates its Promise result, so retain
+                // the real transport status explicitly without changing the response/reference.
+                const transactionResponse = Object.assign({}, response);
+
+                rootParams.baseModel.injectProps(transactionResponse, "getResponseStatus", jqXhr.status);
+
                 rootParams.dashboard.loadComponent("confirm-screen", {
-                    jqXHR: jqXhr,
+                    transactionResponse: transactionResponse,
                     hostReferenceNumber: response.status && response.status.externalReferenceNumber,
                     transactionName: self.transactionName
                 }, self);

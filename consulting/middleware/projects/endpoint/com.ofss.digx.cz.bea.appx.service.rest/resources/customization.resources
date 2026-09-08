@@ -124,3 +124,4 @@ com.ofss.digx.cz.bea.appx.payment.service.bulkpayment.BulkPaymentTran
 com.ofss.digx.cz.bea.appx.bulkpayment.BulkPaymentIncomingFundNotification
 com.ofss.digx.cz.bea.appx.onlinesetting.service.onlinesetting.OnlineServiceSetting
 com.ofss.digx.cz.bea.appx.hosttohost.service.HostToHostUserAccess
+com.ofss.digx.cz.bea.appx.hosttohost.service.HostToHostApiPassword

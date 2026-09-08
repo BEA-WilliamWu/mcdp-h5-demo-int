@@ -54,16 +54,12 @@ define([
             accountNumberDisplay = function (account, canonicalValue) {
                 const value = read(account && account.accountNumber),
                     suppliedDisplay = read(account && account.accountNumberDisplay)
-                        || (value && typeof value === "object" ? read(value.displayValue) : "");
+                        || (value && typeof value === "object" ? read(value.displayValue) : ""),
+                    displayCandidate = suppliedDisplay || canonicalValue,
+                    converted = displayCandidate && serviceExtension.int2extAccNo(
+                        String(displayCandidate), "Y");
 
-                if (suppliedDisplay) {
-                    return suppliedDisplay;
-                }
-
-                const converted = canonicalValue && serviceExtension.int2extAccNo(
-                    String(canonicalValue), "Y");
-
-                return converted || canonicalValue || "-";
+                return converted || suppliedDisplay || canonicalValue || "-";
             },
             context = read(params.hthLinkageContext) || {};
 

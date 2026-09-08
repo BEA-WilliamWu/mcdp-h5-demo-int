@@ -115,12 +115,13 @@ define([
                     suppliedDisplay = account.accountNumberDisplay
                         || (accountNumberObject && typeof accountNumberObject === "object"
                             ? accountNumberObject.displayValue : ""),
-                    convertedDisplay = !suppliedDisplay && canonicalNumber
-                        ? serviceExtension.int2extAccNo(String(canonicalNumber), "Y") : "";
+                    displayCandidate = suppliedDisplay || canonicalNumber,
+                    convertedDisplay = displayCandidate
+                        ? serviceExtension.int2extAccNo(String(displayCandidate), "Y") : "";
 
                 return Object.assign({}, account, {
                     accountNumber: canonicalNumber,
-                    accountNumberDisplay: suppliedDisplay || convertedDisplay
+                    accountNumberDisplay: convertedDisplay || suppliedDisplay
                         || canonicalNumber || "-",
                     accountType: accountType,
                     currency: currency,

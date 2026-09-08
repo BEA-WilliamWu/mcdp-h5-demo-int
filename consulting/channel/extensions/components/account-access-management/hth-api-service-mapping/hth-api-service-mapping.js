@@ -62,12 +62,13 @@ define([
                     accountType = normalizeAccountType(account.accountType),
                     currency = read(account.currency) || read(account.currencyCode) || "",
                     displayName = read(account.displayName) || "",
-                    convertedDisplay = !suppliedDisplay && canonicalNumber
-                        ? serviceExtension.int2extAccNo(String(canonicalNumber), "Y") : "";
+                    displayCandidate = suppliedDisplay || canonicalNumber,
+                    convertedDisplay = displayCandidate
+                        ? serviceExtension.int2extAccNo(String(displayCandidate), "Y") : "";
 
                 return Object.assign({}, account, {
                     accountNumber: canonicalNumber,
-                    accountNumberDisplay: suppliedDisplay || convertedDisplay
+                    accountNumberDisplay: convertedDisplay || suppliedDisplay
                         || canonicalNumber || "-",
                     maskedAccountNumber: read(account.maskedAccountNumber) || "",
                     accountType: accountType,

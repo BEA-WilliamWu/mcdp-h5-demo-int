@@ -2,8 +2,9 @@ define([
     "jquery",
     "baseService",
     "baseModel",
-    "../summary/model"
-], function ($, BaseService, BaseModel, AccountAccessModel) {
+    "../summary/model",
+    "extensions/generic/service-extension"
+], function ($, BaseService, BaseModel, AccountAccessModel, serviceExtension) {
     "use strict";
 
     /*
@@ -75,6 +76,14 @@ define([
         },
         normalizeAccountNumber = function (value) {
             return String(value || "").split("~")[0].replace(/[- ]/g, "").trim();
+        },
+        bcoAccountNumberDisplay = function (value) {
+            const suppliedValue = String(readValue(value) || "").trim(),
+                normalizedValue = normalizeAccountNumber(suppliedValue),
+                convertedValue = normalizedValue
+                    ? serviceExtension.int2extAccNo(normalizedValue, "Y") : "";
+
+            return convertedValue || suppliedValue;
         },
         accountNumberValues = function (account) {
             const accountNumber = account && account.accountNumber,
@@ -162,9 +171,12 @@ define([
                         return existingByKey[`${accountType}:${candidate}`];
                     }).filter(Boolean)[0] || {},
                     accountNumberObject = bcoAccount.accountNumber,
-                    accountNumberDisplay = accountNumberObject
+                    suppliedAccountNumberDisplay = accountNumberObject
                         && typeof accountNumberObject === "object"
                         ? accountNumberObject.displayValue : "",
+                    accountNumberDisplay = bcoAccountNumberDisplay(
+                        suppliedAccountNumberDisplay
+                            || existing.accountNumberDisplay || accountNumber),
                     sourceApis = Array.isArray(existing.apiServices)
                         ? existing.apiServices : eligibleApis;
 
@@ -173,8 +185,7 @@ define([
                     // display alias and row order. This also preserves existing selections when
                     // AccountAccess returns the 15-digit alias and HTH stores the 18-digit form.
                     accountNumber: existing.accountNumber || accountNumber,
-                    accountNumberDisplay: accountNumberDisplay
-                        || existing.accountNumberDisplay || accountNumber,
+                    accountNumberDisplay: accountNumberDisplay || accountNumber,
                     maskedAccountNumber: existing.maskedAccountNumber
                         || accountNumberDisplay || "",
                     accountType: accountType,

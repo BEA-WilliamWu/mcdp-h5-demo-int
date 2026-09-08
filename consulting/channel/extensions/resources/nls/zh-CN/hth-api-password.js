@@ -1,0 +1,22 @@
+define({
+    setupHeader: "创建 HTH API 密码",
+    resetHeader: "更改 HTH API 密码",
+    description: "请输入用于 HTH API 渠道登录的密码。",
+    newPassword: "新密码",
+    confirmPassword: "重新输入密码",
+    passwordCode: "一次性密码（OTP）",
+    codeHelp: "请输入授权人在 CM Portal 中生成的 HTH API 密码代码。",
+    submit: "提交",
+    cancel: "取消",
+    policyHeader: "密码必须符合以下要求：",
+    policyLength: "包含 8 至 16 个英文字母或数字。",
+    policyAlphaNumeric: "同时包含英文字母和数字。",
+    policyNumbers: "至少包含两个数字。",
+    policySpecial: "不得包含空格或特殊字符。",
+    passwordMismatch: "两次输入的密码不一致。",
+    passwordPolicyError: "密码不符合 HTH API 密码规则。",
+    confirmationHeader: "确认",
+    setupSuccess: "您的 HTH API 密码已成功设置。",
+    resetSuccess: "您的 HTH API 密码已成功更改。",
+    goToDashboard: "返回主页"
+});

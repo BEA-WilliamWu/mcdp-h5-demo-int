@@ -4,17 +4,30 @@
 -- APIC client id/secret default to the existing DSPApi configuration and are not duplicated here.
 -- If UAM uses different APIC credentials, provision HTH_API_PASSWORD.APIC_CLIENT_ID and
 -- HTH_API_PASSWORD.APIC_CLIENT_SECRET through the approved secret/configuration process.
--- Re-runnable.
+-- Re-runnable. Before enabling the feature, provision HTH_API_PWD_CODE_CIPHER_KEY
+-- under HthApiCredentialAdapterConfig using the approved secret configuration mechanism.
+-- It must be the SAME Base64 AES-256 key used for existing 787 CODE_CIPHER records.
+-- This script does not overwrite the key. There is no hard-coded fallback.
+
+WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
 
 DEFINE HTH_API_PASSWORD_SERVICE_URL = https://CHANGE_ME.example.invalid
 
 DECLARE
   V_SERVICE_URL VARCHAR2(1000) := '&HTH_API_PASSWORD_SERVICE_URL';
+  V_KEY_COUNT NUMBER;
 BEGIN
   IF V_SERVICE_URL LIKE '%CHANGE_ME%'
      OR V_SERVICE_URL NOT LIKE 'https://%' THEN
     RAISE_APPLICATION_ERROR(-20001,
       'Set HTH_API_PASSWORD_SERVICE_URL to the approved HTTPS UAM base URL before deployment.');
+  END IF;
+  SELECT COUNT(*) INTO V_KEY_COUNT FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
+   WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
+     AND PROP_ID = 'HTH_API_PWD_CODE_CIPHER_KEY'
+     AND PROP_VALUE IS NOT NULL;
+  IF V_KEY_COUNT <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Provision the existing 787 cipher key before enabling API password self service.');
   END IF;
 END;
 /
@@ -80,7 +93,7 @@ SELECT 1 FROM DUAL;
 COMMIT;
 
 SELECT CATEGORY_ID, PROP_ID,
-       CASE WHEN PROP_ID LIKE '%SECRET%' THEN '[PROTECTED]' ELSE PROP_VALUE END AS PROP_VALUE
+       CASE WHEN PROP_ID LIKE '%SECRET%' OR PROP_ID LIKE '%CIPHER_KEY%' THEN '[PROTECTED]' ELSE PROP_VALUE END AS PROP_VALUE
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
  ORDER BY PROP_ID;

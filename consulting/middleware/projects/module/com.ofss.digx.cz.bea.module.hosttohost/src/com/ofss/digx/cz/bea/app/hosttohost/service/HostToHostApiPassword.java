@@ -33,8 +33,31 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.Preferences;
+import com.ofss.digx.app.adapter.AdapterFactoryConfigurator;
+import com.ofss.digx.app.adapter.IAdapterFactory;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordCodeResponseDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordGenerateDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordRevealDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
+import com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO;
+import com.ofss.digx.cz.bea.app.sms.adapter.user.IUserExtensionAdapter;
+import com.ofss.digx.cz.bea.common.constants.CommonAdapterConstants;
+import com.ofss.digx.cz.bea.common.constants.CommonAdapterFactoryConstants;
+import com.ofss.digx.cz.bea.common.constants.UserExtensionDataConstants;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiPasswordCode;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiPasswordCodeKey;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthApiPasswordCodeRepository;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.LocalHthApiPasswordCodeRepositoryAdapter;
+import com.ofss.digx.infra.thread.ThreadAttribute;
+import com.ofss.fc.enumeration.ep.DestinationType;
+import com.ofss.fc.enumeration.ep.SubscriberType;
+import com.ofss.fc.service.response.TransactionStatus;
+import com.ofss.fc.xface.ep.dto.NotificationDetail;
+import java.util.Calendar;
+import org.apache.commons.lang3.ObjectUtils;
 
-/** Implements BCOH2H-788, BCOH2H-790, and the BCOH2H-1204 success event. */
+/** Shared BCOH2H-787 code lifecycle and 788/790/1204 password self service. */
 public class HostToHostApiPassword extends AbstractApplication
     implements IHostToHostApiPassword {
   private static final String THIS_COMPONENT_NAME = HostToHostApiPassword.class.getName();
@@ -61,6 +84,38 @@ public class HostToHostApiPassword extends AbstractApplication
       "HTH_API_PASSWORD.POLICY_SPACES_ALLOWED";
   private static final String DEFAULT_ADAPTER =
       "com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.HthApiCredentialAdapter";
+
+  private static final String GENERATE_SERVICE_ID =
+      "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.generate";
+
+  private static final String MASKED_SERVICE_ID =
+      "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.masked";
+
+  private static final String REVEAL_SERVICE_ID =
+      "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reveal";
+
+  private static final String STATUS_PENDING = "PENDING";
+
+  private static final String STATUS_ACTIVE = "ACTIVE";
+
+  private static final String STATUS_EXPIRED = "EXPIRED";
+
+  private static final String OBJECT_ACTIVE = "A";
+
+  private static final String MASKED_CODE = "******";
+
+  private static final int EXPIRY_HOURS = 24;
+
+  private static final int CODE_LENGTH = 6;
+
+
+  private static final long MILLIS_PER_HOUR = 3600000L;
+
+  private static final String ACTIVITY_HTH_API_PASSWORD_APPROVED =
+      "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval";
+
+  private static final String DATE_FORMAT_PATTERN = "yyyy/MM/dd HH:mm";
+
 
   private final HthApiPasswordStore store = new HthApiPasswordStore();
 
@@ -270,6 +325,7 @@ public class HostToHostApiPassword extends AbstractApplication
           "Unable to reconcile HTH API password status for party '%s'; using local projection",
           identity.partyId), e);
     }
+    if (!allowLocalFallback) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009"); }
     return store.findCredentialState(identity.partyId, identity.userId);
   }
 
@@ -407,4 +463,361 @@ public class HostToHostApiPassword extends AbstractApplication
       this.uamClientId = uamClientId;
     }
   }
+  /**
+   * Generates a one-time setup code while the maker fills the original user-maintenance form.
+   *
+   * <p>Prior PENDING rows for the same user are superseded (Re-Generate semantics). The new row
+   * stays PENDING — and therefore unusable — until the original user-maintenance transaction is
+   * approved, at which point {@link #activateOnUserApproval(String, String)} anchors the expiry.
+   * The plaintext is returned exactly once for the reminder dialog.
+   */
+  @Override
+  @Entitlement(name = "Generate Host To Host API Password Code", action = ActionType.PERFORM,
+      requiredResources = {})
+  @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
+      subCategory = EntitlementSubCategory.Party_Preference)
+  @Task(id = "UAT_N_HAP_GEN", parent = "UAT", name = "HTH API Password - Generate",
+      supportedAccountTypes = {}, executable = true, moduleType = ModuleType.BACK_OFFICE,
+      aspects = {TaskAspect.AUDIT, TaskAspect.BLACKOUT},
+      type = TaskType.ADMINISTRATION)
+  public HthApiPasswordCodeResponseDTO generate(SessionContext sessionContext,
+      HthApiPasswordGenerateDTO requestDTO) throws Exception {
+    super.checkAccessPolicy(GENERATE_SERVICE_ID, sessionContext, requestDTO);
+    HthApiPasswordCodeResponseDTO response = new HthApiPasswordCodeResponseDTO();
+    response.setStatus(fetchStatus());
+    TransactionStatus transactionStatus = fetchTransactionStatus();
+    Interaction.begin(sessionContext);
+    try {
+      String partyId = normalize(requestDTO == null ? null : requestDTO.getPartyId());
+      String userName = normalize(requestDTO == null ? null : requestDTO.getUserName());
+      if (partyId == null || userName == null) {
+        throw new Exception("DIGX_CZ_HTH_PW_009");
+      }
+      requireCodeOwner(sessionContext, partyId);
+      userName = canonicalUser(userName, partyId);
+      String purpose = normalize(requestDTO.getPurpose());
+      purpose = purpose == null ? SETUP : purpose;
+      if (!SETUP.equals(purpose) && !RESET.equals(purpose)) {
+        throw new Exception("DIGX_CZ_HTH_PW_009");
+      }
+      // Validate key configuration before superseding an earlier pending code.
+      HthApiPasswordCrypto.codeCipherKey();
+      String operator = readUserId(sessionContext);
+      LocalHthApiPasswordCodeRepositoryAdapter adapter =
+          LocalHthApiPasswordCodeRepositoryAdapter.getInstance();
+      store.retirePendingCodes(partyId, userName, purpose, operator);
+      String plaintext = HthApiPasswordCrypto.randomDigits(CODE_LENGTH);
+      HthApiPasswordCode row = new HthApiPasswordCode();
+      row.setKey(key(UUID.randomUUID().toString()));
+      row.setPartyId(partyId);
+      row.setUserName(userName);
+      row.setPurpose(purpose);
+      row.setCodeCipher(HthApiPasswordCrypto.encrypt(plaintext, HthApiPasswordCrypto.codeCipherKey()));
+      row.setStatus(STATUS_PENDING);
+      row.setAttemptCount(Integer.valueOf(0));
+      row.setObjectStatus(OBJECT_ACTIVE);
+      row.setCreatedBy(operator);
+      row.setLastUpdatedBy(operator);
+      adapter.create(row);
+
+      response.setCodeId(row.getKey().getId());
+      response.setCode(plaintext);
+      fillMaskedResponse(response, row, false);
+      response.setStatus(buildStatus(transactionStatus));
+    } catch (Exception e) {
+      fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Exception while generating HTH API password code for user '%s'",
+          requestDTO == null ? null : requestDTO.getUserName()), e);
+      throw e;
+    } catch (RuntimeException e) {
+      fillTransactionStatus(transactionStatus, e);
+      throw new Exception(e);
+    } finally {
+      Interaction.close();
+    }
+
+    super.checkResponsePolicy(sessionContext, response);
+    return response;
+  }
+
+  /** Masked lifecycle view; never exposes the plaintext code. */
+  @Override
+  @Entitlement(name = "Read Host To Host API Password Code", action = ActionType.VIEW,
+      requiredResources = {})
+  @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
+      subCategory = EntitlementSubCategory.Party_Preference)
+  public HthApiPasswordCodeResponseDTO masked(SessionContext sessionContext, String partyId,
+      String userName) throws Exception {
+    super.checkAccessPolicy(MASKED_SERVICE_ID, sessionContext);
+    HthApiPasswordCodeResponseDTO response = new HthApiPasswordCodeResponseDTO();
+    response.setStatus(fetchStatus());
+    TransactionStatus transactionStatus = fetchTransactionStatus();
+    Interaction.begin(sessionContext);
+    try {
+      requireCodeOwner(sessionContext, normalize(partyId));
+      if (normalize(userName) == null) { throw new Exception("DIGX_CZ_HTH_PW_009"); }
+      userName = canonicalUser(normalize(userName), normalize(partyId));
+      HthApiPasswordCode latest = HthApiPasswordCodeRepository.getInstance()
+          .findLatestByOwner(normalize(partyId), normalize(userName));
+      if (latest != null) {
+        fillMaskedResponse(response, latest, true);
+      }
+      response.setStatus(buildStatus(transactionStatus));
+    } catch (Exception e) {
+      fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Exception while reading masked HTH API password code for user '%s'", userName), e);
+      throw e;
+    } catch (RuntimeException e) {
+      fillTransactionStatus(transactionStatus, e);
+      throw new Exception(e);
+    } finally {
+      Interaction.close();
+    }
+
+    super.checkResponsePolicy(sessionContext, response);
+    return response;
+  }
+
+  /**
+   * Authorized plaintext reveal. Access is controlled by the reveal task entitlement; every call
+   * is recorded by the audit aspect of {@code UAT_N_HAP_RVL}.
+   */
+  @Override
+  @Entitlement(name = "Reveal Host To Host API Password Code", action = ActionType.PERFORM,
+      requiredResources = {})
+  @EntitlementGroup(category = EntitlementCategory.ADMIN_MAINTENANCE,
+      subCategory = EntitlementSubCategory.Party_Preference)
+  @Task(id = "UAT_N_HAP_RVL", parent = "UAT", name = "HTH API Password - Reveal",
+      supportedAccountTypes = {}, executable = true, moduleType = ModuleType.BACK_OFFICE,
+      aspects = {TaskAspect.AUDIT, TaskAspect.BLACKOUT},
+      type = TaskType.ADMINISTRATION)
+  public HthApiPasswordCodeResponseDTO reveal(SessionContext sessionContext,
+      HthApiPasswordRevealDTO requestDTO) throws Exception {
+    super.checkAccessPolicy(REVEAL_SERVICE_ID, sessionContext, requestDTO);
+    HthApiPasswordCodeResponseDTO response = new HthApiPasswordCodeResponseDTO();
+    response.setStatus(fetchStatus());
+    TransactionStatus transactionStatus = fetchTransactionStatus();
+    Interaction.begin(sessionContext);
+    try {
+      String codeId = normalize(requestDTO == null ? null : requestDTO.getCodeId());
+      HthApiPasswordCode row = codeId == null ? null
+          : LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
+      if (row == null || !OBJECT_ACTIVE.equals(row.getObjectStatus())) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
+      requireCodeOwner(sessionContext, row.getPartyId());
+      fillMaskedResponse(response, row, true);
+      response.setCode(HthApiPasswordCrypto.decrypt(row.getCodeCipher(), HthApiPasswordCrypto.codeCipherKey()));
+      response.setStatus(buildStatus(transactionStatus));
+    } catch (Exception e) {
+      fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "Exception while revealing HTH API password code '%s' by user '%s'",
+          requestDTO == null ? null : requestDTO.getCodeId(),
+          sessionContext == null ? null : sessionContext.getUserId()), e);
+      throw e;
+    } catch (RuntimeException e) {
+      fillTransactionStatus(transactionStatus, e);
+      throw new Exception(e);
+    } finally {
+      Interaction.close();
+    }
+
+    super.checkResponsePolicy(sessionContext, response);
+    return response;
+  }
+
+  /**
+   * Activates the code referenced by a user-maintenance snapshot when the original flow reaches
+   * approval; called from {@code UserExtensionData.create}/{@code update}. Idempotent for
+   * approval re-entry. A regeneration supersedes any earlier ACTIVE code of the same user.
+   */
+  @Override
+  public void activateOnUserApproval(String codeId, String operator) throws Exception {
+    HthApiPasswordCode row = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
+    if (row == null) { throw new Exception("DIGX_CZ_HTH_PW_008"); }
+    activateOnUserApproval(codeId, operator, row.getPartyId(), row.getUserName());
+  }
+
+  /** Bind the submitted code to the actual user being approved, not just a client-supplied id. */
+  public void activateOnUserApproval(String codeId, String operator, String partyId,
+      String userName) throws Exception {
+    HthApiPasswordCode row = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
+    if (row == null || normalize(partyId) == null || normalize(userName) == null
+        || !partyId.equals(row.getPartyId())
+        || !canonicalUser(userName, partyId).equals(canonicalUser(row.getUserName(), partyId))) {
+      throw new Exception("DIGX_CZ_HTH_PW_008");
+    }
+    String transactionId = readTransactionId();
+    if (store.activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
+        operator, transactionId, EXPIRY_HOURS)) {
+      row.setStatus(STATUS_ACTIVE);
+      row.setExpiryTime(new Date(new java.util.Date(
+          System.currentTimeMillis() + EXPIRY_HOURS * MILLIS_PER_HOUR)));
+      row.setTransactionId(transactionId);
+      notifyHthApiPasswordApproved(row);
+    }
+  }
+
+  private void requireCodeOwner(SessionContext sessionContext, String partyId) throws Exception {
+    if (partyId == null || sessionContext == null
+        || !partyId.equals(normalize(sessionContext.getTransactingPartyCode()))) {
+      throw new Exception("DIGX_CZ_HTH_PW_008");
+    }
+  }
+
+  /**
+   * Sends notification to the HTH API User and their company when the API Password Code has been
+   * approved (status transitioned from PENDING to ACTIVE). Follows the same dispatch mechanism as
+   * {@code HostToHostManagement.notifyHostToHostManagement}.
+   *
+   * <p>Notification publication is best-effort. Code activation itself remains part of the
+   * original user-maintenance transaction and is rolled back if that approval execution fails.
+   */
+  private void notifyHthApiPasswordApproved(HthApiPasswordCode row) {
+    try {
+      LOGGER.log(Level.FINE, FORMATTER.formatMessage(
+          "[HTH-PWD-NOTIFY] Start notification for codeId=%s, partyId=%s, userName=%s",
+          row.getKey().getId(), row.getPartyId(), row.getUserName()));
+
+      IAdapterFactory adapterFactory = AdapterFactoryConfigurator.getInstance()
+          .getAdapterFactory(CommonAdapterFactoryConstants.USER_EXTENSION_ADAPTER_FACTORY);
+      IUserExtensionAdapter adapter = (IUserExtensionAdapter) adapterFactory
+          .getAdapter(CommonAdapterConstants.USER_EXTENSION_ADAPTER);
+      CZPartyPreferenceDTO partyDetails = adapter.getPartyPreferences(row.getPartyId());
+
+      NotificationDetail detail = buildHthApiPasswordNotification(partyDetails);
+      if (ObjectUtils.isEmpty(detail.getDestination())) {
+        LOGGER.log(Level.WARNING, FORMATTER.formatMessage(
+            "[HTH-PWD-NOTIFY] No dispatch destination for partyId=%s; skipping notification",
+            row.getPartyId()));
+        return;
+      }
+
+      NotificationDetail[] details = new NotificationDetail[1];
+      details[0] = detail;
+
+      HthApiPasswordActivityLogDTO activityLog = new HthApiPasswordActivityLogDTO();
+      activityLog.setCustomerId(row.getPartyId());
+      activityLog.setNotificationDetails(details);
+
+      Calendar expiryCal = Calendar.getInstance();
+      if (row.getExpiryTime() != null) {
+        expiryCal.setTimeInMillis(row.getExpiryTime().getMillis());
+      }
+
+      activityLog.setHthApiPasswordPartyId(row.getPartyId());
+      activityLog.setHthApiPasswordUserName(row.getUserName());
+      activityLog.setHthApiPasswordExpiryDateTime(new java.text.SimpleDateFormat(DATE_FORMAT_PATTERN).format(expiryCal.getTime()));
+      activityLog.setHthApiPasswordExpiryYear(String.valueOf(expiryCal.get(Calendar.YEAR)));
+      activityLog.setHthApiPasswordExpiryMonth(
+          String.valueOf(expiryCal.get(Calendar.MONTH) + 1));
+      activityLog.setHthApiPasswordExpiryDay(
+          String.valueOf(expiryCal.get(Calendar.DAY_OF_MONTH)));
+      activityLog.setHthApiPasswordExpiryHour(
+          String.valueOf(expiryCal.get(Calendar.HOUR_OF_DAY)));
+      activityLog.setHthApiPasswordExpiryMinute(
+          String.valueOf(expiryCal.get(Calendar.MINUTE)));
+      activityLog.setHthApiPasswordExpirySecond(
+          String.valueOf(expiryCal.get(Calendar.SECOND)));
+
+      String activityId = ACTIVITY_HTH_API_PASSWORD_APPROVED;
+      String eventId = UserExtensionDataConstants.HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT;
+
+      LOGGER.log(Level.FINE, FORMATTER.formatMessage(
+          "[HTH-PWD-NOTIFY] Registering activity: activityId=%s, eventId=%s, partyId=%s",
+          activityId, eventId, row.getPartyId()));
+
+      super.registerActivityAndGenerateEvent(null, activityId, eventId,
+          new Date(), activityLog);
+
+      LOGGER.log(Level.FINE, FORMATTER.formatMessage(
+          "[HTH-PWD-NOTIFY] Notification submitted for codeId=%s, partyId=%s",
+          row.getKey().getId(), row.getPartyId()));
+    } catch (Exception e) {
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "[HTH-PWD-NOTIFY] Failed to send notification for codeId=%s, partyId=%s",
+          row.getKey().getId(), row.getPartyId()), e);
+    } catch (RuntimeException rte) {
+      LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
+          "[HTH-PWD-NOTIFY] RuntimeException while sending notification for codeId=%s",
+          row.getKey().getId()), rte);
+    }
+  }
+
+  /**
+   * Builds the {@link NotificationDetail} for the HTH API Password Code approved notification.
+   * Prefers email over SMS, mirroring {@code HostToHostManagement.buildNotification}.
+   */
+  private NotificationDetail buildHthApiPasswordNotification(CZPartyPreferenceDTO partyDetails) {
+    NotificationDetail detail = new NotificationDetail();
+
+    if (!isBlank(partyDetails.getOfficeEmailId())) {
+      detail.setDestination(DestinationType.EMAIL);
+      detail.setDispatchAddress(partyDetails.getOfficeEmailId());
+    } else if (!isBlank(partyDetails.getOfficeTelNo())) {
+      detail.setDestination(DestinationType.SMS);
+      detail.setDispatchAddress(partyDetails.getOfficeTelNo());
+    }
+    detail.setRecipientType(SubscriberType.EXTERNAL.toString());
+    detail.setRecipientId(partyDetails.getPartyIdValue());
+
+    return detail;
+  }
+
+  private boolean isBlank(String value) {
+    if (value == null) {
+      return true;
+    }
+    return value.trim().isEmpty();
+  }
+
+  private void fillMaskedResponse(HthApiPasswordCodeResponseDTO response, HthApiPasswordCode row,
+      boolean applyExpiry) {
+    response.setCodeId(row.getKey().getId());
+    response.setPurpose(row.getPurpose());
+    response.setMaskedCode(MASKED_CODE);
+    response.setCodeStatus(applyExpiry && isExpired(row) ? STATUS_EXPIRED : row.getStatus());
+    if (row.getExpiryTime() != null) {
+      response.setExpiryTime(new java.util.Date(row.getExpiryTime().getMillis()));
+    }
+    response.setExpiryHours(Integer.valueOf(EXPIRY_HOURS));
+    response.setCanReveal(Boolean.valueOf(true));
+  }
+
+  private boolean isExpired(HthApiPasswordCode row) {
+    return STATUS_ACTIVE.equals(row.getStatus()) && row.getExpiryTime() != null
+        && row.getExpiryTime().getMillis() < System.currentTimeMillis();
+  }
+
+  private HthApiPasswordCodeKey key(String id) {
+    HthApiPasswordCodeKey key = new HthApiPasswordCodeKey();
+    key.setId(id);
+    return key;
+  }
+
+  private String readTransactionId() {
+    Object transactionId = ThreadAttribute.get(ThreadAttribute.TRANSACTION_REFERENCE_NO);
+    if (transactionId == null) {
+      transactionId = ThreadAttribute.get(
+          com.ofss.fc.infra.thread.ThreadAttribute.INTERNAL_REFERENCE_NUMBER);
+    }
+    if (transactionId == null) {
+      transactionId = com.ofss.fc.infra.thread.ThreadAttribute.get(
+          com.ofss.fc.infra.thread.ThreadAttribute.TRANSACTION_REFERENCE_NO);
+    }
+    if (transactionId == null) {
+      transactionId = com.ofss.fc.infra.thread.ThreadAttribute.get(
+          com.ofss.fc.infra.thread.ThreadAttribute.INTERNAL_REFERENCE_NUMBER);
+    }
+    return transactionId == null ? null : String.valueOf(transactionId);
+  }
+
+  private String readUserId(SessionContext sessionContext) {
+    return sessionContext == null || normalize(sessionContext.getUserId()) == null
+        ? "system" : sessionContext.getUserId();
+  }
+
 }

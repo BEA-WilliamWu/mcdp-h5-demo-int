@@ -132,16 +132,19 @@ public class HostToHostApiPassword extends AbstractApplication
       if (!isFeatureEnabled()) {
         response.setSetupState("NOT_APPLICABLE");
       } else {
-        Identity identity = identity(sessionContext, false);
+        HthApiPasswordStorage storage = storageBackend();
+        Identity identity = identity(sessionContext, false, storage);
         if (identity == null) {
           response.setSetupState("NOT_APPLICABLE");
         } else {
-          String state = credentialState(identity, true);
+          String state = credentialState(identity, true, storage);
           if (IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
             response.setSetupState("ACTIVE");
             response.setResetAllowed(store.hasUsableCode(identity.partyId, identity.userId, RESET));
           } else if (IHthApiCredentialAdapter.STATUS_LOCKED.equals(state)) {
             response.setSetupState("LOCKED");
+          } else if (IHthApiCredentialAdapter.STATUS_UNKNOWN.equals(state)) {
+            response.setSetupState("UNKNOWN");
           } else {
             response.setSetupState(store.hasUsableCode(identity.partyId, identity.userId, SETUP)
                 ? "REQUIRED" : "CODE_REQUIRED");
@@ -195,9 +198,10 @@ public class HostToHostApiPassword extends AbstractApplication
     String code = null;
     String codeId = null;
     try {
-      Identity identity = identity(sessionContext, true);
+      HthApiPasswordStorage storage = storageBackend();
+      Identity identity = identity(sessionContext, true, storage);
       HthApiPasswordStore.OperationResult previous = store.findSuccessfulOperation(
-          request.getRequestId(), identity.partyId, identity.userId, operation);
+          request.getRequestId(), identity.partyId, identity.userId, operation, storage.name());
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
           response.setSetupState("ACTIVE");
@@ -208,9 +212,9 @@ public class HostToHostApiPassword extends AbstractApplication
         }
       }
       if (previous == null || !"SUCCESS".equals(previous.status)) {
-        // UAM is authoritative for write preconditions. Never use a stale local projection here.
-        String state = credentialState(identity, false);
-        if (SETUP.equals(operation) && IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
+        // Read the selected authoritative store, never another backend on failure.
+        String state = credentialState(identity, false, storage);
+        if (SETUP.equals(operation) && !IHthApiCredentialAdapter.STATUS_NOT_SETUP.equals(state)) {
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_005");
         }
         if (RESET.equals(operation) && !IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
@@ -224,37 +228,51 @@ public class HostToHostApiPassword extends AbstractApplication
         password = credentials.get(0);
         code = credentials.get(1);
         validatePassword(password);
+        String passwordHash = storage == HthApiPasswordStorage.DATABASE
+            ? com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash.hash(password) : null;
         codeId = store.validateAndReserveCode(identity.partyId, identity.userId, operation,
-            code, request.getRequestId());
+            code, request.getRequestId(), storage.name());
 
-        String reference;
-        try {
-          reference = SETUP.equals(operation)
-              ? adapter().setup(identity.partyId, identity.userId, identity.uamClientId, password,
-                  request.getRequestId())
-              : adapter().reset(identity.partyId, identity.userId, identity.uamClientId, password,
-                  request.getRequestId());
-        } catch (Exception e) {
-          store.fail(identity.userId, request.getRequestId(), codeId, true);
-          throw e;
-        }
-        if (reference == null || reference.trim().length() == 0) {
-          reference = request.getRequestId();
-        }
-        try {
-          store.complete(identity.partyId, identity.userId, operation, request.getRequestId(),
-              codeId, reference);
-        } catch (Exception e) {
-          // UAM has already accepted the change. Keep the request non-retryable until the
-          // external result is reconciled, otherwise a retry could rotate the password twice.
+        String reference = request.getRequestId();
+        if (storage == HthApiPasswordStorage.DATABASE) {
           try {
-            store.fail(identity.userId, request.getRequestId(), codeId, true);
-          } catch (Exception reconciliationFailure) {
-            LOGGER.log(Level.WARNING,
-                "Unable to mark an HTH API password operation for reconciliation",
-                reconciliationFailure);
+            store.completeDatabase(identity.partyId, identity.userId, operation,
+                request.getRequestId(), codeId, reference, passwordHash);
+          } catch (Exception e) {
+            // A connection/commit failure can be indeterminate. Never release a possibly used code.
+            try { store.fail(identity.userId, request.getRequestId(), codeId, true); }
+            catch (Exception failure) { e.addSuppressed(failure); }
+            throw e;
           }
-          throw e;
+        } else {
+          try {
+            reference = SETUP.equals(operation)
+                ? adapter().setup(identity.partyId, identity.userId, identity.uamClientId, password,
+                    request.getRequestId())
+                : adapter().reset(identity.partyId, identity.userId, identity.uamClientId, password,
+                    request.getRequestId());
+          } catch (Exception e) {
+            store.fail(identity.userId, request.getRequestId(), codeId, true);
+            throw e;
+          }
+          if (reference == null || reference.trim().length() == 0) {
+            reference = request.getRequestId();
+          }
+          try {
+            store.complete(identity.partyId, identity.userId, operation, request.getRequestId(),
+                codeId, reference);
+          } catch (Exception e) {
+            // UAM has already accepted the change. Keep the request non-retryable until the
+            // external result is reconciled, otherwise a retry could rotate the password twice.
+            try {
+              store.fail(identity.userId, request.getRequestId(), codeId, true);
+            } catch (Exception reconciliationFailure) {
+              LOGGER.log(Level.WARNING,
+                  "Unable to mark an HTH API password operation for reconciliation",
+                  reconciliationFailure);
+            }
+            throw e;
+          }
         }
         response.setSetupState("ACTIVE");
         response.setResetAllowed(false);
@@ -276,7 +294,8 @@ public class HostToHostApiPassword extends AbstractApplication
     return response;
   }
 
-  private Identity identity(SessionContext sessionContext, boolean required) throws Exception {
+  private Identity identity(SessionContext sessionContext, boolean required,
+      HthApiPasswordStorage storage) throws Exception {
     String partyId = normalize(sessionContext == null ? null
         : sessionContext.getTransactingPartyCode());
     String loginUser = normalize(sessionContext == null ? null : sessionContext.getUserId());
@@ -299,7 +318,7 @@ public class HostToHostApiPassword extends AbstractApplication
     }
     HthManagement management = new HthManagement().findActiveByPartyId(partyId);
     if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
-        || normalize(management.getUamClientId()) == null) {
+        || (storage == HthApiPasswordStorage.UAM && normalize(management.getUamClientId()) == null)) {
       if (required) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_008");
       }
@@ -308,7 +327,11 @@ public class HostToHostApiPassword extends AbstractApplication
     return new Identity(partyId, userId, management.getUamClientId());
   }
 
-  private String credentialState(Identity identity, boolean allowLocalFallback) throws Exception {
+  private String credentialState(Identity identity, boolean allowLocalFallback,
+      HthApiPasswordStorage storage) throws Exception {
+    if (storage == HthApiPasswordStorage.DATABASE) {
+      return store.findDatabaseCredentialState(identity.partyId, identity.userId);
+    }
     try {
       String remote = adapter().getStatus(identity.partyId, identity.userId,
           identity.uamClientId);
@@ -322,11 +345,18 @@ public class HostToHostApiPassword extends AbstractApplication
         throw e;
       }
       LOGGER.log(Level.WARNING, FORMATTER.formatMessage(
-          "Unable to reconcile HTH API password status for party '%s'; using local projection",
+          "Unable to reconcile HTH API password status for party '%s'; returning UNKNOWN",
           identity.partyId), e);
     }
     if (!allowLocalFallback) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009"); }
-    return store.findCredentialState(identity.partyId, identity.userId);
+    return IHthApiCredentialAdapter.STATUS_UNKNOWN;
+  }
+
+  private HthApiPasswordStorage storageBackend() throws Exception {
+    try {
+      return HthApiPasswordStorage.parse(ConfigurationFactory.getInstance()
+          .getConfigurations(ADAPTER_CATEGORY).get("HTH_API_PASSWORD.STORAGE_BACKEND", "DATABASE"));
+    } catch (IllegalArgumentException e) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009"); }
   }
 
   private boolean isFeatureEnabled() {

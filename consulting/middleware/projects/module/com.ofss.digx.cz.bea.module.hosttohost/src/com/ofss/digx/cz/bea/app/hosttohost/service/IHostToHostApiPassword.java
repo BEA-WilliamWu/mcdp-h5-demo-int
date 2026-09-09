@@ -10,9 +10,12 @@ import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordRevealDTO;
 
 /** HTH API-password self-service contract. */
 public interface IHostToHostApiPassword {
+  /** Returns the current session user's credential state and password policy. */
   HostToHostApiPasswordResponseDTO status(SessionContext sessionContext) throws Exception;
+  /** Creates the current user's credential using a SETUP Code and idempotent request ID. */
   HostToHostApiPasswordResponseDTO setup(SessionContext sessionContext,
       HostToHostApiPasswordRequestDTO request) throws Exception;
+  /** Replaces an ACTIVE credential using a RESET Code on the configured backend. */
   HostToHostApiPasswordResponseDTO reset(SessionContext sessionContext,
       HostToHostApiPasswordRequestDTO request) throws Exception;
 
@@ -30,6 +33,7 @@ public interface IHostToHostApiPassword {
 
   /** Activates a PENDING code when the original user-maintenance flow is approved. */
   void activateOnUserApproval(String codeId, String operator) throws Exception;
+  /** Verifies the Code belongs to the company/user snapshot being approved. */
   void activateOnUserApproval(String codeId, String operator, String partyId,
       String userName) throws Exception;
 }

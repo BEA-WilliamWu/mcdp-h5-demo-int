@@ -1,40 +1,75 @@
 -- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
 -- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
--- BCOH2H-788 / BCOH2H-790: UAM HTH API credential adapter configuration.
--- Execute after replacing the V_SERVICE_URL literal with the approved environment URL.
--- The URL must be HTTPS and must not end with a credential operation path.
--- APIC client id/secret default to the existing DSPApi configuration and are not duplicated here.
--- If UAM uses different APIC credentials, provision HTH_API_PASSWORD.APIC_CLIENT_ID and
--- HTH_API_PASSWORD.APIC_CLIENT_SECRET through the approved secret/configuration process.
--- Re-runnable. Before enabling the feature, provision HTH_API_PWD_CODE_CIPHER_KEY
--- under HthApiCredentialAdapterConfig using the approved secret configuration mechanism.
--- It must be the SAME Base64 AES-256 key used for existing 787 CODE_CIPHER records.
--- This script does not overwrite the key. There is no hard-coded fallback.
-
-
+-- BCOH2H-788 / 790: DATABASE by default, UAM only when explicitly selected.
+-- Run 1 Schema, 2 Process and 3 Permission first. Code key and storage settings commit together.
+-- DATABASE needs no UAM URL, client ID or APIC credentials.
+-- UAM requires confirmed HTTPS URL and all three paths; no guessed endpoint defaults.
+-- Changing the backend does NOT migrate passwords. Stop traffic and plan credential migration first.
+-- On first deployment, provide the original Code key locally; never commit a populated script.
+-- On rerun, NULL reuses the configured key; a different supplied key is rejected.
+-- APIC secret configuration is preserved.
 
 DECLARE
-  V_SERVICE_URL VARCHAR2(1000) := 'https://CHANGE_ME.example.invalid';
+  V_STORAGE_BACKEND VARCHAR2(8) := 'DATABASE';
+  V_SERVICE_URL VARCHAR2(1000) := NULL;
+  V_STATUS_PATH VARCHAR2(500) := NULL;
+  V_SETUP_PATH VARCHAR2(500) := NULL;
+  V_RESET_PATH VARCHAR2(500) := NULL;
+  V_ORIGINAL_KEY VARCHAR2(4000) := NULL;
+  V_EXISTING_KEY VARCHAR2(4000);
+  V_KEY_BYTES RAW(2000);
   V_KEY_COUNT NUMBER;
 BEGIN
   SAVEPOINT HTH_API_PASSWORD_CONFIG;
-  IF V_SERVICE_URL LIKE '%CHANGE_ME%'
-     OR V_SERVICE_URL NOT LIKE 'https://%' THEN
-    RAISE_APPLICATION_ERROR(-20001,
-      'Set HTH_API_PASSWORD_SERVICE_URL to the approved HTTPS UAM base URL before deployment.');
+  V_STORAGE_BACKEND := UPPER(TRIM(V_STORAGE_BACKEND));
+  IF V_STORAGE_BACKEND IS NULL OR V_STORAGE_BACKEND NOT IN ('DATABASE', 'UAM') THEN
+    RAISE_APPLICATION_ERROR(-20021, 'STORAGE_BACKEND must be DATABASE or UAM.');
   END IF;
+  IF V_STORAGE_BACKEND = 'UAM' THEN
+    IF V_SERVICE_URL IS NULL OR V_SERVICE_URL NOT LIKE 'https://%'
+       OR V_SERVICE_URL LIKE '%CHANGE_ME%'
+       OR V_STATUS_PATH IS NULL OR V_SETUP_PATH IS NULL OR V_RESET_PATH IS NULL
+       OR V_STATUS_PATH NOT LIKE '/%' OR V_SETUP_PATH NOT LIKE '/%' OR V_RESET_PATH NOT LIKE '/%' THEN
+      RAISE_APPLICATION_ERROR(-20001, 'UAM requires the approved HTTPS URL and status/setup/reset paths.');
+    END IF;
+  END IF;
+  -- Preserve the configured key so existing Code ciphertext remains decryptable.
+  V_ORIGINAL_KEY := TRIM(V_ORIGINAL_KEY);
   SELECT COUNT(*) INTO V_KEY_COUNT FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
    WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
-     AND PROP_ID = 'HTH_API_PWD_CODE_CIPHER_KEY'
-     AND PROP_VALUE IS NOT NULL;
-  IF V_KEY_COUNT <> 1 THEN
-    RAISE_APPLICATION_ERROR(-20002, 'Provision the existing 787 cipher key before enabling API password self service.');
+     AND PROP_ID = 'HTH_API_PWD_CODE_CIPHER_KEY';
+  IF V_KEY_COUNT > 1 THEN
+    RAISE_APPLICATION_ERROR(-20013, 'Duplicate Code key configuration; resolve before deployment.');
+  ELSIF V_KEY_COUNT = 1 THEN
+    SELECT TRIM(PROP_VALUE) INTO V_EXISTING_KEY FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
+     WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
+       AND PROP_ID = 'HTH_API_PWD_CODE_CIPHER_KEY';
+    IF V_EXISTING_KEY IS NULL THEN
+      RAISE_APPLICATION_ERROR(-20012, 'Existing Code key is empty; resolve before deployment.');
+    END IF;
+    IF V_ORIGINAL_KEY IS NOT NULL AND V_ORIGINAL_KEY <> V_EXISTING_KEY THEN
+      RAISE_APPLICATION_ERROR(-20012, 'Existing Code key differs; refusing to overwrite.');
+    END IF;
+    V_ORIGINAL_KEY := V_EXISTING_KEY;
+  END IF;
+  IF V_ORIGINAL_KEY IS NULL
+     OR NOT REGEXP_LIKE(V_ORIGINAL_KEY, '^[A-Za-z0-9+/]{43}=$', 'c') THEN
+    RAISE_APPLICATION_ERROR(-20010, 'Provide the original Base64 AES-256 Code key locally.');
+  END IF;
+  V_KEY_BYTES := UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(V_ORIGINAL_KEY));
+  IF UTL_RAW.LENGTH(V_KEY_BYTES) <> 32 THEN
+    RAISE_APPLICATION_ERROR(-20011, 'The Code key must decode to 32 bytes.');
+  END IF;
+  IF V_KEY_COUNT = 0 THEN
+    INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
+    VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PWD_CODE_CIPHER_KEY', V_ORIGINAL_KEY);
   END IF;
 
 
 DELETE FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
    AND PROP_ID IN (
+     'HTH_API_PASSWORD.STORAGE_BACKEND',
      'HTH_API_PASSWORD.ADAPTER_CLASS',
      'HTH_API_PASSWORD.ENABLED',
      'HTH_API_PASSWORD.SERVICE_URL',
@@ -52,6 +87,9 @@ DELETE FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
      'HTH_API_PASSWORD.POLICY_SPACES_ALLOWED'
    );
 
+INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
+  VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.STORAGE_BACKEND', V_STORAGE_BACKEND);
+
 -- Single-row INSERT supports the configuration view; INSERT ALL does not.
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.ADAPTER_CLASS',
@@ -60,21 +98,24 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.ENABLED', 'true');
 
+IF V_STORAGE_BACKEND = 'UAM' THEN
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.SERVICE_URL',
           V_SERVICE_URL);
 
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.STATUS_PATH',
-          '/uam/hth/users/password/status');
+          V_STATUS_PATH);
 
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.SETUP_PATH',
-          '/uam/hth/users/password');
+          V_SETUP_PATH);
 
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.RESET_PATH',
-          '/uam/hth/users/password/reset');
+          V_RESET_PATH);
+
+END IF;
 
 INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.CHANNEL', 'BCO');

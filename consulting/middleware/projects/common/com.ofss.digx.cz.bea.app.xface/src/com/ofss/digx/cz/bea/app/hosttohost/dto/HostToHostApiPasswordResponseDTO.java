@@ -6,16 +6,28 @@ import com.ofss.digx.service.response.BaseResponseObject;
 public class HostToHostApiPasswordResponseDTO extends BaseResponseObject {
   private static final long serialVersionUID = 7968579792517074445L;
 
+  /** NOT_APPLICABLE, REQUIRED, CODE_REQUIRED, ACTIVE, LOCKED or UNKNOWN. */
   private String setupState;
+  /** True only when the active credential has a usable RESET Code. */
   private boolean resetAllowed;
   private HostToHostApiPasswordPolicyDTO passwordPolicy =
       new HostToHostApiPasswordPolicyDTO();
 
-  public String getSetupState() { return setupState; }
-  public void setSetupState(String setupState) { this.setupState = setupState; }
-  public boolean isResetAllowed() { return resetAllowed; }
-  public void setResetAllowed(boolean resetAllowed) { this.resetAllowed = resetAllowed; }
-  public HostToHostApiPasswordPolicyDTO getPasswordPolicy() { return passwordPolicy; }
+  public String getSetupState() {
+    return setupState;
+  }
+  public void setSetupState(String setupState) {
+    this.setupState = setupState;
+  }
+  public boolean isResetAllowed() {
+    return resetAllowed;
+  }
+  public void setResetAllowed(boolean resetAllowed) {
+    this.resetAllowed = resetAllowed;
+  }
+  public HostToHostApiPasswordPolicyDTO getPasswordPolicy() {
+    return passwordPolicy;
+  }
   public void setPasswordPolicy(HostToHostApiPasswordPolicyDTO passwordPolicy) {
     this.passwordPolicy = passwordPolicy;
   }

@@ -10,6 +10,7 @@ define([
 ], function (ko, Model, ResourceBundle) {
     "use strict";
 
+    /** Setup/reset form using the shared PIN transport encryption and dashboard lifecycle. */
     return function (params) {
         const self = this,
             mode = String((params.data && params.data.mode) || "SETUP").toUpperCase(),
@@ -36,6 +37,7 @@ define([
         self.passwordCode = ko.observable();
         self.submitting = ko.observable(false);
         self.showConfirmation = ko.observable(false);
+        // Keep the request ID across retries so an uncertain response cannot rotate twice.
         self.requestId = createRequestId();
 
         self.policy = ko.observable({
@@ -61,6 +63,7 @@ define([
             params.dashboard.switchModule();
         };
 
+        // Client feedback uses the API policy; the service also validates every submission.
         self.matchesPolicy = function (password) {
             const policy = self.policy(),
                 minimumLength = Number(policy.minLength || 0),
@@ -92,9 +95,7 @@ define([
                 password = self.newPassword() || "",
                 confirmation = self.confirmPassword() || "";
 
-            if (!tracker || tracker.valid !== "valid") {
-                params.baseModel.showComponentValidationErrors(tracker);
-
+            if (!tracker || !params.baseModel.showComponentValidationErrors(tracker)) {
                 return;
             }
 
@@ -151,6 +152,7 @@ define([
             return null;
         });
 
+        // Both dashboard disposal and custom-element detachment clear the form secrets.
         self.disconnected = self.clearSecrets;
         self.dispose = self.clearSecrets;
     };

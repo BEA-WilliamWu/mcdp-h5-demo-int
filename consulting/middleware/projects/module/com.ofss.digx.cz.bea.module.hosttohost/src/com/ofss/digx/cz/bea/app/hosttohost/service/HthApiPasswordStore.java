@@ -10,7 +10,12 @@ import com.ofss.fc.infra.jdbc.ConnectionUtil;
 import javax.transaction.TransactionManager;
 import weblogic.transaction.TransactionHelper;
 
-/** Transactional persistence boundary for one-time password codes and operation state. */
+/**
+ * Persists Code lifecycle, credential hashes and idempotent operation state through the shared ORM.
+ * Conditional SQL updates and row locks coordinate concurrent approval and password requests.
+ * Independent transactions preserve failed attempts and reservations across API rollback;
+ * database completion commits the hash, consumed Code and success state together.
+ */
 final class HthApiPasswordStore {
   static final String STATE_ACTIVE = "ACTIVE";
   static final String STATE_NOT_SETUP = "NOT_SETUP";
@@ -24,6 +29,22 @@ final class HthApiPasswordStore {
       query.setParameter(1, partyId);
       query.setParameter(2, userId);
       query.setMaxResults(1);
+      List rows = query.list();
+      return rows == null || rows.isEmpty() ? STATE_NOT_SETUP : string(rows.get(0));
+    } finally {
+      lease.close(false);
+    }
+  }
+
+  /** Reads the authoritative credential state for DATABASE mode. */
+  String findDatabaseCredentialState(String partyId, String userId) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      Query query = lease.session.createSQLQuery(
+          "SELECT CREDENTIAL_STATUS FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL "
+              + "WHERE PARTY_ID = ? AND USER_ID = ?");
+      query.setParameter(1, partyId);
+      query.setParameter(2, userId);
       List rows = query.list();
       return rows == null || rows.isEmpty() ? STATE_NOT_SETUP : string(rows.get(0));
     } finally {
@@ -52,11 +73,11 @@ final class HthApiPasswordStore {
   }
 
   OperationResult findSuccessfulOperation(String requestId, String partyId, String userId,
-      String operation) throws Exception {
+      String operation, String backend) throws Exception {
     SessionLease lease = open(false);
     try {
       Query query = lease.session.createSQLQuery(
-          "SELECT STATUS, REFERENCE_NUMBER FROM HTH_BEA.HTH_API_PASSWORD_OPERATION "
+          "SELECT STATUS, REFERENCE_NUMBER, STORAGE_BACKEND FROM HTH_BEA.HTH_API_PASSWORD_OPERATION "
               + "WHERE REQUEST_ID = ? AND PARTY_ID = ? AND USER_ID = ? AND OPERATION = ?");
       query.setParameter(1, requestId);
       query.setParameter(2, partyId);
@@ -68,14 +89,18 @@ final class HthApiPasswordStore {
         return null;
       }
       Object[] row = (Object[]) rows.get(0);
+      if (!backend.equals(string(row[2]))) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
       return new OperationResult(string(row[0]), string(row[1]));
     } finally {
       lease.close(false);
     }
   }
 
+  /** Verifies the Code and reserves it, persisting failed verification attempts independently. */
   String validateAndReserveCode(String partyId, String userId, String purpose, String code,
-      String requestId) throws Exception {
+      String requestId, String backend) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
@@ -124,8 +149,8 @@ final class HthApiPasswordStore {
           "INSERT INTO HTH_BEA.HTH_API_PASSWORD_OPERATION "
               + "(REQUEST_ID, PARTY_ID, USER_ID, OPERATION, CODE_ID, STATUS, CREATED_BY, "
               + "CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATE_DATE, OBJECT_STATUS, "
-              + "OBJECT_VERSION_NUMBER) VALUES (?, ?, ?, ?, ?, 'IN_PROGRESS', ?, SYSDATE, ?, "
-              + "SYSDATE, 'A', 1)");
+              + "OBJECT_VERSION_NUMBER, STORAGE_BACKEND) VALUES (?, ?, ?, ?, ?, 'IN_PROGRESS', ?, SYSDATE, ?, "
+              + "SYSDATE, 'A', 1, ?)");
       operation.setParameter(1, requestId);
       operation.setParameter(2, partyId);
       operation.setParameter(3, userId);
@@ -133,6 +158,7 @@ final class HthApiPasswordStore {
       operation.setParameter(5, codeId);
       operation.setParameter(6, userId);
       operation.setParameter(7, userId);
+      operation.setParameter(8, backend);
       operation.executeUpdate();
       success = true;
       return codeId;
@@ -151,8 +177,23 @@ final class HthApiPasswordStore {
     }
   }
 
+  /** Records a confirmed UAM result and consumes its reserved Code. */
   void complete(String partyId, String userId, String operation, String requestId,
       String codeId, String referenceNumber) throws Exception {
+    completeInternal(partyId, userId, operation, requestId, codeId, referenceNumber, null);
+  }
+
+  /** Commits the password hash, Code consumption and operation result in one transaction. */
+  void completeDatabase(String partyId, String userId, String operation, String requestId,
+      String codeId, String referenceNumber, String passwordHash) throws Exception {
+    if (passwordHash == null) {
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
+    }
+    completeInternal(partyId, userId, operation, requestId, codeId, referenceNumber, passwordHash);
+  }
+
+  private void completeInternal(String partyId, String userId, String operation, String requestId,
+      String codeId, String referenceNumber, String passwordHash) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
@@ -165,6 +206,10 @@ final class HthApiPasswordStore {
       code.setParameter(3, requestId);
       if (code.executeUpdate() != 1) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+
+      if (passwordHash != null) {
+        writeDatabaseCredential(lease.session, partyId, userId, operation, requestId, passwordHash);
       }
 
       Query state = lease.session.createSQLQuery(
@@ -206,7 +251,9 @@ final class HthApiPasswordStore {
       op.setParameter(1, referenceNumber);
       op.setParameter(2, userId);
       op.setParameter(3, requestId);
-      op.executeUpdate();
+      if (op.executeUpdate() != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
       success = true;
     } catch (Exception e) {
       throw e;
@@ -217,6 +264,32 @@ final class HthApiPasswordStore {
     }
   }
 
+  private void writeDatabaseCredential(Session session, String partyId, String userId,
+      String operation, String requestId, String passwordHash) throws Exception {
+    Query query;
+    if ("SETUP".equals(operation)) {
+      query = session.createSQLQuery(
+          "INSERT INTO HTH_BEA.HTH_API_PASSWORD_CREDENTIAL "
+              + "(PASSWORD_HASH, LAST_REQUEST_ID, LAST_UPDATED_BY, PARTY_ID, USER_ID, "
+              + "CREDENTIAL_STATUS, CREDENTIAL_VERSION, CREATED_AT, UPDATED_AT) "
+              + "VALUES (?, ?, ?, ?, ?, 'ACTIVE', 1, SYSTIMESTAMP, SYSTIMESTAMP)");
+    } else {
+      query = session.createSQLQuery(
+          "UPDATE HTH_BEA.HTH_API_PASSWORD_CREDENTIAL SET PASSWORD_HASH = ?, LAST_REQUEST_ID = ?, "
+              + "LAST_UPDATED_BY = ?, CREDENTIAL_VERSION = CREDENTIAL_VERSION + 1, UPDATED_AT = SYSTIMESTAMP "
+              + "WHERE PARTY_ID = ? AND USER_ID = ? AND CREDENTIAL_STATUS = 'ACTIVE'");
+    }
+    query.setParameter(1, passwordHash);
+    query.setParameter(2, requestId);
+    query.setParameter(3, userId);
+    query.setParameter(4, partyId);
+    query.setParameter(5, userId);
+    if (query.executeUpdate() != 1) {
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
+    }
+  }
+
+  /** Retains UNKNOWN reservations for reconciliation when the write outcome is uncertain. */
   void fail(String userId, String requestId, String codeId, boolean uncertain) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
@@ -280,16 +353,22 @@ final class HthApiPasswordStore {
           "SELECT STATUS, OBJECT_STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID = ? FOR UPDATE");
       lock.setParameter(1, codeId);
       List rows = lock.list();
-      if (rows == null || rows.isEmpty()) { throw new Exception("DIGX_CZ_HTH_PW_008"); }
+      if (rows == null || rows.isEmpty()) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
       Object[] row = (Object[]) rows.get(0);
-      if (!"A".equals(string(row[1]))) { throw new Exception("DIGX_CZ_HTH_PW_008"); }
+      if (!"A".equals(string(row[1]))) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
       String status = string(row[0]);
       if ("ACTIVE".equals(status) || "USED".equals(status)
           || "IN_PROGRESS".equals(status) || "UNKNOWN".equals(status)) {
         success = true;
-        return false; // Original approval replay must not reactivate or resend.
+        return false; // Approval replay does not reactivate the Code or resend its notification.
       }
-      if (!"PENDING".equals(status)) { throw new Exception("DIGX_CZ_HTH_PW_008"); }
+      if (!"PENDING".equals(status)) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
       Query retire = lease.session.createSQLQuery(
           "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'INVALID', LAST_UPDATED_BY = ?, "
               + "LAST_UPDATE_DATE = SYSDATE WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) "
@@ -313,11 +392,15 @@ final class HthApiPasswordStore {
       activate.setParameter(2, expiryHours);
       activate.setParameter(3, operator);
       activate.setParameter(4, codeId);
-      if (activate.executeUpdate() != 1) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007"); }
+      if (activate.executeUpdate() != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
       success = true;
       return true;
     } catch (java.lang.Exception e) {
-      if (e instanceof Exception) { throw (Exception) e; }
+      if (e instanceof Exception) {
+        throw (Exception) e;
+      }
       throw new Exception(e);
     } finally {
       lease.close(success);
@@ -349,7 +432,9 @@ final class HthApiPasswordStore {
             if (session.fetchCurrentTransaction() != null && session.fetchCurrentTransaction().isActive()) {
               session.fetchCurrentTransaction().rollback();
             }
-          } finally { DataAccessManager.getManager().closeSession(session); }
+          } finally {
+            DataAccessManager.getManager().closeSession(session);
+          }
         }
       } finally {
         if (manager != null && suspended != null) {
@@ -420,7 +505,9 @@ final class HthApiPasswordStore {
               && session.fetchCurrentTransaction().isActive()) {
             session.fetchCurrentTransaction().rollback();
           }
-        } catch (java.lang.Exception rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+        } catch (java.lang.Exception rollbackFailure) {
+          failure.addSuppressed(rollbackFailure);
+        }
         throw new Exception(failure);
       } finally {
         closed = true;

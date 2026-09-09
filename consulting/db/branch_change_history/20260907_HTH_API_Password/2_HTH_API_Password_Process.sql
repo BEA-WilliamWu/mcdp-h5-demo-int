@@ -1,7 +1,7 @@
 -- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
 -- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / BCOH2H-790: self-service task and audit configuration.
--- Execute in the OBDX configuration schema after the Permission script.
+-- Execute in the OBDX configuration schema before 3_HTH_API_Password_Permission.sql.
 -- These are immediate current-user security operations: audit is enabled, approval and 2FA are
 -- deliberately not configured. The HTH API Password Code is the story-defined authorization code.
 -- Re-runnable.

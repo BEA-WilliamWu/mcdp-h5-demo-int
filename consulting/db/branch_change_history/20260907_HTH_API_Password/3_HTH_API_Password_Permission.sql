@@ -1,7 +1,7 @@
 -- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
 -- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / BCOH2H-790: HTH API Password resources and entitlements.
--- Execute in the OBDX configuration schema after 1_HTH_API_Password_Schema.sql.
+-- Execute in the OBDX configuration schema after 2_HTH_API_Password_Process.sql.
 -- Re-runnable. The feature inherits the policy set of the existing BCO Change Password function;
 -- no user-specific or Maker/Checker grants are required.
 
@@ -80,7 +80,7 @@ INSERT ALL
      LAST_UPDATE_DATE, OBJECT_VERSION_NUMBER)
   VALUES
     ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup',
-     'Set up HTH API Password', 'Create the current HTH API user credential in UAM',
+     'Set up HTH API Password', 'Create the current HTH API user credential in the configured store',
      'SVC', 'PRM', NULL, 'system', SYSDATE, 'system', 'A', SYSDATE, 1)
   INTO DIGX_AZ_RESOURCE
     (ID, DISPLAY_NAME, DESCRIPTION, RESOURCE_TYPE, ACTION_TYPE, IS_DEFAULT,
@@ -88,7 +88,7 @@ INSERT ALL
      LAST_UPDATE_DATE, OBJECT_VERSION_NUMBER)
   VALUES
     ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset',
-     'Reset HTH API Password', 'Atomically replace the current HTH API user credential in UAM',
+     'Reset HTH API Password', 'Atomically replace the current HTH API user credential in the configured store',
      'SVC', 'PRM', NULL, 'system', SYSDATE, 'system', 'A', SYSDATE, 1)
 SELECT 1 FROM DUAL;
 

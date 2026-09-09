@@ -5,6 +5,7 @@ define([
 
     const baseService = BaseService.getInstance();
 
+    /** Transport options and error presentation follow the shared BaseService contract. */
     return {
         status: function (config) {
             return baseService.fetch(Object.assign({

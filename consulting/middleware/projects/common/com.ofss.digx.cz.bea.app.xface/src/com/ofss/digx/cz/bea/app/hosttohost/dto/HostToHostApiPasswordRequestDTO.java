@@ -9,7 +9,9 @@ import com.ofss.digx.app.common.dto.DomainObjectDTO;
 public class HostToHostApiPasswordRequestDTO extends DomainObjectDTO {
   private static final long serialVersionUID = -4677655960161447844L;
 
+  /** Shared customer-pin-encrypt envelope containing password followed by one-time Code. */
   private String encryptedCredentials;
+  /** Client UUID retained across retries of the same operation. */
   private String requestId;
 
   public String getEncryptedCredentials() {

@@ -20,8 +20,8 @@ import org.glassfish.jersey.client.ClientProperties;
 /**
  * Configurable HTTPS adapter for the UAM HTH API-password contract.
  *
- * <p>The endpoint paths are deliberately externalized because the bundled DSP client does not
- * expose password administration. No password, password code, or response body is logged here.
+ * <p>Selected only in UAM storage mode. URL and endpoint paths come from environment
+ * configuration. Passwords, password codes and response bodies are excluded from logging.
  */
 public class HthApiCredentialAdapter implements IHthApiCredentialAdapter {
   private static final Client CLIENT = ClientBuilder.newClient();
@@ -38,9 +38,6 @@ public class HthApiCredentialAdapter implements IHthApiCredentialAdapter {
   private static final String DSP_CATEGORY = "DSPApi";
   private static final String DSP_CLIENT_ID = "DSP.APIC_CLIENT_ID";
   private static final String DSP_CLIENT_SECRET = "DSP.APIC_CLIENT_SECRET";
-  private static final String DEFAULT_STATUS_PATH = "/uam/hth/users/password/status";
-  private static final String DEFAULT_SETUP_PATH = "/uam/hth/users/password";
-  private static final String DEFAULT_RESET_PATH = "/uam/hth/users/password/reset";
 
   private final ObjectMapper mapper = new ObjectMapper();
 
@@ -49,7 +46,7 @@ public class HthApiCredentialAdapter implements IHthApiCredentialAdapter {
     Preferences config = configurations();
     Response response = null;
     try {
-      response = request(config, config.get(STATUS_PATH, DEFAULT_STATUS_PATH))
+      response = request(config, config.get(STATUS_PATH, ""))
           .queryParam("partyId", partyId)
           .queryParam("userId", userId)
           .queryParam("uamClientId", uamClientId)
@@ -82,8 +79,8 @@ public class HthApiCredentialAdapter implements IHthApiCredentialAdapter {
       String password, String requestId) throws Exception {
     Preferences config = configurations();
     String path = "SETUP".equals(operation)
-        ? config.get(SETUP_PATH, DEFAULT_SETUP_PATH)
-        : config.get(RESET_PATH, DEFAULT_RESET_PATH);
+        ? config.get(SETUP_PATH, "")
+        : config.get(RESET_PATH, "");
     Map<String, Object> payload = new LinkedHashMap<String, Object>();
     payload.put("partyId", partyId);
     payload.put("userId", userId);
@@ -113,7 +110,8 @@ public class HthApiCredentialAdapter implements IHthApiCredentialAdapter {
 
   private WebTarget request(Preferences config, String path) throws Exception {
     String serviceUrl = config.get(SERVICE_URL, "").trim();
-    if (serviceUrl.length() == 0 || !serviceUrl.toLowerCase().startsWith("https://")) {
+    if (serviceUrl.length() == 0 || !serviceUrl.toLowerCase().startsWith("https://")
+        || path == null || !path.startsWith("/")) {
       throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
     }
     return CLIENT.target(serviceUrl).path(path)

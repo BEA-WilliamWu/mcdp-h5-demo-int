@@ -1,5 +1,7 @@
 # HTH API Password 合并说明（787 / 788 / 790 / 1204）
 
+存储设计更新：按用户要求，密码存储现为 DATABASE（默认）/UAM 可配置；下文历史 UAM-only 描述已被 [当前存储与部署说明](../../consulting/db/branch_change_history/20260907_HTH_API_Password/README.md) 替代。787 Code 密文及原密钥迁移与此选择独立。
+
 同步范围：来自主项目 `a33c20e1`，此 mcdp 提交仅包含 API Password Story 787/788/790/1204 的整合及必要依赖。三个 HTH account-access-management 组件已与主项目一致。共享 SMS 文件使用其他业务快照合入前的 Story 合并版本，未包含其他业务更新。下列 18 文件编译记录针对主项目当时的完整依赖环境，不代表 mcdp 可独立构建。
 
 日期：2026-09-09。合并来源为本次补齐的 `merge/ApiPassword/{middleware,config,db}`。
@@ -81,9 +83,8 @@ Adapter 脚本不会覆盖密钥，启用前检查该配置存在，配置查询
 在 OBDX 配置账户：
 
 1. 787 的 **3 Process -> 2 Permission -> 4 Repository Adapters -> 5 Error Messages**。
-2. 788/790/1204 的 **3 Process -> 2 Permission**。
-3. 受控配置原 Code 密钥，并确认 UAM status/setup/reset 契约、HTTPS 地址、APIC 配置。
-4. 788/790/1204 的 **4 Adapters -> 5 Error Messages -> 6 Notification -> 7 Verification**。
+2. 788/790/1204 的 **2 Process → 3 Permission → 4 Adapters → 5 Error Messages → 6 Notification → 7 Verification**。本目录文件编号即执行顺序，完整账号和配置说明见最终 SQL README。
+3. 4 统一配置原 Code 密钥和存储位置，默认 DATABASE。仅显式选择 UAM 时填写已确认的接口地址及环境凭据。
 
 升级脚本要求 787 密文表结构，遇到我们旧版本 hash 表会退出；不能直接 drop/recreate 现有表。
 若旧 hash 版本已部署，需先盘点数据再制定迁移/过期重发方案，hash 不能还原成密文。

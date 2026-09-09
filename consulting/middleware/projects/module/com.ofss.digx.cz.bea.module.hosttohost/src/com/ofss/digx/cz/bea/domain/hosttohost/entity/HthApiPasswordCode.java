@@ -8,10 +8,10 @@ import com.ofss.fc.framework.domain.IPersistenceObject;
  * One-time HTH API Password Code lifecycle row (BCOH2H-787).
  *
  * <p>A maker generate call persists the row as PENDING inside the HTH maker/checker flow; checker
- * approval of the original user-maintenance transaction activates it and anchors {@code expiryTime}. First-time setup
- * consumes it (USED); regeneration supersedes it (INVALID); passing {@code expiryTime} renders it
- * EXPIRED at read time. The plaintext code never leaves the application: {@code codeCipher} holds
- * the reversible AES-256-GCM ciphertext used for authorized reveal and verification.
+ * approval of the original user-maintenance transaction activates it and anchors {@code expiryTime}. Setup or reset
+ * consumes it according to {@code purpose} (USED); regeneration supersedes it (INVALID); passing {@code expiryTime} renders it
+ * EXPIRED at read time. The database stores AES-256-GCM ciphertext in {@code codeCipher};
+ * plaintext is returned only by entitled generation and reveal operations.
  */
 public class HthApiPasswordCode extends AbstractDomainObject implements IPersistenceObject {
   private static final long serialVersionUID = 4519082374651287345L;

@@ -13,18 +13,40 @@ public class HostToHostApiPasswordPolicyDTO implements Serializable {
   private boolean specialCharsAllowed;
   private boolean spacesAllowed;
 
-  public int getMinLength() { return minLength; }
-  public void setMinLength(int minLength) { this.minLength = minLength; }
-  public int getMaxLength() { return maxLength; }
-  public void setMaxLength(int maxLength) { this.maxLength = maxLength; }
-  public int getNumericRequired() { return numericRequired; }
-  public void setNumericRequired(int numericRequired) { this.numericRequired = numericRequired; }
-  public int getAlphabetRequired() { return alphabetRequired; }
-  public void setAlphabetRequired(int alphabetRequired) { this.alphabetRequired = alphabetRequired; }
-  public boolean isSpecialCharsAllowed() { return specialCharsAllowed; }
+  public int getMinLength() {
+    return minLength;
+  }
+  public void setMinLength(int minLength) {
+    this.minLength = minLength;
+  }
+  public int getMaxLength() {
+    return maxLength;
+  }
+  public void setMaxLength(int maxLength) {
+    this.maxLength = maxLength;
+  }
+  public int getNumericRequired() {
+    return numericRequired;
+  }
+  public void setNumericRequired(int numericRequired) {
+    this.numericRequired = numericRequired;
+  }
+  public int getAlphabetRequired() {
+    return alphabetRequired;
+  }
+  public void setAlphabetRequired(int alphabetRequired) {
+    this.alphabetRequired = alphabetRequired;
+  }
+  public boolean isSpecialCharsAllowed() {
+    return specialCharsAllowed;
+  }
   public void setSpecialCharsAllowed(boolean specialCharsAllowed) {
     this.specialCharsAllowed = specialCharsAllowed;
   }
-  public boolean isSpacesAllowed() { return spacesAllowed; }
-  public void setSpacesAllowed(boolean spacesAllowed) { this.spacesAllowed = spacesAllowed; }
+  public boolean isSpacesAllowed() {
+    return spacesAllowed;
+  }
+  public void setSpacesAllowed(boolean spacesAllowed) {
+    this.spacesAllowed = spacesAllowed;
+  }
 }

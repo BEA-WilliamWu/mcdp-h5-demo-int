@@ -2,7 +2,7 @@ package com.ofss.digx.cz.bea.extxface.hosttohost.adapter;
 
 import com.ofss.digx.infra.exceptions.Exception;
 
-/** Boundary to the UAM service that owns the HTH API credential. */
+/** Boundary used only when UAM is explicitly selected as the credential backend. */
 public interface IHthApiCredentialAdapter {
   String STATUS_NOT_SETUP = "NOT_SETUP";
   String STATUS_ACTIVE = "ACTIVE";

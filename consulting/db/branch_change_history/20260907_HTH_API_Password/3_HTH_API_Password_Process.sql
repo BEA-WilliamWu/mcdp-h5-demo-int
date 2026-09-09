@@ -1,3 +1,5 @@
+-- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
+-- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / BCOH2H-790: self-service task and audit configuration.
 -- Execute in the OBDX configuration schema after the Permission script.
 -- These are immediate current-user security operations: audit is enabled, approval and 2FA are
@@ -7,6 +9,7 @@
 DECLARE
   V_SOURCE_TASK_COUNT NUMBER;
 BEGIN
+  SAVEPOINT HTH_API_PASSWORD_CONFIG;
   SELECT COUNT(*) INTO V_SOURCE_TASK_COUNT
     FROM DIGX_CM_TASK
    WHERE ID = 'CM_N_CC';
@@ -15,8 +18,7 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20003,
       'Source BCO Change Credentials task CM_N_CC was not found; no HTH tasks were changed.');
   END IF;
-END;
-/
+
 
 DELETE FROM DIGX_CM_RESOURCE_TASK_REL
  WHERE TASK_ID IN ('CM_N_HAP_SETUP', 'CM_N_HAP_RESET')
@@ -75,6 +77,11 @@ VALUES
    'CM_N_HAP_RESET', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, NULL, 1);
 
 COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK TO HTH_API_PASSWORD_CONFIG;
+    RAISE;
+END;
 
 SELECT COUNT(*) AS SOURCE_CHANGE_CREDENTIAL_TASK
   FROM DIGX_CM_TASK WHERE ID = 'CM_N_CC';

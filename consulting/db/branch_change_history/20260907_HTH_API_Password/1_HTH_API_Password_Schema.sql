@@ -1,10 +1,12 @@
+-- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
+-- Execute the complete outer BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788/790/1204: incremental schema over the BCOH2H-787 Code producer.
--- SQL*Plus / SQLcl: run 20260830_BCOH2H-787_HTH_API_Password/1...Schema.sql FIRST.
+-- Run 20260830_BCOH2H-787_HTH_API_Password/1...Schema.sql FIRST.
 -- Preserves CODE_CIPHER and approval-anchored EXPIRY_TIME. Never recreates the Code table.
 -- A previously deployed hash-only 788 schema is NOT compatible: stop and plan migration.
 -- DDL commits implicitly; back up and validate the deployment baseline before running.
-WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
 
+BEGIN
 DECLARE n NUMBER;
 BEGIN
   SELECT COUNT(*) INTO n FROM ALL_TAB_COLUMNS
@@ -14,8 +16,6 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20001, 'Requires the 787 ciphertext Code schema; do not drop existing Code data.');
   END IF;
 END;
-/
-
 DECLARE n NUMBER;
 BEGIN
   SELECT COUNT(*) INTO n FROM ALL_TAB_COLUMNS WHERE OWNER = 'HTH_BEA'
@@ -31,8 +31,6 @@ BEGIN
   IF n = 0 THEN EXECUTE IMMEDIATE
     'ALTER TABLE HTH_BEA.HTH_API_PASSWORD_CODE ADD MAX_ATTEMPTS NUMBER(3) DEFAULT 5 NOT NULL'; END IF;
 END;
-/
-
 DECLARE n NUMBER;
 BEGIN
   SELECT COUNT(*) INTO n FROM ALL_CONSTRAINTS WHERE OWNER = 'HTH_BEA'
@@ -52,8 +50,6 @@ BEGIN
     CK_HTH_API_PWD_ATTEMPTS CHECK (ATTEMPT_COUNT >= 0 AND MAX_ATTEMPTS > 0
       AND ATTEMPT_COUNT <= MAX_ATTEMPTS)~'; END IF;
 END;
-/
-
 -- Detect duplicate live codes before creating the unique index; do not silently invalidate data.
 -- Bare and @party-qualified usernames represent the same principal.
 DECLARE n NUMBER;
@@ -69,16 +65,14 @@ BEGIN
       CASE WHEN OBJECT_STATUS = 'A' AND STATUS IN ('ACTIVE','IN_PROGRESS','UNKNOWN') THEN PURPOSE END)~';
   END IF;
 END;
-/
-
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.PURPOSE IS
-  'SETUP by default for 787 creation; RESET must be explicitly requested by reset-code generation.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.REQUEST_ID IS
-  'Request holding this code IN_PROGRESS/UNKNOWN or consuming it to USED.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.MAX_ATTEMPTS IS
-  'Maximum failed verification attempts; INVALID when exhausted.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.STATUS IS
-  '787 PENDING/ACTIVE/USED/EXPIRED/INVALID, plus IN_PROGRESS/UNKNOWN for UAM operation safety.';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.PURPOSE IS
+  'SETUP by default for 787 creation; RESET must be explicitly requested by reset-code generation.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.REQUEST_ID IS
+  'Request holding this code IN_PROGRESS/UNKNOWN or consuming it to USED.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.MAX_ATTEMPTS IS
+  'Maximum failed verification attempts; INVALID when exhausted.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_CODE.STATUS IS
+  '787 PENDING/ACTIVE/USED/EXPIRED/INVALID, plus IN_PROGRESS/UNKNOWN for UAM operation safety.'!';
 
 DECLARE n NUMBER; BEGIN
   SELECT COUNT(*) INTO n FROM ALL_TABLES WHERE OWNER = 'HTH_BEA' AND TABLE_NAME = 'HTH_API_PASSWORD_STATE';
@@ -105,14 +99,12 @@ DECLARE n NUMBER; BEGIN
   CONSTRAINT CK_HTH_API_PWD_STATE_OBJ CHECK (OBJECT_STATUS IN ('A', 'I'))
 )~'; END IF;
 END;
-/
-
-COMMENT ON TABLE HTH_BEA.HTH_API_PASSWORD_STATE IS
-  'Non-sensitive local projection of the UAM HTH API credential state.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_STATE.CREDENTIAL_STATUS IS
-  'Cached projection only; the UAM credential status remains authoritative.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_STATE.CREDENTIAL_VERSION IS
-  'Monotonic successful setup/reset counter; never contains a password version secret.';
+EXECUTE IMMEDIATE q'!COMMENT ON TABLE HTH_BEA.HTH_API_PASSWORD_STATE IS
+  'Non-sensitive local projection of the UAM HTH API credential state.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_STATE.CREDENTIAL_STATUS IS
+  'Cached projection only; the UAM credential status remains authoritative.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_STATE.CREDENTIAL_VERSION IS
+  'Monotonic successful setup/reset counter; never contains a password version secret.'!';
 
 DECLARE n NUMBER; BEGIN
   SELECT COUNT(*) INTO n FROM ALL_TABLES WHERE OWNER = 'HTH_BEA' AND TABLE_NAME = 'HTH_API_PASSWORD_OPERATION';
@@ -141,21 +133,18 @@ DECLARE n NUMBER; BEGIN
   CONSTRAINT CK_HTH_API_PWD_OP_OBJ CHECK (OBJECT_STATUS IN ('A', 'I'))
 )~'; END IF;
 END;
-/
-
 DECLARE n NUMBER; BEGIN
   SELECT COUNT(*) INTO n FROM ALL_INDEXES WHERE OWNER = 'HTH_BEA' AND INDEX_NAME = 'IX_HTH_API_PWD_OP_USER';
   IF n = 0 THEN EXECUTE IMMEDIATE q'~CREATE INDEX HTH_BEA.IX_HTH_API_PWD_OP_USER
   ON HTH_BEA.HTH_API_PASSWORD_OPERATION
     (PARTY_ID, USER_ID, OPERATION, CREATION_DATE)~'; END IF;
 END;
-/
-
-COMMENT ON TABLE HTH_BEA.HTH_API_PASSWORD_OPERATION IS
-  'Idempotency and reconciliation state for setup/reset calls to UAM.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_OPERATION.REQUEST_ID IS
-  'Client-generated UUID; repeated successful requests return the original result.';
-COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_OPERATION.STATUS IS
-  'UNKNOWN prevents an unsafe password rotation retry after an indeterminate UAM result.';
+EXECUTE IMMEDIATE q'!COMMENT ON TABLE HTH_BEA.HTH_API_PASSWORD_OPERATION IS
+  'Idempotency and reconciliation state for setup/reset calls to UAM.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_OPERATION.REQUEST_ID IS
+  'Client-generated UUID; repeated successful requests return the original result.'!';
+EXECUTE IMMEDIATE q'!COMMENT ON COLUMN HTH_BEA.HTH_API_PASSWORD_OPERATION.STATUS IS
+  'UNKNOWN prevents an unsafe password rotation retry after an indeterminate UAM result.'!';
 
 COMMIT;
+END;

@@ -1,3 +1,5 @@
+-- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
+-- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / BCOH2H-790: HTH API Password user-facing errors.
 -- Re-runnable; execute in the OBDX configuration schema.
 

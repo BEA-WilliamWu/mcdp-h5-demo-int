@@ -1,3 +1,5 @@
+-- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
+-- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / 790 / 1204 post-deployment verification (read-only).
 -- Execute after scripts 1-6 with dictionary, HTH_BEA, and OBDX configuration-table read access.
 -- Every query documents its expected result. This script performs no DML.

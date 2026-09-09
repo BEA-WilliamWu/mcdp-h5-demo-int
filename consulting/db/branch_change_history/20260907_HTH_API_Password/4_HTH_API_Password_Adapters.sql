@@ -1,5 +1,7 @@
+-- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
+-- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-788 / BCOH2H-790: UAM HTH API credential adapter configuration.
--- Execute after replacing HTH_API_PASSWORD_SERVICE_URL with the approved environment URL.
+-- Execute after replacing the V_SERVICE_URL literal with the approved environment URL.
 -- The URL must be HTTPS and must not end with a credential operation path.
 -- APIC client id/secret default to the existing DSPApi configuration and are not duplicated here.
 -- If UAM uses different APIC credentials, provision HTH_API_PASSWORD.APIC_CLIENT_ID and
@@ -9,14 +11,13 @@
 -- It must be the SAME Base64 AES-256 key used for existing 787 CODE_CIPHER records.
 -- This script does not overwrite the key. There is no hard-coded fallback.
 
-WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
 
-DEFINE HTH_API_PASSWORD_SERVICE_URL = https://CHANGE_ME.example.invalid
 
 DECLARE
-  V_SERVICE_URL VARCHAR2(1000) := '&HTH_API_PASSWORD_SERVICE_URL';
+  V_SERVICE_URL VARCHAR2(1000) := 'https://CHANGE_ME.example.invalid';
   V_KEY_COUNT NUMBER;
 BEGIN
+  SAVEPOINT HTH_API_PASSWORD_CONFIG;
   IF V_SERVICE_URL LIKE '%CHANGE_ME%'
      OR V_SERVICE_URL NOT LIKE 'https://%' THEN
     RAISE_APPLICATION_ERROR(-20001,
@@ -29,8 +30,7 @@ BEGIN
   IF V_KEY_COUNT <> 1 THEN
     RAISE_APPLICATION_ERROR(-20002, 'Provision the existing 787 cipher key before enabling API password self service.');
   END IF;
-END;
-/
+
 
 DELETE FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
@@ -60,7 +60,7 @@ INSERT ALL
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.ENABLED', 'true')
   INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.SERVICE_URL',
-          '&HTH_API_PASSWORD_SERVICE_URL')
+          V_SERVICE_URL)
   INTO DIGX_FW_CONFIG_ADAPTER_PROP_V (CATEGORY_ID, PROP_ID, PROP_VALUE)
   VALUES ('HthApiCredentialAdapterConfig', 'HTH_API_PASSWORD.STATUS_PATH',
           '/uam/hth/users/password/status')
@@ -91,11 +91,14 @@ INSERT ALL
 SELECT 1 FROM DUAL;
 
 COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK TO HTH_API_PASSWORD_CONFIG;
+    RAISE;
+END;
 
 SELECT CATEGORY_ID, PROP_ID,
        CASE WHEN PROP_ID LIKE '%SECRET%' OR PROP_ID LIKE '%CIPHER_KEY%' THEN '[PROTECTED]' ELSE PROP_VALUE END AS PROP_VALUE
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
  ORDER BY PROP_ID;
-
-UNDEFINE HTH_API_PASSWORD_SERVICE_URL

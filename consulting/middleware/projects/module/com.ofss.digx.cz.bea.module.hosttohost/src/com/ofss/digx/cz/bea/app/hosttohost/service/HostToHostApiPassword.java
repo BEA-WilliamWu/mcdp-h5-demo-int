@@ -57,6 +57,15 @@ import com.ofss.fc.xface.ep.dto.NotificationDetail;
 import java.util.Calendar;
 import org.apache.commons.lang3.ObjectUtils;
 
+import com.ofss.fc.infra.das.orm.DataAccessManager;
+import com.ofss.fc.infra.das.orm.Session;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthApiPasswordCredentialRepository;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthApiPasswordStateRepository;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthApiPasswordOperationRepository;
+import com.ofss.fc.infra.jdbc.ConnectionUtil;
+import javax.transaction.TransactionManager;
+import weblogic.transaction.TransactionHelper;
+
 /** Shared BCOH2H-787 code lifecycle and 788/790/1204 password self service. */
 public class HostToHostApiPassword extends AbstractApplication
     implements IHostToHostApiPassword {
@@ -117,7 +126,17 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final String DATE_FORMAT_PATTERN = "yyyy/MM/dd HH:mm";
 
 
-  private final HthApiPasswordStore store = new HthApiPasswordStore();
+  private final HthApiPasswordCodeRepository codeRepository =
+      HthApiPasswordCodeRepository.getInstance();
+  private final HthApiPasswordCredentialRepository credentialRepository =
+      HthApiPasswordCredentialRepository.getInstance();
+  private final HthApiPasswordStateRepository stateRepository =
+      HthApiPasswordStateRepository.getInstance();
+  private final HthApiPasswordOperationRepository operationRepository =
+      HthApiPasswordOperationRepository.getInstance();
+
+  private static final String STATE_ACTIVE = "ACTIVE";
+  private static final String STATE_NOT_SETUP = "NOT_SETUP";
 
   @Override
   @Entitlement(name = "View HTH API Password Status", action = ActionType.VIEW,
@@ -140,13 +159,13 @@ public class HostToHostApiPassword extends AbstractApplication
           String state = credentialState(identity, true, storage);
           if (IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
             response.setSetupState("ACTIVE");
-            response.setResetAllowed(store.hasUsableCode(identity.partyId, identity.userId, RESET));
+            response.setResetAllowed(hasUsableCode(identity.partyId, identity.userId, RESET));
           } else if (IHthApiCredentialAdapter.STATUS_LOCKED.equals(state)) {
             response.setSetupState("LOCKED");
           } else if (IHthApiCredentialAdapter.STATUS_UNKNOWN.equals(state)) {
             response.setSetupState("UNKNOWN");
           } else {
-            response.setSetupState(store.hasUsableCode(identity.partyId, identity.userId, SETUP)
+            response.setSetupState(hasUsableCode(identity.partyId, identity.userId, SETUP)
                 ? "REQUIRED" : "CODE_REQUIRED");
           }
         }
@@ -200,7 +219,7 @@ public class HostToHostApiPassword extends AbstractApplication
     try {
       HthApiPasswordStorage storage = storageBackend();
       Identity identity = identity(sessionContext, true, storage);
-      HthApiPasswordStore.OperationResult previous = store.findSuccessfulOperation(
+      OperationResult previous = findSuccessfulOperation(
           request.getRequestId(), identity.partyId, identity.userId, operation, storage.name());
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
@@ -230,17 +249,17 @@ public class HostToHostApiPassword extends AbstractApplication
         validatePassword(password);
         String passwordHash = storage == HthApiPasswordStorage.DATABASE
             ? com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash.hash(password) : null;
-        codeId = store.validateAndReserveCode(identity.partyId, identity.userId, operation,
+        codeId = validateAndReserveCode(identity.partyId, identity.userId, operation,
             code, request.getRequestId(), storage.name());
 
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
           try {
-            store.completeDatabase(identity.partyId, identity.userId, operation,
+            completeDatabase(identity.partyId, identity.userId, operation,
                 request.getRequestId(), codeId, reference, passwordHash);
           } catch (Exception e) {
             // A connection/commit failure can be indeterminate. Never release a possibly used code.
-            try { store.fail(identity.userId, request.getRequestId(), codeId, true); }
+            try { fail(identity.userId, request.getRequestId(), codeId, true); }
             catch (Exception failure) { e.addSuppressed(failure); }
             throw e;
           }
@@ -252,20 +271,20 @@ public class HostToHostApiPassword extends AbstractApplication
                 : adapter().reset(identity.partyId, identity.userId, identity.uamClientId, password,
                     request.getRequestId());
           } catch (Exception e) {
-            store.fail(identity.userId, request.getRequestId(), codeId, true);
+            fail(identity.userId, request.getRequestId(), codeId, true);
             throw e;
           }
           if (reference == null || reference.trim().length() == 0) {
             reference = request.getRequestId();
           }
           try {
-            store.complete(identity.partyId, identity.userId, operation, request.getRequestId(),
+            complete(identity.partyId, identity.userId, operation, request.getRequestId(),
                 codeId, reference);
           } catch (Exception e) {
             // UAM has already accepted the change. Keep the request non-retryable until the
             // external result is reconciled, otherwise a retry could rotate the password twice.
             try {
-              store.fail(identity.userId, request.getRequestId(), codeId, true);
+              fail(identity.userId, request.getRequestId(), codeId, true);
             } catch (Exception reconciliationFailure) {
               LOGGER.log(Level.WARNING,
                   "Unable to mark an HTH API password operation for reconciliation",
@@ -330,7 +349,7 @@ public class HostToHostApiPassword extends AbstractApplication
   private String credentialState(Identity identity, boolean allowLocalFallback,
       HthApiPasswordStorage storage) throws Exception {
     if (storage == HthApiPasswordStorage.DATABASE) {
-      return store.findDatabaseCredentialState(identity.partyId, identity.userId);
+      return findDatabaseCredentialState(identity.partyId, identity.userId);
     }
     try {
       String remote = adapter().getStatus(identity.partyId, identity.userId,
@@ -535,7 +554,7 @@ public class HostToHostApiPassword extends AbstractApplication
       String operator = readUserId(sessionContext);
       LocalHthApiPasswordCodeRepositoryAdapter adapter =
           LocalHthApiPasswordCodeRepositoryAdapter.getInstance();
-      store.retirePendingCodes(partyId, userName, purpose, operator);
+      retirePendingCodes(partyId, userName, purpose, operator);
       String plaintext = HthApiPasswordCrypto.randomDigits(CODE_LENGTH);
       HthApiPasswordCode row = new HthApiPasswordCode();
       row.setKey(key(UUID.randomUUID().toString()));
@@ -681,7 +700,7 @@ public class HostToHostApiPassword extends AbstractApplication
       throw new Exception("DIGX_CZ_HTH_PW_008");
     }
     String transactionId = readTransactionId();
-    if (store.activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
+    if (activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
         operator, transactionId, EXPIRY_HOURS)) {
       row.setStatus(STATUS_ACTIVE);
       row.setExpiryTime(new Date(new java.util.Date(
@@ -848,6 +867,332 @@ public class HostToHostApiPassword extends AbstractApplication
   private String readUserId(SessionContext sessionContext) {
     return sessionContext == null || normalize(sessionContext.getUserId()) == null
         ? "system" : sessionContext.getUserId();
+  }
+
+  /**
+   * Repository operations share a session so credential completion is atomic.
+   * Failed Code attempts and reservations use independent transactions to survive API rollback.
+   */
+  private String findCredentialState(String partyId, String userId) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      List rows = stateRepository.findStatus(lease.session, partyId, userId);
+      return rows == null || rows.isEmpty() ? STATE_NOT_SETUP : string(rows.get(0));
+    } finally {
+      lease.close(false);
+    }
+  }
+
+  /** Reads the authoritative credential state for DATABASE mode. */
+  private String findDatabaseCredentialState(String partyId, String userId) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      List rows = credentialRepository.findStatus(lease.session, partyId, userId);
+      return rows == null || rows.isEmpty() ? STATE_NOT_SETUP : string(rows.get(0));
+    } finally {
+      lease.close(false);
+    }
+  }
+
+  private boolean hasUsableCode(String partyId, String userId, String purpose) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      List rows = codeRepository.findUsable(lease.session, partyId, userId, purpose);
+      return rows != null && !rows.isEmpty();
+    } finally {
+      lease.close(false);
+    }
+  }
+
+  private OperationResult findSuccessfulOperation(String requestId, String partyId, String userId,
+      String operation, String backend) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      List rows = operationRepository.findResult(lease.session, requestId, partyId, userId, operation);
+      if (rows == null || rows.isEmpty()) {
+        return null;
+      }
+      Object[] row = (Object[]) rows.get(0);
+      if (!backend.equals(string(row[2]))) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+      return new OperationResult(string(row[0]), string(row[1]));
+    } finally {
+      lease.close(false);
+    }
+  }
+
+  /** Verifies the Code and reserves it, persisting failed verification attempts independently. */
+  private String validateAndReserveCode(String partyId, String userId, String purpose, String code,
+      String requestId, String backend) throws Exception {
+    SessionLease lease = openIndependent();
+    boolean success = false;
+    try {
+      List rows = codeRepository.findUsableCipher(lease.session, partyId, userId, purpose);
+      if (rows == null || rows.isEmpty()) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_003");
+      }
+      Object[] row = (Object[]) rows.get(0);
+      String codeId = string(row[0]);
+      if (!HthApiPasswordCrypto.constantTimeEquals(code,
+          HthApiPasswordCrypto.decrypt(string(row[1]), HthApiPasswordCrypto.codeCipherKey()))) {
+        codeRepository.recordFailedAttempt(lease.session, codeId);
+        success = true;
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_002");
+      }
+
+      if (codeRepository.reserve(lease.session, requestId, codeId) != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+
+      operationRepository.reserve(lease.session, requestId, partyId, userId, purpose, codeId, backend);
+      success = true;
+      return codeId;
+    } catch (Exception e) {
+      if (success) {
+        lease.close(true);
+        lease.closed = true;
+      }
+      throw e;
+    } catch (java.lang.Exception e) {
+      throw new Exception(e);
+    } finally {
+      if (!lease.closed) {
+        lease.close(success);
+      }
+    }
+  }
+
+  /** Records a confirmed UAM result and consumes its reserved Code. */
+  private void complete(String partyId, String userId, String operation, String requestId,
+      String codeId, String referenceNumber) throws Exception {
+    completeInternal(partyId, userId, operation, requestId, codeId, referenceNumber, null);
+  }
+
+  /** Commits the password hash, Code consumption and operation result in one transaction. */
+  private void completeDatabase(String partyId, String userId, String operation, String requestId,
+      String codeId, String referenceNumber, String passwordHash) throws Exception {
+    if (passwordHash == null) {
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
+    }
+    completeInternal(partyId, userId, operation, requestId, codeId, referenceNumber, passwordHash);
+  }
+
+  private void completeInternal(String partyId, String userId, String operation, String requestId,
+      String codeId, String referenceNumber, String passwordHash) throws Exception {
+    SessionLease lease = openIndependent();
+    boolean success = false;
+    try {
+      if (codeRepository.consume(lease.session, userId, codeId, requestId) != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+
+      if (passwordHash != null) {
+        credentialRepository.write(lease.session, partyId, userId, operation, requestId, passwordHash);
+      }
+
+      stateRepository.complete(lease.session, partyId, userId, operation, requestId, referenceNumber);
+
+      if (operationRepository.complete(lease.session, referenceNumber, userId, requestId) != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+      success = true;
+    } catch (Exception e) {
+      throw e;
+    } catch (java.lang.Exception e) {
+      throw new Exception(e);
+    } finally {
+      lease.close(success);
+    }
+  }
+
+
+  /** Retains UNKNOWN reservations for reconciliation when the write outcome is uncertain. */
+  private void fail(String userId, String requestId, String codeId, boolean uncertain) throws Exception {
+    SessionLease lease = openIndependent();
+    boolean success = false;
+    try {
+      codeRepository.failReservation(lease.session, userId, requestId, codeId, uncertain);
+
+      operationRepository.failReservation(lease.session, userId, requestId, uncertain);
+      success = true;
+    } catch (java.lang.Exception e) {
+      throw new Exception(e);
+    } finally {
+      lease.close(success);
+    }
+  }
+
+  /** Regeneration must not inactivate a code that became ACTIVE after the maker read it. */
+  private void retirePendingCodes(String partyId, String userName, String purpose, String operator)
+      throws Exception {
+    SessionLease lease = open(true);
+    boolean success = false;
+    try {
+      codeRepository.retirePending(lease.session, partyId, userName, purpose, operator);
+      success = true;
+    } catch (java.lang.Exception e) {
+      throw new Exception(e);
+    } finally {
+      lease.close(success);
+    }
+  }
+
+  /** Approval and consume share the same row locks and status constraints. */
+  private boolean activateApprovedCode(String codeId, String partyId, String userName, String purpose,
+      String operator, String transactionId, int expiryHours) throws Exception {
+    SessionLease lease = open(true);
+    boolean success = false;
+    try {
+      List rows = codeRepository.lockForApproval(lease.session, codeId);
+      if (rows == null || rows.isEmpty()) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
+      Object[] row = (Object[]) rows.get(0);
+      if (!"A".equals(string(row[1]))) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
+      String status = string(row[0]);
+      if ("ACTIVE".equals(status) || "USED".equals(status)
+          || "IN_PROGRESS".equals(status) || "UNKNOWN".equals(status)) {
+        success = true;
+        return false; // Approval replay does not reactivate the Code or resend its notification.
+      }
+      if (!"PENDING".equals(status)) {
+        throw new Exception("DIGX_CZ_HTH_PW_008");
+      }
+      codeRepository.retireActive(lease.session, operator, partyId, userName, purpose);
+      // The live-code unique index rejects activation while another code is IN_PROGRESS/UNKNOWN.
+      if (codeRepository.activate(lease.session, transactionId, expiryHours, operator, codeId) != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+      success = true;
+      return true;
+    } catch (java.lang.Exception e) {
+      if (e instanceof Exception) {
+        throw (Exception) e;
+      }
+      throw new Exception(e);
+    } finally {
+      lease.close(success);
+    }
+  }
+
+  private String string(Object value) {
+    return value == null ? null : String.valueOf(value);
+  }
+
+  /** Persist failed attempts/reservations even when the outer API transaction is rolled back. */
+  private SessionLease openIndependent() throws Exception {
+    TransactionManager manager = null;
+    javax.transaction.Transaction suspended = null;
+    Session session = null;
+    try {
+      if (ConnectionUtil.isConnPooled("DIGX")) {
+        manager = TransactionHelper.getTransactionHelper().getTransactionManager();
+        suspended = manager.suspend();
+      }
+      // openNewSession does not replace the outer thread-bound ORM session.
+      session = DataAccessManager.getManager().openNewSession("DIGX");
+      session.beginTransaction();
+      return new SessionLease(session, manager, suspended);
+    } catch (java.lang.Exception e) {
+      try {
+        if (session != null) {
+          try {
+            if (session.fetchCurrentTransaction() != null && session.fetchCurrentTransaction().isActive()) {
+              session.fetchCurrentTransaction().rollback();
+            }
+          } finally {
+            DataAccessManager.getManager().closeSession(session);
+          }
+        }
+      } finally {
+        if (manager != null && suspended != null) {
+          try { manager.resume(suspended); } catch (java.lang.Exception resumeFailure) {
+            e.addSuppressed(resumeFailure);
+          }
+        }
+      }
+      throw new Exception(e);
+    }
+  }
+
+  private SessionLease open(boolean write) throws Exception {
+    if (DataAccessManager.getManager().isSessionOpen()) {
+      return new SessionLease(DataAccessManager.getManager().fetchCurrentSession(), false, write);
+    }
+    Session session = DataAccessManager.getManager().openSession("DIGX");
+    if (write) {
+      session.beginTransaction();
+    }
+    return new SessionLease(session, true, write);
+  }
+
+  private static final class OperationResult {
+    final String status;
+    final String referenceNumber;
+
+    OperationResult(String status, String referenceNumber) {
+      this.status = status;
+      this.referenceNumber = referenceNumber;
+    }
+  }
+
+  private static final class SessionLease {
+    private final Session session;
+    private final boolean owned;
+    private final boolean write;
+    private boolean closed;
+    private TransactionManager manager;
+    private javax.transaction.Transaction suspended;
+
+    private SessionLease(Session session, TransactionManager manager,
+        javax.transaction.Transaction suspended) {
+      this(session, true, true);
+      this.manager = manager;
+      this.suspended = suspended;
+    }
+
+    private SessionLease(Session session, boolean owned, boolean write) {
+      this.session = session;
+      this.owned = owned;
+      this.write = write;
+    }
+
+    private void close(boolean commit) throws Exception {
+      if (closed || !owned) {
+        return;
+      }
+      try {
+        if (write && commit) {
+          session.fetchCurrentTransaction().commit();
+        } else if (write && session.fetchCurrentTransaction() != null) {
+          session.fetchCurrentTransaction().rollback();
+        }
+      } catch (java.lang.Exception failure) {
+        try {
+          if (write && session.fetchCurrentTransaction() != null
+              && session.fetchCurrentTransaction().isActive()) {
+            session.fetchCurrentTransaction().rollback();
+          }
+        } catch (java.lang.Exception rollbackFailure) {
+          failure.addSuppressed(rollbackFailure);
+        }
+        throw new Exception(failure);
+      } finally {
+        closed = true;
+        try {
+          DataAccessManager.getManager().closeSession(session);
+        } finally {
+          if (manager != null && suspended != null) {
+            try { manager.resume(suspended); } catch (java.lang.Exception e) {
+              throw new Exception(e);
+            }
+          }
+        }
+      }
+    }
   }
 
 }

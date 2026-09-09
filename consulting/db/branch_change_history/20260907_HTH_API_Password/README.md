@@ -79,7 +79,7 @@ Credential/State 主键为 PARTY_ID + USER_ID；Operation 主键仍为 REQUEST_I
 已执行过配置脚本的环境也需重跑 4，并部署新的 Java 和 ORM 文件。
 本次不改变表结构，不能仅更新 Java 而遗漏 Repository 注册和 ORM 配置。
 
-HthApiPasswordStore 负责 Code 校验和事务编排，各 Repository 使用同一个传入的 Session；
+HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用同一个传入的 Session；
 本地 Adapter 的条件更新方法不自行提交、关闭 Session 或开启其他事务。
 密码哈希、Code USED、状态投影和操作 SUCCESS 仍在一次提交中完成；错误次数及占用使用独立事务。
 

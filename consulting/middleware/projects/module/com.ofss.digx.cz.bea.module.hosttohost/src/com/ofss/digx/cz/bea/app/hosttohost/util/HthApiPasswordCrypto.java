@@ -43,7 +43,7 @@ public final class HthApiPasswordCrypto {
    * Encrypts a setup code with the environment AES-256 key.
    *
    * @param plaintext numeric setup code
-   * @param base64Key Base64-encoded 32-byte key from {@code HTH_API_PWD_CODE_CIPHER_KEY}
+   * @param base64Key Base64-encoded 32-byte key from {@code HTH_API_PASSWORD.CODE_CIPHER_KEY}
    * @return Base64 of IV||ciphertext||tag
    */
   public static String encrypt(String plaintext, String base64Key) {
@@ -89,7 +89,7 @@ public final class HthApiPasswordCrypto {
   public static String codeCipherKey() {
     String value = ConfigurationFactory.getInstance()
         .getConfigurations("HthApiCredentialAdapterConfig")
-        .get("HTH_API_PWD_CODE_CIPHER_KEY", "").trim();
+        .get("HTH_API_PASSWORD.CODE_CIPHER_KEY", "").trim();
     key(value); // Validate configuration before any code is generated or consumed.
     return value;
   }
@@ -97,7 +97,7 @@ public final class HthApiPasswordCrypto {
   private static SecretKeySpec key(String base64Key) {
     byte[] keyBytes = Base64.getDecoder().decode(base64Key);
     if (keyBytes.length != 32) {
-      throw new IllegalStateException("HTH_API_PWD_CODE_CIPHER_KEY must be a 32-byte AES key");
+      throw new IllegalStateException("HTH_API_PASSWORD.CODE_CIPHER_KEY must be a 32-byte AES key");
     }
     return new SecretKeySpec(keyBytes, "AES");
   }

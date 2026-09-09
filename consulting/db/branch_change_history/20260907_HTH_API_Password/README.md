@@ -34,7 +34,7 @@ Code 密钥与存储设置统一在 `4_HTH_API_Password_Adapters.sql` 配置，�
 1. 首次部署时，从实际生成现有 Code 的旧版 `HostToHostApiPassword.java` 取得原 `CIPHER_KEY`，在客户端将 `V_ORIGINAL_KEY` 的 NULL 改成该 Base64 字符串。不要生成替代密钥，不要保存或提交含密钥的脚本。
 2. 已有有效配置时，可保留 `V_ORIGINAL_KEY := NULL`，脚本复用现有值；填写相同值也可重跑。不同值、空配置或重复行均拒绝执行。
 3. 当前 Java 通过 `codeCipherKey()` 读取配置；生成、查看和消费 Code 使用同一项，没有硬编码密钥或默认密钥。
-4. 配置视图为 `DIGX_FW_CONFIG_ADAPTER_PROP_V`，CATEGORY_ID 为 `HthApiCredentialAdapterConfig`，PROP_ID 为 `HTH_API_PWD_CODE_CIPHER_KEY`，PROP_VALUE 为原 Base64 密钥（解码后 32 字节）。
+4. 配置视图为 `DIGX_FW_CONFIG_ADAPTER_PROP_V`，CATEGORY_ID 为 `HthApiCredentialAdapterConfig`，PROP_ID 为 `HTH_API_PASSWORD.CODE_CIPHER_KEY`，PROP_VALUE 为原 Base64 密钥（解码后 32 字节）。
 5. 执行完整配置块后，按环境既有方式刷新缓存或重启应用，并验证旧 Code reveal、新 Code generate 和审批激活。脚本后的查询隐藏密钥值。
 
 当前仓库不包含原密钥。尚无配置时，NULL 占位会使脚本报错并回滚；需填写原密钥才能完成部署。Code 密钥与用户输入的 API 密码存储位置相互独立，DATABASE 和 UAM 都需要该 Code 密钥。
@@ -43,7 +43,7 @@ Code 密钥与存储设置统一在 `4_HTH_API_Password_Adapters.sql` 配置，�
 
 ## 密码存储选择
 
-在 `4_HTH_API_Password_Adapters.sql` 中设置 `V_STORAGE_BACKEND := 'DATABASE'`（默认）或 `'UAM'`，再执行完整配置块。它写入配置视图 `DIGX_FW_CONFIG_ADAPTER_PROP_V`：
+在 `4_HTH_API_Password_Adapters.sql` 中设置 `V_STORAGE_BACKEND := 'DATABASE'`（默认）或 `'UAM'`，再执行完整配置块。它写入配置底表 `DIGX_FW_CONFIG_ADAPTER_PROP_B`，应用通过视图 `DIGX_FW_CONFIG_ADAPTER_PROP_V` 读取：
 
 - CATEGORY_ID：`HthApiCredentialAdapterConfig`
 - PROP_ID：`HTH_API_PASSWORD.STORAGE_BACKEND`
@@ -85,3 +85,16 @@ HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用�
 
 持久化分层验证：19 个新增/变更 Java 文件编译通过；6 个 ORM XML 通过项目内 EclipseLink 2.5 XSD 校验，字段覆盖与 Schema 一致。19 条原 SQL 保留，事务管理实现未变。
 `devtools/backend-compile/tests/verify_hth_password_repositories.py` 用临时类隔离 OBDX 启动依赖，验证 19 次 Session 方法调用的绑定完整性及事务所有权；这不替代实际 Repository 工厂、Oracle 或 JTA 联调。
+
+## Adapter 配置底表与读取
+
+配置写入 `DIGX_FW_CONFIG_ADAPTER_PROP_B`；`DIGX_FW_CONFIG_ADAPTER_PROP_V` 仅用于读取，PROP_ID 是 TRANSACTION_TYPE 与底表 PROP_ID 拼接得到的计算列。
+本功能 HOST_ID 为 `HthApiCredentialAdapterConfig`，TRANSACTION_TYPE 为 `HTH_API_PASSWORD`。
+例如：底表 PROP_ID 为 `STORAGE_BACKEND`，应用读取 `HTH_API_PASSWORD.STORAGE_BACKEND`；底表 PROP_ID 为 `CODE_CIPHER_KEY`，应用读取 `HTH_API_PASSWORD.CODE_CIPHER_KEY`。
+原密钥的值不变。填写原密钥后执行 4，并同步部署 `Preferences.xml` 中同名配置节点及 `HthApiPasswordCrypto.java`，刷新配置缓存或重启应用。仅更新 SQL 不足以切换读取链路。
+
+部署环境的 `Preferences.xml` 必须在 `<Nodes>` 内包含以下节点（已有同名节点时核对配置，不要重复添加）：
+
+```xml
+<Preference name="HthApiCredentialAdapterConfig" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ADAPTER_PROP_V where category_id = 'HthApiCredentialAdapterConfig'" syncTimeInterval="36000000" />
+```

@@ -69,3 +69,19 @@ Code 密钥与存储设置统一在 `4_HTH_API_Password_Adapters.sql` 配置，�
 本次提供哈希校验工具 `HthApiPasswordHash.verify`；当前仓库未找到已确认的 HTH API 入站认证入口，未将其接到 Login PIN/Signer PIN 或新增公开认证接口。认证端需要按公司/用户读取 ACTIVE 凭证、调用 verify，并实施限流、失败次数/锁定和重置并发处理。只完成保存不能等同于外部 HTH API 已可认证。
 
 验证：6 个变更/新增生产 Java 文件以 Java 8 目标编译通过；24 项存储枚举和密码哈希检查通过，含独立 Python PBKDF2 向量、随机 salt、旧/新密码校验和非法格式拒绝。未执行 Oracle SQL、真实 JTA、UAM 或外部认证联调。
+
+## 持久化部署
+
+CREDENTIAL、STATE、OPERATION 各自提供 Entity、Key、ORM XML、Repository 和本地 RepositoryAdapter。
+映射统一注册在 `consulting/config/orm/eclipselink/cfg/cz-hosttohost.cfg.xml`。
+Credential/State 主键为 PARTY_ID + USER_ID；Operation 主键仍为 REQUEST_ID。
+`4_HTH_API_Password_Adapters.sql` 同时注册三组 repositoryadapterconfig / RepositoryAdapterFactories 配置；
+已执行过配置脚本的环境也需重跑 4，并部署新的 Java 和 ORM 文件。
+本次不改变表结构，不能仅更新 Java 而遗漏 Repository 注册和 ORM 配置。
+
+HthApiPasswordStore 负责 Code 校验和事务编排，各 Repository 使用同一个传入的 Session；
+本地 Adapter 的条件更新方法不自行提交、关闭 Session 或开启其他事务。
+密码哈希、Code USED、状态投影和操作 SUCCESS 仍在一次提交中完成；错误次数及占用使用独立事务。
+
+持久化分层验证：19 个新增/变更 Java 文件编译通过；6 个 ORM XML 通过项目内 EclipseLink 2.5 XSD 校验，字段覆盖与 Schema 一致。19 条原 SQL 保留，事务管理实现未变。
+`devtools/backend-compile/tests/verify_hth_password_repositories.py` 用临时类隔离 OBDX 启动依赖，验证 19 次 Session 方法调用的绑定完整性及事务所有权；这不替代实际 Repository 工厂、Oracle 或 JTA 联调。

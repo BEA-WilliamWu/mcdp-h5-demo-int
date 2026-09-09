@@ -20,6 +20,28 @@ public class HthApiPasswordCode extends AbstractDomainObject implements IPersist
 
   private String purpose = "SETUP";
 
+  /** Request reserving or consuming this Code. */
+  private String requestId;
+
+  /** Failed verification limit; matches the schema default for new Codes. */
+  private Integer maxAttempts = 5;
+
+  public String getRequestId() {
+    return requestId;
+  }
+
+  public void setRequestId(String requestId) {
+    this.requestId = requestId;
+  }
+
+  public Integer getMaxAttempts() {
+    return maxAttempts;
+  }
+
+  public void setMaxAttempts(Integer maxAttempts) {
+    this.maxAttempts = maxAttempts;
+  }
+
   public String getPurpose() { return purpose; }
   public void setPurpose(String purpose) { this.purpose = purpose; }
 

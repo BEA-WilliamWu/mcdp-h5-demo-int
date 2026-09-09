@@ -26,6 +26,12 @@
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountKey-embeddable.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApi.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthUserAccessAccountApiKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredential.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredentialKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordState.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordStateKey-embeddable.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordOperation.orm.xml"/>
+	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordOperationKey-embeddable.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCode.orm.xml"/>
 	<mapping resource="orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCodeKey-embeddable.orm.xml"/>
 </mappings>

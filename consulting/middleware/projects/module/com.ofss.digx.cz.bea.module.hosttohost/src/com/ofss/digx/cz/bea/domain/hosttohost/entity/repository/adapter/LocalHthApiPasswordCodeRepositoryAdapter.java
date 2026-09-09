@@ -208,4 +208,135 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
     private static final LocalHthApiPasswordCodeRepositoryAdapter INSTANCE =
         new LocalHthApiPasswordCodeRepositoryAdapter();
   }
+  @Override
+  public List findUsable(Session session, String partyId, String userId, String purpose) throws Exception {
+    Query query = session.createSQLQuery(
+        "SELECT ID FROM HTH_BEA.HTH_API_PASSWORD_CODE "
+            + "WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) AND PURPOSE = ? "
+            + "AND STATUS = 'ACTIVE' AND OBJECT_STATUS = 'A' AND EXPIRY_TIME > SYSTIMESTAMP "
+            + "AND ATTEMPT_COUNT < MAX_ATTEMPTS ORDER BY CREATION_DATE DESC");
+    query.setParameter(1, partyId);
+    query.setParameter(2, userId);
+    query.setParameter(3, userId + "@" + partyId);
+    query.setParameter(4, purpose);
+    query.setMaxResults(1);
+    return query.list();
+  }
+
+  @Override
+  public List findUsableCipher(Session session, String partyId, String userId, String purpose) throws Exception {
+    Query query = session.createSQLQuery(
+        "SELECT ID, CODE_CIPHER FROM HTH_BEA.HTH_API_PASSWORD_CODE "
+            + "WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) AND PURPOSE = ? "
+            + "AND STATUS = 'ACTIVE' AND OBJECT_STATUS = 'A' AND EXPIRY_TIME > SYSTIMESTAMP "
+            + "AND ATTEMPT_COUNT < MAX_ATTEMPTS ORDER BY CREATION_DATE DESC");
+    query.setParameter(1, partyId);
+    query.setParameter(2, userId);
+    query.setParameter(3, userId + "@" + partyId);
+    query.setParameter(4, purpose);
+    query.setMaxResults(1);
+    return query.list();
+  }
+
+  @Override
+  public int recordFailedAttempt(Session session, String codeId) throws Exception {
+    Query failed = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET ATTEMPT_COUNT = ATTEMPT_COUNT + 1, "
+            + "STATUS = CASE WHEN ATTEMPT_COUNT + 1 >= MAX_ATTEMPTS THEN 'INVALID' "
+            + "ELSE STATUS END, LAST_UPDATE_DATE = SYSDATE "
+            + "WHERE ID = ? AND STATUS = 'ACTIVE' AND OBJECT_STATUS = 'A' "
+            + "AND ATTEMPT_COUNT < MAX_ATTEMPTS");
+    failed.setParameter(1, codeId);
+    return failed.executeUpdate();
+  }
+
+  @Override
+  public int reserve(Session session, String requestId, String codeId) throws Exception {
+    Query reserve = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'IN_PROGRESS', REQUEST_ID = ?, "
+            + "LAST_UPDATE_DATE = SYSDATE WHERE ID = ? AND STATUS = 'ACTIVE' "
+            + "AND EXPIRY_TIME > SYSTIMESTAMP AND OBJECT_STATUS = 'A' "
+            + "AND ATTEMPT_COUNT < MAX_ATTEMPTS");
+    reserve.setParameter(1, requestId);
+    reserve.setParameter(2, codeId);
+    return reserve.executeUpdate();
+  }
+
+  @Override
+  public int consume(Session session, String userId, String codeId, String requestId) throws Exception {
+    Query code = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'USED', USED_TIME = SYSTIMESTAMP, "
+            + "LAST_UPDATED_BY = ?, LAST_UPDATE_DATE = SYSDATE WHERE ID = ? "
+            + "AND STATUS = 'IN_PROGRESS' AND REQUEST_ID = ?");
+    code.setParameter(1, userId);
+    code.setParameter(2, codeId);
+    code.setParameter(3, requestId);
+    return code.executeUpdate();
+  }
+
+  @Override
+  public int failReservation(Session session, String userId, String requestId, String codeId, boolean uncertain) throws Exception {
+    Query code = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = ?, LAST_UPDATED_BY = ?, "
+            + "LAST_UPDATE_DATE = SYSDATE WHERE ID = ? AND STATUS = 'IN_PROGRESS' "
+            + "AND REQUEST_ID = ?");
+    code.setParameter(1, uncertain ? "UNKNOWN" : "ACTIVE");
+    code.setParameter(2, userId);
+    code.setParameter(3, codeId);
+    code.setParameter(4, requestId);
+    return code.executeUpdate();
+  }
+
+  @Override
+  public int retirePending(Session session, String partyId, String userName, String purpose, String operator) throws Exception {
+    Query query = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET OBJECT_STATUS = 'I', LAST_UPDATED_BY = ?, "
+            + "LAST_UPDATE_DATE = SYSDATE WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) "
+            + "AND PURPOSE = ? AND STATUS = 'PENDING' AND OBJECT_STATUS = 'A'");
+    query.setParameter(1, operator);
+    query.setParameter(2, partyId);
+    query.setParameter(3, userName);
+    query.setParameter(4, userName + "@" + partyId);
+    query.setParameter(5, purpose);
+    return query.executeUpdate();
+  }
+
+  @Override
+  public List lockForApproval(Session session, String codeId) throws Exception {
+    Query lock = session.createSQLQuery(
+        "SELECT STATUS, OBJECT_STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID = ? FOR UPDATE");
+    lock.setParameter(1, codeId);
+    return lock.list();
+  }
+
+  @Override
+  public int retireActive(Session session, String operator, String partyId, String userName, String purpose) throws Exception {
+    Query retire = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'INVALID', LAST_UPDATED_BY = ?, "
+            + "LAST_UPDATE_DATE = SYSDATE WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) "
+            + "AND PURPOSE = ? AND STATUS = 'ACTIVE' AND OBJECT_STATUS = 'A'");
+    retire.setParameter(1, operator);
+    retire.setParameter(2, partyId);
+    String suffix = "@" + partyId;
+    String bareName = userName.endsWith(suffix)
+        ? userName.substring(0, userName.length() - suffix.length()) : userName;
+    retire.setParameter(3, bareName);
+    retire.setParameter(4, bareName + suffix);
+    retire.setParameter(5, purpose);
+    return retire.executeUpdate();
+  }
+
+  @Override
+  public int activate(Session session, String transactionId, int expiryHours, String operator, String codeId) throws Exception {
+    Query activate = session.createSQLQuery(
+        "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'ACTIVE', TRANSACTION_ID = ?, "
+            + "EXPIRY_TIME = SYSTIMESTAMP + NUMTODSINTERVAL(?, 'HOUR'), LAST_UPDATED_BY = ?, "
+            + "LAST_UPDATE_DATE = SYSDATE WHERE ID = ? AND STATUS = 'PENDING' "
+            + "AND OBJECT_STATUS = 'A'");
+    activate.setParameter(1, transactionId);
+    activate.setParameter(2, expiryHours);
+    activate.setParameter(3, operator);
+    activate.setParameter(4, codeId);
+    return activate.executeUpdate();
+  }
 }

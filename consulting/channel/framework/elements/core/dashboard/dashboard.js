@@ -1017,10 +1017,10 @@ define([
       $("#hthApiPasswordSetupDialog").trigger("closeModal");
 
       context.properties.baseModel.registerComponent(
-        "hth-api-password", "hth-api-password"
+        "api-password", "host-to-host"
       );
 
-      self.loadComponent("hth-api-password", { mode: "SETUP" });
+      self.loadComponent("api-password", { mode: "SETUP" });
     };
 
     self.loadHthApiPasswordSetup = function() {

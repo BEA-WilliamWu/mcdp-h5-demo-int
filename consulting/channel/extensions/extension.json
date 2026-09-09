@@ -81,7 +81,7 @@
         "recovery/merchant-forgot-pin",
         "widgets/pre-login/login-form",
         "change-password/change-password",
-        "hth-api-password/hth-api-password",
+        "host-to-host/api-password",
         "security/security-menu",
         "approvals/electronic-bill-payments",
         "approvals/transaction-detail",

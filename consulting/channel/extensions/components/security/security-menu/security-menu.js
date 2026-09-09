@@ -54,8 +54,8 @@ define([
                 data.resetAllowed === true) {
                 self.listItem.push({
                     id: "changeHthApiPassword",
-                    module: "hth-api-password",
-                    parentModule: "hth-api-password",
+                    module: "api-password",
+                    parentModule: "host-to-host",
                     iconImage: "security/change-password.svg",
                     data: {
                         mode: "RESET"

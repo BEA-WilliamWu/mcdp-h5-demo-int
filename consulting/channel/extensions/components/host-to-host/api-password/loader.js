@@ -1,8 +1,8 @@
 define([
     "module",
-    "text!./hth-api-password.html",
-    "./hth-api-password",
-    "text!./hth-api-password.css",
+    "text!./api-password.html",
+    "./api-password",
+    "text!./api-password.css",
     "base-models/css"
 ], function (module, template, viewModel, componentCSS, CSS) {
     "use strict";

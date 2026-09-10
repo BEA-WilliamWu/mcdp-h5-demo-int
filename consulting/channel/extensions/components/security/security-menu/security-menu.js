@@ -4,10 +4,11 @@ define([
      "./model",
     "ojL10n!extensions/resources/nls/security-menu",
     "baseLogger",
+    "extensions/components/host-to-host/api-password/user-context",
     "ojs/ojswitch",
     "ojs/ojnavigationlist",
     "baseLogger"
-], function(ko, $, SecurityMenuModel, ResourceBundle, BaseLogger) {
+], function(ko, $, SecurityMenuModel, ResourceBundle, BaseLogger, HthApiPasswordUserContext) {
     "use strict";
 
     return function(rootParams) {
@@ -49,22 +50,24 @@ define([
             iconImage: "security/change-password.svg"
         });
 
-        SecurityMenuModel.getHthApiPasswordStatus().then(function (data) {
-            if (data && String(data.setupState || "").toUpperCase() === "ACTIVE" &&
-                data.resetAllowed === true) {
-                self.listItem.push({
-                    id: "changeHthApiPassword",
-                    module: "api-password",
-                    parentModule: "host-to-host",
-                    iconImage: "security/change-password.svg",
-                    data: {
-                        mode: "RESET"
-                    }
-                });
-            }
-        }).catch(function () {
-            return null;
-        });
+        if (HthApiPasswordUserContext.isHthUser(rootParams.dashboard.userData.userProfile)) {
+            SecurityMenuModel.getHthApiPasswordStatus().then(function (data) {
+                if (data && String(data.setupState || "").toUpperCase() === "ACTIVE" &&
+                    data.resetAllowed === true) {
+                    self.listItem.push({
+                        id: "changeHthApiPassword",
+                        module: "api-password",
+                        parentModule: "host-to-host",
+                        iconImage: "security/change-password.svg",
+                        data: {
+                            mode: "RESET"
+                        }
+                    });
+                }
+            }).catch(function () {
+                return null;
+            });
+        }
 
         if (rootParams.dashboard.userData.userProfile.roles.length > 0) {
 

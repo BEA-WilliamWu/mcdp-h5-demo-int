@@ -98,3 +98,11 @@ HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用�
 ```xml
 <Preference name="HthApiCredentialAdapterConfig" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ADAPTER_PROP_V where category_id = 'HthApiCredentialAdapterConfig'" syncTimeInterval="36000000" />
 ```
+
+## BCO 页面隔离
+
+登录 Profile 的 `CZVoidUserExt` 通过现有 dictionary 返回 `userChannelType`，复用已读取的用户扩展数据。Dashboard 和 Security Settings 仅在该值为 `HTH` 时查询 API Password 状态；BCO 或缺少该字段时不发起查询。后端 HTH 身份及权限校验保持有效。
+
+此次需要同步部署 `CZVoidUserExt`、Dashboard、安全菜单及新增 `api-password/user-context.js`；只部署前端而未更新 Profile 会使 HTH 入口不可见。HTH 登录提醒等待最多 5 秒，失败或超时继续原 Bounce Back 提醒，忽略迟到响应；页面销毁会取消提醒定时器。原有 Login PIN/Signer PIN 提醒顺序保持不变。
+
+可运行 `node devtools/frontend-tests/hth-api-password-isolation.test.js` 验证普通 BCO 零 HTH 请求、原安全菜单保留、HTH 入口、重复查询、失败/超时及页面销毁分支。该测试使用隔离的 UI/网络替身，不替代 UAT 登录联调。

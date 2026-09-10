@@ -14,6 +14,7 @@ define([
   "extensions/override/extensions",
   "load!framework/js/chatbot/chatbot-components.json",
   "framework/js/chatbot/chatbot-functions",
+  "extensions/components/host-to-host/api-password/user-context",
   "ojs/ojradioset",
   "framework/elements/core/header/loader",
   "framework/elements/core/menu/loader",
@@ -37,7 +38,8 @@ define([
   Context,
   ExtensionsOverride,
   ChatbotComponentMapping,
-  ChatBotFunctions
+  ChatBotFunctions,
+  HthApiPasswordUserContext
 ) {
   "use strict";
 
@@ -169,6 +171,12 @@ define([
     self.callSignerPinCloseHandler = ko.observable(true);
     self.callHthApiPasswordCloseHandler = ko.observable(true);
     self.hthApiPasswordSetupState = ko.observable();
+
+    let isHthApiPasswordUser = false,
+      hthApiPasswordCheckPending = false,
+      hthApiPasswordCheckFinished = false,
+      hthApiPasswordTimer;
+
     self.isMerchantUser = ko.observable(false);
     self.currentUserRole = ko.observable();
     self.canExitCurrentPage = ko.observable(false);
@@ -1024,6 +1032,16 @@ define([
     };
 
     self.loadHthApiPasswordSetup = function() {
+      if (!isHthApiPasswordUser || hthApiPasswordCheckFinished) {
+        self.openBounceBackReminder();
+
+        return;
+      }
+
+      if (hthApiPasswordCheckPending) {
+        return;
+      }
+
       // eslint-disable-next-line no-storage/no-browser-storage
       if (sessionStorage.getItem("hthApiPasswordSetupPromptLoaded") === "true") {
         self.openBounceBackReminder();
@@ -1031,7 +1049,18 @@ define([
         return;
       }
 
-      DashboardModel.getHthApiPasswordStatus().then(function(data) {
+      hthApiPasswordCheckPending = true;
+
+      // Bound the optional reminder check and ignore responses after it has finished.
+      const finish = function(data) {
+        if (hthApiPasswordCheckFinished) {
+          return;
+        }
+
+        hthApiPasswordCheckFinished = true;
+        hthApiPasswordCheckPending = false;
+        clearTimeout(hthApiPasswordTimer);
+
         const state = data && String(data.setupState || "").toUpperCase();
 
         self.hthApiPasswordSetupState(state);
@@ -1043,8 +1072,14 @@ define([
         } else {
           self.openBounceBackReminder();
         }
-      }).catch(function() {
-        self.openBounceBackReminder();
+      };
+
+      hthApiPasswordTimer = setTimeout(finish, 5000);
+
+      Promise.resolve().then(function() {
+        return DashboardModel.getHthApiPasswordStatus();
+      }).then(finish).catch(function() {
+        finish();
       });
     };
 
@@ -1076,6 +1111,10 @@ define([
         Platform.getInstance("authentication")
       ]).then(function (promiseData) {
         self.headerName(null);
+
+        isHthApiPasswordUser = HthApiPasswordUserContext.isHthUser(
+          promiseData[0].userData.userProfile
+        );
 
         context.properties.baseModel.showMerchantHeaderFooterChanges(false);
 
@@ -1364,6 +1403,8 @@ define([
     }, true);
 
     self.dispose = function () {
+      hthApiPasswordCheckFinished = true;
+      clearTimeout(hthApiPasswordTimer);
       resizeHandler.dispose();
       pinReminder.dispose();
       signerPinReminder.dispose();

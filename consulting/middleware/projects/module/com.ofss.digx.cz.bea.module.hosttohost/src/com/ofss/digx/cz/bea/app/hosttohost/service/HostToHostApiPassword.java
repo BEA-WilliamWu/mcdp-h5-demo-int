@@ -321,6 +321,9 @@ public class HostToHostApiPassword extends AbstractApplication
         : sessionContext.getTransactingPartyCode());
     String loginUser = normalize(sessionContext == null ? null : sessionContext.getUserId());
     if (partyId == null || loginUser == null) {
+      LOGGER.log(Level.WARNING,
+          "HTH_API_PASSWORD eligibility: reason=MISSING_SESSION_IDENTITY, partyId={0}, loginUser={1}, storage={2}",
+          new Object[] {partyId, loginUser, storage});
       if (required) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_008");
       }
@@ -332,6 +335,9 @@ public class HostToHostApiPassword extends AbstractApplication
     key.setCloseId(userId);
     HthUserProfile profile = HthUserProfileRepository.getInstance().read(key);
     if (profile == null) {
+      LOGGER.log(Level.WARNING,
+          "HTH_API_PASSWORD eligibility: reason=USER_PROFILE_NOT_FOUND, partyId={0}, loginUser={1}, closeId={2}, storage={3}",
+          new Object[] {partyId, loginUser, userId, storage});
       if (required) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_008");
       }
@@ -340,6 +346,13 @@ public class HostToHostApiPassword extends AbstractApplication
     HthManagement management = new HthManagement().findActiveByPartyId(partyId);
     if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
         || (storage == HthApiPasswordStorage.UAM && normalize(management.getUamClientId()) == null)) {
+      String reason = management == null ? "ACTIVE_MANAGEMENT_NOT_FOUND"
+          : !"ENABLE".equalsIgnoreCase(management.getHthStatus()) ? "HTH_NOT_ENABLED"
+          : "UAM_CLIENT_NOT_CONFIGURED";
+      LOGGER.log(Level.WARNING,
+          "HTH_API_PASSWORD eligibility: reason={0}, partyId={1}, loginUser={2}, closeId={3}, storage={4}, hthStatus={5}",
+          new Object[] {reason, partyId, loginUser, userId, storage,
+              management == null ? null : management.getHthStatus()});
       if (required) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_008");
       }
@@ -382,7 +395,13 @@ public class HostToHostApiPassword extends AbstractApplication
 
   private boolean isFeatureEnabled() {
     Preferences config = ConfigurationFactory.getInstance().getConfigurations(ADAPTER_CATEGORY);
-    return config.getBoolean(FEATURE_ENABLED, false);
+    boolean enabled = config.getBoolean(FEATURE_ENABLED, false);
+    if (!enabled) {
+      LOGGER.log(Level.WARNING,
+          "HTH_API_PASSWORD eligibility: reason=FEATURE_DISABLED, category={0}, property={1}, configuredValue={2}",
+          new Object[] {ADAPTER_CATEGORY, FEATURE_ENABLED, config.get(FEATURE_ENABLED, "<missing>")});
+    }
+    return enabled;
   }
 
   @SuppressWarnings("unchecked")

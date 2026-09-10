@@ -2,7 +2,7 @@
 -- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
 -- BCOH2H-1204: First-Time HTH API Password Setup success notification.
 -- Execute in the OBDX configuration schema after the Error Messages script.
--- The event is raised only by HostToHostApiPassword.setup after UAM and local finalization succeed.
+-- The event is raised only by HostToHostApiPassword.setup after credential storage and local finalization succeed.
 -- Reset is intentionally excluded (BCOH2H-1205). No password or Password Code is templated.
 -- Re-runnable. Dispatch behavior follows the existing BCO Login PIN notification baseline.
 

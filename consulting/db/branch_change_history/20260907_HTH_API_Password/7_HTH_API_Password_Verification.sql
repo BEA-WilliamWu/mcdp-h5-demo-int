@@ -4,25 +4,27 @@
 -- Execute after scripts 1-6 with dictionary, HTH_BEA, and OBDX configuration-table read access.
 -- Every query documents its expected result. This script performs no DML.
 
--- Expected: 3 rows.
+-- Expected: 4 rows.
 SELECT TABLE_NAME
   FROM ALL_TABLES
  WHERE OWNER = 'HTH_BEA'
    AND TABLE_NAME IN (
      'HTH_API_PASSWORD_CODE',
      'HTH_API_PASSWORD_STATE',
-     'HTH_API_PASSWORD_OPERATION'
+     'HTH_API_PASSWORD_OPERATION',
+     'HTH_API_PASSWORD_CREDENTIAL'
    )
  ORDER BY TABLE_NAME;
 
--- Expected: 16 enabled constraints (3 PK, 4 FK, 9 business/object checks).
+-- Expected: all constraints ENABLED, including the credential PK, user FK and status check.
 SELECT TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE, STATUS
   FROM ALL_CONSTRAINTS
  WHERE OWNER = 'HTH_BEA'
    AND TABLE_NAME IN (
      'HTH_API_PASSWORD_CODE',
      'HTH_API_PASSWORD_STATE',
-     'HTH_API_PASSWORD_OPERATION'
+     'HTH_API_PASSWORD_OPERATION',
+     'HTH_API_PASSWORD_CREDENTIAL'
    )
  ORDER BY TABLE_NAME, CONSTRAINT_NAME;
 
@@ -38,13 +40,14 @@ SELECT INDEX_NAME, STATUS
    )
  ORDER BY INDEX_NAME;
 
--- Expected: 15 rows. ENABLED must be true only after the approved UAM contract is available;
--- SERVICE_URL must be the approved HTTPS URL and contain no CHANGE_ME.
+-- ENABLED should be true after deployment. DATABASE needs no UAM URL.
+-- For UAM only, SERVICE_URL must be the approved HTTPS URL and contain no CHANGE_ME.
 -- APIC secrets are deliberately reused from DSPApi and are not selected here.
 SELECT PROP_ID, PROP_VALUE
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
    AND PROP_ID NOT LIKE '%SECRET%'
+   AND PROP_ID <> 'HTH_API_PASSWORD.CODE_CIPHER_KEY'
  ORDER BY PROP_ID;
 
 -- Expected: 4 resources and 4 resource actions.
@@ -148,7 +151,8 @@ SELECT O.REQUEST_ID, O.PARTY_ID, O.USER_ID, O.CODE_ID
     ON U.PARTY_ID = O.PARTY_ID AND U.CLOSE_ID = O.USER_ID
  WHERE C.ID IS NULL OR U.CLOSE_ID IS NULL;
 
--- Expected: no rows under normal operation. UNKNOWN requires UAM reconciliation before retry.
+-- Expected: no rows after completed operations. UNKNOWN requires checking the selected
+-- storage backend and commit outcome before retry.
 SELECT REQUEST_ID, PARTY_ID, USER_ID, OPERATION, STATUS, LAST_UPDATE_DATE
   FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
  WHERE STATUS IN ('IN_PROGRESS', 'UNKNOWN')

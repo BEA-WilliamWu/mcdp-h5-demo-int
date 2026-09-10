@@ -26,6 +26,7 @@ async function dashboard(channel, outcome) {
     const events = [], request = new Promise((a, b) => { resolve = a; reject = b; });
     const context = {
         isHthApiPasswordUser: userContext.isHthUser(profile(channel)),
+        isHthFirstLoginFlowDone: outcome !== 'firstLogin',
         hthApiPasswordCheckPending: false, hthApiPasswordCheckFinished: false,
         hthApiPasswordTimer: null,
         self: {openBounceBackReminder: () => events.push('BCO'), hthApiPasswordSetupState: () => {}},
@@ -42,6 +43,15 @@ async function dashboard(channel, outcome) {
     vm.runInNewContext(body, context);
     context.self.loadHthApiPasswordSetup();
     await tick();
+    if (outcome === 'firstLogin') {
+        assert.equal(calls, 0); assert.deepEqual(events, []);
+        assert.equal(context.hthApiPasswordCheckFinished, false);
+        context.isHthFirstLoginFlowDone = true;
+        context.self.loadHthApiPasswordSetup();
+        await tick(); assert.equal(calls, 1);
+        resolve({setupState: 'REQUIRED'}); await tick();
+        assert.deepEqual(events, ['HTH']); return;
+    }
     if (channel !== 'HTH') {
         assert.equal(calls, 0); assert.deepEqual(events, ['BCO']); return;
     }
@@ -119,7 +129,7 @@ async function profilePage(channel, state, resetAllowed, failure, dispose) {
 }
 (async () => {
     await dashboard('BCO'); await dashboard(null);
-    for (const result of ['REQUIRED', 'CODE_REQUIRED', 'ACTIVE', 'NOT_APPLICABLE', 'reject', 'throw', 'timeout', 'dispose']) await dashboard('HTH', result);
+    for (const result of ['REQUIRED', 'CODE_REQUIRED', 'ACTIVE', 'NOT_APPLICABLE', 'reject', 'throw', 'timeout', 'dispose', 'firstLogin']) await dashboard('HTH', result);
     await menu('BCO'); await menu(null); await menu('HTH', false); await menu('HTH', true);
     await profilePage('BCO', 'ACTIVE', true); await profilePage(null, 'ACTIVE', true);
     for (const state of ['ACTIVE', 'REQUIRED', 'CODE_REQUIRED', 'NOT_APPLICABLE', 'LOCKED', 'UNKNOWN']) {
@@ -128,5 +138,5 @@ async function profilePage(channel, state, resetAllowed, failure, dispose) {
     await profilePage('HTH', 'ACTIVE', false, true);
     await profilePage('HTH', 'ACTIVE', false, false, true);
     assert(read('extensions/components/base-components/profile/profile.html').includes('on-click="[[$component.changeHthApiPassword]]"'));
-    console.log('PASS: profile classification, BCO zero requests, Profile entry without RESET Code, reset navigation, original security menus, duplicate suppression, failure, timeout, late response and disposal');
+    console.log('PASS: profile classification, BCO zero requests, Profile entry without RESET Code, reset navigation, original security menus, duplicate suppression, failure, timeout, late response, disposal and first-login completion');
 })().catch(error => { console.error(error); process.exitCode = 1; });

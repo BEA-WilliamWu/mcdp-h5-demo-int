@@ -110,3 +110,7 @@ HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用�
 ## 790 Profile 修改密码入口
 
 入口位于右上角用户菜单 → Profile 页面。仅渠道为 HTH 且 status 返回 ACTIVE 的用户显示 Change HTH API Password；是否有 RESET Code 不影响入口显示。点击进入现有 API Password 页面 RESET 模式，提交时仍校验 Code 的归属、用途、有效期和使用状态。未设置密码、普通 BCO 用户或状态查询失败时不显示。Security Settings 已移除该入口及 HTH 状态请求，原有安全菜单保留。复用现有按钮样式和 API Password 三语言文案，不修改 CSS/SCSS。
+
+## 首次登录向导与 API Password 提示
+
+HTH 用户的登录 Profile 返回 `firstLoginFlowDone=true` 后才查询 API Password 状态。在原登录密码、安全问题向导期间不查询、不设置 HTH 提示已显示标记；最后一步的 `me/loginFlow` 保存成功后，原向导刷新页面，在新的 Dashboard 提醒链中检查并显示 API Password 设置提示。已完成设置则不提示；无有效 SETUP Code 时显示取码提示。测试时需同时确认登录 Profile 中 `userChannelType=HTH`、`firstLoginFlowDone=true`，以及 status 返回 REQUIRED/CODE_REQUIRED。

@@ -173,6 +173,7 @@ define([
     self.hthApiPasswordSetupState = ko.observable();
 
     let isHthApiPasswordUser = false,
+      isHthFirstLoginFlowDone = false,
       hthApiPasswordCheckPending = false,
       hthApiPasswordCheckFinished = false,
       hthApiPasswordTimer;
@@ -1032,6 +1033,11 @@ define([
     };
 
     self.loadHthApiPasswordSetup = function() {
+      // Complete the existing login-password/security-question flow before any HTH prompt.
+      if (isHthApiPasswordUser && !isHthFirstLoginFlowDone) {
+        return;
+      }
+
       if (!isHthApiPasswordUser || hthApiPasswordCheckFinished) {
         self.openBounceBackReminder();
 
@@ -1115,6 +1121,8 @@ define([
         isHthApiPasswordUser = HthApiPasswordUserContext.isHthUser(
           promiseData[0].userData.userProfile
         );
+
+        isHthFirstLoginFlowDone = promiseData[0].userData.firstLoginFlowDone === true;
 
         context.properties.baseModel.showMerchantHeaderFooterChanges(false);
 

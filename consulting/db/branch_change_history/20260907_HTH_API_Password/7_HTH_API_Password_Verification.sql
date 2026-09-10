@@ -55,7 +55,7 @@ SELECT R.ID AS RESOURCE_ID, RA.ACTION_TYPE, RA.ENTITLEMENT_ID
   FROM DIGX_AZ_RESOURCE R
   LEFT JOIN DIGX_AZ_RESOURCE_ACTION RA ON RA.RESOURCE_ID = R.ID
  WHERE R.ID IN (
-   'hth-api-password',
+   'api-password',
    'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.status',
    'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup',
    'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset'

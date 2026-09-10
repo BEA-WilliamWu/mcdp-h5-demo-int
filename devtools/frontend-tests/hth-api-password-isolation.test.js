@@ -127,7 +127,39 @@ async function profilePage(channel, state, resetAllowed, failure, dispose) {
     assert.deepEqual(navigation, visible ? [['api-password', 'RESET']] : []);
     if (visible) assert.deepEqual(registrations[registrations.length - 1], ['api-password', 'host-to-host']);
 }
+async function repeatLoginReminder() {
+    for (const name of ['login-form-web', 'login-form-mobile']) {
+        const login = read(`extensions/components/login/${name}/${name}.js`);
+        const reset = login.match(/sessionStorage\.setItem\("hthApiPasswordSetupPromptLoaded", "false"\);/);
+        assert(reset, name + ' resets the prompt at login');
+        const storage = new Map();
+        const sessionStorage = {getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value)};
+        async function visit(state, firstLoginFlowDone = true) {
+            let calls = 0;
+            const events = [];
+            const context = {
+                isHthApiPasswordUser: true, isHthFirstLoginFlowDone: firstLoginFlowDone,
+                hthApiPasswordCheckPending: false, hthApiPasswordCheckFinished: false, hthApiPasswordTimer: null,
+                self: {openBounceBackReminder: () => events.push('BCO'), hthApiPasswordSetupState() {}},
+                sessionStorage, setTimeout: () => 1, clearTimeout() {},
+                DashboardModel: {getHthApiPasswordStatus: () => { calls++; return Promise.resolve({setupState: state}); }},
+                $: () => ({trigger: () => events.push('HTH')})
+            };
+            vm.runInNewContext(body, context); context.self.loadHthApiPasswordSetup(); await tick();
+            return {calls, events};
+        }
+        vm.runInNewContext(reset[0], {sessionStorage});
+        assert.deepEqual(await visit('REQUIRED', false), {calls: 0, events: []});
+        assert.deepEqual(await visit('REQUIRED'), {calls: 1, events: ['HTH']});
+        assert.deepEqual(await visit('REQUIRED'), {calls: 0, events: ['BCO']});
+        vm.runInNewContext(reset[0], {sessionStorage});
+        assert.deepEqual(await visit('CODE_REQUIRED'), {calls: 1, events: ['HTH']});
+        vm.runInNewContext(reset[0], {sessionStorage});
+        assert.deepEqual(await visit('ACTIVE'), {calls: 1, events: ['BCO']});
+    }
+}
 (async () => {
+    await repeatLoginReminder();
     await dashboard('BCO'); await dashboard(null);
     for (const result of ['REQUIRED', 'CODE_REQUIRED', 'ACTIVE', 'NOT_APPLICABLE', 'reject', 'throw', 'timeout', 'dispose', 'firstLogin']) await dashboard('HTH', result);
     await menu('BCO'); await menu(null); await menu('HTH', false); await menu('HTH', true);

@@ -114,3 +114,5 @@ HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用�
 ## 首次登录向导与 API Password 提示
 
 HTH 用户的登录 Profile 返回 `firstLoginFlowDone=true` 后才查询 API Password 状态。在原登录密码、安全问题向导期间不查询、不设置 HTH 提示已显示标记；最后一步的 `me/loginFlow` 保存成功后，原向导刷新页面，在新的 Dashboard 提醒链中检查并显示 API Password 设置提示。已完成设置则不提示；无有效 SETUP Code 时显示取码提示。测试时需同时确认登录 Profile 中 `userChannelType=HTH`、`firstLoginFlowDone=true`，以及 status 返回 REQUIRED/CODE_REQUIRED。
+
+每次 Web/移动端登录会与既有 PIN 提醒一起重置 `hthApiPasswordSetupPromptLoaded`。尚未设置 API Password 的 HTH 用户每次登录最多提示一次；关闭提示或刷新页面不重复弹出，重新登录后重新查询状态。首次登录向导完成前不查询、不消耗提示标记；ACTIVE 用户不提示。

@@ -19,13 +19,6 @@ define([
             };
 
             baseService.fetch(options);
-            },
-            getHthApiPasswordStatus = function () {
-                return baseService.fetch({
-                    url: "hostToHostApiPassword/status",
-                    version: "cz/v1",
-                    showMessage: false
-                });
             };
         let getEnbleItokenManagementDeferred;
 
@@ -35,8 +28,7 @@ define([
                 getEnbleItokenManagement(getEnbleItokenManagementDeferred);
 
                 return getEnbleItokenManagementDeferred;
-            },
-            getHthApiPasswordStatus: getHthApiPasswordStatus
+            }
         };
     };
 

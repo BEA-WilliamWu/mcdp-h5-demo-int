@@ -72,7 +72,7 @@ function observable(value) {
 }
 async function menu(channel, fail) {
     let constructor, calls = 0;
-    const ko = {observable, observableArray: observable, utils: {extend: Object.assign, arrayForEach: (a, f) => a.forEach(f)}};
+    const ko = {observable, observableArray: value => observable(value || []), utils: {extend: Object.assign, arrayForEach: (a, f) => a.forEach(f)}};
     vm.runInNewContext(read('extensions/components/security/security-menu/security-menu.js'), {
         define: (_, factory) => { constructor = factory(ko, {}, {
             getHthApiPasswordStatus: () => { calls++; return fail ? Promise.reject(new Error('503')) : Promise.resolve({setupState: 'ACTIVE', resetAllowed: true}); },
@@ -82,14 +82,51 @@ async function menu(channel, fail) {
     const model = new constructor({rootModel: {params: {}}, dashboard: {headerName() {}, userData: {userProfile: profile(channel)}},
         baseModel: {registerComponent() {}, small: () => false, cordovaDevice: () => false}});
     await tick();
-    assert.equal(calls, channel === 'HTH' ? 1 : 0);
+    assert.equal(calls, 0);
     const ids = Array.from(model.listItem(), item => item.id);
     assert(ids.includes('changePassword')); assert(ids.includes('setSecurityQuestion'));
-    assert.equal(ids.includes('changeHthApiPassword'), channel === 'HTH' && !fail);
+    assert.equal(ids.includes('changeHthApiPassword'), false);
+}
+async function profilePage(channel, state, resetAllowed, failure, dispose) {
+    let constructor, resolve, reject, calls = 0;
+    const navigation = [], registrations = [];
+    const request = new Promise((a, b) => { resolve = a; reject = b; });
+    vm.runInNewContext(read('extensions/components/base-components/profile/profile.js'), {
+        define: (_, factory) => { constructor = factory({observable, observableArray: value => observable(value || [])}, {}, {},
+            {heading: 'Profile'}, userContext, {status: () => { calls++; return request; }},
+            {resetHeader: 'Change HTH API Password'}); }
+    });
+    const user = Object.assign(profile(channel), {emailId: {displayValue: 'test'}, phoneNumber: {displayValue: 'test'}, address: null});
+    const page = new constructor({rootModel: {params: {}},
+        dashboard: {appData: {segment: 'CORP'}, userData: {userProfile: user}, headerName() {},
+            loadComponent: (name, data) => navigation.push([name, data.mode])},
+        baseModel: {registerComponent: (name, parent) => registrations.push([name, parent]), format: () => 'Test user'}});
+    assert.equal(page.showChangeHthApiPassword(), false);
+    page.changeHthApiPassword(); assert.equal(navigation.length, 0);
+    await tick();
+    assert.equal(calls, channel === 'HTH' ? 1 : 0);
+    if (channel === 'HTH') {
+        if (dispose) page.dispose();
+        if (failure) reject(new Error('403'));
+        else resolve({setupState: state, resetAllowed});
+        await tick();
+    }
+    const visible = channel === 'HTH' && state === 'ACTIVE' && !failure && !dispose;
+    assert.equal(page.showChangeHthApiPassword(), visible);
+    page.changeHthApiPassword();
+    assert.deepEqual(navigation, visible ? [['api-password', 'RESET']] : []);
+    if (visible) assert.deepEqual(registrations[registrations.length - 1], ['api-password', 'host-to-host']);
 }
 (async () => {
     await dashboard('BCO'); await dashboard(null);
     for (const result of ['REQUIRED', 'CODE_REQUIRED', 'ACTIVE', 'NOT_APPLICABLE', 'reject', 'throw', 'timeout', 'dispose']) await dashboard('HTH', result);
     await menu('BCO'); await menu(null); await menu('HTH', false); await menu('HTH', true);
-    console.log('PASS: profile classification, BCO zero requests, HTH menus, duplicate suppression, failure, timeout, late response and disposal');
+    await profilePage('BCO', 'ACTIVE', true); await profilePage(null, 'ACTIVE', true);
+    for (const state of ['ACTIVE', 'REQUIRED', 'CODE_REQUIRED', 'NOT_APPLICABLE', 'LOCKED', 'UNKNOWN']) {
+        await profilePage('HTH', state, false); await profilePage('HTH', state, true);
+    }
+    await profilePage('HTH', 'ACTIVE', false, true);
+    await profilePage('HTH', 'ACTIVE', false, false, true);
+    assert(read('extensions/components/base-components/profile/profile.html').includes('on-click="[[$component.changeHthApiPassword]]"'));
+    console.log('PASS: profile classification, BCO zero requests, Profile entry without RESET Code, reset navigation, original security menus, duplicate suppression, failure, timeout, late response and disposal');
 })().catch(error => { console.error(error); process.exitCode = 1; });

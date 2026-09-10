@@ -101,8 +101,12 @@ HostToHostApiPassword 负责 Code 校验和事务编排，各 Repository 使用�
 
 ## BCO 页面隔离
 
-登录 Profile 的 `CZVoidUserExt` 通过现有 dictionary 返回 `userChannelType`，复用已读取的用户扩展数据。Dashboard 和 Security Settings 仅在该值为 `HTH` 时查询 API Password 状态；BCO 或缺少该字段时不发起查询。后端 HTH 身份及权限校验保持有效。
+登录 Profile 的 `CZVoidUserExt` 通过现有 dictionary 返回 `userChannelType`，复用已读取的用户扩展数据。Dashboard 和 Profile 页面仅在该值为 `HTH` 时查询 API Password 状态；BCO 或缺少该字段时不发起查询。后端 HTH 身份及权限校验保持有效。
 
-此次需要同步部署 `CZVoidUserExt`、Dashboard、安全菜单及新增 `api-password/user-context.js`；只部署前端而未更新 Profile 会使 HTH 入口不可见。HTH 登录提醒等待最多 5 秒，失败或超时继续原 Bounce Back 提醒，忽略迟到响应；页面销毁会取消提醒定时器。原有 Login PIN/Signer PIN 提醒顺序保持不变。
+此次需要同步部署 `CZVoidUserExt`、Dashboard、Profile 页面、安全菜单及新增 `api-password/user-context.js`；只部署前端而未更新 Profile 会使 HTH 入口不可见。HTH 登录提醒等待最多 5 秒，失败或超时继续原 Bounce Back 提醒，忽略迟到响应；页面销毁会取消提醒定时器。原有 Login PIN/Signer PIN 提醒顺序保持不变。
 
 可运行 `node devtools/frontend-tests/hth-api-password-isolation.test.js` 验证普通 BCO 零 HTH 请求、原安全菜单保留、HTH 入口、重复查询、失败/超时及页面销毁分支。该测试使用隔离的 UI/网络替身，不替代 UAT 登录联调。
+
+## 790 Profile 修改密码入口
+
+入口位于右上角用户菜单 → Profile 页面。仅渠道为 HTH 且 status 返回 ACTIVE 的用户显示 Change HTH API Password；是否有 RESET Code 不影响入口显示。点击进入现有 API Password 页面 RESET 模式，提交时仍校验 Code 的归属、用途、有效期和使用状态。未设置密码、普通 BCO 用户或状态查询失败时不显示。Security Settings 已移除该入口及 HTH 状态请求，原有安全菜单保留。复用现有按钮样式和 API Password 三语言文案，不修改 CSS/SCSS。

@@ -332,11 +332,18 @@ public class HostToHostApiPassword extends AbstractApplication
     String userId = canonicalUser(loginUser, partyId);
     HthUserProfileKey key = new HthUserProfileKey();
     key.setPartyId(partyId);
-    key.setCloseId(userId);
+    // User profiles retain the OBDX login key; password and Code records use the canonical user ID.
+    key.setCloseId(loginUser);
     HthUserProfile profile = HthUserProfileRepository.getInstance().read(key);
+    if (profile == null && !loginUser.equals(userId)) {
+      HthUserProfileKey canonicalKey = new HthUserProfileKey();
+      canonicalKey.setPartyId(partyId);
+      canonicalKey.setCloseId(userId);
+      profile = HthUserProfileRepository.getInstance().read(canonicalKey);
+    }
     if (profile == null) {
       LOGGER.log(Level.WARNING,
-          "HTH_API_PASSWORD eligibility: reason=USER_PROFILE_NOT_FOUND, partyId={0}, loginUser={1}, closeId={2}, storage={3}",
+          "HTH_API_PASSWORD eligibility: reason=USER_PROFILE_NOT_FOUND, partyId={0}, loginUser={1}, canonicalUserId={2}, storage={3}",
           new Object[] {partyId, loginUser, userId, storage});
       if (required) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_008");
@@ -350,7 +357,7 @@ public class HostToHostApiPassword extends AbstractApplication
           : !"ENABLE".equalsIgnoreCase(management.getHthStatus()) ? "HTH_NOT_ENABLED"
           : "UAM_CLIENT_NOT_CONFIGURED";
       LOGGER.log(Level.WARNING,
-          "HTH_API_PASSWORD eligibility: reason={0}, partyId={1}, loginUser={2}, closeId={3}, storage={4}, hthStatus={5}",
+          "HTH_API_PASSWORD eligibility: reason={0}, partyId={1}, loginUser={2}, canonicalUserId={3}, storage={4}, hthStatus={5}",
           new Object[] {reason, partyId, loginUser, userId, storage,
               management == null ? null : management.getHthStatus()});
       if (required) {

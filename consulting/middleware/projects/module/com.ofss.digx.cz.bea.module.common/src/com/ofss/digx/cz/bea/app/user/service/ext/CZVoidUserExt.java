@@ -27,6 +27,8 @@ import com.ofss.digx.common.constants.CommonAdapterConstants;
 import com.ofss.digx.common.constants.CommonAdapterFactoryConstants;
 import com.ofss.digx.cz.bea.app.common.adapter.hostuserdetails.IHostUserDetailsInvocationAdapter;
 import com.ofss.digx.cz.bea.app.common.helper.HostToHostManagementHelper;
+import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
+import com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory;
 import com.ofss.digx.cz.bea.common.util.UserManagementUtils;
 import com.ofss.digx.cz.bea.domain.party.entity.profile.CZPartyPreferences;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.ResetUserPinRecord;
@@ -452,12 +454,16 @@ public class CZVoidUserExt extends VoidUserExt {
 
 				item.setValue(transactionApproved ? Optional.ofNullable(resetUserPinRecord).map(ResetUserPinRecord::getForceChangePin).orElse("N") : "N");
 
-				// Expose the existing user classification without another profile lookup.
+				// Derive channel membership from the same HTH profiles used by user maintenance.
+				IHthUserProfileAdapter hthUserProfileAdapter = (IHthUserProfileAdapter) RepositoryAdapterFactory
+						.getInstance().getRepositoryAdapter(IHthUserProfileAdapter.HTH_USER_PROFILE_LOCAL_REPOSITORY_ADAPTER);
+				boolean isHthUser = hthUserProfileAdapter.listCloseIdsByUserKey(extensionData.getCdcNo())
+						.containsKey(IHthUserProfileAdapter.userProfileKey(extensionData.getCdcNo(), extensionData.getUserID()));
 				NameValuePairDTO channelType = new NameValuePairDTO();
 				channelType.setGenericName("userChannelType");
 				channelType.setName("userChannelType");
 				channelType.setDatatype("String");
-				channelType.setValue((extensionData.getUserChannelType() != null && "HTH".equalsIgnoreCase(extensionData.getUserChannelType().trim())) ? "HTH" : "BCO");
+				channelType.setValue(isHthUser ? "HTH" : "BCO");
 				NameValuePairDTO[] nextNameValuePairDTOArray = Stream.concat(Arrays.stream(nameValuePairDTOArray), Stream.of(item, channelType)).toArray(NameValuePairDTO[]::new);
 				Dictionary[] nextDictionary = new Dictionary[1];
 				nextDictionary[0] = new Dictionary();

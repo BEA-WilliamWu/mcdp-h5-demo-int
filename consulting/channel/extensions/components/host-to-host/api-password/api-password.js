@@ -14,9 +14,6 @@ define([
     return function (params) {
         const self = this,
             mode = String((params.data && params.data.mode) || "SETUP").toUpperCase(),
-            userProfile = params.dashboard.userData.userProfile,
-            partyId = userProfile.partyId && userProfile.partyId.value
-                ? userProfile.partyId.value : userProfile.partyId,
             createRequestId = function () {
                 if (window.crypto && typeof window.crypto.randomUUID === "function") {
                     return window.crypto.randomUUID();
@@ -96,7 +93,8 @@ define([
                     ? response.status : response),
                 message = status && status.message,
                 code = message && typeof message.code === "string" ? message.code : null,
-                text = error && error.hthInputError ? error.hthInputError : self.nls.submissionError;
+                text = error && error.hthInputError ? error.hthInputError
+                    : code === "DIGX_CZ_HTH_API_PASSWORD_010" ? self.nls.encryptionError : self.nls.submissionError;
 
             params.baseModel.showMessages(null, [code ? `${text} (${code})` : text], "ERROR");
         };
@@ -134,44 +132,36 @@ define([
 
             self.submitting(true);
 
-            require(["framework/js/plugins/customer-pin-encrypt"], function (Encrypt) {
+            require(["extensions/components/host-to-host/api-password/transport"], function (Encrypt) {
                 Promise.resolve().then(function () {
-                    return Encrypt([password, self.passwordCode()], userProfile.userName, partyId);
+                    return Encrypt(password, self.passwordCode(), self.requestId,
+                        self.isSetup ? "SETUP" : "RESET");
+                }).catch(function () {
+                    throw { hthInputError: self.nls.encryptionError };
                 }).then(function (encrypted) {
-                        if (!Array.isArray(encrypted) || typeof encrypted[0] !== "string" ||
-                            !encrypted[0].trim()) {
-                            throw { hthInputError: self.nls.encryptionError };
-                        }
-
-                        const payload = JSON.stringify({
-                            encryptedCredentials: encrypted[0],
-                            requestId: self.requestId
-                        }),
-                            config = {
-                                headers: {
-                                    RSAKeyIndicator: encrypted[2],
-                                    token: encrypted[1]
-                                }
-                            };
-
-                        return (self.isSetup ? Model.setup : Model.reset)(payload, config);
-                    }).then(function (data) {
-                        const status = data && (data.status || data);
-
-                        if (!status || status.result !== "SUCCESSFUL" ||
-                            (status.message && status.message.type === "ERROR")) {
-                            throw { responseJSON: data };
-                        }
-
-                        self.clearSecrets();
-                        self.requestId = createRequestId();
-                        self.showConfirmation(true);
-                    }).catch(function (error) {
-                        self.clearSecrets();
-                        self.showSubmissionError(error);
-                    }).finally(function () {
-                        self.submitting(false);
+                    const payload = JSON.stringify({
+                        encryptedCredentials: encrypted,
+                        requestId: self.requestId
                     });
+
+                    return (self.isSetup ? Model.setup : Model.reset)(payload);
+                }).then(function (data) {
+                    const status = data && (data.status || data);
+
+                    if (!status || status.result !== "SUCCESSFUL" ||
+                        (status.message && status.message.type === "ERROR")) {
+                        throw { responseJSON: data };
+                    }
+
+                    self.clearSecrets();
+                    self.requestId = createRequestId();
+                    self.showConfirmation(true);
+                }).catch(function (error) {
+                    self.clearSecrets();
+                    self.showSubmissionError(error);
+                }).finally(function () {
+                    self.submitting(false);
+                });
             }, function () {
                 self.clearSecrets();
                 self.submitting(false);

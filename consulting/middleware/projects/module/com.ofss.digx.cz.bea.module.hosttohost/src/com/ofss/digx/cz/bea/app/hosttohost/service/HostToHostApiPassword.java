@@ -26,7 +26,8 @@ import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.datatype.Date;
 import com.ofss.fc.infra.config.ConfigurationFactory;
 import com.ofss.fc.infra.log.impl.MultiEntityLogger;
-import java.lang.reflect.Method;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -240,7 +241,7 @@ public class HostToHostApiPassword extends AbstractApplication
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
         }
 
-        List<String> credentials = decryptCredentials(request.getEncryptedCredentials());
+        List<String> credentials = decryptCredentials(request.getEncryptedCredentials(), request.getRequestId(), operation);
         if (credentials == null || credentials.size() < 2) {
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
         }
@@ -411,25 +412,39 @@ public class HostToHostApiPassword extends AbstractApplication
     return enabled;
   }
 
-  @SuppressWarnings("unchecked")
-  private List<String> decryptCredentials(String encryptedCredentials) throws Exception {
-    if (normalize(encryptedCredentials) == null) {
-      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
-    }
+  private List<String> decryptCredentials(String encryptedCredentials, String requestId,
+      String operation) throws Exception {
+    String stage = "DECRYPT";
     try {
+      if (encryptedCredentials == null || encryptedCredentials.length() > 8192
+          || !encryptedCredentials.matches("[A-Za-z0-9+/]+={0,2}")) {
+        throw new IllegalArgumentException();
+      }
       IAsymmetricCryptographyProvider provider = AsymmetricCryptographyProviderFactory
           .getInstance().getLatestProvider();
       String decrypted = provider.decrypt(encryptedCredentials);
-      Class<?> validatorClass = Class.forName(
-          "com.ofss.digx.app.sms.service.user.credentials.SaltValidator");
-      Object validator = validatorClass.newInstance();
-      Method method = validatorClass.getDeclaredMethod("getSeperatePassword", String.class);
-      if (!method.isAccessible()) {
-        method.setAccessible(true);
+      stage = "PARSE";
+      if (decrypted == null || decrypted.length() > 1024) {
+        throw new IllegalArgumentException();
       }
-      return (List<String>) method.invoke(validator, decrypted);
+      JsonNode envelope = new ObjectMapper().readTree(decrypted);
+      if (envelope == null || !envelope.isArray() || envelope.size() != 5) {
+        throw new IllegalArgumentException();
+      }
+      for (JsonNode item : envelope) {
+        if (!item.isTextual()) { throw new IllegalArgumentException(); }
+      }
+      if (!"HTH1".equals(envelope.get(0).asText())
+          || !operation.equals(envelope.get(1).asText())
+          || !requestId.equals(envelope.get(2).asText())) {
+        throw new IllegalArgumentException();
+      }
+      return java.util.Arrays.asList(envelope.get(3).asText(), envelope.get(4).asText());
     } catch (java.lang.Exception e) {
-      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
+      LOGGER.log(Level.WARNING,
+          "HTH_API_PASSWORD input: stage={0}, exceptionType={1}",
+          new Object[] {stage, e.getClass().getSimpleName()});
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_010");
     }
   }
 
@@ -1025,6 +1040,7 @@ public class HostToHostApiPassword extends AbstractApplication
       String codeId = string(row[0]);
       if (!HthApiPasswordCrypto.constantTimeEquals(code,
           HthApiPasswordCrypto.decrypt(string(row[1]), HthApiPasswordCrypto.codeCipherKey()))) {
+        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_COMPARE, result=MISMATCH");
         codeRepository.recordFailedAttempt(lease.session, codeId);
         success = true;
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_002");

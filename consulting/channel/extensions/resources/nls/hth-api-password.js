@@ -1,6 +1,8 @@
 define({
     root: {
         setupHeader: "Create HTH API Password",
+        menuLabel: "HTH API Password",
+        profileHeader: "Profile",
         resetHeader: "Change HTH API Password",
         description: "Please enter your HTH API channel login password.",
         newPassword: "New Password",

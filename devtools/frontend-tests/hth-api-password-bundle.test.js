@@ -110,6 +110,31 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hth-password-bundle-'));
     assert.equal(form.submitting(), false);
     assert(requests.includes('hostToHostApiPassword/status?transport=true'));
     assert.equal(messages[0], form.nls.encryptionError);
-    console.log('PASS: minified production loader includes transport; standalone transport absent; bundled form reaches key request and handles failure without dynamic script loading');
+    const sideMenu = 'extensions/components/security/side-menu';
+    fs.mkdirSync(path.join(input, sideMenu), {recursive: true});
+    fs.symlinkSync(path.join(channel, 'resources'), path.join(input, 'resources'));
+    for (const name of fs.readdirSync(path.join(channel, sideMenu))) {
+        if (!/\.(js|html|css)$/.test(name)) continue;
+        let content = fs.readFileSync(path.join(channel, sideMenu, name), 'utf8');
+        if (name.endsWith('.js')) {
+            const minified = await terser.minify(content);
+            if (minified.error) throw minified.error;
+            content = minified.code;
+        }
+        fs.writeFileSync(path.join(input, sideMenu, name), content);
+    }
+    const sideOutput = path.join(tmp, 'dist', sideMenu, 'loader.js');
+    await new Promise((resolve, reject) => requirejs.optimize({
+        baseUrl: input, mainConfigFile: path.join(build, 'build-config-components.js'), paths,
+        name: sideMenu + '/loader', out: sideOutput,
+        optimize: 'none', optimizeCss: 'none', preserveLicenseComments: false,
+        exclude: ['text', 'css', 'ojL10n', 'load'], pragmasOnSave: {excludeRequireCss: true}
+    }, resolve, reject));
+    const sideModules = new Set();
+    vm.runInNewContext(fs.readFileSync(sideOutput, 'utf8'), {define: name => sideModules.add(name)});
+    for (const id of [sideMenu + '/side-menu', component + '/model', component + '/user-context']) {
+        assert(sideModules.has(id), 'Profile loader must bundle ' + id);
+    }
+    console.log('PASS: minified password loader includes transport and handles key failure; Profile loader bundles HTH model/user context without missing standalone scripts');
 })().catch(error => { console.error(error); process.exitCode = 1; })
     .finally(() => fs.rmSync(tmp, {recursive: true, force: true}));

@@ -1,0 +1,23 @@
+<div data-bind="descendantsComplete : $component.getRootContext.bind(null, $root)">
+    <div class="form-main-container side-menu">
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 side-menu__list">
+                <oj-navigation-list data="[[sideMenuDataProvider]]" selection="{{selectedSideMenuItem}}" :aria-label="[[$component.resource.header]]">
+                    <template slot="itemTemplate" data-oj-as="item">
+                        <li :id="[[item.data.id]]">
+                            <a href="#" data-bind="text: item.data.label || $component.resource.menuItems[item.data.id]"></a>
+                        </li>
+                    </template>
+                </oj-navigation-list>
+            </div>
+            <!-- ko if:!$baseModel.small() -->
+            <div class="oj-flex-item oj-md-8 oj-lg-9 side-menu-content">
+                <!-- ko if: $component.menuSelectionForSideMenu() -->
+                <div class="menu-option" data-bind="component: {name: $component.menuSelectionForSideMenu(), params:{rootModel: $data, data:$component.showDetailParams}}">
+                </div>
+                <!-- /ko -->
+            </div>
+            <!-- /ko -->
+        </div>
+    </div>
+</div>

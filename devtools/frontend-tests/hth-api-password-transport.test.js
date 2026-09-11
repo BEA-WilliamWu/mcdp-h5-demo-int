@@ -102,9 +102,16 @@ let child;
     for (const op of ['SETUP','RESET']) {
         currentOperation=op;
         const errors=[];
-        const form=new Form({data:{mode:op},dashboard:{headerName:()=>{}},baseModel:{
+        const navigation=[], headers=[];
+        const form=new Form({...(op === 'RESET' ? {rootModel:{params:{mode:op}}} : {data:{mode:op}}),
+            dashboard:{headerName:name=>headers.push(name),switchModule:()=>navigation.push('dashboard'),
+                loadComponent:name=>navigation.push(name)},baseModel:{registerComponent:()=>{},
             showComponentValidationErrors:()=>true,showMessages:(_,messages)=>errors.push(...messages)
         }});
+        assert.equal(form.isSetup,op==='SETUP');
+        assert.equal(headers[0],op==='SETUP' ? 'Create HTH API Password' : 'Change HTH API Password');
+        form.cancel();
+        assert.deepEqual(navigation,[op==='SETUP' ? 'dashboard' : 'side-menu']);
         form.newPassword('TransportTest123');form.confirmPassword('TransportTest123');form.passwordCode('123456');
         form.submit();
         const deadline=Date.now()+10000;
@@ -113,6 +120,7 @@ let child;
         assert.deepEqual(errors,[]);
         assert.equal(form.showConfirmation(),true);
         assert.equal(form.newPassword(),null);assert.equal(form.passwordCode(),null);
+        form.goToDashboard(); assert.equal(navigation[navigation.length-1],'dashboard');
         const result = await encrypt('TransportTest123','123456','00000000-0000-4000-8000-000000000001',op);
         assert.equal(result.transportKeyId,keyId);
         assert(!result.encryptedCredentials.includes('TransportTest123'));

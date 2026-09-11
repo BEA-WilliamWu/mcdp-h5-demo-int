@@ -14,7 +14,8 @@ define([
     /** Setup/reset form using application RSA encryption and the dashboard lifecycle. */
     return function (params) {
         const self = this,
-            mode = String((params.data && params.data.mode) || "SETUP").toUpperCase(),
+            data = Object.assign({}, params.rootModel && params.rootModel.params, params.data),
+            mode = String(data.mode || "SETUP").toUpperCase(),
             createRequestId = function () {
                 if (window.crypto && typeof window.crypto.randomUUID === "function") {
                     return window.crypto.randomUUID();
@@ -47,8 +48,10 @@ define([
             spacesAllowed: false
         });
 
-        params.dashboard.headerName(self.isSetup
-            ? self.nls.setupHeader : self.nls.resetHeader);
+        if (!data.embedded) {
+            params.dashboard.headerName(self.isSetup
+                ? self.nls.setupHeader : self.nls.resetHeader);
+        }
 
         self.clearSecrets = function () {
             self.newPassword(null);
@@ -57,6 +60,19 @@ define([
         };
 
         self.cancel = function () {
+            self.clearSecrets();
+
+            if (self.isSetup) {
+                params.dashboard.switchModule();
+            } else if (typeof data.onCancel === "function") {
+                data.onCancel();
+            } else {
+                params.baseModel.registerComponent("side-menu", "security");
+                params.dashboard.loadComponent("side-menu", {});
+            }
+        };
+
+        self.goToDashboard = function () {
             self.clearSecrets();
             params.dashboard.switchModule();
         };

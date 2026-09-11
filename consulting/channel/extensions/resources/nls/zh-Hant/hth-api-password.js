@@ -1,5 +1,7 @@
 define({
     setupHeader: "建立 HTH API 密碼",
+    menuLabel: "HTH API 密碼",
+    profileHeader: "個人資料",
     resetHeader: "更改 HTH API 密碼",
     description: "請輸入用於 HTH API 渠道登入的密碼。",
     newPassword: "新密碼",

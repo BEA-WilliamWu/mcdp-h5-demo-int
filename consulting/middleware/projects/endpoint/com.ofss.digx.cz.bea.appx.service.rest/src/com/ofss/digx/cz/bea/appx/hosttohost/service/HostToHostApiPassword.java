@@ -85,13 +85,16 @@ public class HostToHostApiPassword extends AbstractRESTApplication
     Response response = null;
     ChannelInteraction interaction = null;
     ChannelContext context = null;
+    String stage = "CHANNEL_BEGIN";
     try {
       context = super.getChannelContext();
       interaction = ChannelInteraction.getInstance();
       interaction.begin(context);
+      stage = "SERVICE_CREATE";
       com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword service =
           new com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword();
       HostToHostApiPasswordResponseDTO result;
+      stage = "SERVICE_CALL";
       if ("setup".equals(operation) || "reset".equals(operation)) {
         HttpSession session = getHttpRequest().getSession(false);
         ThreadAttribute.set(HthApiPasswordTransport.THREAD_ATTRIBUTE,
@@ -130,12 +133,18 @@ public class HostToHostApiPassword extends AbstractRESTApplication
           result.setTransportKey(publicKey);
         }
       }
+      stage = "BUILD_RESPONSE";
       response = Response.fromResponse(buildResponse(result, Response.Status.OK))
           .header("Cache-Control", "no-store").build();
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while invoking HTH API password operation '%s'", operation), e);
       response = buildResponse(e, Response.Status.BAD_REQUEST);
+    } catch (RuntimeException e) {
+      LOGGER.log(Level.SEVERE,
+          "HTH_API_PASSWORD endpoint: operation={0}, stage={1}, exceptionType={2}",
+          new Object[] {operation, stage, e.getClass().getName()});
+      throw e;
     } finally {
       ThreadAttribute.clear(HthApiPasswordTransport.THREAD_ATTRIBUTE);
       if (interaction != null && context != null) {
@@ -145,6 +154,11 @@ public class HostToHostApiPassword extends AbstractRESTApplication
           LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
               "Exception while closing HTH API password channel interaction"), e);
           response = buildResponse(e, Response.Status.INTERNAL_SERVER_ERROR);
+        } catch (RuntimeException e) {
+          LOGGER.log(Level.SEVERE,
+              "HTH_API_PASSWORD endpoint: operation={0}, stage=CHANNEL_CLOSE, exceptionType={1}",
+              new Object[] {operation, e.getClass().getName()});
+          throw e;
         }
       }
     }

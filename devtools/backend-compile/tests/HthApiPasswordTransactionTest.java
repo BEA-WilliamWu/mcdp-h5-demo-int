@@ -25,6 +25,7 @@ public final class HthApiPasswordTransactionTest {
       new SecureRandom().nextBytes(key);
       ConfigurationFactory.getInstance().getRootConfigurations().put(
           "HTH_API_PASSWORD.CODE_CIPHER_KEY", Base64.getEncoder().encodeToString(key));
+      diagnosticsOmitSensitiveInput();
       schema();
       failedAttemptsSurviveOuterRollback();
       setupAndResetCommitTogether();
@@ -39,6 +40,30 @@ public final class HthApiPasswordTransactionTest {
       db.close();
       DataAccessManager.factory.close();
     }
+  }
+
+  private static void diagnosticsOmitSensitiveInput() {
+    java.util.logging.Logger logger = java.util.logging.Logger.getLogger("transaction-test");
+    final StringBuilder captured = new StringBuilder();
+    java.util.logging.Handler handler = new java.util.logging.Handler() {
+      public void publish(java.util.logging.LogRecord record) {
+        check(record.getThrown() == null, "Diagnostic must not attach the throwable or its messages");
+        captured.append(java.text.MessageFormat.format(record.getMessage(), record.getParameters()));
+      }
+      public void flush() { }
+      public void close() { }
+    };
+    logger.addHandler(handler);
+    try {
+      RuntimeException failure = new RuntimeException("PASSWORD_SENTINEL",
+          new IllegalStateException("CODE_SENTINEL"));
+      failure.addSuppressed(new RuntimeException("CIPHERTEXT_SENTINEL"));
+      SERVICE.logTestFailure(failure);
+    } finally { logger.removeHandler(handler); }
+    String diagnostic = captured.toString();
+    check(diagnostic.contains("TEST_FAILURE") && diagnostic.contains("java.lang.IllegalStateException"),
+        "Diagnostic identifies phase and nested exception type");
+    check(!diagnostic.contains("SENTINEL"), "Diagnostic must omit input-bearing exception messages");
   }
 
   private static void schema() throws SQLException {

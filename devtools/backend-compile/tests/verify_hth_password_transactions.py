@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 
     # Copy complete service method bodies, including transaction order and close logic.
     methods = []
-    for name in ("string", "validateAndReserveCode", "completeInternal", "openIndependent"):
+    for name in ("string", "validateAndReserveCode", "completeInternal", "openIndependent", "logPhaseFailure"):
         match = re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S)
         assert match, name
         methods.append(match.group())
@@ -66,6 +66,7 @@ import java.util.List;
 import java.util.logging.*;
 public class PasswordTransactionHarness {
   private static final Logger LOGGER = Logger.getLogger("transaction-test");
+  public void logTestFailure(Throwable failure) { logPhaseFailure("TEST_FAILURE", failure); }
   public String reserve(String purpose, String code, String requestId) throws Exception {
     return validateAndReserveCode("PARTY", "USER", purpose, code, requestId, "DATABASE");
   }

@@ -70,3 +70,15 @@ fixtures; the separate frontend transport regression exercises the actual sessio
 UAT must still verify WebLogic's NONXA datasource/Oracle permissions and a complete HTTP SETUP/RESET
 with a current approved Code. For a wrong Code, expect `_002` with ATTEMPT_COUNT incremented; for an
 expired Code, expect `_003`; for success, check the credential is ACTIVE and Code is USED.
+
+### API Password 500 diagnostics
+
+`DIGX_CO_0003` with HTTP 500 is a generic RuntimeException/FatalException response.
+The existing server log prefixes are `RuntimeException thrown by a REST service` and
+`FatalException thrown by a REST service`; inspect the matching request's cause chain.
+HTH-specific logs use `HTH_API_PASSWORD lifecycle` for the service and
+`HTH_API_PASSWORD endpoint` for the REST/channel boundary. They record only stages and
+exception class names. `TX_BEGIN_NONXA` also records the actual ORM transaction wrapper
+class, distinguishing the resource-local wrapper from a JTA wrapper in the deployed environment.
+Stages include `CODE_RESERVE`, `DATABASE_COMPLETE`, `NOTIFICATION`, `INTERACTION_CLOSE`,
+and `CHANNEL_CLOSE`. These logs diagnose a failure; they do not change its response or transaction outcome.

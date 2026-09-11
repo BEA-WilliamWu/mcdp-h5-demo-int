@@ -217,9 +217,14 @@ public class HostToHostApiPassword extends AbstractApplication
     String password = null;
     String code = null;
     String codeId = null;
+    String stage = "STORAGE_CONFIG";
+    LOGGER.log(Level.INFO,
+        "HTH_API_PASSWORD lifecycle: stage=CHANGE_BEGIN, independentPersistenceUnit=NONXA");
     try {
       HthApiPasswordStorage storage = storageBackend();
+      stage = "IDENTITY";
       Identity identity = identity(sessionContext, true, storage);
+      stage = "OPERATION_LOOKUP";
       OperationResult previous = findSuccessfulOperation(
           request.getRequestId(), identity.partyId, identity.userId, operation, storage.name());
       if (previous != null) {
@@ -233,6 +238,7 @@ public class HostToHostApiPassword extends AbstractApplication
       }
       if (previous == null || !"SUCCESS".equals(previous.status)) {
         // Read the selected authoritative store, never another backend on failure.
+        stage = "CREDENTIAL_STATUS";
         String state = credentialState(identity, false, storage);
         if (SETUP.equals(operation) && !IHthApiCredentialAdapter.STATUS_NOT_SETUP.equals(state)) {
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_005");
@@ -241,20 +247,25 @@ public class HostToHostApiPassword extends AbstractApplication
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
         }
 
+        stage = "INPUT_DECRYPT";
         List<String> credentials = decryptCredentials(request, sessionContext.getUserId(), operation);
         if (credentials == null || credentials.size() < 2) {
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
         }
         password = credentials.get(0);
         code = credentials.get(1);
+        stage = "PASSWORD_VALIDATE";
         validatePassword(password);
+        stage = "PASSWORD_HASH";
         String passwordHash = storage == HthApiPasswordStorage.DATABASE
             ? com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash.hash(password) : null;
+        stage = "CODE_RESERVE";
         codeId = validateAndReserveCode(identity.partyId, identity.userId, operation,
             code, request.getRequestId(), storage.name());
 
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
+          stage = "DATABASE_COMPLETE";
           try {
             completeDatabase(identity.partyId, identity.userId, operation,
                 request.getRequestId(), codeId, reference, passwordHash);
@@ -265,6 +276,7 @@ public class HostToHostApiPassword extends AbstractApplication
             throw e;
           }
         } else {
+          stage = "UAM_WRITE";
           try {
             reference = SETUP.equals(operation)
                 ? adapter().setup(identity.partyId, identity.userId, identity.uamClientId, password,
@@ -278,6 +290,7 @@ public class HostToHostApiPassword extends AbstractApplication
           if (reference == null || reference.trim().length() == 0) {
             reference = request.getRequestId();
           }
+          stage = "UAM_COMPLETE";
           try {
             complete(identity.partyId, identity.userId, operation, request.getRequestId(),
                 codeId, reference);
@@ -298,22 +311,52 @@ public class HostToHostApiPassword extends AbstractApplication
         response.setResetAllowed(false);
         response.getStatus().setReferenceNumber(reference);
         response.getStatus().setExternalReferenceNumber(reference);
+        stage = "NOTIFICATION";
         if (SETUP.equals(operation)) {
           notifySetupSuccess(sessionContext, identity);
         } else if (RESET.equals(operation)) {
           notifyResetSuccess(sessionContext, identity);
         }
       }
+    } catch (java.lang.Exception failure) {
+      logPhaseFailure(stage, failure);
+      throw failure;
     } finally {
       password = null;
       code = null;
       if (request != null) {
         request.setEncryptedCredentials(null);
       }
-      Interaction.close();
+      try {
+        Interaction.close();
+      } catch (java.lang.Exception failure) {
+        logPhaseFailure("INTERACTION_CLOSE", failure);
+        throw failure;
+      }
     }
-    super.checkResponsePolicy(sessionContext, response);
+    try {
+      super.checkResponsePolicy(sessionContext, response);
+    } catch (java.lang.Exception failure) {
+      logPhaseFailure("RESPONSE_POLICY", failure);
+      throw failure;
+    }
     return response;
+  }
+
+  /** Log phase and exception classes without exception messages or submitted values. */
+  private static void logPhaseFailure(String stage, Throwable failure) {
+    StringBuilder types = new StringBuilder();
+    Throwable cause = failure;
+    for (int depth = 0; cause != null && depth < 8; depth++) {
+      if (depth > 0) {
+        types.append(" -> ");
+      }
+      types.append(cause.getClass().getName());
+      cause = cause.getCause();
+    }
+    LOGGER.log(Level.WARNING,
+        "HTH_API_PASSWORD lifecycle: stage={0}, exceptionTypes={1}",
+        new Object[] {stage, types.toString()});
   }
 
   private Identity identity(SessionContext sessionContext, boolean required,
@@ -1187,16 +1230,23 @@ public class HostToHostApiPassword extends AbstractApplication
     TransactionManager manager = null;
     javax.transaction.Transaction suspended = null;
     Session session = null;
+    String stage = "TX_SUSPEND";
     try {
       if (ConnectionUtil.isConnPooled("DIGX")) {
         manager = TransactionHelper.getTransactionHelper().getTransactionManager();
         suspended = manager.suspend();
       }
       // NONXA owns a resource-local transaction without replacing the outer ORM session.
+      stage = "TX_OPEN_NONXA";
       session = DataAccessManager.getManager().openNewSession("NONXA");
-      session.beginTransaction();
+      stage = "TX_BEGIN_NONXA";
+      com.ofss.fc.infra.das.orm.Transaction transaction = session.beginTransaction();
+      LOGGER.log(Level.INFO,
+          "HTH_API_PASSWORD lifecycle: stage=TX_BEGIN_NONXA, result=OK, transactionType={0}",
+          transaction == null ? "NONE" : transaction.getClass().getName());
       return new SessionLease(session, manager, suspended);
     } catch (java.lang.Exception e) {
+      logPhaseFailure(stage, e);
       try {
         if (session != null) {
           try {
@@ -1210,6 +1260,7 @@ public class HostToHostApiPassword extends AbstractApplication
       } finally {
         if (manager != null && suspended != null) {
           try { manager.resume(suspended); } catch (java.lang.Exception resumeFailure) {
+            logPhaseFailure("TX_RESUME", resumeFailure);
             e.addSuppressed(resumeFailure);
           }
         }
@@ -1271,12 +1322,14 @@ public class HostToHostApiPassword extends AbstractApplication
           session.fetchCurrentTransaction().rollback();
         }
       } catch (java.lang.Exception failure) {
+        logPhaseFailure(commit ? "TX_COMMIT" : "TX_ROLLBACK", failure);
         try {
           if (write && session.fetchCurrentTransaction() != null
               && session.fetchCurrentTransaction().isActive()) {
             session.fetchCurrentTransaction().rollback();
           }
         } catch (java.lang.Exception rollbackFailure) {
+          logPhaseFailure("TX_ROLLBACK", rollbackFailure);
           failure.addSuppressed(rollbackFailure);
         }
         throw new Exception(failure);
@@ -1287,6 +1340,7 @@ public class HostToHostApiPassword extends AbstractApplication
         } finally {
           if (manager != null && suspended != null) {
             try { manager.resume(suspended); } catch (java.lang.Exception e) {
+              logPhaseFailure("TX_RESUME", e);
               throw new Exception(e);
             }
           }

@@ -226,7 +226,7 @@ public class HostToHostApiPassword extends AbstractApplication
       Identity identity = identity(sessionContext, true, storage);
       stage = "OPERATION_LOOKUP";
       OperationResult previous = findSuccessfulOperation(
-          request.getRequestId(), identity.partyId, identity.userId, operation, storage.name());
+          request.getRequestId(), identity.partyId, identity.profileUserId, operation, storage.name());
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
           response.setSetupState("ACTIVE");
@@ -260,18 +260,18 @@ public class HostToHostApiPassword extends AbstractApplication
         String passwordHash = storage == HthApiPasswordStorage.DATABASE
             ? com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash.hash(password) : null;
         stage = "CODE_RESERVE";
-        codeId = validateAndReserveCode(identity.partyId, identity.userId, operation,
+        codeId = validateAndReserveCode(identity.partyId, identity.userId, identity.profileUserId, operation,
             code, request.getRequestId(), storage.name());
 
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
           stage = "DATABASE_COMPLETE";
           try {
-            completeDatabase(identity.partyId, identity.userId, operation,
+            completeDatabase(identity.partyId, identity.profileUserId, operation,
                 request.getRequestId(), codeId, reference, passwordHash);
           } catch (Exception e) {
             // A connection/commit failure can be indeterminate. Never release a possibly used code.
-            try { fail(identity.userId, request.getRequestId(), codeId, true); }
+            try { fail(identity.profileUserId, request.getRequestId(), codeId, true); }
             catch (Exception failure) { e.addSuppressed(failure); }
             throw e;
           }
@@ -284,7 +284,7 @@ public class HostToHostApiPassword extends AbstractApplication
                 : adapter().reset(identity.partyId, identity.userId, identity.uamClientId, password,
                     request.getRequestId());
           } catch (Exception e) {
-            fail(identity.userId, request.getRequestId(), codeId, true);
+            fail(identity.profileUserId, request.getRequestId(), codeId, true);
             throw e;
           }
           if (reference == null || reference.trim().length() == 0) {
@@ -292,13 +292,13 @@ public class HostToHostApiPassword extends AbstractApplication
           }
           stage = "UAM_COMPLETE";
           try {
-            complete(identity.partyId, identity.userId, operation, request.getRequestId(),
+            complete(identity.partyId, identity.profileUserId, operation, request.getRequestId(),
                 codeId, reference);
           } catch (Exception e) {
             // UAM has already accepted the change. Keep the request non-retryable until the
             // external result is reconciled, otherwise a retry could rotate the password twice.
             try {
-              fail(identity.userId, request.getRequestId(), codeId, true);
+              fail(identity.profileUserId, request.getRequestId(), codeId, true);
             } catch (Exception reconciliationFailure) {
               LOGGER.log(Level.WARNING,
                   "Unable to mark an HTH API password operation for reconciliation",
@@ -376,7 +376,7 @@ public class HostToHostApiPassword extends AbstractApplication
     String userId = canonicalUser(loginUser, partyId);
     HthUserProfileKey key = new HthUserProfileKey();
     key.setPartyId(partyId);
-    // User profiles retain the OBDX login key; password and Code records use the canonical user ID.
+    // Resolve the stored profile key; password tables reference its exact CLOSE_ID.
     key.setCloseId(loginUser);
     HthUserProfile profile = HthUserProfileRepository.getInstance().read(key);
     if (profile == null && !loginUser.equals(userId)) {
@@ -409,13 +409,13 @@ public class HostToHostApiPassword extends AbstractApplication
       }
       return null;
     }
-    return new Identity(partyId, userId, management.getUamClientId());
+    return new Identity(partyId, userId, profile.getKey().getCloseId(), management.getUamClientId());
   }
 
   private String credentialState(Identity identity, boolean allowLocalFallback,
       HthApiPasswordStorage storage) throws Exception {
     if (storage == HthApiPasswordStorage.DATABASE) {
-      return findDatabaseCredentialState(identity.partyId, identity.userId);
+      return findDatabaseCredentialState(identity.partyId, identity.profileUserId);
     }
     try {
       String remote = adapter().getStatus(identity.partyId, identity.userId,
@@ -618,11 +618,14 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final class Identity {
     private final String partyId;
     private final String userId;
+    /** Exact HTH_USER_PROFILE.CLOSE_ID used by password-table foreign keys. */
+    private final String profileUserId;
     private final String uamClientId;
 
-    private Identity(String partyId, String userId, String uamClientId) {
+    private Identity(String partyId, String userId, String profileUserId, String uamClientId) {
       this.partyId = partyId;
       this.userId = userId;
+      this.profileUserId = profileUserId;
       this.uamClientId = uamClientId;
     }
   }
@@ -1063,9 +1066,12 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
 
-  /** Verifies the Code and reserves it, persisting failed verification attempts independently. */
-  private String validateAndReserveCode(String partyId, String userId, String purpose, String code,
-      String requestId, String backend) throws Exception {
+  /**
+   * Verifies Code ownership by canonical username and reserves the operation against the exact
+   * profile key. Failed verification attempts are persisted independently.
+   */
+  private String validateAndReserveCode(String partyId, String userId, String profileUserId,
+      String purpose, String code, String requestId, String backend) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
@@ -1088,7 +1094,7 @@ public class HostToHostApiPassword extends AbstractApplication
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
 
-      operationRepository.reserve(lease.session, requestId, partyId, userId, purpose, codeId, backend);
+      operationRepository.reserve(lease.session, requestId, partyId, profileUserId, purpose, codeId, backend);
       success = true;
       return codeId;
     } catch (Exception e) {

@@ -63,8 +63,13 @@ project's real OBDX ORM wrappers and EclipseLink against an isolated H2 database
 failed Code attempts survive an outer rollback, five failures invalidate the Code, SETUP and RESET
 commit the Code/credential/state/operation together, a final-step failure rolls all four writes back,
 and expiry/session-open failure restore the outer transaction and close independent sessions.
+The fixture applies the three user foreign keys from the deployment SQL. Production identity
+resolution and database call sites run against profiles whose CLOSE_ID is either the complete
+login ID or a legacy short ID. Code lookups accept both username formats, while credential/state/
+operation writes, status reads and successful-request lookups retain the resolved profile key.
 The STATE MERGE fixture adds explicit types to two bind parameters for H2; production SQL is unchanged.
-WebLogic suspension and application configuration use test fixtures. Password hashes are synthetic
+WebLogic suspension, user-profile repository bootstrap, management eligibility and application
+configuration use test fixtures. Password hashes are synthetic
 fixtures; the separate frontend transport regression exercises the actual session RSA protocol.
 
 UAT must still verify WebLogic's NONXA datasource/Oracle permissions and a complete HTTP SETUP/RESET

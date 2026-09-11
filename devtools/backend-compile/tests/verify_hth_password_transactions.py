@@ -33,13 +33,33 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
         if name.endswith(".java"):
             sources.append(str(target))
 
+    # Apply the production user foreign keys to the test schema.
+    schema = (ROOT / "consulting/db/branch_change_history/20260907_HTH_API_Password/1_HTH_API_Password_Schema.sql").read_text()
+    constraints = []
+    for table, constraint in (("STATE", "STATE"), ("OPERATION", "OP"), ("CREDENTIAL", "CRED")):
+        match = re.search(r"CONSTRAINT FK_HTH_API_PWD_" + constraint
+                          + r"_USER FOREIGN KEY \(PARTY_ID, USER_ID\)\s+REFERENCES HTH_BEA.HTH_USER_PROFILE \(PARTY_ID, CLOSE_ID\)", schema)
+        assert match, table
+        constraints.append("ALTER TABLE HTH_BEA.HTH_API_PASSWORD_" + table + " ADD "
+                           + " ".join(match.group().split()))
+    write("user-foreign-keys.sql", "\n".join(constraints))
+
     # Copy complete service method bodies, including transaction order and close logic.
     methods = []
-    for name in ("string", "validateAndReserveCode", "completeInternal", "openIndependent", "logPhaseFailure"):
+    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findSuccessfulOperation"):
         match = re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S)
         assert match, name
         methods.append(match.group())
-    lease = source[source.index("  private static final class SessionLease {"):source.rindex("\n}")]
+    lease = source[source.index("  private static final class OperationResult {"):source.rindex("\n}")]
+    identity_class = re.search(r"  private static final class Identity \{.*?\n  }", source, re.S).group()
+    # Compile the production call sites as well as the methods they invoke.
+    reserve_call = re.search(r"codeId = (validateAndReserveCode\(identity\..*?\));", source, re.S).group(1)
+    complete_call = re.search(r"completeDatabase\(identity\..*?\);", source, re.S).group()
+    lookup_call = re.search(r"OperationResult previous = (findSuccessfulOperation\(.*?\));", source, re.S).group(1)
+    status_call = re.search(r"return (findDatabaseCredentialState\(identity\..*?\));", source, re.S).group(1)
+    def call(expression):
+        return expression.replace("request.getRequestId()", "requestId").replace("storage.name()", '"DATABASE"')
+
     fields = []
     for kind in ("Code", "Credential", "State", "Operation"):
         name = "LocalHthApiPassword" + kind + "RepositoryAdapter"
@@ -67,13 +87,71 @@ import java.util.logging.*;
 public class PasswordTransactionHarness {
   private static final Logger LOGGER = Logger.getLogger("transaction-test");
   public void logTestFailure(Throwable failure) { logPhaseFailure("TEST_FAILURE", failure); }
-  public String reserve(String purpose, String code, String requestId) throws Exception {
-    return validateAndReserveCode("PARTY", "USER", purpose, code, requestId, "DATABASE");
+  private static final String STATE_NOT_SETUP = "NOT_SETUP";
+  public String[] resolvedIdentity() throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DATABASE);
+    return new String[] { identity.userId, identity.profileUserId };
   }
-  public void complete(String purpose, String requestId, String codeId, String hash) throws Exception {
-    completeInternal("PARTY", "USER", purpose, requestId, codeId, "REFERENCE", hash);
+  public String reserve(String operation, String code, String requestId) throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DATABASE);
+    return RESERVE_CALL;
   }
-""" + "\n".join(fields + methods) + lease + "\n}")
+  public void complete(String operation, String requestId, String codeId, String passwordHash) throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DATABASE);
+    String reference = "REFERENCE";
+    COMPLETE_CALL
+  }
+  public String credentialStatus() throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DATABASE);
+    return STATUS_CALL;
+  }
+  public String previousStatus(String operation, String requestId) throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DATABASE);
+    OperationResult previous = LOOKUP_CALL;
+    return previous == null ? null : previous.status;
+  }
+""".replace("RESERVE_CALL", call(reserve_call)).replace("COMPLETE_CALL", call(complete_call))
+       .replace("STATUS_CALL", status_call).replace("LOOKUP_CALL", call(lookup_call))
+       + "\n".join(fields + methods) + identity_class + lease + "\n}")
+    write("IdentityFixtures.java", """
+import java.sql.*;
+import com.ofss.digx.infra.exceptions.Exception;
+class SessionContext {
+  public String getUserId() { return "USER@PARTY"; }
+  public String getTransactingPartyCode() { return "PARTY"; }
+}
+enum HthApiPasswordStorage { DATABASE, UAM }
+class HthUserProfileKey {
+  private String partyId, closeId;
+  public void setPartyId(String value) { partyId = value; }
+  public void setCloseId(String value) { closeId = value; }
+  public String getPartyId() { return partyId; }
+  public String getCloseId() { return closeId; }
+}
+class HthUserProfile {
+  private HthUserProfileKey key;
+  HthUserProfile(HthUserProfileKey value) { key = value; }
+  public HthUserProfileKey getKey() { return key; }
+}
+class HthUserProfileRepository {
+  static HthUserProfileRepository getInstance() { return new HthUserProfileRepository(); }
+  HthUserProfile read(HthUserProfileKey key) throws Exception {
+    try (Connection db = DriverManager.getConnection("jdbc:h2:mem:hth;MODE=Oracle");
+         PreparedStatement query = db.prepareStatement(
+             "SELECT CLOSE_ID FROM HTH_BEA.HTH_USER_PROFILE WHERE PARTY_ID=? AND CLOSE_ID=?")) {
+      query.setString(1, key.getPartyId()); query.setString(2, key.getCloseId());
+      try (ResultSet rows = query.executeQuery()) {
+        return rows.next() ? new HthUserProfile(key) : null;
+      }
+    } catch (SQLException failure) { throw new Exception(failure); }
+  }
+}
+class HthManagement {
+  HthManagement findActiveByPartyId(String partyId) { return this; }
+  String getHthStatus() { return "ENABLE"; }
+  String getUamClientId() { return null; }
+}
+""")
     write("ConfigurationFactory.java", """
 package com.ofss.fc.infra.config;
 public class ConfigurationFactory {
@@ -134,6 +212,11 @@ public class DataAccessManager {
   public static Session outerSession;
   public int fetchCurrentUsageCount() { return outerSession == null ? 0 : 1; }
   public Session fetchCurrentSession() { return outerSession; }
+  public boolean isSessionOpen() { return outerSession != null; }
+  public Session openSession(String unit) {
+    opened++;
+    return TestOrmAccess.wrap(factory.createEntityManager());
+  }
   public static boolean failOpen;
   private static final DataAccessManager INSTANCE = new DataAccessManager();
   public static DataAccessManager getManager() { return INSTANCE; }

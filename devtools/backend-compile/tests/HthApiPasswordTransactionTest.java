@@ -27,14 +27,24 @@ public final class HthApiPasswordTransactionTest {
           "HTH_API_PASSWORD.CODE_CIPHER_KEY", Base64.getEncoder().encodeToString(key));
       diagnosticsOmitSensitiveInput();
       schema();
-      failedAttemptsSurviveOuterRollback();
-      setupAndResetCommitTogether();
-      failedCompletionRollsBackAllWrites();
-      expiredCodeDoesNotReserve();
-      openFailureRestoresOuterTransaction();
+      for (String closeId : new String[] {"USER@PARTY", "USER"}) {
+        resetData(closeId);
+        check("USER".equals(SERVICE.resolvedIdentity()[0]), "Code username stays canonical");
+        check(closeId.equals(SERVICE.resolvedIdentity()[1]), "Persistence uses the actual profile key");
+        failedAttemptsSurviveOuterRollback();
+        setupAndResetCommitTogether();
+        failedCompletionRollsBackAllWrites();
+        expiredCodeDoesNotReserve();
+        openFailureRestoresOuterTransaction();
+        if ("USER@PARTY".equals(closeId)) {
+          sql("INSERT INTO HTH_BEA.HTH_USER_PROFILE VALUES ('PARTY', 'USER')");
+          check(closeId.equals(SERVICE.resolvedIdentity()[1]), "Exact login profile takes precedence");
+          check("ACTIVE".equals(SERVICE.credentialStatus()), "Status reads the selected profile credential");
+        }
+      }
       check(DataAccessManager.opened == DataAccessManager.closed, "Every independent ORM session closed");
       check(TransactionHelper.suspends == TransactionHelper.resumes, "Every suspended transaction restored");
-      System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: failed-attempt commit/lockout, SETUP/RESET writes, atomic rollback, expiry, outer restoration and session cleanup");
+      System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: failed-attempt commit/lockout, profile foreign keys (full/legacy IDs), Code aliases, SETUP/RESET writes and status/retry reads, atomic rollback, expiry, outer restoration and session cleanup");
     } finally {
       if (outerEntityManager != null && outerEntityManager.isOpen()) outerEntityManager.close();
       db.close();
@@ -69,6 +79,8 @@ public final class HthApiPasswordTransactionTest {
   private static void schema() throws SQLException {
     sql("CREATE SCHEMA HTH_BEA");
     sql("CREATE TABLE OUTER_WORK (ID INT)");
+    sql("CREATE TABLE HTH_BEA.HTH_USER_PROFILE (PARTY_ID VARCHAR(40), CLOSE_ID VARCHAR(80), "
+        + "PRIMARY KEY (PARTY_ID, CLOSE_ID))");
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CODE (ID VARCHAR(40) PRIMARY KEY, PARTY_ID VARCHAR(40), "
         + "USER_NAME VARCHAR(80), PURPOSE VARCHAR(10), CODE_CIPHER VARCHAR(200), STATUS VARCHAR(20), "
         + "OBJECT_STATUS CHAR(1), EXPIRY_TIME TIMESTAMP, ATTEMPT_COUNT INT, MAX_ATTEMPTS INT, "
@@ -87,6 +99,20 @@ public final class HthApiPasswordTransactionTest {
         + "LAST_REQUEST_ID VARCHAR(40), LAST_REFERENCE_NUMBER VARCHAR(40), LAST_UPDATED_BY VARCHAR(80), "
         + "LAST_UPDATE_DATE TIMESTAMP, OBJECT_STATUS CHAR(1), CREATED_BY VARCHAR(80), CREATION_DATE TIMESTAMP, "
         + "OBJECT_VERSION_NUMBER INT, PRIMARY KEY (PARTY_ID, USER_ID))");
+    try (java.util.Scanner constraints = new java.util.Scanner(
+        HthApiPasswordTransactionTest.class.getResourceAsStream("/user-foreign-keys.sql"), "UTF-8")) {
+      while (constraints.hasNextLine()) sql(constraints.nextLine());
+    }
+  }
+
+  private static void resetData(String closeId) throws SQLException {
+    for (String table : new String[] {"OPERATION", "CREDENTIAL", "STATE", "CODE"}) {
+      sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_" + table);
+    }
+    sql("DELETE FROM HTH_BEA.HTH_USER_PROFILE");
+    try (PreparedStatement insert = db.prepareStatement("INSERT INTO HTH_BEA.HTH_USER_PROFILE VALUES ('PARTY', ?)")) {
+      insert.setString(1, closeId); insert.executeUpdate();
+    }
   }
 
   private static void beginOuter() {
@@ -126,6 +152,9 @@ public final class HthApiPasswordTransactionTest {
     for (String operation : new String[] {"SETUP", "RESET"}) {
       String id = operation.toLowerCase();
       seed(id, operation);
+      if ("RESET".equals(operation)) {
+        sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET USER_NAME='USER@PARTY' WHERE ID='reset'");
+      }
       beginOuter();
       check(id.equals(SERVICE.reserve(operation, CODE, id)), "Correct code reserved");
       rollbackOuter();
@@ -137,6 +166,13 @@ public final class HthApiPasswordTransactionTest {
       check("SUCCESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_OPERATION WHERE REQUEST_ID='" + id + "'")), "Operation completed");
       check((operation + "-HASH-FIXTURE").equals(value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL")), "Credential committed");
       check(number("SELECT CREDENTIAL_VERSION FROM HTH_BEA.HTH_API_PASSWORD_STATE") == ++version, "State version committed");
+      String closeId = SERVICE.resolvedIdentity()[1];
+      for (String table : new String[] {"OPERATION", "CREDENTIAL", "STATE"}) {
+        check(closeId.equals(value("SELECT USER_ID FROM HTH_BEA.HTH_API_PASSWORD_" + table)),
+            table + " references the resolved profile key");
+      }
+      check("ACTIVE".equals(SERVICE.credentialStatus()), "Status finds the saved credential");
+      check("SUCCESS".equals(SERVICE.previousStatus(operation, id)), "Retry finds the completed operation");
     }
   }
 

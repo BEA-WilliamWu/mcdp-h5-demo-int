@@ -1192,8 +1192,8 @@ public class HostToHostApiPassword extends AbstractApplication
         manager = TransactionHelper.getTransactionHelper().getTransactionManager();
         suspended = manager.suspend();
       }
-      // openNewSession does not replace the outer thread-bound ORM session.
-      session = DataAccessManager.getManager().openNewSession("DIGX");
+      // NONXA owns a resource-local transaction without replacing the outer ORM session.
+      session = DataAccessManager.getManager().openNewSession("NONXA");
       session.beginTransaction();
       return new SessionLease(session, manager, suspended);
     } catch (java.lang.Exception e) {

@@ -665,6 +665,17 @@ define([
         };
     };
 
+    let requestDebounceTimer;
+
+    const requestDebounce = function (callback) {
+
+        clearTimeout(requestDebounceTimer);
+
+        requestDebounceTimer = setTimeout(() => {
+            callback();
+        }, 500);
+    };
+
     self.getDashboardContext = function () {
       const dashboardContext = {
         showHeaderNotification: self.showHeaderNotification,
@@ -698,6 +709,7 @@ define([
         specialCurrency: self.specialCurrency,
         currentUserRole: self.currentUserRole,
         isMerchantUser:self.isMerchantUser,
+        requestDebounce: requestDebounce,
         getMarketingWidgetParams: self.getMarketingWidgetParams
       };
 

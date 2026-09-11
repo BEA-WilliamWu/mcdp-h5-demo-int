@@ -19,6 +19,18 @@ define({
         codeFormatError: "Enter the six-digit HTH API Password Code.",
         encryptionError: "Unable to encrypt your input. Check the password and HTH API Password Code and try again.",
         submissionError: "Unable to set or change your HTH API Password. Check your input and try again.",
+        submissionErrors: {
+            DIGX_CZ_HTH_API_PASSWORD_001: "The request is invalid. Please enter all required information again.",
+            DIGX_CZ_HTH_API_PASSWORD_002: "The HTH API password code you entered is invalid, please enter it again",
+            DIGX_CZ_HTH_API_PASSWORD_003: "The HTH API Password Code has expired. Please contact your Authorized Person to generate a new code.",
+            DIGX_CZ_HTH_API_PASSWORD_004: "The API Password does not meet the password requirements.",
+            DIGX_CZ_HTH_API_PASSWORD_005: "An HTH API Password has already been set up. Please use Change HTH API Password.",
+            DIGX_CZ_HTH_API_PASSWORD_006: "No active HTH API Password is available to reset.",
+            DIGX_CZ_HTH_API_PASSWORD_007: "The previous request cannot yet be confirmed. Please do not submit it again and contact the bank.",
+            DIGX_CZ_HTH_API_PASSWORD_008: "HTH API Password service is not available for this user or company.",
+            DIGX_CZ_HTH_API_PASSWORD_009: "The HTH API Password service is temporarily unavailable. Please try again later.",
+            DIGX_CZ_HTH_API_PASSWORD_010: "Unable to securely process your input. Refresh the page and try again."
+        },
         confirmationHeader: "Confirmation",
         setupSuccess: "Your HTH API Password has been set up successfully.",
         resetSuccess: "Your HTH API Password has been changed successfully.",

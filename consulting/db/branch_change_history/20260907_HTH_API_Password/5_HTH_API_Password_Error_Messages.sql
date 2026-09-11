@@ -35,7 +35,7 @@ INSERT ALL
      CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE,
      OBJECT_STATUS_FLAG, OBJECT_VERSION_NUMBER)
   VALUES
-    ('DIGX_CZ_HTH_API_PASSWORD_002', 'The HTH API Password Code you entered is invalid. Please enter it again.',
+    ('DIGX_CZ_HTH_API_PASSWORD_002', 'The HTH API password code you entered is invalid, please enter it again',
      'en', 'N', 'Error Message', 'ofssuser', SYSDATE, 'ofssuser', SYSDATE, 'A', 1)
   INTO DIGX_FW_ERROR_MESSAGES
     (ERROR_CODE, ERROR_MESSAGE, USER_LOCALE, FACTORY_SHIPPED_FLAG, SUMMARY_TEXT,

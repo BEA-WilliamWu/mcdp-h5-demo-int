@@ -18,6 +18,18 @@ define({
     codeFormatError: "请输入六位数字的 HTH API Password Code。",
     encryptionError: "无法加密输入内容，请检查密码和 HTH API Password Code 后重试。",
     submissionError: "无法设置或更改 HTH API 密码，请检查输入内容后重试。",
+    submissionErrors: {
+        DIGX_CZ_HTH_API_PASSWORD_001: "请求无效，请重新输入所有必填资料。",
+        DIGX_CZ_HTH_API_PASSWORD_002: "您输入的 HTH API 密码代码无效，请重新输入。",
+        DIGX_CZ_HTH_API_PASSWORD_003: "HTH API 密码代码已过期，请联络获授权人士生成新代码。",
+        DIGX_CZ_HTH_API_PASSWORD_004: "API 密码不符合密码要求。",
+        DIGX_CZ_HTH_API_PASSWORD_005: "HTH API 密码已设置，请使用更改 HTH API 密码。",
+        DIGX_CZ_HTH_API_PASSWORD_006: "没有可重设的有效 HTH API 密码。",
+        DIGX_CZ_HTH_API_PASSWORD_007: "暂时无法确认上次请求，请勿再次提交并联络本行。",
+        DIGX_CZ_HTH_API_PASSWORD_008: "此用户或公司不适用 HTH API 密码服务。",
+        DIGX_CZ_HTH_API_PASSWORD_009: "HTH API 密码服务暂时不可用，请稍后再试。",
+        DIGX_CZ_HTH_API_PASSWORD_010: "无法安全处理输入内容，请刷新页面后重试。"
+    },
     confirmationHeader: "确认",
     setupSuccess: "您的 HTH API 密码已成功设置。",
     resetSuccess: "您的 HTH API 密码已成功更改。",

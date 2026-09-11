@@ -1034,7 +1034,8 @@ public class HostToHostApiPassword extends AbstractApplication
     try {
       List rows = codeRepository.findUsableCipher(lease.session, partyId, userId, purpose);
       if (rows == null || rows.isEmpty()) {
-        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_003");
+        boolean expired = codeRepository.isLatestCodeExpired(lease.session, partyId, userId, purpose);
+        throw new Exception(expired ? "DIGX_CZ_HTH_API_PASSWORD_003" : "DIGX_CZ_HTH_API_PASSWORD_002");
       }
       Object[] row = (Object[]) rows.get(0);
       String codeId = string(row[0]);

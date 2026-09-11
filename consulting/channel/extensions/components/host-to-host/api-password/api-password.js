@@ -10,7 +10,7 @@ define([
 ], function (ko, Model, ResourceBundle) {
     "use strict";
 
-    /** Setup/reset form using the shared PIN transport encryption and dashboard lifecycle. */
+    /** Setup/reset form using application RSA encryption and the dashboard lifecycle. */
     return function (params) {
         const self = this,
             mode = String((params.data && params.data.mode) || "SETUP").toUpperCase(),
@@ -94,9 +94,9 @@ define([
                 message = status && status.message,
                 code = message && typeof message.code === "string" ? message.code : null,
                 text = error && error.hthInputError ? error.hthInputError
-                    : code === "DIGX_CZ_HTH_API_PASSWORD_010" ? self.nls.encryptionError : self.nls.submissionError;
+                    : (code && self.nls.submissionErrors[code]) || self.nls.submissionError;
 
-            params.baseModel.showMessages(null, [code ? `${text} (${code})` : text], "ERROR");
+            params.baseModel.showMessages(null, [text], "ERROR");
         };
 
         self.submit = function () {

@@ -1,0 +1,19 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2869
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 SELECT PROP_ID, PROP_VALUE\
+FROM DIGX_FW_CONFIG_OUT_RS_CFG_V\
+WHERE (\
+    PROP_ID LIKE 'AUTH_DECRYPT_PROVIDER.%'\
+    OR PROP_ID LIKE 'AUTH_PUBLICKEY_PROVIDER.%'\
+)\
+AND (\
+    PROP_ID LIKE '%.contextUrl'\
+    OR PROP_ID LIKE '%.serviceUrl'\
+    OR PROP_ID LIKE '%.mockServiceUrl'\
+)\
+ORDER BY PROP_ID;}

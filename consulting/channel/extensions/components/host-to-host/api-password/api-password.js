@@ -140,7 +140,8 @@ define([
                     throw { hthInputError: self.nls.encryptionError };
                 }).then(function (encrypted) {
                     const payload = JSON.stringify({
-                        encryptedCredentials: encrypted,
+                        encryptedCredentials: encrypted.encryptedCredentials,
+                        transportKeyId: encrypted.transportKeyId,
                         requestId: self.requestId
                     });
 

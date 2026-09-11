@@ -132,3 +132,19 @@ HTH 用户的登录 Profile 返回 `firstLoginFlowDone=true` 后才查询 API Pa
 
 本地验证命令：`JAVA_HOME=<JDK> python3 devtools/backend-compile/tests/verify_hth_notifications.py`。
 该测试执行生产通知方法体，用内存替身隔离 OBDX 框架，并检查 SQL 的事件/模板字段。它不模拟真实事务提交或消息投递。
+
+### HTH setup/reset 输入传输
+
+前端 `transport.js` 通过已授权的 `GET hostToHostApiPassword/status?transport=true` 获取短期 RSA 公钥，
+再提交 `encryptedCredentials`、`transportKeyId` 和 `requestId`。私钥只保存在当前已认证的 HTTP 会话中，
+公钥有效期为 10 分钟；应用直接解密并继续原有密码策略、Code 消费及数据库哈希流程。
+此传输不依赖 `AUTH_PUBLICKEY_PROVIDER`、`AUTH_DECRYPT_PROVIDER` 或 UAM；Code 的 AES 配置继续用于保存和查看 Code。
+
+部署需同时更新前端两个 JS、公共 DTO 模块、REST endpoint 模块、hosttohost 模块（包含 `HthApiPasswordTransport`）。
+本次传输调整不新增表或 SQL 配置。部署后清理前端缓存并重新登录，旧请求密文不能用于新的登录会话。
+集群必须保持现有登录会话的粘性或复制；公钥获取与提交应使用同一登录会话。生产部署继续要求 HTTPS。
+
+验证时观察 `status?transport=true` 返回 `transportKey`，然后执行 setup/reset；正常流程不再请求通用 `v1/publicKey`。
+验证正确 Code 成功落库、错误/过期 Code 不改密码、过期或不同会话的密钥返回 `_010`。
+本地真实 RSA 互通测试：`JAVA_HOME=<JDK目录> node devtools/frontend-tests/hth-api-password-transport.test.js`。
+该测试覆盖前端加密、Java 解密、后端解析、会话密钥序列化及错误分支，不替代 UAT 的实际落库和通知测试。

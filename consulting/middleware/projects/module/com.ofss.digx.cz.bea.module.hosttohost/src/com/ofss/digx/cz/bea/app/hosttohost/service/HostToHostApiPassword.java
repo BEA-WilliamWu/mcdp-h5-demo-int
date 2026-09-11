@@ -5,6 +5,8 @@ import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
 import com.ofss.digx.app.AbstractApplication;
 import com.ofss.digx.app.Interaction;
+import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordTransport;
+import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordTransport.KeyMaterial;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordPolicyDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordRequestDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordResponseDTO;
@@ -19,8 +21,6 @@ import com.ofss.digx.enumeration.security.EntitlementCategory;
 import com.ofss.digx.enumeration.security.EntitlementSubCategory;
 import com.ofss.digx.enumeration.task.TaskAspect;
 import com.ofss.digx.enumeration.task.TaskType;
-import com.ofss.digx.infra.crypto.service.AsymmetricCryptographyProviderFactory;
-import com.ofss.digx.infra.crypto.spi.IAsymmetricCryptographyProvider;
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.datatype.Date;
@@ -241,7 +241,7 @@ public class HostToHostApiPassword extends AbstractApplication
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
         }
 
-        List<String> credentials = decryptCredentials(request.getEncryptedCredentials(), request.getRequestId(), operation);
+        List<String> credentials = decryptCredentials(request, sessionContext.getUserId(), operation);
         if (credentials == null || credentials.size() < 2) {
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_001");
         }
@@ -412,21 +412,14 @@ public class HostToHostApiPassword extends AbstractApplication
     return enabled;
   }
 
-  private List<String> decryptCredentials(String encryptedCredentials, String requestId,
-      String operation) throws Exception {
-    String stage = "DECRYPT";
+  private List<String> decryptCredentials(HostToHostApiPasswordRequestDTO request,
+      String loginUser, String operation) throws Exception {
+    String stage = "SESSION_DECRYPT";
     try {
-      if (encryptedCredentials == null || encryptedCredentials.length() > 8192
-          || !encryptedCredentials.matches("[A-Za-z0-9+/]+={0,2}")) {
-        throw new IllegalArgumentException();
-      }
-      IAsymmetricCryptographyProvider provider = AsymmetricCryptographyProviderFactory
-          .getInstance().getLatestProvider();
-      String decrypted = provider.decrypt(encryptedCredentials);
-      stage = "PARSE";
-      if (decrypted == null || decrypted.length() > 1024) {
-        throw new IllegalArgumentException();
-      }
+      KeyMaterial material = (KeyMaterial) ThreadAttribute.get(HthApiPasswordTransport.THREAD_ATTRIBUTE);
+      String decrypted = HthApiPasswordTransport.decrypt(
+          material, loginUser, request.getTransportKeyId(), request.getEncryptedCredentials(), System.currentTimeMillis());
+      stage = "ENVELOPE_PARSE";
       JsonNode envelope = new ObjectMapper().readTree(decrypted);
       if (envelope == null || !envelope.isArray() || envelope.size() != 5) {
         throw new IllegalArgumentException();
@@ -434,9 +427,10 @@ public class HostToHostApiPassword extends AbstractApplication
       for (JsonNode item : envelope) {
         if (!item.isTextual()) { throw new IllegalArgumentException(); }
       }
-      if (!"HTH1".equals(envelope.get(0).asText())
+      stage = "ENVELOPE_BINDING";
+      if (!"HTH2".equals(envelope.get(0).asText())
           || !operation.equals(envelope.get(1).asText())
-          || !requestId.equals(envelope.get(2).asText())) {
+          || !request.getRequestId().equals(envelope.get(2).asText())) {
         throw new IllegalArgumentException();
       }
       return java.util.Arrays.asList(envelope.get(3).asText(), envelope.get(4).asText());

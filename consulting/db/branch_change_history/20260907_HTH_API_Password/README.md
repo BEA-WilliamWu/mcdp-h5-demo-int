@@ -148,3 +148,8 @@ HTH 用户的登录 Profile 返回 `firstLoginFlowDone=true` 后才查询 API Pa
 验证正确 Code 成功落库、错误/过期 Code 不改密码、过期或不同会话的密钥返回 `_010`。
 本地真实 RSA 互通测试：`JAVA_HOME=<JDK目录> node devtools/frontend-tests/hth-api-password-transport.test.js`。
 该测试覆盖前端加密、Java 解密、后端解析、会话密钥序列化及错误分支，不替代 UAT 的实际落库和通知测试。
+
+生产前端构建把组件依赖合并进 `api-password/loader.js`，随后清理组件内的独立文件。
+`transport` 必须是 ViewModel 的显式 AMD 依赖，随组件打包；提交时不应再单独请求 `transport.js`。
+服务器发布应使用同一次前端构建产物，包含组件 loader 及构建生成的完整性配置和指纹，不能只替换源码 JS。
+可运行 `node devtools/frontend-tests/hth-api-password-bundle.test.js` 验证压缩、组件打包及独立文件清理后的加载行为。

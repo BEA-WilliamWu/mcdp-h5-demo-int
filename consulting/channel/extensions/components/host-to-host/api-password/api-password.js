@@ -1,13 +1,14 @@
 define([
     "knockout",
     "./model",
+    "./transport",
     "ojL10n!extensions/resources/nls/hth-api-password",
     "ojs/ojformlayout",
     "ojs/ojvalidationgroup",
     "ojs/ojinputtext",
     "ojs/ojbutton",
     "ojs/ojlabel"
-], function (ko, Model, ResourceBundle) {
+], function (ko, Model, Encrypt, ResourceBundle) {
     "use strict";
 
     /** Setup/reset form using application RSA encryption and the dashboard lifecycle. */
@@ -132,41 +133,35 @@ define([
 
             self.submitting(true);
 
-            require(["extensions/components/host-to-host/api-password/transport"], function (Encrypt) {
-                Promise.resolve().then(function () {
-                    return Encrypt(password, self.passwordCode(), self.requestId,
-                        self.isSetup ? "SETUP" : "RESET");
-                }).catch(function () {
-                    throw { hthInputError: self.nls.encryptionError };
-                }).then(function (encrypted) {
-                    const payload = JSON.stringify({
-                        encryptedCredentials: encrypted.encryptedCredentials,
-                        transportKeyId: encrypted.transportKeyId,
-                        requestId: self.requestId
-                    });
-
-                    return (self.isSetup ? Model.setup : Model.reset)(payload);
-                }).then(function (data) {
-                    const status = data && (data.status || data);
-
-                    if (!status || status.result !== "SUCCESSFUL" ||
-                        (status.message && status.message.type === "ERROR")) {
-                        throw { responseJSON: data };
-                    }
-
-                    self.clearSecrets();
-                    self.requestId = createRequestId();
-                    self.showConfirmation(true);
-                }).catch(function (error) {
-                    self.clearSecrets();
-                    self.showSubmissionError(error);
-                }).finally(function () {
-                    self.submitting(false);
+            Promise.resolve().then(function () {
+                return Encrypt(password, self.passwordCode(), self.requestId,
+                    self.isSetup ? "SETUP" : "RESET");
+            }).catch(function () {
+                throw { hthInputError: self.nls.encryptionError };
+            }).then(function (encrypted) {
+                const payload = JSON.stringify({
+                    encryptedCredentials: encrypted.encryptedCredentials,
+                    transportKeyId: encrypted.transportKeyId,
+                    requestId: self.requestId
                 });
-            }, function () {
+
+                return (self.isSetup ? Model.setup : Model.reset)(payload);
+            }).then(function (data) {
+                const status = data && (data.status || data);
+
+                if (!status || status.result !== "SUCCESSFUL" ||
+                    (status.message && status.message.type === "ERROR")) {
+                    throw { responseJSON: data };
+                }
+
                 self.clearSecrets();
+                self.requestId = createRequestId();
+                self.showConfirmation(true);
+            }).catch(function (error) {
+                self.clearSecrets();
+                self.showSubmissionError(error);
+            }).finally(function () {
                 self.submitting(false);
-                self.showSubmissionError({ hthInputError: self.nls.encryptionError });
             });
         };
 

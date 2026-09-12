@@ -1,4 +1,6 @@
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
+import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordGenerateDTO;
 import com.ofss.fc.infra.config.ConfigurationFactory;
 import com.ofss.fc.infra.das.orm.DataAccessManager;
 import java.lang.reflect.Proxy;
@@ -26,15 +28,23 @@ public final class HthApiPasswordTransactionTest {
       ConfigurationFactory.getInstance().getRootConfigurations().put(
           "HTH_API_PASSWORD.CODE_CIPHER_KEY", Base64.getEncoder().encodeToString(key));
       diagnosticsOmitSensitiveInput();
+      HthApiPasswordGenerateDTO request = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+          "{\"partyId\":\"PARTY\",\"userName\":\"USER\"}", HthApiPasswordGenerateDTO.class);
+      check(request.getPurpose() == null, "Existing clients omit purpose and must allow automatic selection");
       schema();
       for (String closeId : new String[] {"USER@PARTY", "USER"}) {
         resetData(closeId);
         check("USER".equals(SERVICE.resolvedIdentity()[0]), "Code username stays canonical");
         check(closeId.equals(SERVICE.resolvedIdentity()[1]), "Persistence uses the actual profile key");
+        check("SETUP".equals(SERVICE.codePurpose("PARTY", "USER@PARTY", null)), "Unset target selects SETUP");
+        reject("DIGX_CZ_HTH_PW_009", () -> SERVICE.codePurpose("PARTY", "USER", "RESET"));
         failedAttemptsSurviveOuterRollback();
         setupAndResetCommitTogether();
         failedCompletionRollsBackAllWrites();
         expiredCodeDoesNotReserve();
+        codeFailuresRemainDistinct();
+        changingPurposeDoesNotChangeCipher();
+        targetStateControlsPurpose();
         openFailureRestoresOuterTransaction();
         if ("USER@PARTY".equals(closeId)) {
           sql("INSERT INTO HTH_BEA.HTH_USER_PROFILE VALUES ('PARTY', 'USER')");
@@ -44,7 +54,7 @@ public final class HthApiPasswordTransactionTest {
       }
       check(DataAccessManager.opened == DataAccessManager.closed, "Every independent ORM session closed");
       check(TransactionHelper.suspends == TransactionHelper.resumes, "Every suspended transaction restored");
-      System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: failed-attempt commit/lockout, profile foreign keys (full/legacy IDs), Code aliases, SETUP/RESET writes and status/retry reads, atomic rollback, expiry, outer restoration and session cleanup");
+      System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: automatic SETUP/RESET by target/store, PBKDF2 password changes, failed-attempt commit/lockout, Code aliases/purpose/expiry/consumption/decryption, profile foreign keys, atomic rollback, status/retry reads and session cleanup");
     } finally {
       if (outerEntityManager != null && outerEntityManager.isOpen()) outerEntityManager.close();
       db.close();
@@ -85,7 +95,7 @@ public final class HthApiPasswordTransactionTest {
         + "USER_NAME VARCHAR(80), PURPOSE VARCHAR(10), CODE_CIPHER VARCHAR(200), STATUS VARCHAR(20), "
         + "OBJECT_STATUS CHAR(1), EXPIRY_TIME TIMESTAMP, ATTEMPT_COUNT INT, MAX_ATTEMPTS INT, "
         + "CREATION_DATE TIMESTAMP, LAST_UPDATE_DATE TIMESTAMP, REQUEST_ID VARCHAR(40), "
-        + "USED_TIME TIMESTAMP, LAST_UPDATED_BY VARCHAR(80))");
+        + "USED_TIME TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), TRANSACTION_ID VARCHAR(40))");
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_OPERATION (REQUEST_ID VARCHAR(40) PRIMARY KEY, PARTY_ID VARCHAR(40), "
         + "USER_ID VARCHAR(80), OPERATION VARCHAR(10), CODE_ID VARCHAR(40), STATUS VARCHAR(20), CREATED_BY VARCHAR(80), "
         + "CREATION_DATE TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), LAST_UPDATE_DATE TIMESTAMP, OBJECT_STATUS CHAR(1), "
@@ -151,20 +161,34 @@ public final class HthApiPasswordTransactionTest {
     int version = 0;
     for (String operation : new String[] {"SETUP", "RESET"}) {
       String id = operation.toLowerCase();
-      seed(id, operation);
+      String purpose = SERVICE.codePurpose("PARTY", "USER", null);
+      check(operation.equals(purpose), "Generation follows target state before/after setup");
+      seed(id, purpose);
+      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='PENDING', EXPIRY_TIME=NULL WHERE ID='" + id + "'");
+      beginOuter();
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(operation, CODE, id + "-pending"));
+      rollbackOuter();
       if ("RESET".equals(operation)) {
         sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET USER_NAME='USER@PARTY' WHERE ID='reset'");
       }
+      check(SERVICE.approve(id, purpose), "Original user-maintenance approval activates new Code");
+      check(!SERVICE.approve(id, purpose), "Approval replay is idempotent");
       beginOuter();
       check(id.equals(SERVICE.reserve(operation, CODE, id)), "Correct code reserved");
       rollbackOuter();
       check("IN_PROGRESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='" + id + "'")), "Reservation committed");
       beginOuter();
-      SERVICE.complete(operation, id, id, operation + "-HASH-FIXTURE");
+      String password = "SETUP".equals(operation) ? "Example123" : "Example456";
+      SERVICE.complete(operation, id, id, HthApiPasswordHash.hash(password));
       rollbackOuter();
       check("USED".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='" + id + "'")), "Code consumed");
+      check(!SERVICE.approve(id, purpose), "Approval replay must not reactivate a consumed Code");
       check("SUCCESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_OPERATION WHERE REQUEST_ID='" + id + "'")), "Operation completed");
-      check((operation + "-HASH-FIXTURE").equals(value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL")), "Credential committed");
+      String savedHash = (String) value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL");
+      check(HthApiPasswordHash.verify(password, savedHash), "New password verifies against persisted hash");
+      if ("RESET".equals(operation)) {
+        check(!HthApiPasswordHash.verify("Example123", savedHash), "Old password stops matching after reset");
+      }
       check(number("SELECT CREDENTIAL_VERSION FROM HTH_BEA.HTH_API_PASSWORD_STATE") == ++version, "State version committed");
       String closeId = SERVICE.resolvedIdentity()[1];
       for (String table : new String[] {"OPERATION", "CREDENTIAL", "STATE"}) {
@@ -177,6 +201,7 @@ public final class HthApiPasswordTransactionTest {
   }
 
   private static void failedCompletionRollsBackAllWrites() throws java.lang.Exception {
+    Object previousHash = value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL");
     seed("rollback", "RESET");
     beginOuter();
     SERVICE.reserve("RESET", CODE, "rollback");
@@ -187,7 +212,7 @@ public final class HthApiPasswordTransactionTest {
     reject("DIGX_CZ_HTH_API_PASSWORD_007", () -> SERVICE.complete("RESET", "rollback", "rollback", "UNCOMMITTED-HASH"));
     rollbackOuter();
     check("IN_PROGRESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='rollback'")), "Code consumption rolled back");
-    check("RESET-HASH-FIXTURE".equals(value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL")), "Password write rolled back");
+    check(previousHash.equals(value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL")), "Password write rolled back");
     check(number("SELECT CREDENTIAL_VERSION FROM HTH_BEA.HTH_API_PASSWORD_STATE") == 2, "State write rolled back");
   }
 
@@ -209,6 +234,84 @@ public final class HthApiPasswordTransactionTest {
         check(expected.getCause() instanceof IllegalStateException, "Original open failure preserved");
       }
     } finally { DataAccessManager.failOpen = false; rollbackOuter(); }
+  }
+
+  private static void targetStateControlsPurpose() throws java.lang.Exception {
+    check("RESET".equals(SERVICE.codePurpose("PARTY", "USER@PARTY", "RESET")), "Active target selects RESET");
+    check("SETUP".equals(SERVICE.codePurpose("PARTY", "NEW_USER", null)), "Creating a new user needs no saved profile");
+    sql("INSERT INTO HTH_BEA.HTH_USER_PROFILE VALUES ('OTHER_PARTY', 'USER@OTHER_PARTY')");
+    check("SETUP".equals(SERVICE.codePurpose("OTHER_PARTY", "USER", null)), "Maker session credential is not the target credential");
+    reject("DIGX_CZ_HTH_PW_009", () -> SERVICE.codePurpose("PARTY", "USER", "SETUP"));
+    sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CREDENTIAL SET CREDENTIAL_STATUS='LOCKED'");
+    reject("DIGX_CZ_HTH_API_PASSWORD_006", () -> SERVICE.codePurpose("PARTY", "USER", null));
+    sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CREDENTIAL SET CREDENTIAL_STATUS='ACTIVE'");
+    check(RemoteCredentialFixture.calls == 0, "Default DATABASE generation does not depend on UAM");
+    java.util.prefs.Preferences config = ConfigurationFactory.getInstance().getRootConfigurations();
+    config.put("HTH_API_PASSWORD.STORAGE_BACKEND", "UAM");
+    try {
+      RemoteCredentialFixture.state = "NOT_SETUP";
+      check("SETUP".equals(SERVICE.codePurpose("PARTY", "USER", null)), "UAM mode uses remote state despite local ACTIVE credential");
+      RemoteCredentialFixture.state = "ACTIVE";
+      check("RESET".equals(SERVICE.codePurpose("OTHER_PARTY", "USER@OTHER_PARTY", null)), "UAM target ACTIVE selects RESET");
+      check("OTHER_PARTY".equals(RemoteCredentialFixture.lastParty) && "USER".equals(RemoteCredentialFixture.lastUser), "UAM receives target identity");
+      RemoteCredentialFixture.state = "UNKNOWN";
+      reject("DIGX_CZ_HTH_API_PASSWORD_009", () -> SERVICE.codePurpose("PARTY", "USER", null));
+      RemoteCredentialFixture.state = "FAIL";
+      reject("REMOTE_UNAVAILABLE", () -> SERVICE.codePurpose("PARTY", "USER", null));
+    } finally {
+      config.remove("HTH_API_PASSWORD.STORAGE_BACKEND");
+      RemoteCredentialFixture.calls = 0;
+    }
+  }
+
+  private static void codeFailuresRemainDistinct() throws java.lang.Exception {
+    seed("bad-cipher", "SETUP");
+    String encrypted = (String) value("SELECT CODE_CIPHER FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='bad-cipher'");
+    java.util.prefs.Preferences config = ConfigurationFactory.getInstance().getRootConfigurations();
+    String originalKey = config.get("HTH_API_PASSWORD.CODE_CIPHER_KEY", null);
+    byte[] differentKey = new byte[32];
+    new SecureRandom().nextBytes(differentKey);
+    config.put("HTH_API_PASSWORD.CODE_CIPHER_KEY", Base64.getEncoder().encodeToString(differentKey));
+    java.util.logging.Logger logger = java.util.logging.Logger.getLogger("transaction-test");
+    final StringBuilder captured = new StringBuilder();
+    java.util.logging.Handler handler = new java.util.logging.Handler() {
+      public void publish(java.util.logging.LogRecord record) {
+        check(record.getThrown() == null, "Code decryption diagnostic must not attach exception details");
+        captured.append(java.text.MessageFormat.format(record.getMessage(), record.getParameters()));
+      }
+      public void flush() { }
+      public void close() { }
+    };
+    logger.addHandler(handler);
+    beginOuter();
+    try { reject("DIGX_CZ_HTH_API_PASSWORD_009", () -> SERVICE.reserve("SETUP", CODE, "bad-cipher")); }
+    finally { config.put("HTH_API_PASSWORD.CODE_CIPHER_KEY", originalKey); logger.removeHandler(handler); rollbackOuter(); }
+    check(captured.toString().contains("CODE_DECRYPT"), "Stored ciphertext failure has a separate stage");
+    check(!captured.toString().contains(CODE) && !captured.toString().contains(encrypted)
+        && !captured.toString().contains(originalKey), "No Code, ciphertext or key in diagnostics");
+    check(number("SELECT ATTEMPT_COUNT FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='bad-cipher'") == 0, "Configuration failure does not count as user mismatch");
+    sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='bad-cipher'");
+  }
+
+  private static void changingPurposeDoesNotChangeCipher() throws java.lang.Exception {
+    seed("purpose", "SETUP");
+    Object originalCipher = value("SELECT CODE_CIPHER FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='purpose'");
+    beginOuter();
+    reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve("RESET", CODE, "purpose-wrong"));
+    rollbackOuter();
+    sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET PURPOSE='RESET' WHERE ID='purpose'");
+    beginOuter();
+    check("purpose".equals(SERVICE.reserve("RESET", CODE, "purpose")), "Changing an unused Code purpose preserves decryption");
+    rollbackOuter();
+    check(originalCipher.equals(value("SELECT CODE_CIPHER FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='purpose'")), "Purpose is not part of stored ciphertext");
+    sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_OPERATION WHERE REQUEST_ID='purpose'");
+    for (String status : new String[] {"USED", "PENDING", "INVALID", "IN_PROGRESS", "UNKNOWN"}) {
+      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='" + status + "' WHERE ID='purpose'");
+      beginOuter();
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve("RESET", CODE, "purpose-reuse"));
+      rollbackOuter();
+    }
+    sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='purpose'");
   }
 
   private static void seed(String id, String purpose) throws SQLException {

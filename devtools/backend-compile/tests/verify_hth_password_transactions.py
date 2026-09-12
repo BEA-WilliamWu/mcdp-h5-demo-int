@@ -2,8 +2,8 @@
 
 WebLogic transaction suspension, configuration and service bootstrap are fixtures.
 EntityManager, ORM Session/Query/Transaction wrappers and Code crypto are real.
-The STATE MERGE source parameters receive explicit VARCHAR casts for H2 type inference;
-all other SQL and all service method bodies are unchanged.
+The STATE MERGE source parameters receive explicit VARCHAR casts for H2 type inference,
+and Oracle's approval expiry arithmetic uses H2 DATEADD. Service method bodies are unchanged.
 This does not replace Oracle/WebLogic deployment tests. Requires JAVA_HOME and H2_JAR.
 """
 from pathlib import Path
@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 
     # Copy complete service method bodies, including transaction order and close logic.
     methods = []
-    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findSuccessfulOperation"):
+    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findSuccessfulOperation", "resolveCodePurpose", "credentialState", "storageBackend", "activateApprovedCode"):
         match = re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S)
         assert match, name
         methods.append(match.group())
@@ -66,6 +66,9 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
         adapter = (BASE / ("domain/hosttohost/entity/repository/adapter/" + name + ".java")).read_text()
         bodies = re.findall(r"  public [^\n]+\(Session session[^\n]+ \{\n.*?\n  \}", adapter, re.S)
         assert bodies, name
+        if kind == "Code":
+            bodies = [body.replace("SYSTIMESTAMP + NUMTODSINTERVAL(?, 'HOUR')",
+                                   "DATEADD('HOUR', ?, SYSTIMESTAMP)") for body in bodies]
         if kind == "State":
             # H2 requires types for bind variables in a MERGE-derived table; Oracle infers them.
             bodies = [body.replace("SELECT ? PARTY_ID, ? USER_ID FROM DUAL",
@@ -80,12 +83,24 @@ import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.infra.das.orm.*;
 import com.ofss.fc.infra.jdbc.ConnectionUtil;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
+import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
+import com.ofss.fc.infra.config.ConfigurationFactory;
 import javax.transaction.TransactionManager;
 import weblogic.transaction.TransactionHelper;
 import java.util.List;
 import java.util.logging.*;
 public class PasswordTransactionHarness {
   private static final Logger LOGGER = Logger.getLogger("transaction-test");
+  private static final String SETUP = "SETUP", RESET = "RESET";
+  private static final String ADAPTER_CATEGORY = "HthApiCredentialAdapterConfig";
+  private static final FormatterFixture FORMATTER = new FormatterFixture();
+  private IHthApiCredentialAdapter adapter() { return RemoteCredentialFixture.INSTANCE; }
+  public String codePurpose(String partyId, String userName, String requested) throws Exception {
+    return resolveCodePurpose(partyId, userName, requested);
+  }
+  public boolean approve(String codeId, String purpose) throws Exception {
+    return activateApprovedCode(codeId, "PARTY", "USER", purpose, "MAKER", "TX-APPROVED", 24);
+  }
   public void logTestFailure(Throwable failure) { logPhaseFailure("TEST_FAILURE", failure); }
   private static final String STATE_NOT_SETUP = "NOT_SETUP";
   public String[] resolvedIdentity() throws Exception {
@@ -120,7 +135,6 @@ class SessionContext {
   public String getUserId() { return "USER@PARTY"; }
   public String getTransactingPartyCode() { return "PARTY"; }
 }
-enum HthApiPasswordStorage { DATABASE, UAM }
 class HthUserProfileKey {
   private String partyId, closeId;
   public void setPartyId(String value) { partyId = value; }
@@ -149,9 +163,26 @@ class HthUserProfileRepository {
 class HthManagement {
   HthManagement findActiveByPartyId(String partyId) { return this; }
   String getHthStatus() { return "ENABLE"; }
-  String getUamClientId() { return null; }
+  String getUamClientId() { return "CLIENT"; }
+}
+class FormatterFixture {
+  String formatMessage(String text, Object... args) { return String.format(text, args); }
+}
+class RemoteCredentialFixture implements com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter {
+  static final RemoteCredentialFixture INSTANCE = new RemoteCredentialFixture();
+  static String state = "NOT_SETUP", lastParty, lastUser;
+  static int calls;
+  public String getStatus(String partyId, String userId, String clientId) throws Exception {
+    calls++; lastParty = partyId; lastUser = userId;
+    if ("FAIL".equals(state)) throw new Exception("REMOTE_UNAVAILABLE");
+    return state;
+  }
+  public String setup(String p, String u, String c, String v, String r) { throw new AssertionError(); }
+  public String reset(String p, String u, String c, String v, String r) { throw new AssertionError(); }
 }
 """)
+    storage = (BASE / "app/hosttohost/service/HthApiPasswordStorage.java").read_text()
+    write("HthApiPasswordStorage.java", re.sub(r"^package .*?;", "", storage))
     write("ConfigurationFactory.java", """
 package com.ofss.fc.infra.config;
 public class ConfigurationFactory {
@@ -238,7 +269,11 @@ public class DataAccessManager {
 <property name="javax.persistence.jdbc.url" value="jdbc:h2:mem:hth;MODE=Oracle;DB_CLOSE_DELAY=-1"/>
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="OFF"/>
 </properties></persistence-unit></persistence>""")
+    common = ROOT / "consulting/middleware/projects/common"
     sources += [str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
+                str(BASE / "app/hosttohost/util/HthApiPasswordHash.java"),
+                str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HthApiPasswordGenerateDTO.java"),
+                str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java"),
                 str(Path(__file__).with_name("HthApiPasswordTransactionTest.java"))]
     compile_result = subprocess.run([str(JDK / "javac"), "--release", "8", "-proc:none", "-cp", CP,
                     "-d", str(work), *sources], check=False)

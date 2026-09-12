@@ -148,12 +148,16 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
       }
       Query query = session.createSQLQuery(
           "SELECT C.* FROM HTH_BEA.HTH_API_PASSWORD_CODE C "
-              + "WHERE C.PARTY_ID = ? AND C.USER_NAME = ? AND C.OBJECT_STATUS = ? "
-              + "ORDER BY C.CREATION_DATE DESC",
+              + "WHERE C.PARTY_ID = ? AND C.USER_NAME IN (?, ?) AND C.OBJECT_STATUS = ? "
+              + "ORDER BY C.CREATION_DATE DESC, C.ID DESC",
           (String) null, HthApiPasswordCode.class);
+      String suffix = "@" + partyId;
+      String owner = userName.endsWith(suffix)
+          ? userName.substring(0, userName.length() - suffix.length()) : userName;
       query.setParameter(1, partyId);
-      query.setParameter(2, userName);
-      query.setParameter(3, ACTIVE);
+      query.setParameter(2, owner);
+      query.setParameter(3, owner + suffix);
+      query.setParameter(4, ACTIVE);
       query.setMaxResults(1);
       List<HthApiPasswordCode> rows = query.list();
       return rows == null || rows.isEmpty() ? null : rows.get(0);

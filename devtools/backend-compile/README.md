@@ -67,10 +67,18 @@ The fixture applies the three user foreign keys from the deployment SQL. Product
 resolution and database call sites run against profiles whose CLOSE_ID is either the complete
 login ID or a legacy short ID. Code lookups accept both username formats, while credential/state/
 operation writes, status reads and successful-request lookups retain the resolved profile key.
-The STATE MERGE fixture adds explicit types to two bind parameters for H2; production SQL is unchanged.
+The test also deserializes the existing generate request with no `purpose`, resolves SETUP/RESET
+from the target user's selected credential store, activates pending Codes through the approval
+transaction method, and verifies that the old password stops matching after RESET. UAM status
+calls are fixtures, including unavailable/unknown responses with no local-store fallback.
+The STATE MERGE fixture adds explicit types to two bind parameters for H2, and approval expiry
+arithmetic uses H2 DATEADD; production SQL is unchanged.
 WebLogic suspension, user-profile repository bootstrap, management eligibility and application
-configuration use test fixtures. Password hashes are synthetic
-fixtures; the separate frontend transport regression exercises the actual session RSA protocol.
+configuration use test fixtures. Passwords are synthetic inputs hashed and checked by the production
+PBKDF2 implementation; the separate frontend transport regression exercises the actual session RSA protocol.
+
+`python3 devtools/backend-compile/tests/verify_hth_code_lookup.py` checks that the newest Code
+is selected across both short and full usernames, without revealing another user's or company's Code.
 
 UAT must still verify WebLogic's NONXA datasource/Oracle permissions and a complete HTTP SETUP/RESET
 with a current approved Code. For a wrong Code, expect `_002` with ATTEMPT_COUNT incremented; for an
@@ -87,3 +95,9 @@ exception class names. `TX_BEGIN_NONXA` also records the actual ORM transaction 
 class, distinguishing the resource-local wrapper from a JTA wrapper in the deployed environment.
 Stages include `CODE_RESERVE`, `DATABASE_COMPLETE`, `NOTIFICATION`, `INTERACTION_CLOSE`,
 and `CHANNEL_CLOSE`. These logs diagnose a failure; they do not change its response or transaction outcome.
+
+Generation logs `HTH_API_PASSWORD code: stage=PURPOSE_RESOLVED` with SETUP or RESET. Code
+verification logs `input: stage=CODE_LOOKUP` for no usable/expired Code, `CODE_COMPARE` for
+incorrect input, and `CODE_DECRYPT` for a stored Code cipher/key failure. A decryption failure
+returns `_009` without incrementing the user's failed-attempt count. Input transport errors
+remain `_010`; Code values, ciphertext and keys are never included in these diagnostics.

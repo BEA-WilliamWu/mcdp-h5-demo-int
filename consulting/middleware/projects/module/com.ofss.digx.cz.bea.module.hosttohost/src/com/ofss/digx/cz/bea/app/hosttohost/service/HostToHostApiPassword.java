@@ -630,7 +630,8 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
   /**
-   * Generates a one-time setup code while the maker fills the original user-maintenance form.
+   * Generates a one-time Code for the target user in the existing user-maintenance form.
+   * The selected credential store determines SETUP for an unset password and RESET for an active one.
    *
    * <p>Prior PENDING rows for the same user are superseded (Re-Generate semantics). The new row
    * stays PENDING — and therefore unusable — until the original user-maintenance transaction is
@@ -661,11 +662,7 @@ public class HostToHostApiPassword extends AbstractApplication
       }
       requireCodeOwner(sessionContext, partyId);
       userName = canonicalUser(userName, partyId);
-      String purpose = normalize(requestDTO.getPurpose());
-      purpose = purpose == null ? SETUP : purpose;
-      if (!SETUP.equals(purpose) && !RESET.equals(purpose)) {
-        throw new Exception("DIGX_CZ_HTH_PW_009");
-      }
+      String purpose = resolveCodePurpose(partyId, userName, requestDTO.getPurpose());
       // Validate key configuration before superseding an earlier pending code.
       HthApiPasswordCrypto.codeCipherKey();
       String operator = readUserId(sessionContext);
@@ -707,6 +704,56 @@ public class HostToHostApiPassword extends AbstractApplication
     return response;
   }
 
+  /** Resolve the target user's credential state, independently of the maker's own password. */
+  private String resolveCodePurpose(String partyId, String userName, String requestedPurpose)
+      throws Exception {
+    String requested = normalize(requestedPurpose);
+    if (requested != null && !SETUP.equals(requested) && !RESET.equals(requested)) {
+      throw new Exception("DIGX_CZ_HTH_PW_009");
+    }
+    String owner = canonicalUser(userName, partyId);
+    HthUserProfileKey key = new HthUserProfileKey();
+    key.setPartyId(partyId);
+    key.setCloseId(owner + "@" + partyId);
+    HthUserProfile profile = HthUserProfileRepository.getInstance().read(key);
+    if (profile == null) {
+      key = new HthUserProfileKey();
+      key.setPartyId(partyId);
+      key.setCloseId(owner);
+      profile = HthUserProfileRepository.getInstance().read(key);
+    }
+
+    // A user being created may not have a persisted HTH profile yet.
+    String state = IHthApiCredentialAdapter.STATUS_NOT_SETUP;
+    if (profile != null) {
+      HthApiPasswordStorage storage = storageBackend();
+      String uamClientId = null;
+      if (storage == HthApiPasswordStorage.UAM) {
+        HthManagement management = new HthManagement().findActiveByPartyId(partyId);
+        if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
+            || normalize(management.getUamClientId()) == null) {
+          throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
+        }
+        uamClientId = management.getUamClientId();
+      }
+      state = credentialState(new Identity(partyId, owner, profile.getKey().getCloseId(),
+          uamClientId), false, storage);
+    }
+    String purpose;
+    if (IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
+      purpose = RESET;
+    } else if (IHthApiCredentialAdapter.STATUS_NOT_SETUP.equals(state)) {
+      purpose = SETUP;
+    } else {
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
+    }
+    if (requested != null && !requested.equals(purpose)) {
+      throw new Exception("DIGX_CZ_HTH_PW_009");
+    }
+    LOGGER.log(Level.INFO, "HTH_API_PASSWORD code: stage=PURPOSE_RESOLVED, purpose={0}", purpose);
+    return purpose;
+  }
+
   /** Masked lifecycle view; never exposes the plaintext code. */
   @Override
   @Entitlement(name = "Read Host To Host API Password Code", action = ActionType.VIEW,
@@ -723,16 +770,9 @@ public class HostToHostApiPassword extends AbstractApplication
     try {
       requireCodeOwner(sessionContext, normalize(partyId));
       if (normalize(userName) == null) { throw new Exception("DIGX_CZ_HTH_PW_009"); }
-      String normalizedName = normalize(userName);
-      String canonicalName = canonicalUser(normalizedName, normalize(partyId));
-      // Try canonical form first (QTES2 format, e.g. "WILLIAM5"), then fall back to
-      // the original form that may include the "@partyId" suffix (legacy format).
+      String canonicalName = canonicalUser(normalize(userName), normalize(partyId));
       HthApiPasswordCode latest = HthApiPasswordCodeRepository.getInstance()
           .findLatestByOwner(normalize(partyId), canonicalName);
-      if (latest == null && !canonicalName.equals(normalizedName)) {
-        latest = HthApiPasswordCodeRepository.getInstance()
-            .findLatestByOwner(normalize(partyId), normalizedName);
-      }
       if (latest != null) {
         fillMaskedResponse(response, latest, true);
       }
@@ -1078,12 +1118,21 @@ public class HostToHostApiPassword extends AbstractApplication
       List rows = codeRepository.findUsableCipher(lease.session, partyId, userId, purpose);
       if (rows == null || rows.isEmpty()) {
         boolean expired = codeRepository.isLatestCodeExpired(lease.session, partyId, userId, purpose);
+        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_LOOKUP, result={0}",
+            expired ? "EXPIRED" : "NO_USABLE_CODE");
         throw new Exception(expired ? "DIGX_CZ_HTH_API_PASSWORD_003" : "DIGX_CZ_HTH_API_PASSWORD_002");
       }
       Object[] row = (Object[]) rows.get(0);
       String codeId = string(row[0]);
-      if (!HthApiPasswordCrypto.constantTimeEquals(code,
-          HthApiPasswordCrypto.decrypt(string(row[1]), HthApiPasswordCrypto.codeCipherKey()))) {
+      String expectedCode;
+      try {
+        expectedCode = HthApiPasswordCrypto.decrypt(string(row[1]), HthApiPasswordCrypto.codeCipherKey());
+      } catch (java.lang.Exception e) {
+        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_DECRYPT, exceptionType={0}",
+            e.getClass().getSimpleName());
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
+      }
+      if (!HthApiPasswordCrypto.constantTimeEquals(code, expectedCode)) {
         LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_COMPARE, result=MISMATCH");
         codeRepository.recordFailedAttempt(lease.session, codeId);
         success = true;

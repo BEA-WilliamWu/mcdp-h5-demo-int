@@ -82,7 +82,10 @@ is selected across both short and full usernames, without revealing another user
 
 UAT must still verify WebLogic's NONXA datasource/Oracle permissions and a complete HTTP SETUP/RESET
 with a current approved Code. For a wrong Code, expect `_002` with ATTEMPT_COUNT incremented; for an
-expired Code, expect `_003`; for success, check the credential is ACTIVE and Code is USED.
+expired Code with matching input, expect `_003`; incorrect input remains `_002` and counts
+towards the attempt limit even when the stored Code has expired. An expired Code never
+reserves an operation or changes the password. For success, check the credential is ACTIVE
+and Code is USED.
 
 ### API Password 500 diagnostics
 
@@ -97,7 +100,8 @@ Stages include `CODE_RESERVE`, `DATABASE_COMPLETE`, `NOTIFICATION`, `INTERACTION
 and `CHANNEL_CLOSE`. These logs diagnose a failure; they do not change its response or transaction outcome.
 
 Generation logs `HTH_API_PASSWORD code: stage=PURPOSE_RESOLVED` with SETUP or RESET. Code
-verification logs `input: stage=CODE_LOOKUP` for no usable/expired Code, `CODE_COMPARE` for
-incorrect input, and `CODE_DECRYPT` for a stored Code cipher/key failure. A decryption failure
+verification logs `input: stage=CODE_LOOKUP` when no usable or latest expired Code is available,
+`CODE_COMPARE` for incorrect input, `CODE_EXPIRY` only after matching an expired Code, and
+`CODE_DECRYPT` for a stored Code cipher/key failure. A decryption failure
 returns `_009` without incrementing the user's failed-attempt count. Input transport errors
 remain `_010`; Code values, ciphertext and keys are never included in these diagnostics.

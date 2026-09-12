@@ -35,10 +35,10 @@ public interface IHthApiPasswordCodeRepositoryAdapter
   /** Loads the usable Code identifier and ciphertext for verification. Uses the supplied session. */
   List findUsableCipher(Session session, String partyId, String userId, String purpose) throws Exception;
 
-  /** Reports expiry of the latest logical Code, excluding used or attempt-exhausted Codes. */
-  boolean isLatestCodeExpired(Session session, String partyId, String userId, String purpose) throws Exception;
+  /** Loads the latest expired Code for input comparison, excluding used or attempt-exhausted Codes. */
+  List findLatestExpiredCipher(Session session, String partyId, String userId, String purpose) throws Exception;
 
-  /** Increments the failed attempt count and invalidates an exhausted ACTIVE Code. Uses the supplied session. */
+  /** Increments the failed attempt count and invalidates an exhausted ACTIVE or EXPIRED Code. Uses the supplied session. */
   int recordFailedAttempt(Session session, String codeId) throws Exception;
 
   /** Reserves an ACTIVE Code conditionally; returns the affected row count. Uses the supplied session. */

@@ -243,9 +243,9 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
   }
 
   @Override
-  public boolean isLatestCodeExpired(Session session, String partyId, String userId, String purpose) throws Exception {
+  public List findLatestExpiredCipher(Session session, String partyId, String userId, String purpose) throws Exception {
     Query query = session.createSQLQuery(
-        "SELECT CASE WHEN STATUS IN ('ACTIVE', 'EXPIRED') AND EXPIRY_TIME <= SYSTIMESTAMP "
+        "SELECT ID, CODE_CIPHER, CASE WHEN STATUS IN ('ACTIVE', 'EXPIRED') AND EXPIRY_TIME <= SYSTIMESTAMP "
             + "AND ATTEMPT_COUNT < MAX_ATTEMPTS THEN 1 ELSE 0 END "
             + "FROM HTH_BEA.HTH_API_PASSWORD_CODE "
             + "WHERE PARTY_ID = ? AND USER_NAME IN (?, ?) AND PURPOSE = ? AND OBJECT_STATUS = 'A' "
@@ -256,7 +256,8 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
     query.setParameter(4, purpose);
     query.setMaxResults(1);
     List rows = query.list();
-    return rows != null && !rows.isEmpty() && ((Number) rows.get(0)).intValue() == 1;
+    return rows != null && !rows.isEmpty() && ((Number) ((Object[]) rows.get(0))[2]).intValue() == 1
+        ? rows : java.util.Collections.emptyList();
   }
 
   @Override
@@ -265,7 +266,7 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
         "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET ATTEMPT_COUNT = ATTEMPT_COUNT + 1, "
             + "STATUS = CASE WHEN ATTEMPT_COUNT + 1 >= MAX_ATTEMPTS THEN 'INVALID' "
             + "ELSE STATUS END, LAST_UPDATE_DATE = SYSDATE "
-            + "WHERE ID = ? AND STATUS = 'ACTIVE' AND OBJECT_STATUS = 'A' "
+            + "WHERE ID = ? AND STATUS IN ('ACTIVE', 'EXPIRED') AND OBJECT_STATUS = 'A' "
             + "AND ATTEMPT_COUNT < MAX_ATTEMPTS");
     failed.setParameter(1, codeId);
     return failed.executeUpdate();

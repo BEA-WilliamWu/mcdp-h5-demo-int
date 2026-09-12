@@ -45,6 +45,7 @@ public final class HthApiPasswordTransactionTest {
         codeFailuresRemainDistinct();
         changingPurposeDoesNotChangeCipher();
         targetStateControlsPurpose();
+        expiredCodesRequireMatchingInput();
         openFailureRestoresOuterTransaction();
         if ("USER@PARTY".equals(closeId)) {
           sql("INSERT INTO HTH_BEA.HTH_USER_PROFILE VALUES ('PARTY', 'USER')");
@@ -234,6 +235,45 @@ public final class HthApiPasswordTransactionTest {
         check(expected.getCause() instanceof IllegalStateException, "Original open failure preserved");
       }
     } finally { DataAccessManager.failOpen = false; rollbackOuter(); }
+  }
+
+  private static void expiredCodesRequireMatchingInput() throws java.lang.Exception {
+    for (String purpose : new String[] {"SETUP", "RESET"}) {
+      for (String status : new String[] {"ACTIVE", "EXPIRED"}) {
+        sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE");
+        seed("expired-input", purpose);
+        sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='" + status
+            + "', EXPIRY_TIME=TIMESTAMP '2000-01-01 00:00:00'");
+        int operations = number("SELECT COUNT(*) FROM HTH_BEA.HTH_API_PASSWORD_OPERATION");
+        Object previousHash = value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL");
+        beginOuter();
+        reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, "654321", "expired-wrong"));
+        rollbackOuter();
+        check(number("SELECT ATTEMPT_COUNT FROM HTH_BEA.HTH_API_PASSWORD_CODE") == 1, "Wrong input increments attempts even for an expired Code");
+        beginOuter();
+        reject("DIGX_CZ_HTH_API_PASSWORD_003", () -> SERVICE.reserve(purpose, CODE, "expired-correct"));
+        rollbackOuter();
+        check(number("SELECT ATTEMPT_COUNT FROM HTH_BEA.HTH_API_PASSWORD_CODE") == 1, "Matching expired Code does not increment attempts");
+        check(number("SELECT COUNT(*) FROM HTH_BEA.HTH_API_PASSWORD_OPERATION") == operations, "Expired Code never reserves an operation");
+        check(previousHash.equals(value("SELECT PASSWORD_HASH FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL")), "Expired submission leaves credential unchanged");
+        sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET ATTEMPT_COUNT=4");
+        beginOuter();
+        reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, "654321", "expired-limit"));
+        rollbackOuter();
+        check("INVALID".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE")), "Attempt limit also invalidates expired Codes");
+        beginOuter();
+        reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, CODE, "expired-exhausted"));
+        rollbackOuter();
+      }
+      sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE");
+      seed("old-expired", purpose);
+      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET EXPIRY_TIME=TIMESTAMP '2000-01-01 00:00:00', CREATION_DATE=TIMESTAMP '1999-01-01 00:00:00'");
+      seed("new-used", purpose);
+      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='USED' WHERE ID='new-used'");
+      beginOuter();
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, CODE, "superseded-expired"));
+      rollbackOuter();
+    }
   }
 
   private static void targetStateControlsPurpose() throws java.lang.Exception {

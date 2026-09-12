@@ -1,0 +1,116 @@
+-- Read-only Oracle diagnostics for HTH setup/reset notifications.
+-- Run in the OBDX configuration schema. No SQL*Plus commands or DML.
+-- Query 1 covers the last seven days; adjust the period for older tests.
+-- Query 5 uses :PARTY_ID and :LOGIN_USER binds supplied by the SQL client.
+-- Do not select MESSAGEBODY, passwords, Code ciphertext or encryption keys.
+
+-- 1. Both EMAIL and SMS use DIGX_CZ_EMAIL_MNG.
+-- Success: the existing dispatcher classified the MNG response as successful;
+--          this is NOT a handset/mailbox delivery receipt.
+-- Failed / Exception: inspect the matching dispatcher/provider log.
+-- Pending: no final provider result was persisted; it does not prove no send.
+-- No row: investigate event generation, configuration, mock mode, contact lookup,
+--         template validation and audit-persistence failures before concluding no send.
+SELECT REFNUMBER, EVENTID, ALERT_TYPE, RESPONSE_STATUS,
+       COD_ACT_DATA_ID, LAST_UPDATED_DATE,
+       CASE WHEN TRIM(RECIPIENTID) IS NULL THEN 'MISSING'
+            WHEN ALERT_TYPE = 'SMS'
+              THEN '***' || SUBSTR(TRIM(RECIPIENTID), -4)
+            ELSE 'PRESENT' END AS RECIPIENT_CHECK,
+       CASE WHEN ALERT_TYPE = 'SMS' THEN LENGTH(TRIM(RECIPIENTID))
+            ELSE NULL END AS SMS_DESTINATION_LENGTH
+  FROM DIGX_CZ_EMAIL_MNG
+ WHERE EVENTID IN ('HTH_API_PASSWORD_SETUP_SUCCESS',
+                   'HTH_API_PASSWORD_RESET_SUCCESS')
+   AND LAST_UPDATED_DATE >= SYSDATE - 7
+ ORDER BY LAST_UPDATED_DATE DESC;
+
+-- 2. Expected: twelve rows with RECIPIENT_COUNT=1 and ACTIVE_TEMPLATE_COUNT=1.
+-- Missing setup rows can explain reset working while setup does not.
+-- Check the exact locale used at the time of the operation.
+WITH events AS (
+  SELECT 'HTH_API_PASSWORD_SETUP_SUCCESS' AS event_id,
+         'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup' AS activity_id
+    FROM DUAL
+  UNION ALL
+  SELECT 'HTH_API_PASSWORD_RESET_SUCCESS',
+         'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset'
+    FROM DUAL
+), destinations AS (
+  SELECT 'EMAIL' AS destination FROM DUAL
+  UNION ALL SELECT 'SMS' FROM DUAL
+), locales AS (
+  SELECT 'en' AS locale FROM DUAL
+  UNION ALL SELECT 'zh-Hans-CN' FROM DUAL
+  UNION ALL SELECT 'zh-Hant' FROM DUAL
+)
+SELECT e.event_id, d.destination, l.locale,
+       COUNT(DISTINCT r.ROWID) AS recipient_count,
+       COUNT(t.COD_TMPL_ID) AS active_template_count
+  FROM events e
+ CROSS JOIN destinations d
+ CROSS JOIN locales l
+  LEFT JOIN DIGX_EP_EVT_REC_B r
+    ON r.COD_EVENT_ID = e.event_id AND r.COD_ACT_ID = e.activity_id
+   AND r.COD_ACTION_ID = 'A' AND r.TXT_DEST_TYP = d.destination
+   AND r.LOCALE = l.locale AND r.SUBSCRIBER_TYPE = 'EXTERNAL'
+   AND r.SUBSCRIBER_VALUE = 'USER'
+  LEFT JOIN DIGX_EP_MSG_TMPL_B t
+    ON t.COD_TMPL_ID = r.COD_MSG_TMPL_ID
+   AND t.DESTINATION_TYPE = d.destination
+   AND t.OBJECT_STATUS = 'A' AND t.DETERMINANT_VALUE = 'OBDX_BU'
+ GROUP BY e.event_id, d.destination, l.locale
+ ORDER BY e.event_id, d.destination, l.locale;
+
+-- 3. Compare setup/reset event actions and the existing BCO PIN reset action.
+-- HTH currently uses active, immediate, nontransactional actions without retry.
+SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, OBJECT_STATUS,
+       FLG_TRANSACTIONAL, ALERT_DISPATCH_TYPE, FLG_RETRY_ALLOWED,
+       NUM_RETRY_CNT, EXPIRY_DATE
+  FROM DIGX_EP_ACT_EVT_ACN_B
+ WHERE COD_EVENT_ID IN ('HTH_API_PASSWORD_SETUP_SUCCESS',
+                        'HTH_API_PASSWORD_RESET_SUCCESS', 'PIN_RESET_SUCCESS')
+ ORDER BY COD_EVENT_ID, COD_ACT_ID, COD_ACTION_ID;
+
+SELECT EVENT_CODE, ALERTS_FLAG
+  FROM DIGX_PM_EVENT_ALL_B
+ WHERE EVENT_CODE IN ('HTH_API_PASSWORD_SETUP_SUCCESS',
+                      'HTH_API_PASSWORD_RESET_SUCCESS');
+
+-- 4. isDispatchMocked=true skips the real SMS gateway and returns mock success.
+-- Check the active business-unit override as well as the base value.
+-- A missing base setting defaults to false in SMSDispatcher.
+SELECT CATEGORY_ID, PROP_ID, PROP_VALUE
+  FROM DIGX_FW_CONFIG_ALL_B
+ WHERE CATEGORY_ID = 'DispatchDetails' AND PROP_ID = 'isDispatchMocked';
+
+SELECT PREFERENCE_NAME, DETERMINANT_VALUE, PROP_ID, PROP_VALUE
+  FROM DIGX_FW_CONFIG_ALL_O
+ WHERE PREFERENCE_NAME = 'DispatchDetails' AND PROP_ID = 'isDispatchMocked';
+
+-- 5. SMSDispatcher reads MOBILE_CODE using the notification's runtime user ID.
+-- The HTH service takes the phone number from framework User.getMobileNumber().
+-- The extension's MOBILE_NO is shown only as a presence/length cross-check;
+-- it is not proof of the framework User mobile value.
+SELECT USER_ID, CDC_NO, MOBILE_CODE,
+       CASE WHEN TRIM(MOBILE_NO) IS NULL THEN 'MISSING' ELSE 'PRESENT' END AS EXTENSION_MOBILE,
+       LENGTH(TRIM(MOBILE_NO)) AS EXTENSION_MOBILE_LENGTH
+  FROM DIGX_CZ_UM_EXTENSIONDATA
+ WHERE CDC_NO = :PARTY_ID
+   AND UPPER(USER_ID) IN (
+       UPPER(:LOGIN_USER),
+       UPPER(REGEXP_SUBSTR(:LOGIN_USER, '^[^@]+')),
+       UPPER(REGEXP_SUBSTR(:LOGIN_USER, '^[^@]+') || '@' || :PARTY_ID)
+   );
+
+-- Existing log markers (correlate event, timestamp and REFNUMBER):
+--   No user recipient for HTH event
+--   No registered contacts for HTH event
+--   Unable to publish HTH notification event
+--   SMS Template Id:
+--   Failed to send SMS due to text length exceeding allowed limit
+--   Exception from SMSDispatcher.send
+--   MNG SMS before adapter.createAlert
+--   MNG SMS after adpater.createAlert,result:
+--   AddressException from SMSDispatcher.dispatchMNGSms
+-- Avoid sharing full dispatcher payloads: existing shared logs may contain contacts.

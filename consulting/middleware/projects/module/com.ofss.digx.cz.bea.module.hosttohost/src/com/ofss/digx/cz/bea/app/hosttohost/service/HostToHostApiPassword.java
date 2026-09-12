@@ -1116,11 +1116,14 @@ public class HostToHostApiPassword extends AbstractApplication
     boolean success = false;
     try {
       List rows = codeRepository.findUsableCipher(lease.session, partyId, userId, purpose);
+      boolean expired = false;
       if (rows == null || rows.isEmpty()) {
-        boolean expired = codeRepository.isLatestCodeExpired(lease.session, partyId, userId, purpose);
-        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_LOOKUP, result={0}",
-            expired ? "EXPIRED" : "NO_USABLE_CODE");
-        throw new Exception(expired ? "DIGX_CZ_HTH_API_PASSWORD_003" : "DIGX_CZ_HTH_API_PASSWORD_002");
+        rows = codeRepository.findLatestExpiredCipher(lease.session, partyId, userId, purpose);
+        expired = rows != null && !rows.isEmpty();
+      }
+      if (rows == null || rows.isEmpty()) {
+        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_LOOKUP, result=NO_USABLE_CODE");
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_002");
       }
       Object[] row = (Object[]) rows.get(0);
       String codeId = string(row[0]);
@@ -1137,6 +1140,11 @@ public class HostToHostApiPassword extends AbstractApplication
         codeRepository.recordFailedAttempt(lease.session, codeId);
         success = true;
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_002");
+      }
+
+      if (expired) {
+        LOGGER.log(Level.WARNING, "HTH_API_PASSWORD input: stage=CODE_EXPIRY, result=EXPIRED");
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_003");
       }
 
       if (codeRepository.reserve(lease.session, requestId, codeId) != 1) {

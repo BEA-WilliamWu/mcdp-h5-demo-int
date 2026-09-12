@@ -48,9 +48,9 @@ public class HthApiPasswordCodeRepository {
     return repositoryAdapter().findUsableCipher(session, partyId, userId, purpose);
   }
 
-  /** Determines whether the latest Code is unavailable because its validity period ended. */
-  public boolean isLatestCodeExpired(Session session, String partyId, String userId, String purpose) throws Exception {
-    return repositoryAdapter().isLatestCodeExpired(session, partyId, userId, purpose);
+  /** Loads an expired Code so expiry is reported only after the submitted value matches. */
+  public List findLatestExpiredCipher(Session session, String partyId, String userId, String purpose) throws Exception {
+    return repositoryAdapter().findLatestExpiredCipher(session, partyId, userId, purpose);
   }
 
   public int recordFailedAttempt(Session session, String codeId) throws Exception {

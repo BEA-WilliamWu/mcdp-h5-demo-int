@@ -1,0 +1,791 @@
+<!-- ko if :dataLoaded -->
+<div class="form-main-container">
+   <!-- <div class="oj-flex oj-lg-flex-items-initial oj-lg-justify-content-flex-end">
+      <oj-button class="action-button-secondary confirm-screen__eReceipt-top confirm-screen__form-button-link" data-bind="attr:{'alt':$component.nls.headers.download ,'title':$component.nls.headers.downloadFile,'aria-label':$component.nls.headers.downloadFile }, click: $component.downloadUserDetails ">
+          <span class="confirm-screen__eReceipt-bottom-icon icons icon-download"></span>
+          <span class="confirm-screen__eReceipt-bottom-text" data-bind="text:$component.nls.headers.downloadFile"></span>
+      </oj-button>
+  </div> -->
+  <!-- ko ifnot :showConfirmation -->
+  <!-- ko if: userFullData().userType.enterpriseRoleId ==="administrator" -->
+  <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.organization]]"
+     value="[[userFullData().organization]]">
+  </obdx-row>
+  <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.manager]]"
+     value="[[userFullData().manager]]">
+  </obdx-row>
+  <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.empno]]"
+     value="[[userFullData().employeeNumber]]">
+  </obdx-row>
+  <!-- /ko -->
+
+  <!-- ko ifnot: userFullData().userType.enterpriseRoleId ==="administrator" -->
+  <!-- ko ifnot : $component.isCorpAdmin -->
+    <!-- ko ifnot: userFullData().applicationRoles[0] ==="Member" -->
+    <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.cdcId]]"
+      value="[[userFullData().partyId.displayValue]]">
+    </obdx-row>
+    <!-- /ko -->
+    <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.companyName]]"
+      value="[[userFullData().partyName]]">
+    </obdx-row>
+  <!-- /ko -->
+  <!-- /ko -->
+
+  <page-section heading="[[$component.nls.headers.personalinfo]]">
+     <div>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.username]]"
+           value="[[userFullData().username.split('@')[0]]]">
+        </obdx-row>
+        <!-- ko ifnot : $component.isCorpAdmin -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentType]]"
+           value="[[$component.getDocumentTypeResource(userExtensionData().documentType)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentCountry]]"
+           value="[[userExtensionData().documentCountry]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentId]]"
+           value="[[userExtensionData().documentID]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if : $component.isCorpAdmin && $component.taskCode() === 'MT_N_CUS' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentType]]"
+           value="[[$component.getDocumentTypeResource(userExtensionData().documentType)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentCountry]]"
+           value="[[userExtensionData().documentCountry]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.documentId]]"
+           value="[[userExtensionData().maskedDocumentId]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.title]]"
+           value="[[$component.nls.fieldname[userFullData().title]]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.firstname]]"
+           value="[[userFullData().firstName]]" data-class="[['word-break-all']]">
+        </obdx-row>
+     </div>
+  </page-section>
+  <page-section heading="[[$component.nls.headers.contacts]]">
+     <div>
+        <!-- ko ifnot : isCorpAdmin -->
+         <oj-bind-if test="[[!userFullData().deleteStatus]]">
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.emailid]]"
+               value="[[userFullData().emailId]]" data-class="[['word-break-all']]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+               label="[[$component.nls.fieldname.contactmobile]]" value="[[$baseModel.format($component.nls.fieldname.mobileWithCode, {code:userExtensionData().mobileCode, mobileNo:userFullData().mobileNumber})]]">
+            </obdx-row>
+         </oj-bind-if>
+         <oj-bind-if test="[[userFullData().deleteStatus]]">
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.emailid]]"
+               value="[[userExtensionData().revokedEmailId  ? userExtensionData().revokedEmailId : '-']]" data-class="[['word-break-all']]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+               label="[[$component.nls.fieldname.contactmobile]]" value="[[$baseModel.format($component.nls.fieldname.mobileWithCode, {code:userExtensionData().mobileCode, mobileNo:userExtensionData().revokedMobileNo ? userExtensionData().revokedMobileNo : '-'})]]">
+            </obdx-row>
+         </oj-bind-if>
+        <!-- /ko -->
+        <!-- ko if : isCorpAdmin -->
+         <oj-bind-if test="[[!userFullData().deleteStatus]]">
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.emailid]]"
+               value="[[userExtensionData().maskedEmailId]]" data-class="[['word-break-all']]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+               label="[[$component.nls.fieldname.contactmobile]]" value="[[userExtensionData().maskedMobileNo]]">
+            </obdx-row>
+         </oj-bind-if>
+         <oj-bind-if test="[[userFullData().deleteStatus]]">
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.emailid]]"
+               value="[[userExtensionData().maskRevokedEmailId ? userExtensionData().maskRevokedEmailId : '-']]" data-class="[['word-break-all']]">
+            </obdx-row>
+            <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+               label="[[$component.nls.fieldname.contactmobile]]" value="[[userExtensionData().maskRevokedMobileNo ? userExtensionData().maskRevokedMobileNo : '-']]">
+            </obdx-row>
+         </oj-bind-if>
+        <!-- /ko -->
+     </div>
+  </page-section>
+  <page-section heading="[[roleHeader()]]">
+     <div>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+           label="[[$component.nls.fieldname.userChannelType]]"
+           value="[[userExtensionData().userChannelType]]">
+        </obdx-row>
+        <!-- HTH Code lifecycle and authorized reveal. -->
+        <!-- ko if: userExtensionData().userChannelType === 'HTH' && hthApiPasswordCodeId() -->
+        <div class="oj-flex oj-flex-items-pad" style="margin-bottom: 20px;">
+           <div class="oj-flex-item oj-sm-12 oj-sm-margin-4-bottom">
+              <oj-label for="hthApiPasswordCode"><span data-bind="text:$component.nls.fieldname.hthApiPasswordCode"></span></oj-label>
+              <!-- ko if: hthApiPasswordCodeStatus() === 'USED' -->
+              <span class="validity-text used" data-bind="text:$component.nls.info.hthUsed"></span>
+              <!-- /ko -->
+              <!-- ko if: hthApiPasswordCodeStatus() !== 'USED' -->
+              <oj-label class="code-label">
+                 <span class="code fs14" data-bind="text: hthApiPasswordCodeVisible() ? hthApiPasswordCode() : $component.nls.fieldname.hthApiPasswordCodeMask"></span>
+                 <!-- ko if: hthApiPasswordCodeCanReveal() -->
+                 <a href="javascript:void(0);" class="switch-button" data-bind="click:toggleHthApiPasswordCodeVisible">
+                    <span class="icon login-pin-reset-code-eyecon" data-bind="css:{'icon-eye': hthApiPasswordCodeVisible(), 'icon-eye-slash': !hthApiPasswordCodeVisible()}"></span>
+                 </a>
+                 <!-- /ko -->
+              </oj-label>
+              <!-- /ko -->
+           </div>
+        </div>
+        <!-- /ko -->
+        <!-- ko if : approverReview -->
+        <!-- ko if: userFullData().userGroupDTOs.length > 0 -->
+        <!-- ko if: showUserGroup -->
+        <div class="oj-flex oj-flex-items-pad">
+         <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+            <oj-label :for="[['usergrouplistRead']]"><span
+               data-bind="text:$component.nls.userGroupHeaders.userGroup"></span>
+            </oj-label>
+         </div>
+         <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+            <oj-select-many id="usergrouplistRead" value="{{selectedUserGroupValues}}" readonly
+               placeholder="{{$component.nls.userGroupHeaders.selectUserGroup}}">
+               <!-- ko foreach:$component.userGroupValues  -->
+               <oj-option value="[[id]]"><span data-bind="text:name"></span></oj-option>
+               <!-- /ko -->
+            </oj-select-many>
+         </div>
+      </div>
+      <!-- /ko -->
+      <!-- /ko -->
+      <!-- /ko -->
+        <!-- ko if: userFullData().userType.enterpriseRoleId === "corporateuser" || userFullData().userType.enterpriseRoleId === "administrator"-->
+        <!-- ko if: userFullData().userGroupDTOs.length === 0 -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+           label="[[$component.nls.userGroupHeaders.userGroup]]"
+           value="[[$component.nls.userGroupHeaders.noUserGroupAssigned]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if: userFullData().userGroupDTOs.length > 0 -->
+        <!-- ko if: showUserGroup -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+              <oj-label :for="[['usergrouplistRead']]"><span
+                 data-bind="text:$component.nls.userGroupHeaders.userGroup"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+              <oj-select-many id="usergrouplistRead" value="{{selectedUserGroupValues}}" readonly
+                 placeholder="{{$component.nls.userGroupHeaders.selectUserGroup}}">
+                 <!-- ko foreach:$component.userGroupValues  -->
+                 <oj-option value="[[value]]"><span data-bind="text:text"></span></oj-option>
+                 <!-- /ko -->
+              </oj-select-many>
+           </div>
+        </div>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko ifnot: userFullData().userType.enterpriseRoleId ==="administrator" -->
+        <!-- ko if: !$component.homeEntityLimitPackage() -->
+        <!-- <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.limit]]"
+           value="[[$component.nls.message.noLimitAssigned]]">
+           </obdx-row>  -->
+        <!-- /ko -->
+        <!-- ko if: $component.dataLoaded() -->
+        <!-- ko foreach:$component.entityLimitPackages -->
+        <!-- ko if: $data.targetUnit === $component.userFullData().homeEntity-->
+        <!-- ko foreach:$data.entityLimitPackageMappingDTO -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$data.accessPointDescription]]"
+           value="[[$data.limitPackage]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if: userFullData().userType.enterpriseRoleId ==="retailuser" -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+              <oj-label for="segmentName">
+                 <span data-bind="text:$component.nls.fieldname.selectedSegment"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-4">
+              <span data-bind="text:$component.selectedSegmentName"></span>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-5 pull-left">
+              <div class="tooltip-section">
+                 <div class="tooltip message-text" id="segmentRoles_toolTip">
+                    <!-- ko	if:isSegmentContainsRole -->
+                    <oj-label class="span-label">
+                       <span data-bind="text:$component.nls.common.segmentRoles"></span>
+                    </oj-label>
+                    <!-- ko foreach: selectedSegmentRoles -->
+                    <oj-label>
+                       <li><span data-bind="text:appRoleId"></span></li>
+                    </oj-label>
+                    <!-- /ko -->
+                    <!-- /ko -->
+                    <!-- ko	ifnot:isSegmentContainsRole -->
+                    <oj-label class="span-label">
+                       <span data-bind="text: $component.nls.common.segmentNoRole"></span>
+                    </oj-label>
+                    <!-- /ko -->
+                 </div>
+                 <span class="icon-help" id="tool-tip-holder-segment-role" aria-hidden="true"
+                    data-bind="event: { mouseover: $component.showToolTip.bind($data,'segmentRoles_toolTip','tool-tip-holder-segment-role'), mouseout: $component.hideToolTip.bind($data,'segmentRoles_toolTip') }"></span>
+              </div>
+           </div>
+        </div>
+        <!-- /ko -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+              <oj-label>
+                 <span data-bind="text:$component.nls.fieldname.role"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+              <!-- ko if: childRoleEnumsLoaded -->
+              <oj-checkboxset id="checkboxSetId" class="oj-choice-direction-row" :aria-label="$component.nls.fieldname.role"
+                 disabled="[[true]]" value="{{selectedChildRole}}">
+                 <!-- ko if : userFullData().updatable-->
+                 <!-- ko foreach: childRoleEnums -->
+                 <oj-option value="{{applicationRoleId}}">
+                    <span data-bind="text:applicationRoleName"></span>
+                 </oj-option>
+                 <!-- /ko -->
+                 <!-- /ko -->
+                 <!-- ko ifnot : userFullData().updatable-->
+                 <!-- ko foreach: childRoleEnums -->
+                 <oj-option value="{{$data}}">
+                    <!-- ko ifnot : $component.approverReview -->
+                    <span data-bind="text:$component.nls.roles[$data]"></span>
+                    <!-- /ko -->
+                    <!-- ko if : $component.approverReview -->
+                    <span data-bind="text:$data"></span>
+                    <!-- /ko -->
+                 </oj-option>
+                 <!-- /ko -->
+                 <!-- /ko -->
+              </oj-checkboxset>
+              <!-- /ko -->
+           </div>
+        </div>
+     </div>
+  </page-section>
+   <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+         <oj-label for="companyActivityLog"><span
+               data-bind="text:$component.nls.fieldname.companyActivityLog"></span></oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9"
+         data-bind="attr:{'aria-label': $component.nls.fieldname.companyActivityLog}">
+         <oj-checkboxset id="companyActivityLog" value="{{$component.companyActivityLog}}">
+            <oj-option id="companyActivityLogCheck" disabled="[['true']]" value="true"></oj-option>
+         </oj-checkboxset>
+      </div>
+   </div>
+  <!-- ko ifnot : isCorpAdmin -->
+  <page-section heading="[[$component.nls.headers.internalAccessPoints]]">
+     <div>
+        <!-- ko if: $component.isAccessPointFetched() -->
+        <!-- ko if: $component.selectedAccessType()==="INT" -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+              <oj-label>
+                 <span data-bind="text:$component.nls.fieldname.selectedAccessPoints"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+              <oj-checkboxset :id="[['accessPoint_'+$baseModel.incrementIdCount()]]"
+                 :aria-label="[[$component.nls.fieldname.accessPoints+$baseModel.incrementIdCount()]]"
+                 class="oj-choice-direction-row" value="{{selectedAccessPoint}}" disabled="[[true]]">
+                 <!-- ko foreach: $component.accessPoint() -->
+                 <oj-option value="[[value]]">
+                    <span data-bind="text: text"></span>
+                 </oj-option>
+                 <!-- /ko -->
+              </oj-checkboxset>
+           </div>
+        </div>
+        <!-- /ko -->
+        <!-- /ko -->
+     </div>
+  </page-section>
+  <!-- /ko -->
+  <!-- ko if: userFullData().userType.enterpriseRoleId ==="administrator" -->
+  <!-- ko if: userFullData().accessibleEntities.length>1 -->
+  <page-section heading="[[$component.nls.accessibleEntity.accessibleEntity.accessibleEntities]]">
+     <div>
+        <!-- ko foreach: userFullData().accessibleEntities -->
+        <!-- ko ifnot: $component.userFullData().homeEntity === $data.entityId -->
+        <div>
+           <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+              label="[[$component.nls.accessibleEntity.accessibleEntity.entityName]]" value="[[$data.entityName]]">
+           </obdx-row>
+           <!-- ko if: $component.isAccessPointFetched() -->
+           <!-- ko if: $component.selectedAccessType()==="INT" -->
+           <div class="oj-flex oj-flex-items-pad">
+              <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                 <oj-label>
+                    <span data-bind="text:$component.nls.fieldname.selectedAccessPoints"></span>
+                 </oj-label>
+              </div>
+              <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+                 <oj-checkboxset :id="[['accessPoint_'+$baseModel.incrementIdCount()]]"
+                    :aria-label="[[$component.nls.fieldname.accessPoints+$baseModel.incrementIdCount()]]"
+                    class="oj-choice-direction-row" value="{{$data.selectedAccessPoints}}" disabled="[[true]]">
+                    <!-- ko foreach: $component.accessPoint() -->
+                    <oj-option value="[[value]]">
+                       <span data-bind="text: text"></span>
+                    </oj-option>
+                    <!-- /ko -->
+                 </oj-checkboxset>
+              </div>
+           </div>
+           <!-- /ko -->
+           <!-- /ko -->
+        </div>
+        <!-- /ko -->
+        <!-- /ko -->
+     </div>
+  </page-section>
+  <!-- /ko -->
+  <!-- /ko -->
+  <!-- ko ifnot: userFullData().userType.enterpriseRoleId ==="administrator" -->
+  <!-- ko if:$component.deviceDataLoaded() -->
+  <!-- <page-section heading="[[$component.nls.headers.deviceRegistration]]">
+     <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-5">
+       <div class="oj-flex oj-flex-items-pad">
+         <div class="oj-flex-item oj-sm-7">
+           <div data-bind="text: $component.nls.fieldname.androidDevice"></div>
+         </div>
+         <div class="oj-flex-item oj-sm-3">
+           <oj-switch id="androidDeviceSwitch" disabled="[[androidDisabled]]" value="{{androidDevice}}"></oj-switch>
+         </div>
+       </div>
+       <div class="oj-flex oj-flex-items-pad">
+         <div class="oj-flex-item oj-sm-7">
+           <div data-bind="text: $component.nls.fieldname.iOsDevice"></div>
+         </div>
+         <div class="oj-flex-item oj-sm-3">
+           <oj-switch id="iOsDeviceSwitch" disabled="[[iOsDisabled]]" value="{{iOsDevice}}"></oj-switch>
+         </div>
+       </div>
+     </div>
+     </page-section>  -->
+  <!-- /ko -->
+  <!-- ko if:$component.deviceDataLoadedForPushNotification() -->
+  <!-- <page-section heading="[[$component.nls.headers.pushNotification]]">
+     <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-5">
+       <div class="oj-flex oj-flex-items-pad">
+         <div class="oj-flex-item oj-sm-7">
+           <div data-bind="text: $component.nls.fieldname.androidDevice"></div>
+         </div>
+         <div class="oj-flex-item oj-sm-3">
+           <oj-switch id="androidDeviceSwitchForPushNotification" disabled="[[androidDisabledForPushNotification]]"
+             value="{{androidDeviceForPushNotification}}"></oj-switch>
+         </div>
+       </div>
+       <div class="oj-flex oj-flex-items-pad">
+         <div class="oj-flex-item oj-sm-7">
+           <div data-bind="text: $component.nls.fieldname.iOsDevice"></div>
+         </div>
+         <div class="oj-flex-item oj-sm-3">
+           <oj-switch id="iOsDeviceSwitchForPushNotification" disabled="[[iOsDisabledForPushNotification]]"
+             value="{{iOsDeviceForPushNotification}}"></oj-switch>
+         </div>
+       </div>
+     </div>
+     </page-section>  -->
+  <!-- /ko -->
+  <!-- /ko -->
+  <!-- ko ifnot: userFullData().userType.enterpriseRoleId ==="administrator" -->
+  <!-- ko if: userFullData().accessibleEntities.length>1 -->
+  <page-section heading="[[$component.nls.accessibleEntity.accessibleEntity.accessibleEntities]]">
+     <div>
+        <!-- ko foreach:userFullData().accessibleEntities -->
+        <!-- ko if:$data.entityId!== $component.userFullData().homeEntity-->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.entityName]]"
+           value="[[entityName]]">
+        </obdx-row>
+        <!-- ko if: $component.isAccessPointFetched() -->
+        <!-- ko if: $component.selectedAccessType()==="INT" -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+              <oj-label>
+                 <span data-bind="text:$component.nls.fieldname.selectedAccessPoints"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+              <oj-checkboxset :id="[['accessPoint_'+$baseModel.incrementIdCount()]]"
+                 :aria-label="[[$component.nls.fieldname.accessPoints+$baseModel.incrementIdCount()]]"
+                 class="oj-choice-direction-row" value="{{$data.selectedAccessPoints}}" disabled="[[true]]">
+                 <!-- ko foreach: $component.accessPoint() -->
+                 <oj-option value="[[value]]">
+                    <span data-bind="text: text"></span>
+                 </oj-option>
+                 <!-- /ko -->
+              </oj-checkboxset>
+           </div>
+        </div>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko with: userPartyRelationship -->
+        <!-- ko with: partyId -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.partyid]]"
+           value="[[displayValue]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.partyname]]"
+           value="[[partyName]]">
+        </obdx-row>
+        <!-- ko foreach:$component.entityLimitPackages -->
+        <!-- ko if:  $data.targetUnit === $parent.entityId -->
+        <!-- ko ifnot:  $data.entityLimitPackageMappingDTO.length -->
+        <!-- <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.limit]]"
+           value="[[$component.nls.message.noLimitAssigned]]">
+           </obdx-row>  -->
+        <!-- /ko -->
+        <!-- ko foreach:$data.entityLimitPackageMappingDTO -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$data.accessPointDescription]]"
+           value="[[$data.limitPackage]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- /ko -->
+        <div class="oj-flex oj-flex-items-pad">
+           <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+              <oj-label>
+                 <span data-bind="text:$component.nls.fieldname.role"></span>
+              </oj-label>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+              <!-- ko if: $parent.childRoleEnumsLoaded -->
+              <oj-checkboxset id="checkboxSetId" class="oj-choice-direction-row" :aria-label="[[$parent.selectedChildRole]]"
+                 disabled="[[true]]" value="{{$parent.selectedChildRole}}">
+                 <!-- ko if : userFullData().updatable-->
+                 <!-- ko foreach: $parent.childRoleEnums -->
+                 <oj-option value="{{applicationRoleId}}">
+                    <span data-bind="text:applicationRoleName"></span>
+                 </oj-option>
+                 <!-- /ko -->
+                 <!-- /ko -->
+                 <!-- ko ifnot : userFullData().updatable-->
+                 <!-- ko foreach: $parent.childRoleEnums -->
+                 <oj-option value="{{$data}}">
+                    <!-- ko ifnot : $component.approverReview -->
+                    <span data-bind="text:$component.nls.roles[$data]"></span>
+                    <!-- /ko -->
+                    <!-- ko if : $component.approverReview -->
+                    <span data-bind="text:$data"></span>
+                    <!-- /ko -->
+                 </oj-option>
+                 <!-- /ko -->
+                 <!-- /ko -->
+              </oj-checkboxset>
+              <!-- /ko -->
+           </div>
+        </div>
+        <!-- /ko -->
+        <!-- /ko -->
+     </div>
+  </page-section>
+  <!-- /ko -->
+  <!-- /ko -->
+  <page-section heading="[[$component.nls.headers.loginIdInfo]]">
+     <div>
+        <!-- ko ifnot: $component.isCorpAdmin -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[userExtensionData().loginID]]">
+        </obdx-row>
+        <!-- ko if : $component.approverReview() && taskCode() === 'MT_N_UUS' && currentExtensionLoaded -->
+        <!-- ko ifnot: $component.isCorpAdmin -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinReferenceNo]]"
+           value="[[currentExtensionData().loginPinReferenceNo]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinStatus]]"
+           value="[[$component.getPinStatusResource(currentExtensionData().loginPinstatus)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldStatus]]"
+           value="[[$component.getHoldStatusResource(currentExtensionData().loginHoldStatus)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldReason]]"
+           value="[[$component.getHoldReasonResource(currentExtensionData().loginHoldReason)]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newPinReferenceNo : $component.nls.fieldname.currentPinReferenceNo]]"
+           value="[[userExtensionData().loginPinReferenceNo]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newPinStatus : $component.nls.fieldname.currentPinStatus]]"
+           value="[[$component.getPinStatusResource(userExtensionData().loginPinstatus)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newHoldStatus : $component.nls.fieldname.currentHoldStatus]]"
+           value="[[$component.getHoldStatusResource(userExtensionData().loginHoldStatus)]]">
+        </obdx-row>
+        <!-- ko if : userExtensionData().loginHoldReason -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newHoldReason : $component.nls.fieldname.currentHoldReason]]"
+           value="[[$component.getHoldReasonResource(userExtensionData().loginHoldReason)]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if : userExtensionData().loginHoldReason === undefined || userExtensionData().loginHoldReason === null || userExtensionData().loginHoldReason === '' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldReason]]"
+           value="[[$component.nls.fieldname.nil]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCodeStatus]]"
+           value="[[$component.getBypassStatus()]]">
+        </obdx-row>
+        <!-- ko if : userExtensionData().bypassFlag === 'Y' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCode]]"
+           value="[[$component.nls.fieldname.loginPINResetCodeMask]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if: $component.isCorpAdmin && userExtensionData().loginID && $component.approverReview() === false -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[$component.nls.fieldname.mapped]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCodeStatus]]"
+           value="[[$component.getBypassStatus()]]">
+        </obdx-row>
+        <!-- ko if : userExtensionData().bypassFlag === 'Y' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCode]]"
+           value="[[$component.nls.fieldname.loginPINResetCodeMask]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if: $component.isCorpAdmin && $component.approverReview() === false && (userExtensionData().loginID === undefined || userExtensionData().loginID === null || userExtensionData().loginID === '') -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[$component.nls.fieldname.notMapped]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if : $component.isCorpAdmin && $component.taskCode() === 'MT_N_CUS' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[userExtensionData().loginID]]">
+        </obdx-row>
+        <!-- ko ifnot: $component.isCorpAdmin -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinReferenceNo]]"
+           value="[[userExtensionData().loginPinReferenceNo]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinStatus]]"
+           value="[[$component.getPinStatusResource(userExtensionData().loginPinstatus)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldStatus]]"
+           value="[[$component.getHoldStatusResource(userExtensionData().loginHoldStatus)]]">
+        </obdx-row>
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldReason]]"
+           value="[[$component.getHoldReasonResource(userExtensionData().loginHoldReason)]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if : $component.isCorpAdmin && $component.taskCode() === 'MT_N_UUS' -->
+        <!-- ko if: userExtensionData().loginID -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[$component.nls.fieldname.mapped]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- ko if: (userExtensionData().loginID === undefined || userExtensionData().loginID === null || userExtensionData().loginID === '') -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginId]]"
+           value="[[$component.nls.fieldname.notMapped]]">
+        </obdx-row>
+        <!-- /ko -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCodeStatus]]"
+           value="[[userExtensionData().bypassFlag === 'Y' ? $component.nls.fieldname.enable : $component.nls.fieldname.loginPINResetCodeDisabled]]">
+        </obdx-row>
+        <!-- ko if : userExtensionData().bypassFlag === 'Y' -->
+        <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.loginPINResetCode]]"
+           value="[[$component.nls.fieldname.loginPINResetCodeMask]]">
+        </obdx-row>
+        <!-- /ko -->
+        <!-- /ko -->
+     </div>
+  </page-section>
+
+  <!-- ko ifnot : $component.taskCode() === 'MT_N_CUS' && $component.isCorpAdmin -->
+  <page-section heading="[[$component.nls.headers.signerIdInfo]]">
+     <div>
+        <!-- if not deleted -->
+        <!-- ko if : $component.isSignerIdDeletedSection() === false -->
+              <!-- ko if: $component.isCorpAdmin && userExtensionData().signerID -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.signerId]]"
+                value="[[$component.nls.fieldname.mapped]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if: $component.isCorpAdmin && (userExtensionData().signerID === undefined || userExtensionData().signerID === null || userExtensionData().signerID === '') -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.signerId]]"
+                value="[[$component.nls.fieldname.notMapped]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if: $component.isCorpAdmin && userExtensionData().isAuthorisedPerson -->
+              <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                    <oj-label for="authorizedPerson"><span data-bind="text:$component.nls.fieldname.authorizedPerson"></span></oj-label>
+                </div>
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9"
+                    data-bind="attr:{'aria-label': $component.nls.fieldname.authorizedPerson}">
+                    <oj-checkboxset id="authorizedPerson" value="{{$component.isAuthorizedChecked}}">
+                      <oj-option id="authCheck" disabled="[['true']]" value="true"></oj-option>
+                    </oj-checkboxset>
+                </div>
+              </div>
+              <!-- /ko -->
+        <!-- not isCorpAdmin  -->
+        <!-- ko ifnot: $component.isCorpAdmin -->
+              <!-- ko if : userExtensionData().signerID -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.signerId]]"
+                value="[[userExtensionData().signerID]]">
+              </obdx-row>
+              <!-- /ko -->
+        <!-- Approval screen for update  -->
+        <!-- ko if : approverReview && taskCode() === 'MT_N_UUS' && currentExtensionLoaded -->
+              <!-- ko if : userExtensionData().signerPinReferenceNo && !$component.isCorpAdmin -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinReferenceNo]]"
+                value="[[currentExtensionData().signerPinReferenceNo]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerPinstatus -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentPinStatus]]"
+                value="[[$component.getPinStatusResource(currentExtensionData().signerPinstatus)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerHoldStatus -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldStatus]]"
+                value="[[$component.getHoldStatusResource(currentExtensionData().signerHoldStatus)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerHoldReason -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.currentHoldReason]]"
+                value="[[$component.getHoldReasonResource(currentExtensionData().signerHoldReason)]]">
+              </obdx-row>
+              <!-- /ko -->
+          <!-- /ko -->
+          <!-- /Approval screen for update  -->
+
+              <!-- ko if : userExtensionData().signerPinReferenceNo -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newPinReferenceNo : $component.nls.fieldname.currentPinReferenceNo]]"
+                value="[[userExtensionData().signerPinReferenceNo]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerPinstatus -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newPinStatus : $component.nls.fieldname.currentPinStatus]]"
+                value="[[$component.getPinStatusResource(userExtensionData().signerPinstatus)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerHoldStatus -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newHoldStatus : $component.nls.fieldname.currentHoldStatus]]"
+                value="[[$component.getHoldStatusResource(userExtensionData().signerHoldStatus)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerHoldReason -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.approverReview() && taskCode() === 'MT_N_UUS' ? $component.nls.fieldname.newHoldReason : $component.nls.fieldname.currentHoldReason]]"
+                value="[[$component.getHoldReasonResource(userExtensionData().signerHoldReason)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <!-- ko if : userExtensionData().signerHoldReason === undefined || userExtensionData().signerHoldReason === null || userExtensionData().signerHoldReason === '' -->
+              <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.newHoldReason]]"
+                value="[[$component.getHoldReasonResource(userExtensionData().signerHoldReason)]]">
+              </obdx-row>
+              <!-- /ko -->
+              <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                    <oj-label for="idDocumentSubmitted"><span data-bind="text:$component.nls.fieldname.idDocumentSubmitted"></span></oj-label>
+                </div>
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9"
+                    data-bind="attr:{'aria-label': $component.nls.fieldname.idDocumentSubmitted}">
+                    <oj-checkboxset id="idDocumentSubmitted" value="{{$component.idDocumentChecked}}">
+                      <oj-option id="idDoc" disabled="[['true']]" value="true"></oj-option>
+                    </oj-checkboxset>
+                </div>
+              </div>
+              <div class="oj-flex oj-flex-items-pad">
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                    <oj-label for="authorizedPerson"><span data-bind="text:$component.nls.fieldname.authorizedPerson"></span></oj-label>
+                </div>
+                <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9"
+                    data-bind="attr:{'aria-label': $component.nls.fieldname.authorizedPerson}">
+                    <oj-checkboxset id="authorizedPerson" value="{{$component.isAuthorizedChecked}}">
+                      <oj-option id="authCheck" disabled="[['true']]" value="true"></oj-option>
+                    </oj-checkboxset>
+                </div>
+              </div>
+              <!-- /ko -->
+              <!-- /not isCorpAdmin  -->
+              <!-- /ko -->
+              <!-- if not deleted -->
+              <!-- ko if : $component.isSignerIdDeletedSection() -->
+              <div class="oj-flex oj-flex-items-pad">
+                 <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+                    <span data-bind="text:$component.nls.message.deleteSigner"></span>
+                </div>
+              </div>
+              <!-- /ko -->
+     </div>
+  </page-section>
+  <!-- /ko -->
+
+   <!-- ko if : $component.isShowToken -->
+   <page-section heading="[[$component.nls.headers.itokenService]]">
+      <div>
+         <!-- ko if: bmItokenService() && bmItokenService().linkedDevice -->
+         <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.linkedDevice]]"
+            value="[[$component.bmItokenService().linkedDevice]]">
+         </obdx-row>
+         <!-- /ko -->
+         <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.tokenStatus]]"
+            value="[[$component.tokenStatus]]">
+         </obdx-row>
+         <!-- ko if: bmItokenService() && bmItokenService().creationDate -->
+         <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+            label="[[$component.nls.fieldname.lastUpdateDate]]" value="[[$component.bmItokenService().creationDate]]">
+         </obdx-row>
+         <!-- /ko -->
+         <!-- ko if: bmItokenService() && bmItokenService().lastUpdatedBy -->
+         <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.lastUpdatedBy]]"
+            value="[[$component.bmItokenService().lastUpdatedBy]]">
+         </obdx-row>
+         <!-- /ko -->
+         <!-- ko if: bmItokenService() && bmItokenService().lastUpdatedDate -->
+         <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+            label="[[$component.nls.fieldname.lastUpdatedOn]]" value="[[$component.bmItokenService().lastUpdatedDate]]">
+         </obdx-row>
+         <!-- /ko -->
+      </div>
+   </page-section>
+   <!-- /ko -->
+
+
+
+  <!-- ko ifnot :approverReview -->
+  <div class="oj-flex oj-flex-items-pad button-container">
+     <oj-button class="action-button-primary" disabled="[[$component.disableEditButton]]" on-click="[[edit]]">
+        <span data-bind="text:$component.nls.buttons.edit"></span>
+     </oj-button>
+     <oj-button class="action-button-secondary" on-click="[[$component.cancel]]">
+        <span data-bind="text:$component.nls.buttons.cancel"></span>
+     </oj-button>
+     <oj-button class="action-button-tertiary" on-click="[[back]]">
+        <span data-bind="text:$component.nls.buttons.back"></span>
+     </oj-button>
+  </div>
+  <!-- /ko -->
+  <!-- /ko -->
+</div>
+<modal-window dashboard="[[$dashboard]]" base-model="[[$baseModel]]" dialog-id="[['resetPassword']]"
+  header="[[$component.nls.headers.resetCredentials]]">
+  <div class="confirm-dialog">
+     <div class="confirm-dialog__container confirm-dialog-container">
+        <div class="oj-flex oj-flex-items-pad confirm-dialog-container__message">
+           <div data-bind="text:$component.nls.message.resetalert"></div>
+        </div>
+        <div class="confirm-dialog-container__buttons button-container">
+           <oj-button class="action-button-primary" on-click="[[resetPassword]]">
+              <span data-bind="text:$component.nls.buttons.yes"></span>
+           </oj-button>
+           <oj-button class="action-button-secondary" on-click="[[hideModalWindow]]">
+              <span data-bind="text:$component.nls.buttons.no"></span>
+           </oj-button>
+        </div>
+     </div>
+  </div>
+</modal-window>
+<!-- /ko -->

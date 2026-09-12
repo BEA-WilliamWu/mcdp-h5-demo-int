@@ -118,19 +118,30 @@
         <div class="oj-flex oj-flex-items-pad" style="margin-bottom: 20px;">
            <div class="oj-flex-item oj-sm-12 oj-sm-margin-4-bottom">
               <oj-label for="hthApiPasswordCode"><span data-bind="text:$component.nls.fieldname.hthApiPasswordCode"></span></oj-label>
+              <oj-label class="code-label">
+                 <span class="code fs14" data-bind="text: hthApiPasswordCodeVisible() ? hthApiPasswordCode() : $component.nls.fieldname.hthApiPasswordCodeMask"></span>
+                 <a href="javascript:void(0);" class="switch-button" role="button"
+                    data-bind="click:toggleHthApiPasswordCodeVisible, css:{'oj-disabled': !hthApiPasswordCodeCanReveal()}, attr:{'aria-disabled': !hthApiPasswordCodeCanReveal(), 'aria-label': hthApiPasswordCodeVisible() ? $component.nls.buttons.hideHthCode : $component.nls.buttons.showHthCode}">
+                    <span class="icon login-pin-reset-code-eyecon" data-bind="css:{'icon-eye': hthApiPasswordCodeVisible(), 'icon-eye-slash': !hthApiPasswordCodeVisible()}"></span>
+                 </a>
+              </oj-label>
               <!-- ko if: hthApiPasswordCodeStatus() === 'USED' -->
               <span class="validity-text used" data-bind="text:$component.nls.info.hthUsed"></span>
               <!-- /ko -->
-              <!-- ko if: hthApiPasswordCodeStatus() !== 'USED' -->
-              <oj-label class="code-label">
-                 <span class="code fs14" data-bind="text: hthApiPasswordCodeVisible() ? hthApiPasswordCode() : $component.nls.fieldname.hthApiPasswordCodeMask"></span>
-                 <!-- ko if: hthApiPasswordCodeCanReveal() -->
-                 <a href="javascript:void(0);" class="switch-button" data-bind="click:toggleHthApiPasswordCodeVisible">
-                    <span class="icon login-pin-reset-code-eyecon" data-bind="css:{'icon-eye': hthApiPasswordCodeVisible(), 'icon-eye-slash': !hthApiPasswordCodeVisible()}"></span>
-                 </a>
-                 <!-- /ko -->
-              </oj-label>
-              <!-- /ko -->
+           </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad oj-sm-margin-4-bottom">
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-sm-margin-2-bottom">
+              <oj-label><span data-bind="text:$component.nls.fieldname.hthApiPasswordCodePurpose"></span></oj-label>
+              <span class="hth-code-purpose" data-bind="text:hthApiPasswordCodePurpose() || $component.nls.fieldname.nil"></span>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-sm-margin-2-bottom">
+              <oj-label><span data-bind="text:$component.nls.fieldname.hthApiPasswordCodeExpiry"></span></oj-label>
+              <span class="hth-code-expiry" data-bind="text:hthApiPasswordCodeExpiryText"></span>
+           </div>
+           <div class="oj-flex-item oj-sm-12 oj-md-4 oj-sm-margin-2-bottom">
+              <oj-label><span data-bind="text:$component.nls.fieldname.hthApiPasswordCodeStatus"></span></oj-label>
+              <span class="hth-code-status" data-bind="text:hthApiPasswordCodeStatusText"></span>
            </div>
         </div>
         <!-- /ko -->

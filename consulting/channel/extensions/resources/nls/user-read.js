@@ -36,7 +36,9 @@ define(["ojL10n!resources/nls/generic",
                     yes: "Yes",
                     no: "No",
                     delete: "Delete",
-                    revoke: "Revoke"
+                    revoke: "Revoke",
+                    showHthCode: "Show HTH API Password Code",
+                    hideHthCode: "Hide HTH API Password Code"
                 },
                 fieldname: {
                     tokenStatus:"Status",
@@ -149,10 +151,23 @@ define(["ojL10n!resources/nls/generic",
                     enable: "Enable",
                     loginPINResetCodeMask: "******",
                     hthApiPasswordCode: "HTH API Password Code",
-                    hthApiPasswordCodeMask: "******"
+                    hthApiPasswordCodeMask: "******",
+                    hthApiPasswordCodePurpose: "Purpose",
+                    hthApiPasswordCodeExpiry: "Expiry Time",
+                    hthApiPasswordCodeStatus: "Code Status"
+                },
+                hthCodeStatuses: {
+                    PENDING: "Pending approval",
+                    ACTIVE: "Active",
+                    EXPIRED: "Expired",
+                    USED: "Used",
+                    INVALID: "Invalid",
+                    IN_PROGRESS: "In progress",
+                    UNKNOWN: "Unknown"
                 },
                 info: {
                     hthUsed: "This Code has been used.",
+                    hthExpiryPendingApproval: "Available after approval.",
                     hthExpiryAfterApproval: "This Code validity: T+1 23:59:59 after approval."
                 },
                 message: {

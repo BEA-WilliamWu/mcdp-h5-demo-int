@@ -44,26 +44,41 @@ define([
         self.userTokenDataDTO = ko.observable();
         self.bmItokenService = ko.observable(null);
 
-        /**
-         * BCOH2H-787: HTH API Password Code observables (checker page).
-         * - code: plain text (held only in memory for current session)
-         * - codeVisible: eye-toggle state
-         * - codeId: code record identifier (used for reveal API)
-         * - codeStatus: PENDING / ACTIVE / EXPIRED / USED
-         */
+        /** Code visibility and lifecycle details returned by the authorized masked/reveal APIs. */
         self.hthApiPasswordCode = ko.observable();
         self.hthApiPasswordCodeVisible = ko.observable(false);
         self.hthApiPasswordCodeId = ko.observable();
         self.hthApiPasswordCodeStatus = ko.observable();
         self.hthApiPasswordCodeCanReveal = ko.observable(false);
+        self.hthApiPasswordCodePurpose = ko.observable();
+        self.hthApiPasswordCodeExpiryTime = ko.observable();
+
+        self.hthApiPasswordCodeStatusText = ko.pureComputed(function () {
+            const status = self.hthApiPasswordCodeStatus();
+
+            return self.nls.hthCodeStatuses[status] || status || self.nls.fieldname.nil;
+        });
+
+        self.hthApiPasswordCodeExpiryText = ko.pureComputed(function () {
+            const expiry = self.hthApiPasswordCodeExpiryTime();
+
+            if (expiry) {
+                return rootParams.baseModel.formatDate(expiry, "headerTimeFormat");
+            }
+
+            return self.hthApiPasswordCodeStatus() === "PENDING"
+                ? self.nls.info.hthExpiryPendingApproval : self.nls.fieldname.nil;
+        });
 
         /** Apply the current Code lifecycle to both the masked view and an authorized reveal. */
         self.updateHthApiPasswordCode = function (data) {
             if (data && data.status && data.status.result === "SUCCESSFUL" && data.codeId) {
-                const canReveal = !!data.canReveal && (data.codeStatus === "PENDING" || data.codeStatus === "ACTIVE");
+                const canReveal = !!data.canReveal;
 
                 self.hthApiPasswordCodeId(data.codeId);
                 self.hthApiPasswordCodeStatus(data.codeStatus);
+                self.hthApiPasswordCodePurpose(data.purpose);
+                self.hthApiPasswordCodeExpiryTime(data.expiryTime);
                 self.hthApiPasswordCodeCanReveal(canReveal);
                 self.hthApiPasswordCode(canReveal ? data.code || data.maskedCode : null);
                 self.hthApiPasswordCodeVisible(canReveal && !!data.code);
@@ -810,10 +825,7 @@ define([
             return self.nls.fieldname.loginPINResetCodeDisabled;
         };
 
-        /**
-         * BCOH2H-787: Toggle HTH API Password Code visibility (eye icon, checker page).
-         * First reveal calls /reveal (audit logged), subsequent toggles are local.
-         */
+        /** Each reveal checks authorization and refreshes lifecycle details; hiding is local. */
         self.toggleHthApiPasswordCodeVisible = function () {
             if (!self.hthApiPasswordCodeCanReveal()) {
                 return;

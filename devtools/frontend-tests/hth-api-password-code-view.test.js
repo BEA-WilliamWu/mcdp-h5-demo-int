@@ -38,7 +38,13 @@ assert(init && load && toggle && markup);
                     nls, userExtensionData: ko.observable({userChannelType}),
                     userFullData: ko.observable({partyId: {value: 'PARTY'}, username: 'USER'})
                 };
-                const rootParams = {baseModel: {showMessages() { throw new Error('Unexpected request error'); }}};
+                const rootParams = {baseModel: {
+                    showMessages() { throw new Error('Unexpected request error'); },
+                    formatDate(value, format) {
+                        check(format === 'headerTimeFormat', 'Expiry uses the existing BCO date formatter');
+                        return new Date(value).toISOString();
+                    }
+                }};
                 const UserReadModel = {
                     getHthApiPasswordCodeMasked(party, user) {
                         check(party === 'PARTY' && user === 'USER', 'Request uses target user');
@@ -55,40 +61,57 @@ assert(init && load && toggle && markup);
                 self.$component = self;
                 view.innerHTML = markup;
                 ko.applyBindings(self, view);
-                const response = (codeStatus, code) => ({status: {result: 'SUCCESSFUL'}, codeId: 'CODE_ID',
-                    codeStatus, code, canReveal: true, maskedCode: '******'});
+                const expiryTime = '2026-09-14T15:59:59.000Z';
+                const response = (codeStatus, code, purpose = 'SETUP') => ({status: {result: 'SUCCESSFUL'}, codeId: 'CODE_ID',
+                    codeStatus, code, purpose, expiryTime: codeStatus === 'PENDING' ? null : expiryTime,
+                    canReveal: true, maskedCode: '******'});
                 if (userChannelType === 'BCO') {
                     check(maskedCalls === 0 && !view.textContent.trim(), 'BCO makes no Code request and displays no HTH content');
                 } else {
                     check(maskedCalls === 1, 'HTH loads masked status once');
+                    check(!view.querySelector('a.switch-button'), 'No Code controls before a Code is returned');
                     maskedResponse(response('USED'));
                     check(view.textContent.includes(nls.info.hthUsed), 'USED message renders directly on User view');
-                    check(!view.querySelector('a.switch-button'), 'Used Code has no reveal button');
+                    check(view.querySelector('a.switch-button .icon-eye-slash') && view.textContent.includes('******'), 'Used Code retains original masked value and eye');
+                    check(view.querySelector('.hth-code-purpose').textContent === 'SETUP', 'Purpose is visible');
+                    check(view.querySelector('.hth-code-expiry').textContent === expiryTime, 'Expiry is visible for a used Code');
+                    check(view.querySelector('.hth-code-status').textContent === nls.hthCodeStatuses.USED, 'Used status accompanies Code');
                     self.toggleHthApiPasswordCodeVisible();
-                    check(revealCalls === 0, 'Used Code cannot trigger reveal');
-                    for (const status of ['PENDING', 'ACTIVE']) {
+                    check(revealCalls === 1, 'Authorized used-Code reveal retains existing API');
+                    revealResponse(response('USED', '123456'));
+                    check(view.textContent.includes('123456') && view.textContent.includes(nls.info.hthUsed), 'Revealed used Code retains usage information');
+                    check(view.querySelector('a.switch-button .icon-eye'), 'Revealed Code uses original eye icon');
+                    self.toggleHthApiPasswordCodeVisible();
+                    check(!view.textContent.includes('123456') && view.querySelector('a.switch-button .icon-eye-slash'), 'Hide restores mask and eye without losing metadata');
+                    for (const status of ['PENDING', 'ACTIVE', 'EXPIRED', 'INVALID', 'IN_PROGRESS', 'UNKNOWN']) {
                         maskedResponse(response(status));
-                        check(!view.textContent.includes(nls.info.hthUsed) && view.querySelector('a.switch-button'), status + ' can reveal');
+                        check(!view.textContent.includes(nls.info.hthUsed) && view.querySelectorAll('a.switch-button').length === 1, status + ' retains one eye');
+                        check(view.querySelector('.hth-code-status').textContent === nls.hthCodeStatuses[status], status + ' renders its lifecycle label');
+                        check(view.querySelector('.hth-code-expiry').textContent === (status === 'PENDING' ? nls.info.hthExpiryPendingApproval : expiryTime), status + ' renders expiry or pending-approval hint');
                     }
+                    maskedResponse(response('ACTIVE'));
                     self.toggleHthApiPasswordCodeVisible();
                     revealResponse(response('ACTIVE', '123456'));
                     check(view.textContent.includes('123456'), 'Active Code reveal displays returned value');
                     self.toggleHthApiPasswordCodeVisible();
                     check(!view.textContent.includes('123456'), 'Hide restores mask');
                     self.toggleHthApiPasswordCodeVisible();
-                    revealResponse(response('USED', '123456'));
-                    check(view.textContent.includes(nls.info.hthUsed) && !view.textContent.includes('123456'), 'Consumed during reveal updates status and clears plaintext');
-                    check(!view.querySelector('a.switch-button'), 'Consumed during reveal removes button');
-                    maskedResponse({...response('ACTIVE'), canReveal: false});
-                    check(!view.querySelector('a.switch-button'), 'Backend reveal flag is respected');
-                    maskedResponse(response('EXPIRED'));
-                    check(!view.querySelector('a.switch-button'), 'Expired Code has no reveal button');
+                    revealResponse(response('USED', '123456', 'RESET'));
+                    check(view.textContent.includes(nls.info.hthUsed) && view.textContent.includes('123456'), 'Consumed during authorized reveal keeps Code and refreshes usage information');
+                    check(view.querySelector('.hth-code-purpose').textContent === 'RESET', 'Reveal refreshes purpose');
+                    maskedResponse({...response('ACTIVE', '123456'), canReveal: false});
+                    const callsBeforeDeniedReveal = revealCalls;
+                    self.toggleHthApiPasswordCodeVisible();
+                    check(revealCalls === callsBeforeDeniedReveal && !view.textContent.includes('123456'), 'Backend reveal flag still blocks API calls and plaintext');
+                    check(view.querySelector('a.switch-button .icon-eye-slash') && view.querySelector('a.switch-button').getAttribute('aria-disabled') === 'true', 'Unauthorized eye remains visible but disabled');
+                    maskedResponse({...response('ACTIVE'), expiryTime: null, purpose: null});
+                    check(view.querySelector('.hth-code-purpose').textContent === nls.fieldname.nil && view.querySelector('.hth-code-expiry').textContent === nls.fieldname.nil, 'Missing metadata clears previous values');
                 }
                 ko.cleanNode(view);
                 view.innerHTML = '';
             }
             return assertions;
         }, {init, load, toggle, markup, nls});
-        console.log('PASS: ' + result + ' production User-view DOM assertions: USED notice, reveal lifecycle, async updates and BCO isolation');
+        console.log('PASS: ' + result + ' production User-view DOM assertions: retained eye, lifecycle metadata, authorized reveal and BCO isolation');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

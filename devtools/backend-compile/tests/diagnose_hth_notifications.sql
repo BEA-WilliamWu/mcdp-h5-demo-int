@@ -4,13 +4,56 @@
 -- Query 5 uses :PARTY_ID and :LOGIN_USER binds supplied by the SQL client.
 -- Do not select MESSAGEBODY, passwords, Code ciphertext or encryption keys.
 
--- 1. Both EMAIL and SMS use DIGX_CZ_EMAIL_MNG.
+-- 0. Confirm the configured dispatcher before interpreting MNG audit rows.
+-- Preferences.xml maps Dispatchers to category AlertDispatcher.
+-- The project implementations are:
+-- com.ofss.digx.cz.bea.domain.service.dispatch.EmailDispatcher
+-- com.ofss.digx.cz.bea.domain.service.dispatch.SMSDispatcher
+-- Other implementations or an outgoing adapter handling email itself may bypass
+-- this project's MNG audit. Configuration rows do not prove which class is loaded.
+SELECT PROP_ID, PROP_VALUE
+  FROM DIGX_FW_CONFIG_ALL_B
+ WHERE CATEGORY_ID = 'AlertDispatcher'
+ ORDER BY PROP_ID;
+
+-- Check the connection/schema and whether this resolved table has any audit data.
+-- Compare the schema with the application's datasource; do not assume HTH_BEA.
+SELECT SYS_CONTEXT('USERENV', 'DB_NAME') AS DATABASE_NAME,
+       SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS CURRENT_SCHEMA_NAME,
+       SYSDATE AS DATABASE_TIME
+  FROM DUAL;
+
+SELECT OWNER, OBJECT_NAME, OBJECT_TYPE
+  FROM ALL_OBJECTS
+ WHERE OBJECT_NAME = 'DIGX_CZ_EMAIL_MNG'
+   AND OBJECT_TYPE IN ('TABLE', 'VIEW', 'SYNONYM')
+ ORDER BY OWNER, OBJECT_TYPE;
+
+SELECT OWNER, SYNONYM_NAME, TABLE_OWNER, TABLE_NAME, DB_LINK
+  FROM ALL_SYNONYMS
+ WHERE SYNONYM_NAME = 'DIGX_CZ_EMAIL_MNG'
+   AND OWNER IN (SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'), 'PUBLIC');
+
+SELECT COUNT(*) AS TOTAL_ROWS, MAX(LAST_UPDATED_DATE) AS LATEST_AUDIT_TIME
+  FROM DIGX_CZ_EMAIL_MNG;
+
+-- Inspect recent audit metadata without assuming an event ID or a date window.
+SELECT * FROM (
+  SELECT REFNUMBER, EVENTID, ACTIVITYID, ALERT_TYPE,
+         RESPONSE_STATUS, LAST_UPDATED_DATE
+    FROM DIGX_CZ_EMAIL_MNG
+   ORDER BY LAST_UPDATED_DATE DESC NULLS LAST
+) WHERE ROWNUM <= 30;
+
+-- 1. The project's MNG paths for EMAIL and SMS use DIGX_CZ_EMAIL_MNG.
 -- Success: the existing dispatcher classified the MNG response as successful;
 --          this is NOT a handset/mailbox delivery receipt.
 -- Failed / Exception: inspect the matching dispatcher/provider log.
 -- Pending: no final provider result was persisted; it does not prove no send.
 -- No row: investigate event generation, configuration, mock mode, contact lookup,
 --         template validation and audit-persistence failures before concluding no send.
+-- In sendMNGMail, a caught audit-insert failure does not stop the gateway call;
+-- an audit-update failure is also caught. Received email can therefore lack a row.
 SELECT REFNUMBER, EVENTID, ALERT_TYPE, RESPONSE_STATUS,
        COD_ACT_DATA_ID, LAST_UPDATED_DATE,
        CASE WHEN TRIM(RECIPIENTID) IS NULL THEN 'MISSING'

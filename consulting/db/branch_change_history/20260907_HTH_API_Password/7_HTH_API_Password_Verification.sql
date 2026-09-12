@@ -33,14 +33,15 @@ SELECT INDEX_NAME, STATUS
   FROM ALL_INDEXES
  WHERE OWNER = 'HTH_BEA'
    AND INDEX_NAME IN (
-     'IX_HTH_API_PWD_CODE_USER',
-     'IX_HTH_API_PWD_CODE_REQ',
+     'IX_HTH_API_PWD_CODE_OWN',
+     'IX_HTH_API_PWD_CODE_TXN',
      'UX_HTH_API_PWD_CODE_LIVE',
      'IX_HTH_API_PWD_OP_USER'
    )
  ORDER BY INDEX_NAME;
 
--- ENABLED should be true after deployment. DATABASE needs no UAM URL.
+-- ENABLED retains its configured value on rerun; true is required to use the feature.
+-- DATABASE needs no UAM URL.
 -- For UAM only, SERVICE_URL must be the approved HTTPS URL and contain no CHANGE_ME.
 -- APIC secrets are deliberately reused from DSPApi and are not selected here.
 SELECT PROP_ID, PROP_VALUE
@@ -94,49 +95,88 @@ SELECT RESOURCE_NAME, TASK_ID
  WHERE TASK_ID IN ('CM_N_HAP_SETUP', 'CM_N_HAP_RESET')
  ORDER BY TASK_ID;
 
--- Expected: 9 rows, each with LOCALE_COUNT=3 (en, zh-hans-cn, zh-hant).
-SELECT ERROR_CODE, COUNT(DISTINCT USER_LOCALE) AS LOCALE_COUNT
-  FROM DIGX_FW_ERROR_MESSAGES
- WHERE ERROR_CODE BETWEEN 'DIGX_CZ_HTH_API_PASSWORD_001'
-                      AND 'DIGX_CZ_HTH_API_PASSWORD_009'
- GROUP BY ERROR_CODE
- ORDER BY ERROR_CODE;
-
--- Expected per event: one activity/action; 6 recipients for SETUP/RESET, 3 for each Code event.
+-- Expected: ten rows, each with ROW_COUNT=3, LOCALE_COUNT=3 and CONFIG_STATUS=OK.
 WITH expected AS (
-SELECT 'HTH_API_PASSWORD_SETUP_SUCCESS' AS event_id, 6 AS expected_recipients FROM DUAL
-UNION ALL
-SELECT 'HTH_API_PASSWORD_RESET_SUCCESS' AS event_id, 6 AS expected_recipients FROM DUAL
-UNION ALL
-SELECT 'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT' AS event_id, 3 AS expected_recipients FROM DUAL
-UNION ALL
-SELECT 'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT' AS event_id, 3 AS expected_recipients FROM DUAL
+  SELECT 'DIGX_CZ_HTH_API_PASSWORD_' || TO_CHAR(LEVEL, 'FM000') AS error_code
+    FROM DUAL CONNECT BY LEVEL <= 10
 )
-SELECT e.event_id, e.expected_recipients,
- (SELECT COUNT(*) FROM DIGX_PM_EVENT_ALL_B b WHERE b.EVENT_CODE=e.event_id) AS event_count,
- (SELECT COUNT(*) FROM DIGX_EP_ACT_EVT_B b WHERE b.COD_EVENT_ID=e.event_id) AS activity_count,
- (SELECT COUNT(*) FROM DIGX_EP_ACT_EVT_ACN_B b WHERE b.COD_EVENT_ID=e.event_id) AS action_count,
- (SELECT COUNT(*) FROM DIGX_EP_EVT_REC_B b WHERE b.COD_EVENT_ID=e.event_id) AS recipient_count,
+SELECT e.error_code, COUNT(m.ERROR_CODE) AS row_count,
+       COUNT(DISTINCT m.USER_LOCALE) AS locale_count,
+       CASE WHEN COUNT(m.ERROR_CODE) = 3 AND
+         COUNT(DISTINCT CASE WHEN m.USER_LOCALE IN ('en','zh-hans-cn','zh-hant')
+           AND m.OBJECT_STATUS_FLAG = 'A' THEN m.USER_LOCALE END) = 3
+         THEN 'OK' ELSE 'MISSING_OR_INVALID' END AS config_status
+  FROM expected e LEFT JOIN DIGX_FW_ERROR_MESSAGES m ON m.ERROR_CODE = e.error_code
+ GROUP BY e.error_code ORDER BY e.error_code;
+
+-- Expected: four rows, CONFIG_STATUS=OK; three distinct Activity parents cover four events.
+-- ACTIVITY_COUNT checks DIGX_EP_ACT_B, not just the event-to-activity mapping.
+WITH expected AS (
+SELECT 'HTH_API_PASSWORD_SETUP_SUCCESS' AS event_id,
+ 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup' AS activity_id,
+ 6 AS expected_recipients FROM DUAL
+UNION ALL
+SELECT 'HTH_API_PASSWORD_RESET_SUCCESS',
+ 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset', 6 FROM DUAL
+UNION ALL
+SELECT 'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+ 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 3 FROM DUAL
+UNION ALL
+SELECT 'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT',
+ 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 3 FROM DUAL
+), checks AS (
+SELECT e.*,
+ (SELECT COUNT(*) FROM DIGX_EP_ACT_B b WHERE b.COD_ACT_ID=e.activity_id
+  AND b.MODULE_TYPE='PC' AND b.OBJECT_STATUS='A' AND b.DOMAIN_OBJECT_EXTN='CZ') AS activity_count,
+ (SELECT COUNT(*) FROM DIGX_PM_EVENT_ALL_B b WHERE b.EVENT_CODE=e.event_id
+  AND b.ALERTS_FLAG='Y') AS event_count,
+ (SELECT COUNT(*) FROM DIGX_EP_ACT_EVT_B b WHERE b.COD_ACT_ID=e.activity_id
+  AND b.COD_EVENT_ID=e.event_id AND b.DOMAIN_OBJECT_EXTN='CZ') AS activity_event_count,
+ (SELECT COUNT(*) FROM DIGX_EP_ACT_EVT_ACN_B b WHERE b.COD_ACT_ID=e.activity_id
+  AND b.COD_EVENT_ID=e.event_id AND b.COD_ACTION_ID='A' AND b.OBJECT_STATUS='A'
+  AND b.DOMAIN_OBJECT_EXTN='CZ' AND b.EXPIRY_DATE > SYSDATE
+  AND b.ALERT_DISPATCH_TYPE='I') AS action_count,
+ (SELECT COUNT(*) FROM DIGX_EP_EVT_REC_B b WHERE b.COD_ACT_ID=e.activity_id
+  AND b.COD_EVENT_ID=e.event_id AND b.COD_ACTION_ID='A') AS recipient_count,
  (SELECT COUNT(*) FROM DIGX_EP_EVT_REC_B b JOIN DIGX_EP_MSG_TMPL_B t
   ON t.COD_TMPL_ID=b.COD_MSG_TMPL_ID AND t.DESTINATION_TYPE=b.TXT_DEST_TYP
-  WHERE b.COD_EVENT_ID=e.event_id) AS matching_template_count
-FROM expected e;
+  WHERE b.COD_ACT_ID=e.activity_id AND b.COD_EVENT_ID=e.event_id AND b.COD_ACTION_ID='A'
+  AND b.DOMAIN_OBJECT_EXTN='CZ' AND b.SUBSCRIBER_TYPE='EXTERNAL' AND b.SUBSCRIBER_VALUE='USER'
+  AND t.OBJECT_STATUS='A' AND t.DOMAIN_OBJECT_EXTN='CZ'
+  AND t.DETERMINANT_VALUE='OBDX_BU') AS matching_template_count,
+ (SELECT COUNT(DISTINCT b.TXT_DEST_TYP || ':' || b.LOCALE)
+  FROM DIGX_EP_EVT_REC_B b WHERE b.COD_ACT_ID=e.activity_id AND b.COD_EVENT_ID=e.event_id
+  AND b.COD_ACTION_ID='A' AND b.LOCALE IN ('en','zh-Hans-CN','zh-Hant')
+  AND (b.TXT_DEST_TYP='EMAIL' OR (e.expected_recipients=6 AND b.TXT_DEST_TYP='SMS'))) AS channel_locale_count
+FROM expected e
+)
+SELECT c.*, CASE WHEN activity_count=1 AND event_count=1 AND activity_event_count=1
+  AND action_count=1 AND recipient_count=expected_recipients
+  AND matching_template_count=expected_recipients AND channel_locale_count=expected_recipients
+  THEN 'OK' ELSE 'MISSING_OR_INVALID' END AS config_status
+FROM checks c ORDER BY event_id;
 
 -- Expected: no rows. Only one usable code may exist for one user and purpose.
-SELECT PARTY_ID, USER_NAME, PURPOSE, COUNT(*) AS ACTIVE_CODE_COUNT
+SELECT PARTY_ID,
+       CASE WHEN SUBSTR(USER_NAME, -LENGTH(PARTY_ID)-1) = '@' || PARTY_ID
+         THEN SUBSTR(USER_NAME, 1, LENGTH(USER_NAME)-LENGTH(PARTY_ID)-1) ELSE USER_NAME END AS USER_NAME,
+       PURPOSE, COUNT(*) AS ACTIVE_CODE_COUNT
   FROM HTH_BEA.HTH_API_PASSWORD_CODE
  WHERE OBJECT_STATUS = 'A'
    AND STATUS = 'ACTIVE'
-   AND EXPIRY_TIME > SYSDATE
- GROUP BY PARTY_ID, USER_NAME, PURPOSE
+   AND EXPIRY_TIME > SYSTIMESTAMP
+ GROUP BY PARTY_ID,
+       CASE WHEN SUBSTR(USER_NAME, -LENGTH(PARTY_ID)-1) = '@' || PARTY_ID
+         THEN SUBSTR(USER_NAME, 1, LENGTH(USER_NAME)-LENGTH(PARTY_ID)-1) ELSE USER_NAME END, PURPOSE
 HAVING COUNT(*) > 1;
 
--- Expected: no rows. Expired codes should be retired by the code-generation/housekeeping feature.
+-- Informational: ACTIVE rows past expiry are unusable even before lifecycle retirement.
+-- Do not extend their expiry or reset their status as part of deployment.
 SELECT ID, PARTY_ID, USER_NAME, PURPOSE, STATUS, EXPIRY_TIME
   FROM HTH_BEA.HTH_API_PASSWORD_CODE
  WHERE OBJECT_STATUS = 'A'
    AND STATUS = 'ACTIVE'
-   AND EXPIRY_TIME <= SYSDATE
+   AND EXPIRY_TIME <= SYSTIMESTAMP
  ORDER BY EXPIRY_TIME;
 
 -- Expected: no rows. Every operation must still reference its code and HTH user profile.
@@ -153,21 +193,6 @@ SELECT REQUEST_ID, PARTY_ID, USER_ID, OPERATION, STATUS, LAST_UPDATE_DATE
   FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
  WHERE STATUS IN ('IN_PROGRESS', 'UNKNOWN')
  ORDER BY LAST_UPDATE_DATE;
-
--- Expected after one successful first setup:
---   CODE=USED, OPERATION=SUCCESS, STATE=ACTIVE with the same request/reference.
--- Replace the two bind variables in the deployment tool; never query or print CODE_CIPHER or the code-encryption key.
-SELECT S.PARTY_ID, S.USER_ID, S.CREDENTIAL_STATUS, S.CREDENTIAL_VERSION,
-       S.SETUP_AT, S.LAST_RESET_AT, S.LAST_REQUEST_ID, S.LAST_REFERENCE_NUMBER,
-       O.OPERATION, O.STATUS AS OPERATION_STATUS, C.STATUS AS CODE_STATUS
-  FROM HTH_BEA.HTH_API_PASSWORD_STATE S
-  JOIN HTH_BEA.HTH_API_PASSWORD_OPERATION O
-    ON O.PARTY_ID = S.PARTY_ID
-   AND O.USER_ID = S.USER_ID
-   AND O.REQUEST_ID = S.LAST_REQUEST_ID
-  JOIN HTH_BEA.HTH_API_PASSWORD_CODE C ON C.ID = O.CODE_ID
- WHERE S.PARTY_ID = :PARTY_ID
-   AND S.USER_ID = :USER_ID;
 
 -- Approved user creation codes must not be consumed before activation.
 SELECT ID, PARTY_ID, USER_NAME, STATUS, PURPOSE
@@ -189,15 +214,6 @@ SELECT CASE WHEN COUNT(*) = 0 THEN 'DATABASE'
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
    AND PROP_ID = 'HTH_API_PASSWORD.STORAGE_BACKEND';
-
--- Database credentials: metadata only, never select PASSWORD_HASH or Code ciphertext.
-SELECT PARTY_ID, USER_ID, CREDENTIAL_STATUS, CREDENTIAL_VERSION, LAST_REQUEST_ID, UPDATED_AT
-  FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL
- WHERE PARTY_ID = :PARTY_ID AND USER_ID = :USER_ID;
-
-SELECT REQUEST_ID, OPERATION, STATUS, STORAGE_BACKEND
-  FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
- WHERE PARTY_ID = :PARTY_ID AND USER_ID = :USER_ID;
 
 -- Each repository requires matching base and OBDX_BU registrations.
 SELECT PROP_ID, PROP_VALUE FROM DIGX_FW_CONFIG_ALL_B

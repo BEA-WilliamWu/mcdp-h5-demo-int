@@ -68,6 +68,16 @@ SELECT REFNUMBER, EVENTID, ALERT_TYPE, RESPONSE_STATUS,
    AND LAST_UPDATED_DATE >= SYSDATE - 7
  ORDER BY LAST_UPDATED_DATE DESC;
 
+-- Activity parents must exist before any event can reach the dispatchers.
+-- Expected: three active CZ activities with MODULE_TYPE=PC.
+SELECT COD_ACT_ID, MODULE_TYPE, OBJECT_STATUS, DOMAIN_OBJECT_EXTN
+  FROM DIGX_EP_ACT_B
+ WHERE COD_ACT_ID IN (
+  'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup',
+  'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset',
+  'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+ );
+
 -- 2. Expected: twelve rows with RECIPIENT_COUNT=1 and ACTIVE_TEMPLATE_COUNT=1.
 -- Missing setup rows can explain reset working while setup does not.
 -- Check the exact locale used at the time of the operation.
@@ -157,3 +167,29 @@ SELECT USER_ID, CDC_NO, MOBILE_CODE,
 --   MNG SMS after adpater.createAlert,result:
 --   AddressException from SMSDispatcher.dispatchMNGSms
 -- Avoid sharing full dispatcher payloads: existing shared logs may contain contacts.
+
+-- Optional per-user credential result checks; supply :PARTY_ID and the stored :USER_ID.
+-- Expected after one successful first setup:
+--   CODE=USED, OPERATION=SUCCESS, STATE=ACTIVE with the same request/reference.
+-- Replace the two bind variables in the deployment tool; never query or print CODE_CIPHER or the code-encryption key.
+SELECT S.PARTY_ID, S.USER_ID, S.CREDENTIAL_STATUS, S.CREDENTIAL_VERSION,
+       S.SETUP_AT, S.LAST_RESET_AT, S.LAST_REQUEST_ID, S.LAST_REFERENCE_NUMBER,
+       O.OPERATION, O.STATUS AS OPERATION_STATUS, C.STATUS AS CODE_STATUS
+  FROM HTH_BEA.HTH_API_PASSWORD_STATE S
+  JOIN HTH_BEA.HTH_API_PASSWORD_OPERATION O
+    ON O.PARTY_ID = S.PARTY_ID
+   AND O.USER_ID = S.USER_ID
+   AND O.REQUEST_ID = S.LAST_REQUEST_ID
+  JOIN HTH_BEA.HTH_API_PASSWORD_CODE C ON C.ID = O.CODE_ID
+ WHERE S.PARTY_ID = :PARTY_ID
+   AND S.USER_ID = :USER_ID;
+
+
+-- Database credentials: metadata only, never select PASSWORD_HASH or Code ciphertext.
+SELECT PARTY_ID, USER_ID, CREDENTIAL_STATUS, CREDENTIAL_VERSION, LAST_REQUEST_ID, UPDATED_AT
+  FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL
+ WHERE PARTY_ID = :PARTY_ID AND USER_ID = :USER_ID;
+
+SELECT REQUEST_ID, OPERATION, STATUS, STORAGE_BACKEND
+  FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
+ WHERE PARTY_ID = :PARTY_ID AND USER_ID = :USER_ID;

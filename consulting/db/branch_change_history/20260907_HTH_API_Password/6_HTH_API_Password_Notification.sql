@@ -1,8 +1,71 @@
--- Oracle SQL; execute as complete statements in the OBDX configuration schema.
+-- Oracle SQL/PLSQL; execute the complete BEGIN ... END; block as one statement.
+-- Run in the OBDX configuration schema; no SQL*Plus commands or slash delimiter.
 -- 789: Code approval emails to user/company, deduplicated by the service.
 -- 1204/1205: successful setup/reset user email and SMS, like BCO Login PIN reset.
 -- Uses the existing BCO event/action/recipient dispatch mechanism and retry policy.
 -- No passwords or Code values are included in templates. Re-runnable.
+
+BEGIN
+  SAVEPOINT HTH_API_PASSWORD_CONFIG;
+
+-- Activities are parents of event mappings; preserve their identity on rerun.
+-- PC / A / CZ follows the existing BCO Login PIN notification Activity registration.
+UPDATE DIGX_EP_ACT_B
+   SET TXT_ACT_NAME = 'HostToHostApiPassword.setup',
+       TXT_ACT_DESC = 'Set up HTH API Password', MODULE_TYPE = 'PC',
+       OBJECT_STATUS = 'A', DOMAIN_OBJECT_EXTN = 'CZ',
+       LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup';
+
+INSERT INTO DIGX_EP_ACT_B
+  (COD_ACT_ID, TXT_ACT_NAME, TXT_ACT_DESC, MODULE_TYPE, FLG_IP_REQD, FLG_OP_REQD,
+   FLG_LOG_REQD, TXT_LOG_CLASS, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
+   LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, DOMAIN_OBJECT_EXTN)
+SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup',
+       'HostToHostApiPassword.setup', 'Set up HTH API Password',
+       'PC', NULL, NULL, NULL, NULL, USER, SYSDATE, USER, SYSDATE, 1, 'A', 'CZ'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_EP_ACT_B
+                   WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup');
+
+UPDATE DIGX_EP_ACT_B
+   SET TXT_ACT_NAME = 'HostToHostApiPassword.reset',
+       TXT_ACT_DESC = 'Reset HTH API Password', MODULE_TYPE = 'PC',
+       OBJECT_STATUS = 'A', DOMAIN_OBJECT_EXTN = 'CZ',
+       LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset';
+
+INSERT INTO DIGX_EP_ACT_B
+  (COD_ACT_ID, TXT_ACT_NAME, TXT_ACT_DESC, MODULE_TYPE, FLG_IP_REQD, FLG_OP_REQD,
+   FLG_LOG_REQD, TXT_LOG_CLASS, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
+   LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, DOMAIN_OBJECT_EXTN)
+SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset',
+       'HostToHostApiPassword.reset', 'Reset HTH API Password',
+       'PC', NULL, NULL, NULL, NULL, USER, SYSDATE, USER, SYSDATE, 1, 'A', 'CZ'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_EP_ACT_B
+                   WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset');
+
+UPDATE DIGX_EP_ACT_B
+   SET TXT_ACT_NAME = 'HostToHostApiPassword.activateOnUserApproval',
+       TXT_ACT_DESC = 'Approve HTH API Password Code', MODULE_TYPE = 'PC',
+       OBJECT_STATUS = 'A', DOMAIN_OBJECT_EXTN = 'CZ',
+       LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval';
+
+INSERT INTO DIGX_EP_ACT_B
+  (COD_ACT_ID, TXT_ACT_NAME, TXT_ACT_DESC, MODULE_TYPE, FLG_IP_REQD, FLG_OP_REQD,
+   FLG_LOG_REQD, TXT_LOG_CLASS, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY,
+   LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, DOMAIN_OBJECT_EXTN)
+SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval',
+       'HostToHostApiPassword.activateOnUserApproval', 'Approve HTH API Password Code',
+       'PC', NULL, NULL, NULL, NULL, USER, SYSDATE, USER, SYSDATE, 1, 'A', 'CZ'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_EP_ACT_B
+                   WHERE COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval');
 
 DELETE FROM DIGX_EP_EVT_REC_B
  WHERE COD_ACT_ID =
@@ -26,7 +89,7 @@ DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID IN (
   'HTH_API_PWD_SETUP_USER_SMS_en',
   'HTH_API_PWD_SETUP_USER_SMS_zh-Hans-CN',
   'HTH_API_PWD_SETUP_USER_SMS_zh-Hant'
-);
+) AND DETERMINANT_VALUE = 'OBDX_BU';
 
 DELETE FROM DIGX_PM_EVENT_ALL_B
  WHERE EVENT_CODE = 'HTH_API_PASSWORD_SETUP_SUCCESS';
@@ -60,7 +123,7 @@ VALUES
   ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.setup',
    'HTH_API_PASSWORD_SETUP_SUCCESS', 'A', 'N', NULL, '0', 'N', '1',
    'HTH API Password SETUP USER', 'superadmin', SYSDATE,
-   'superadmin', SYSDATE, 1, 0, 'N', TO_DATE('31-DEC-2099', 'DD-MON-RRRR'),
+   'superadmin', SYSDATE, 1, 0, 'N', DATE '2099-12-31',
    'M', 'I', 'A', 'CZ');
 
 INSERT INTO DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DESTINATION_TYPE, MSG_TMPL_NAME, MSG_TMPL_DESC, TXT_MSG_TMPL, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, TXT_SUBJECT_TMPL, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
@@ -122,7 +185,7 @@ DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID IN (
   'HTH_API_PWD_RESET_USER_SMS_en',
   'HTH_API_PWD_RESET_USER_SMS_zh-Hans-CN',
   'HTH_API_PWD_RESET_USER_SMS_zh-Hant'
-);
+) AND DETERMINANT_VALUE = 'OBDX_BU';
 
 DELETE FROM DIGX_PM_EVENT_ALL_B
  WHERE EVENT_CODE = 'HTH_API_PASSWORD_RESET_SUCCESS';
@@ -156,7 +219,7 @@ VALUES
   ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset',
    'HTH_API_PASSWORD_RESET_SUCCESS', 'A', 'N', NULL, '0', 'N', '1',
    'HTH API Password RESET USER', 'superadmin', SYSDATE,
-   'superadmin', SYSDATE, 1, 0, 'N', TO_DATE('31-DEC-2099', 'DD-MON-RRRR'),
+   'superadmin', SYSDATE, 1, 0, 'N', DATE '2099-12-31',
    'M', 'I', 'A', 'CZ');
 
 INSERT INTO DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DESTINATION_TYPE, MSG_TMPL_NAME, MSG_TMPL_DESC, TXT_MSG_TMPL, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, TXT_SUBJECT_TMPL, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
@@ -215,7 +278,7 @@ DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID IN (
   'HTH_API_PWD_CODE_USER_EMAIL_en',
   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN',
   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hant'
-);
+) AND DETERMINANT_VALUE = 'OBDX_BU';
 
 DELETE FROM DIGX_PM_EVENT_ALL_B
  WHERE EVENT_CODE = 'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT';
@@ -249,7 +312,7 @@ VALUES
   ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval',
    'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT', 'A', 'N', NULL, '0', 'N', '1',
    'HTH API Password CODE USER', 'superadmin', SYSDATE,
-   'superadmin', SYSDATE, 1, 0, 'N', TO_DATE('31-DEC-2099', 'DD-MON-RRRR'),
+   'superadmin', SYSDATE, 1, 0, 'N', DATE '2099-12-31',
    'M', 'I', 'A', 'CZ');
 
 INSERT INTO DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DESTINATION_TYPE, MSG_TMPL_NAME, MSG_TMPL_DESC, TXT_MSG_TMPL, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, TXT_SUBJECT_TMPL, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
@@ -290,7 +353,7 @@ DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID IN (
   'HTH_API_PWD_CODE_COMPANY_EMAIL_en',
   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN',
   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant'
-);
+) AND DETERMINANT_VALUE = 'OBDX_BU';
 
 DELETE FROM DIGX_PM_EVENT_ALL_B
  WHERE EVENT_CODE = 'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT';
@@ -324,7 +387,7 @@ VALUES
   ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval',
    'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT', 'A', 'N', NULL, '0', 'N', '1',
    'HTH API Password CODE COMPANY', 'superadmin', SYSDATE,
-   'superadmin', SYSDATE, 1, 0, 'N', TO_DATE('31-DEC-2099', 'DD-MON-RRRR'),
+   'superadmin', SYSDATE, 1, 0, 'N', DATE '2099-12-31',
    'M', 'I', 'A', 'CZ');
 
 INSERT INTO DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DESTINATION_TYPE, MSG_TMPL_NAME, MSG_TMPL_DESC, TXT_MSG_TMPL, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, TXT_SUBJECT_TMPL, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
@@ -347,6 +410,11 @@ VALUES ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activ
 
 
 COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK TO HTH_API_PASSWORD_CONFIG;
+    RAISE;
+END;
 
 SELECT COD_EVENT_ID, TXT_DEST_TYP, LOCALE, COD_MSG_TMPL_ID
 FROM DIGX_EP_EVT_REC_B

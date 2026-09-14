@@ -65,7 +65,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hth-password-bundle-'));
     };
     const context = {
         define, window: {crypto: crypto.webcrypto}, navigator: {appName: 'Netscape', appVersion: '5'},
-        document: {getElementById: () => ({})}, Uint8Array,
+        document: {getElementById: () => ({querySelector: () => null})}, Uint8Array,
         require: () => { throw new Error('Unexpected dynamic script request after component cleanup'); }
     };
     vm.runInNewContext(bundled, context, {filename: output});

@@ -29,6 +29,10 @@ import com.ofss.fc.infra.log.impl.MultiEntityLogger;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -226,7 +230,7 @@ public class HostToHostApiPassword extends AbstractApplication
       Identity identity = identity(sessionContext, true, storage);
       stage = "OPERATION_LOOKUP";
       OperationResult previous = findSuccessfulOperation(
-          request.getRequestId(), identity.partyId, identity.profileUserId, operation, storage.name());
+          request.getRequestId(), identity.partyId, identity.profileUserId, operation, storage.name(), identity.uamClientId);
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
           response.setSetupState("ACTIVE");
@@ -261,7 +265,7 @@ public class HostToHostApiPassword extends AbstractApplication
             ? com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash.hash(password) : null;
         stage = "CODE_RESERVE";
         codeId = validateAndReserveCode(identity.partyId, identity.userId, identity.profileUserId, operation,
-            code, request.getRequestId(), storage.name());
+            code, request.getRequestId(), storage.name(), identity.uamClientId);
 
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
@@ -276,33 +280,37 @@ public class HostToHostApiPassword extends AbstractApplication
             throw e;
           }
         } else {
-          stage = "UAM_WRITE";
+          stage = storage.name() + "_WRITE";
           try {
+            IHthApiCredentialAdapter remote = storage == HthApiPasswordStorage.DSP ? dspAdapter() : adapter();
+            String remoteUserId = storage == HthApiPasswordStorage.DSP
+                ? identity.userId + "@" + identity.partyId : identity.userId;
             reference = SETUP.equals(operation)
-                ? adapter().setup(identity.partyId, identity.userId, identity.uamClientId, password,
+                ? remote.setup(identity.partyId, remoteUserId, identity.uamClientId, password,
                     request.getRequestId())
-                : adapter().reset(identity.partyId, identity.userId, identity.uamClientId, password,
+                : remote.reset(identity.partyId, remoteUserId, identity.uamClientId, password,
                     request.getRequestId());
           } catch (Exception e) {
-            fail(identity.profileUserId, request.getRequestId(), codeId, true);
+            boolean uncertain = !(e instanceof com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException)
+                || ((com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException) e).isUncertain();
+            try { fail(identity.profileUserId, request.getRequestId(), codeId, uncertain); }
+            catch (Exception failure) { e.addSuppressed(failure); }
             throw e;
           }
           if (reference == null || reference.trim().length() == 0) {
             reference = request.getRequestId();
           }
-          stage = "UAM_COMPLETE";
+          stage = storage.name() + "_COMPLETE";
           try {
             complete(identity.partyId, identity.profileUserId, operation, request.getRequestId(),
                 codeId, reference);
           } catch (Exception e) {
-            // UAM has already accepted the change. Keep the request non-retryable until the
+            // The remote store has already accepted the change. Keep the request non-retryable until the
             // external result is reconciled, otherwise a retry could rotate the password twice.
             try {
               fail(identity.profileUserId, request.getRequestId(), codeId, true);
             } catch (Exception reconciliationFailure) {
-              LOGGER.log(Level.WARNING,
-                  "Unable to mark an HTH API password operation for reconciliation",
-                  reconciliationFailure);
+              logPhaseFailure(storage.name() + "_RECONCILE", reconciliationFailure);
             }
             throw e;
           }
@@ -396,7 +404,7 @@ public class HostToHostApiPassword extends AbstractApplication
     }
     HthManagement management = new HthManagement().findActiveByPartyId(partyId);
     if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
-        || (storage == HthApiPasswordStorage.UAM && normalize(management.getUamClientId()) == null)) {
+        || (storage != HthApiPasswordStorage.DATABASE && normalize(management.getUamClientId()) == null)) {
       String reason = management == null ? "ACTIVE_MANAGEMENT_NOT_FOUND"
           : !"ENABLE".equalsIgnoreCase(management.getHthStatus()) ? "HTH_NOT_ENABLED"
           : "UAM_CLIENT_NOT_CONFIGURED";
@@ -416,6 +424,13 @@ public class HostToHostApiPassword extends AbstractApplication
       HthApiPasswordStorage storage) throws Exception {
     if (storage == HthApiPasswordStorage.DATABASE) {
       return findDatabaseCredentialState(identity.partyId, identity.profileUserId);
+    }
+    if (storage == HthApiPasswordStorage.DSP) {
+      String state = findDspCredentialState(identity.partyId, identity.profileUserId, identity.uamClientId);
+      if (IHthApiCredentialAdapter.STATUS_UNKNOWN.equals(state) && !allowLocalFallback) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
+      return state;
     }
     try {
       String remote = adapter().getStatus(identity.partyId, identity.userId,
@@ -524,6 +539,15 @@ public class HostToHostApiPassword extends AbstractApplication
     if (alphabetCount < policy.getAlphabetRequired()
         || numericCount < policy.getNumericRequired()) {
       throw new Exception("DIGX_CZ_HTH_API_PASSWORD_004");
+    }
+  }
+
+  private IHthApiCredentialAdapter dspAdapter() throws Exception {
+    try {
+      return (IHthApiCredentialAdapter) Class.forName(
+          "com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.HthDspApiCredentialAdapter").newInstance();
+    } catch (java.lang.Exception failure) {
+      throw new com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException(false);
     }
   }
 
@@ -728,7 +752,7 @@ public class HostToHostApiPassword extends AbstractApplication
     if (profile != null) {
       HthApiPasswordStorage storage = storageBackend();
       String uamClientId = null;
-      if (storage == HthApiPasswordStorage.UAM) {
+      if (storage != HthApiPasswordStorage.DATABASE) {
         HthManagement management = new HthManagement().findActiveByPartyId(partyId);
         if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
             || normalize(management.getUamClientId()) == null) {
@@ -870,7 +894,7 @@ public class HostToHostApiPassword extends AbstractApplication
       row.setExpiryTime(new Date(new java.util.Date(
           System.currentTimeMillis() + EXPIRY_HOURS * MILLIS_PER_HOUR)));
       row.setTransactionId(transactionId);
-      notifyHthApiPasswordApproved(row);
+      notifyHthApiPasswordApproved(row, operator);
     }
   }
 
@@ -881,8 +905,8 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
 
-  /** Publishes the Code-approved user/company emails through the BCO event framework. */
-  private void notifyHthApiPasswordApproved(HthApiPasswordCode row) {
+  /** Publishes Code-approved user, actual approver and company emails via the BCO framework. */
+  private void notifyHthApiPasswordApproved(HthApiPasswordCode row, String operator) {
     HthApiPasswordActivityLogDTO log = new HthApiPasswordActivityLogDTO();
     log.setCustomerId(row.getPartyId());
     log.setHthApiPasswordPartyId(row.getPartyId());
@@ -903,41 +927,110 @@ public class HostToHostApiPassword extends AbstractApplication
     notifyEmailRecipients(null, ACTIVITY_HTH_API_PASSWORD_APPROVED,
         UserExtensionDataConstants.HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT,
         UserExtensionDataConstants.HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT,
-        row.getPartyId(), row.getUserName(), log);
+        row.getPartyId(), row.getUserName(), row.getTransactionId(), operator, log);
+  }
+
+  /** Uses the transaction's actual signers, as in BCO Login PIN Code notifications. */
+  private List<String> readCodeApprovalSigners(String transactionId, String operator) {
+    Set<String> signers = new LinkedHashSet<String>();
+    try {
+      if (!isBlank(transactionId)) {
+        com.ofss.digx.framework.domain.transaction.TransactionKey transactionKey =
+            new com.ofss.digx.framework.domain.transaction.TransactionKey();
+        transactionKey.setId(transactionId);
+        com.ofss.digx.framework.domain.transaction.Transaction transaction =
+            new com.ofss.digx.framework.domain.transaction.Transaction().read(transactionKey);
+        if (transaction != null && transaction.getApprovalDetails() != null
+            && !isBlank(transaction.getApprovalDetails().getSignedBy())) {
+          for (String signer : transaction.getApprovalDetails().getSignedBy().split("~")) {
+            if (!isBlank(signer)) {
+              signers.add(signer.trim());
+            }
+          }
+        }
+      }
+      // BCO's one-man-band flow has no signedBy list; use the authenticated operator.
+      if (signers.isEmpty() && Boolean.TRUE.equals(
+          com.ofss.fc.infra.thread.ThreadAttribute.get("IS_OMB_ENABLED"))
+          && !isBlank(operator)) {
+        signers.add(operator.trim());
+      }
+      if (signers.isEmpty()) {
+        LOGGER.log(Level.WARNING, "No approval signers resolved for HTH Code notification");
+      }
+    } catch (java.lang.Exception e) {
+      LOGGER.log(Level.WARNING, "Unable to resolve HTH Code notification approval signers", e);
+    }
+    return new ArrayList<String>(signers);
   }
 
   /**
-   * Like BCO Logon PIN Code notifications, addresses the user and company by email,
-   * without sending a second message to the same mailbox. Contact or publication failures
-   * are contained so notification delivery never changes the completed business result.
+   * Sends user and all actual approvers first, then company. A mailbox receives one
+   * event even when it belongs to multiple roles. Each contact failure is isolated.
    */
   private void notifyEmailRecipients(SessionContext context, String activityId,
       String userEvent, String companyEvent, String partyId, String userName,
-      HthApiPasswordActivityLogDTO log) {
-    String userEmail = null;
+      String transactionId, String operator, HthApiPasswordActivityLogDTO log) {
+    Set<String> mailboxes = new LinkedHashSet<String>();
     try {
       com.ofss.digx.domain.sms.entity.user.User user = readNotificationUser(partyId, userName);
       if (user != null) {
-        userEmail = normalize(user.getEmailId());
+        publishUniqueEmail(context, activityId, userEvent, partyId, user.getEmailId(), log, mailboxes);
       }
     } catch (java.lang.Exception e) {
       LOGGER.log(Level.WARNING, "Unable to resolve HTH notification user contacts", e);
     }
-    publishEmail(context, activityId, userEvent, partyId, userEmail, log);
-
+    for (String signer : readCodeApprovalSigners(transactionId, operator)) {
+      try {
+        // signedBy contains authoritative OBDX keys, including internal approvers.
+        UserKey key = new UserKey();
+        key.setUserId(signer);
+        com.ofss.digx.domain.sms.entity.user.User user =
+            new com.ofss.digx.domain.sms.entity.user.User().read(key);
+        if (user != null) {
+          publishUniqueEmail(context, activityId, userEvent, partyId, user.getEmailId(), log, mailboxes);
+        }
+      } catch (java.lang.Exception e) {
+        LOGGER.log(Level.WARNING, "Unable to resolve HTH notification approver contacts", e);
+      }
+    }
     try {
       IAdapterFactory factory = AdapterFactoryConfigurator.getInstance()
           .getAdapterFactory(CommonAdapterFactoryConstants.USER_EXTENSION_ADAPTER_FACTORY);
       IUserExtensionAdapter adapter = (IUserExtensionAdapter) factory
           .getAdapter(CommonAdapterConstants.USER_EXTENSION_ADAPTER);
       CZPartyPreferenceDTO party = adapter.getPartyPreferences(partyId);
-      String companyEmail = party == null ? null : normalize(party.getOfficeEmailId());
-      if (companyEmail != null && !companyEmail.equalsIgnoreCase(userEmail)) {
-        publishEmail(context, activityId, companyEvent, partyId, companyEmail, log);
+      if (party != null) {
+        publishUniqueEmail(context, activityId, companyEvent, partyId,
+            party.getOfficeEmailId(), log, mailboxes);
       }
     } catch (java.lang.Exception e) {
       LOGGER.log(Level.WARNING, "Unable to resolve HTH notification company contacts", e);
     }
+  }
+
+  private void publishUniqueEmail(SessionContext context, String activityId, String eventId,
+      String partyId, String address, HthApiPasswordActivityLogDTO log, Set<String> mailboxes) {
+    String email = normalize(address);
+    if (email != null && mailboxes.add(email.toLowerCase(Locale.ROOT))) {
+      publishEmail(context, activityId, eventId, partyId, email, log);
+    }
+  }
+
+  /** Event dispatch may be asynchronous; never mutate a previously published log. */
+  private HthApiPasswordActivityLogDTO copyNotificationLog(HthApiPasswordActivityLogDTO source) {
+    HthApiPasswordActivityLogDTO copy = new HthApiPasswordActivityLogDTO();
+    copy.setCustomerId(source.getCustomerId());
+    copy.setHthApiPasswordPartyId(source.getHthApiPasswordPartyId());
+    copy.setHthApiPasswordUserName(source.getHthApiPasswordUserName());
+    copy.setHthApiPasswordExpiryDateTime(source.getHthApiPasswordExpiryDateTime());
+    copy.setHthApiPasswordExpiryYear(source.getHthApiPasswordExpiryYear());
+    copy.setHthApiPasswordExpiryMonth(source.getHthApiPasswordExpiryMonth());
+    copy.setHthApiPasswordExpiryDay(source.getHthApiPasswordExpiryDay());
+    copy.setHthApiPasswordExpiryHour(source.getHthApiPasswordExpiryHour());
+    copy.setHthApiPasswordExpiryMinute(source.getHthApiPasswordExpiryMinute());
+    copy.setHthApiPasswordExpirySecond(source.getHthApiPasswordExpirySecond());
+    return copy;
   }
 
   private void publishEmail(SessionContext context, String activityId, String eventId,
@@ -952,8 +1045,9 @@ public class HostToHostApiPassword extends AbstractApplication
       detail.setDispatchAddress(address);
       detail.setRecipientId(partyId);
       detail.setRecipientType(SubscriberType.EXTERNAL.toString());
-      log.setNotificationDetails(new NotificationDetail[] { detail });
-      super.registerActivityAndGenerateEvent(context, activityId, eventId, new Date(), log);
+      HthApiPasswordActivityLogDTO recipientLog = copyNotificationLog(log);
+      recipientLog.setNotificationDetails(new NotificationDetail[] { detail });
+      super.registerActivityAndGenerateEvent(context, activityId, eventId, new Date(), recipientLog);
     } catch (java.lang.Exception e) {
       LOGGER.log(Level.SEVERE, "Unable to publish HTH notification event " + eventId, e);
     }
@@ -1078,6 +1172,19 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
 
+  /** Workflow state comes only from this application's writes to the current DSP client. */
+  private String findDspCredentialState(String partyId, String userId, String clientId) throws Exception {
+    SessionLease lease = open(false);
+    try {
+      List rows = operationRepository.findDspState(lease.session, partyId, userId, clientId);
+      if (rows == null || rows.isEmpty()) { return STATE_NOT_SETUP; }
+      return "SUCCESS".equals(string(rows.get(0)))
+          ? IHthApiCredentialAdapter.STATUS_ACTIVE : IHthApiCredentialAdapter.STATUS_UNKNOWN;
+    } finally {
+      lease.close(false);
+    }
+  }
+
   private boolean hasUsableCode(String partyId, String userId, String purpose) throws Exception {
     SessionLease lease = open(false);
     try {
@@ -1089,7 +1196,7 @@ public class HostToHostApiPassword extends AbstractApplication
   }
 
   private OperationResult findSuccessfulOperation(String requestId, String partyId, String userId,
-      String operation, String backend) throws Exception {
+      String operation, String backend, String remoteClientId) throws Exception {
     SessionLease lease = open(false);
     try {
       List rows = operationRepository.findResult(lease.session, requestId, partyId, userId, operation);
@@ -1097,7 +1204,8 @@ public class HostToHostApiPassword extends AbstractApplication
         return null;
       }
       Object[] row = (Object[]) rows.get(0);
-      if (!backend.equals(string(row[2]))) {
+      if (!backend.equals(string(row[2]))
+          || ("DSP".equals(backend) && (remoteClientId == null || !remoteClientId.equals(string(row[3]))))) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
       return new OperationResult(string(row[0]), string(row[1]));
@@ -1111,7 +1219,7 @@ public class HostToHostApiPassword extends AbstractApplication
    * profile key. Failed verification attempts are persisted independently.
    */
   private String validateAndReserveCode(String partyId, String userId, String profileUserId,
-      String purpose, String code, String requestId, String backend) throws Exception {
+      String purpose, String code, String requestId, String backend, String remoteClientId) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
@@ -1152,6 +1260,10 @@ public class HostToHostApiPassword extends AbstractApplication
       }
 
       operationRepository.reserve(lease.session, requestId, partyId, profileUserId, purpose, codeId, backend);
+      if ("DSP".equals(backend) && (normalize(remoteClientId) == null
+          || operationRepository.bindDspClient(lease.session, requestId, remoteClientId) != 1)) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
+      }
       success = true;
       return codeId;
     } catch (Exception e) {
@@ -1169,7 +1281,7 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
 
-  /** Records a confirmed UAM result and consumes its reserved Code. */
+  /** Records a confirmed remote result and consumes its reserved Code. */
   private void complete(String partyId, String userId, String operation, String requestId,
       String codeId, String referenceNumber) throws Exception {
     completeInternal(partyId, userId, operation, requestId, codeId, referenceNumber, null);

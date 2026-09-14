@@ -34,6 +34,8 @@ define([
         self.newPassword = ko.observable();
         self.confirmPassword = ko.observable();
         self.passwordCode = ko.observable();
+        self.newPasswordVisible = ko.observable(false);
+        self.confirmPasswordVisible = ko.observable(false);
         self.submitting = ko.observable(false);
         self.showConfirmation = ko.observable(false);
         // Keep the request ID across retries so an uncertain response cannot rotate twice.
@@ -53,7 +55,38 @@ define([
                 ? self.nls.setupHeader : self.nls.resetHeader);
         }
 
+        self.setPasswordVisibility = function (id, state, visible) {
+            const field = document.getElementById(id),
+                input = field && field.querySelector("input");
+
+            if (input) {
+                input.type = visible ? "text" : "password";
+            }
+
+            state(Boolean(input) && visible);
+        };
+
+        self.toggleNewPassword = function () {
+            if (!self.submitting()) {
+                self.setPasswordVisibility("hthApiNewPassword", self.newPasswordVisible,
+                    !self.newPasswordVisible());
+            }
+        };
+
+        self.toggleConfirmPassword = function () {
+            if (!self.submitting()) {
+                self.setPasswordVisibility("hthApiConfirmPassword", self.confirmPasswordVisible,
+                    !self.confirmPasswordVisible());
+            }
+        };
+
+        self.hidePasswords = function () {
+            self.setPasswordVisibility("hthApiNewPassword", self.newPasswordVisible, false);
+            self.setPasswordVisibility("hthApiConfirmPassword", self.confirmPasswordVisible, false);
+        };
+
         self.clearSecrets = function () {
+            self.hidePasswords();
             self.newPassword(null);
             self.confirmPassword(null);
             self.passwordCode(null);
@@ -147,6 +180,7 @@ define([
                 return;
             }
 
+            self.hidePasswords();
             self.submitting(true);
 
             Promise.resolve().then(function () {

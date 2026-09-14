@@ -16,10 +16,13 @@ def method(name):
         depth += (s[i] == '{') - (s[i] == '}'); i += 1
     return s[m.start():i]
 names = ['notifySetupSuccess', 'notifyResetSuccess', 'notifyPasswordSuccess', 'addNotificationDestination', 'notifyEmailRecipients',
-         'publishEmail', 'readNotificationUser', 'normalize', 'canonicalUser', 'isBlank']
+         'publishEmail', 'publishUniqueEmail', 'copyNotificationLog', 'readCodeApprovalSigners', 'readNotificationUser', 'normalize', 'canonicalUser', 'isBlank']
 methods = '\n'.join(method(n) for n in names)
 methods = methods.replace('com.ofss.digx.domain.sms.entity.user.User', 'TestUser')
 methods = methods.replace('com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData', 'Extension')
+methods = methods.replace('com.ofss.digx.framework.domain.transaction.TransactionKey', 'ApprovalKey')
+methods = methods.replace('com.ofss.digx.framework.domain.transaction.Transaction', 'ApprovalTransaction')
+methods = methods.replace('com.ofss.fc.infra.thread.ThreadAttribute', 'ThreadAttribute')
 # These boundaries are security/transaction contracts around the exercised methods.
 sms = next((ROOT/'consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.sms/src').rglob('app/sms/service/user/UserExtensionData.java')).read_text()
 assert 'String.class, String.class).invoke(service, dto.getHthApiPasswordCodeId().trim(),' in sms
@@ -36,10 +39,11 @@ class Base {
   static List<String> events = new ArrayList<String>();
   static List<List<String>> destinations = new ArrayList<List<String>>();
   static String failEvent;
+  static List<HthNotificationHarness.HthApiPasswordActivityLogDTO> logs=new ArrayList<>();
   void registerActivityAndGenerateEvent(SessionContext c, String a, String e, Date d,
       HthApiPasswordActivityLogDTO log) throws Exception {
     if(e.equals(failEvent)) throw new Exception("dispatch failure");
-    events.add(e); List<String> ds=new ArrayList<String>();
+    logs.add(log); events.add(e); List<String> ds=new ArrayList<String>();
     for(NotificationDetail n:log.details) ds.add(n.destination+":"+n.address);
     destinations.add(ds);
   }
@@ -50,7 +54,19 @@ public class HthNotificationHarness extends Base {
   static List<Extension> owners=new ArrayList<Extension>();
   static Map<String,TestUser> users=new HashMap<String,TestUser>();
   static String readKey, companyEmail;
-  static boolean companyFailure;
+  static boolean companyFailure, transactionFailure, omb;
+  static String signedBy, failedUser;
+  static class ApprovalKey { String id; void setId(String id){this.id=id;} }
+  static class ApprovalTransaction {
+    ApprovalTransaction read(ApprovalKey k) {
+      if(transactionFailure)throw new RuntimeException("transaction read failed");
+      check("TX".equals(k.id),"approval transaction key");return this;
+    }
+    ApprovalTransaction getApprovalDetails(){return this;}
+    String getSignedBy(){return signedBy;}
+  }
+  static class ThreadAttribute { static Object get(String key){return omb;} }
+
   static int closes;
   static class SessionContext {}
   static class Identity { String partyId="P", userId="ALICE"; }
@@ -66,9 +82,16 @@ public class HthNotificationHarness extends Base {
   static class HthApiPasswordActivityLogDTO {
     NotificationDetail[] details;
     void setNotificationDetails(NotificationDetail[] d){details=d;}
-    void setCustomerId(String p){}
-    void setHthApiPasswordPartyId(String p){}
-    void setHthApiPasswordUserName(String p){}
+    String CustomerId; String getCustomerId(){return CustomerId;} void setCustomerId(String v){CustomerId=v;}
+    String HthApiPasswordPartyId; String getHthApiPasswordPartyId(){return HthApiPasswordPartyId;} void setHthApiPasswordPartyId(String v){HthApiPasswordPartyId=v;}
+    String HthApiPasswordUserName; String getHthApiPasswordUserName(){return HthApiPasswordUserName;} void setHthApiPasswordUserName(String v){HthApiPasswordUserName=v;}
+    String HthApiPasswordExpiryDateTime; String getHthApiPasswordExpiryDateTime(){return HthApiPasswordExpiryDateTime;} void setHthApiPasswordExpiryDateTime(String v){HthApiPasswordExpiryDateTime=v;}
+    String HthApiPasswordExpiryYear; String getHthApiPasswordExpiryYear(){return HthApiPasswordExpiryYear;} void setHthApiPasswordExpiryYear(String v){HthApiPasswordExpiryYear=v;}
+    String HthApiPasswordExpiryMonth; String getHthApiPasswordExpiryMonth(){return HthApiPasswordExpiryMonth;} void setHthApiPasswordExpiryMonth(String v){HthApiPasswordExpiryMonth=v;}
+    String HthApiPasswordExpiryDay; String getHthApiPasswordExpiryDay(){return HthApiPasswordExpiryDay;} void setHthApiPasswordExpiryDay(String v){HthApiPasswordExpiryDay=v;}
+    String HthApiPasswordExpiryHour; String getHthApiPasswordExpiryHour(){return HthApiPasswordExpiryHour;} void setHthApiPasswordExpiryHour(String v){HthApiPasswordExpiryHour=v;}
+    String HthApiPasswordExpiryMinute; String getHthApiPasswordExpiryMinute(){return HthApiPasswordExpiryMinute;} void setHthApiPasswordExpiryMinute(String v){HthApiPasswordExpiryMinute=v;}
+    String HthApiPasswordExpirySecond; String getHthApiPasswordExpirySecond(){return HthApiPasswordExpirySecond;} void setHthApiPasswordExpirySecond(String v){HthApiPasswordExpirySecond=v;}
   }
   static class UserKey { String id; void setUserId(String id){this.id=id;} }
   static class TestUser {
@@ -76,7 +99,7 @@ public class HthNotificationHarness extends Base {
     TestUser(){}
     TestUser(String e,String m){email=e;mobile=m;}
     String getEmailId(){return email;} String getMobileNumber(){return mobile;}
-    TestUser read(UserKey k){readKey=k.id;return users.get(k.id);}
+    TestUser read(UserKey k){if(k.id.equals(failedUser))throw new RuntimeException("contact failure");readKey=k.id;return users.get(k.id);}
   }
   static class ExtensionKey { String id; ExtensionKey(String s){id=s;} String getUserExtensionKey(){return id;} }
   static class Extension {
@@ -106,10 +129,11 @@ public class HthNotificationHarness extends Base {
 preamble = preamble.replace('void registerActivityAndGenerateEvent(SessionContext c', 'void registerActivityAndGenerateEvent(HthNotificationHarness.SessionContext c').replace('      HthApiPasswordActivityLogDTO log)', '      HthNotificationHarness.HthApiPasswordActivityLogDTO log)').replace('for(NotificationDetail n:', 'for(HthNotificationHarness.NotificationDetail n:')
 tests=r'''
   static void reset(){events.clear();destinations.clear();owners.clear();users.clear();readKey=null;
-    companyEmail="office@example.test";companyFailure=false;failEvent=null;closes=0;}
+    companyEmail="office@example.test";companyFailure=false;failEvent=null;closes=0;
+    logs.clear();signedBy=null;transactionFailure=false;omb=false;failedUser=null;}
   static void owner(String id,String email,String mobile){owners.add(new Extension("P",id));users.put(id,new TestUser(email,mobile));}
   static void check(boolean b,String message){if(!b)throw new AssertionError(message);}
-  void code(){notifyEmailRecipients(null,"approve","USER","COMPANY","P","ALICE",new HthApiPasswordActivityLogDTO());}
+  void code(){notifyEmailRecipients(null,"approve","USER","COMPANY","P","ALICE","TX","OPERATOR",new HthApiPasswordActivityLogDTO());}
   void success(){notifyPasswordSuccess(null,new Identity(),"reset","RESET");}
   public static void main(String[] args) throws Exception {
     LOGGER.setLevel(Level.OFF);HthNotificationHarness h=new HthNotificationHarness();
@@ -122,6 +146,35 @@ tests=r'''
     reset();owner("ALICE","u@example.test","123");failEvent="USER";h.code();check(events.equals(Arrays.asList("COMPANY")),"user publication failure isolated");
     reset();owners.add(new Extension("OTHER","ALICE"));users.put("ALICE",new TestUser("wrong@example.test","1"));h.code();check(readKey==null,"other party rejected");
     reset();owner("ALICE","a@example.test","1");owner("ALICE@P","b@example.test","2");h.code();check(readKey==null,"ambiguous owners rejected");check(events.equals(Arrays.asList("COMPANY")),"company independent of user lookup");
+    reset();owner("ALICE@P","alice@example.test","123");
+    signedBy="AP1~AP2~AP1~ALICE@P~ ~AP3";
+    users.put("AP1",new TestUser("ap1@example.test",null));
+    users.put("AP2",new TestUser(" ALICE@EXAMPLE.TEST ",null));
+    users.put("AP3",new TestUser("ap3@example.test",null));h.code();
+    check(events.equals(Arrays.asList("USER","USER","USER","COMPANY")),"user/all approvers before company");
+    check(destinations.get(1).equals(Arrays.asList("EMAIL:ap1@example.test")),"actual signer 1");
+    check(destinations.get(2).equals(Arrays.asList("EMAIL:ap3@example.test")),"actual signer 3 despite duplicate mailbox");
+    check(logs.get(0)!=logs.get(1),"independent event log instances");
+    check(logs.get(0).details[0].address.equals("alice@example.test"),"first event destination not overwritten");
+    reset();owner("ALICE","office@example.test",null);signedBy="AP1~AP2";
+    users.put("AP1",new TestUser(" OFFICE@EXAMPLE.TEST ",null));users.put("AP2",new TestUser("office@example.test",null));h.code();
+    check(events.equals(Arrays.asList("USER")),"one mailbox across user/all AP/company");
+    reset();owner("ALICE","a@example.test",null);signedBy="AP1~AP2";failedUser="AP1";
+    users.put("AP2",new TestUser("b@example.test",null));companyEmail=" B@EXAMPLE.TEST ";h.code();
+    check(events.equals(Arrays.asList("USER","USER")),"bad signer does not stop later signer; company dedup with AP");
+    reset();owner("ALICE","a@example.test",null);signedBy="AP1";
+    users.put("AP1",new TestUser("b@example.test",null));failEvent="USER";h.code();
+    check(events.equals(Arrays.asList("COMPANY")),"publication failures do not stop other recipient roles");
+    reset();owner("ALICE","a@example.test",null);transactionFailure=true;h.code();
+    check(events.size()==2,"approval lookup failure retains user/company");
+    reset();owner("ALICE","a@example.test",null);omb=true;
+    users.put("OPERATOR",new TestUser("operator@example.test",null));h.code();check(events.size()==3,"OMB operator fallback");
+    reset();owner("ALICE","a@example.test",null);
+    users.put("OPERATOR",new TestUser("operator@example.test",null));h.code();check(events.size()==2,"no invented approver without signedBy/OMB");
+    HthApiPasswordActivityLogDTO original=new HthApiPasswordActivityLogDTO();
+    original.setHthApiPasswordUserName("ALICE");original.setHthApiPasswordExpiryDateTime("2030-01-01 09:00:00");
+    HthApiPasswordActivityLogDTO copy=h.copyNotificationLog(original);
+    check("ALICE".equals(copy.getHthApiPasswordUserName()) && original.getHthApiPasswordExpiryDateTime().equals(copy.getHthApiPasswordExpiryDateTime()),"template values retained per event");
     reset();owner("ALICE@P","u@example.test","123");h.success();check(events.equals(Arrays.asList("RESET")),"one success event");check(destinations.get(0).equals(Arrays.asList("EMAIL:u@example.test","SMS:123")),"success uses both channels");
     reset();owner("ALICE",null,"123");h.success();check(destinations.get(0).equals(Arrays.asList("SMS:123")),"SMS without email");
     reset();owner("ALICE","u@example.test",null);h.success();check(destinations.get(0).equals(Arrays.asList("EMAIL:u@example.test")),"email without SMS");
@@ -157,7 +210,7 @@ placeholders=set(re.findall(r'#(\w+)#',sql))
 dto=next((ROOT/'consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src').rglob('HthApiPasswordActivityLogDTO.java')).read_text()
 for field in placeholders:assert 'get'+field[0].upper()+field[1:]+'()' in dto,field
 assert not any(re.search(r'(?im)^\s*'+cmd+r'\b',sql) for cmd in ['DEFINE','UNDEFINE','WHENEVER'])
-print('PASS: 4 events, 18 recipient/template configurations; template placeholders resolve; no SQL*Plus directives')
+print('PASS: 4 events, 18 recipient/template configurations; template placeholders have DTO getters (metadata checked separately); no SQL*Plus directives')
 
 # Each recipient must select an existing template with the same destination, and each
 # event must have exactly its intended language/channel matrix.

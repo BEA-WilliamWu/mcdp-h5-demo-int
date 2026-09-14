@@ -1,9 +1,11 @@
 -- Oracle SQL/PLSQL; no SQL*Plus commands or substitution variables.
 -- Execute each complete DECLARE/BEGIN ... END; block as one statement (no slash).
--- BCOH2H-788 / 790: DATABASE by default, UAM only when explicitly selected.
+-- BCOH2H-788 / 790: DATABASE by default; UAM or DSP only when explicitly selected.
 -- Run 1 Schema, 2 Process and 3 Permission first. Code key and storage settings commit together.
 -- DATABASE needs no UAM URL, client ID or APIC credentials.
 -- UAM requires confirmed HTTPS URL and all three paths; no guessed endpoint defaults.
+-- DSP uses the supplied persist POST and dedicated APIC properties; no remote status API is assumed.
+-- Populate DSP credentials only in the local deployment copy, never in Git.
 -- Changing the backend does NOT migrate passwords. Stop traffic and plan credential migration first.
 -- On first deployment, provide the original Code key locally; never commit a populated script.
 -- On rerun, NULL reuses the configured key; a different supplied key is rejected.
@@ -18,6 +20,9 @@ DECLARE
   V_STATUS_PATH VARCHAR2(500) := NULL;
   V_SETUP_PATH VARCHAR2(500) := NULL;
   V_RESET_PATH VARCHAR2(500) := NULL;
+  V_DSP_PERSIST_URL VARCHAR2(1000) := NULL;
+  V_DSP_APIC_CLIENT_ID VARCHAR2(1000) := NULL;
+  V_DSP_APIC_CLIENT_SECRET VARCHAR2(1000) := NULL;
   V_ORIGINAL_KEY VARCHAR2(4000) := NULL;
   V_EXISTING_KEY VARCHAR2(4000);
   V_KEY_BYTES RAW(2000);
@@ -74,8 +79,8 @@ BEGIN
   V_STATUS_PATH := COALESCE(TRIM(V_STATUS_PATH), EXISTING_PROPERTY('STATUS_PATH', NULL));
   V_SETUP_PATH := COALESCE(TRIM(V_SETUP_PATH), EXISTING_PROPERTY('SETUP_PATH', NULL));
   V_RESET_PATH := COALESCE(TRIM(V_RESET_PATH), EXISTING_PROPERTY('RESET_PATH', NULL));
-  IF V_STORAGE_BACKEND IS NULL OR V_STORAGE_BACKEND NOT IN ('DATABASE', 'UAM') THEN
-    RAISE_APPLICATION_ERROR(-20021, 'STORAGE_BACKEND must be DATABASE or UAM.');
+  IF V_STORAGE_BACKEND IS NULL OR V_STORAGE_BACKEND NOT IN ('DATABASE', 'UAM', 'DSP') THEN
+    RAISE_APPLICATION_ERROR(-20021, 'STORAGE_BACKEND must be DATABASE, UAM or DSP.');
   END IF;
   IF V_STORAGE_BACKEND = 'UAM' THEN
     IF V_SERVICE_URL IS NULL OR V_SERVICE_URL NOT LIKE 'https://%'
@@ -83,6 +88,16 @@ BEGIN
        OR V_STATUS_PATH IS NULL OR V_SETUP_PATH IS NULL OR V_RESET_PATH IS NULL
        OR V_STATUS_PATH NOT LIKE '/%' OR V_SETUP_PATH NOT LIKE '/%' OR V_RESET_PATH NOT LIKE '/%' THEN
       RAISE_APPLICATION_ERROR(-20001, 'UAM requires the approved HTTPS URL and status/setup/reset paths.');
+    END IF;
+  END IF;
+  IF V_STORAGE_BACKEND = 'DSP' THEN
+    V_DSP_PERSIST_URL := COALESCE(TRIM(V_DSP_PERSIST_URL), EXISTING_PROPERTY('DSP_PERSIST_URL', NULL));
+    V_DSP_APIC_CLIENT_ID := COALESCE(TRIM(V_DSP_APIC_CLIENT_ID), EXISTING_PROPERTY('DSP_APIC_CLIENT_ID', NULL));
+    V_DSP_APIC_CLIENT_SECRET := COALESCE(TRIM(V_DSP_APIC_CLIENT_SECRET), EXISTING_PROPERTY('DSP_APIC_CLIENT_SECRET', NULL));
+    IF V_DSP_PERSIST_URL IS NULL OR V_DSP_PERSIST_URL NOT LIKE 'https://%/credentials/v1/persist'
+       OR V_DSP_PERSIST_URL LIKE '%CHANGE_ME%'
+       OR V_DSP_APIC_CLIENT_ID IS NULL OR V_DSP_APIC_CLIENT_SECRET IS NULL THEN
+      RAISE_APPLICATION_ERROR(-20023, 'DSP requires the HTTPS persist URL and dedicated APIC credentials supplied locally.');
     END IF;
   END IF;
   -- Preserve the configured key so existing Code ciphertext remains decryptable.
@@ -131,6 +146,17 @@ IF V_STORAGE_BACKEND = 'UAM' THEN
   PUT_PROPERTY('STATUS_PATH', V_STATUS_PATH, TRUE);
   PUT_PROPERTY('SETUP_PATH', V_SETUP_PATH, TRUE);
   PUT_PROPERTY('RESET_PATH', V_RESET_PATH, TRUE);
+END IF;
+IF V_STORAGE_BACKEND = 'DSP' THEN
+  PUT_PROPERTY('DSP_PERSIST_URL', V_DSP_PERSIST_URL, TRUE);
+  PUT_PROPERTY('DSP_APIC_CLIENT_ID', V_DSP_APIC_CLIENT_ID, TRUE);
+  PUT_PROPERTY('DSP_APIC_CLIENT_SECRET', V_DSP_APIC_CLIENT_SECRET, TRUE);
+  PUT_PROPERTY('DSP_CONNECT_TIMEOUT_MS', '5000');
+  PUT_PROPERTY('DSP_READ_TIMEOUT_MS', '15000');
+  -- With no JSON match configured, only empty synchronous responses are confirmed.
+  PUT_PROPERTY('DSP_SUCCESS_HTTP_STATUSES', '200,201,204');
+  PUT_PROPERTY('DSP_SUCCESS_JSON_POINTER', NULL);
+  PUT_PROPERTY('DSP_SUCCESS_JSON_VALUE', NULL);
 END IF;
 PUT_PROPERTY('CHANNEL', 'BCO');
 PUT_PROPERTY('CONNECT_TIMEOUT_MS', '5000');

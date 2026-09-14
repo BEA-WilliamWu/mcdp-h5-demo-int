@@ -53,6 +53,7 @@ public final class HthApiPasswordTransactionTest {
           check("ACTIVE".equals(SERVICE.credentialStatus()), "Status reads the selected profile credential");
         }
       }
+      dspChangeFlow();
       check(DataAccessManager.opened == DataAccessManager.closed, "Every independent ORM session closed");
       check(TransactionHelper.suspends == TransactionHelper.resumes, "Every suspended transaction restored");
       System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: automatic SETUP/RESET by target/store, PBKDF2 password changes, failed-attempt commit/lockout, Code aliases/purpose/expiry/consumption/decryption, profile foreign keys, atomic rollback, status/retry reads and session cleanup");
@@ -60,6 +61,75 @@ public final class HthApiPasswordTransactionTest {
       if (outerEntityManager != null && outerEntityManager.isOpen()) outerEntityManager.close();
       db.close();
       DataAccessManager.factory.close();
+    }
+  }
+
+  private static void dspChangeFlow() throws java.lang.Exception {
+    java.util.prefs.Preferences config = ConfigurationFactory.getInstance().getRootConfigurations();
+    config.put("HTH_API_PASSWORD.STORAGE_BACKEND", "DSP");
+    try {
+      resetData("USER@PARTY");
+      // Historical DATABASE success must not claim the password is in DSP.
+      sql("INSERT INTO HTH_BEA.HTH_API_PASSWORD_OPERATION (REQUEST_ID,PARTY_ID,USER_ID,OPERATION,STATUS,STORAGE_BACKEND) VALUES ('legacy','PARTY','USER@PARTY','SETUP','SUCCESS','DATABASE')");
+      check("NOT_SETUP".equals(SERVICE.dspState()), "Local success is not DSP success");
+      check("SETUP".equals(SERVICE.codePurpose("PARTY","USER",null)), "DSP first Code is SETUP");
+      seed("dsp-setup", "SETUP");
+      int calls = DspCredentialFixture.calls;
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.changeDsp("SETUP","Example1234","999999",java.util.UUID.randomUUID().toString()));
+      reject("DIGX_CZ_HTH_API_PASSWORD_010", () -> SERVICE.changeDsp("SETUP","BAD_TRANSPORT",CODE,java.util.UUID.randomUUID().toString()));
+      reject("DIGX_CZ_HTH_API_PASSWORD_004", () -> SERVICE.changeDsp("SETUP","short",CODE,java.util.UUID.randomUUID().toString()));
+      check(DspCredentialFixture.calls == calls, "Invalid input never reaches DSP");
+      String setupId = java.util.UUID.randomUUID().toString();
+      check("ACTIVE".equals(SERVICE.changeDsp("SETUP","Example1234",CODE,setupId)), "DSP setup completes");
+      check("USED".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-setup'")), "Confirmed setup consumes Code");
+      check("USER@PARTY".equals(DspCredentialFixture.lastUser), "DSP receives full CLOSE_ID");
+      check("CLIENT".equals(DspCredentialFixture.lastClient), "DSP receives management client");
+      check(number("SELECT COUNT(*) FROM HTH_BEA.HTH_API_PASSWORD_CREDENTIAL") == 0, "DSP stores no local password hash");
+      check("RESET".equals(SERVICE.codePurpose("PARTY","USER",null)), "Confirmed DSP setup selects RESET");
+      check("ACTIVE".equals(SERVICE.changeDsp("SETUP","Example1234",CODE,setupId)), "Successful request replay");
+      check(DspCredentialFixture.calls == calls + 1 && PasswordTransactionHarness.setupNotifications == 1, "Replay does not POST or notify twice");
+      HthManagement.clientId = "CHANGED_CLIENT";
+      check("NOT_SETUP".equals(SERVICE.dspState()), "Changed business client has its own state");
+      reject("DIGX_CZ_HTH_API_PASSWORD_007", () -> SERVICE.changeDsp("SETUP","Example1234",CODE,setupId));
+      HthManagement.clientId = "CLIENT";
+      seed("dsp-reset", "RESET");
+      String resetId = java.util.UUID.randomUUID().toString();
+      check("ACTIVE".equals(SERVICE.changeDsp("RESET","Example5678",CODE,resetId)), "DSP reset completes");
+      check("Example5678".equals(DspCredentialFixture.lastPassword), "Reset supplies the new password to adapter");
+      check(PasswordTransactionHarness.resetNotifications == 1, "Confirmed reset notifies");
+      check("USED".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-reset'")), "Reset consumes Code");
+      seed("dsp-config", "RESET");
+      DspCredentialFixture.failure = "BEFORE_POST";
+      reject("DIGX_CZ_HTH_API_PASSWORD_009", () -> SERVICE.changeDsp("RESET","Example9012",CODE,java.util.UUID.randomUUID().toString()));
+      check("ACTIVE".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-config'")), "Unsent failure releases Code");
+      DspCredentialFixture.failure = "UNKNOWN";
+      String uncertainId = java.util.UUID.randomUUID().toString();
+      reject("DIGX_CZ_HTH_API_PASSWORD_009", () -> SERVICE.changeDsp("RESET","Example9012",CODE,uncertainId));
+      check("UNKNOWN".equals(SERVICE.dspState()), "Uncertain reset blocks workflow even after an earlier success");
+      check("UNKNOWN".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-config'")), "Uncertain Code held");
+      calls = DspCredentialFixture.calls;
+      reject("DIGX_CZ_HTH_API_PASSWORD_007", () -> SERVICE.changeDsp("RESET","Example9012",CODE,uncertainId));
+      reject("DIGX_CZ_HTH_API_PASSWORD_007", () -> SERVICE.changeDsp("RESET","Example9012",CODE,java.util.UUID.randomUUID().toString()));
+      check(calls == DspCredentialFixture.calls && PasswordTransactionHarness.resetNotifications == 1, "Unknown is not retried or notified");
+      // A confirmed remote result followed by local commit failure must also remain unresolved.
+      resetData("USER@PARTY"); seed("dsp-commit", "SETUP");
+      DspCredentialFixture.failure = null;
+      DspCredentialFixture.afterPersist = () -> DataAccessManager.failOpen = true;
+      try {
+        SERVICE.changeDsp("SETUP","Example1234",CODE,java.util.UUID.randomUUID().toString());
+        throw new AssertionError("Expected local commit failure");
+      } catch (com.ofss.digx.infra.exceptions.Exception failure) {
+        check(failure.getCause() instanceof IllegalStateException, "Local session failure propagated");
+      }
+      DataAccessManager.failOpen = false;
+      check("UNKNOWN".equals(SERVICE.dspState()), "IN_PROGRESS from unavailable local DB remains unresolved");
+      check("IN_PROGRESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-commit'")), "Failed local completion retains reservation");
+      check(PasswordTransactionHarness.setupNotifications == 1, "Local completion failure does not notify success");
+      System.out.println("PASS: production change() DSP setup/reset, full identity/client binding, Code checks, replay, no local hash, known/unknown failure, commit failure and notification gating");
+    } finally {
+      config.remove("HTH_API_PASSWORD.STORAGE_BACKEND");
+      HthManagement.clientId = "CLIENT"; DspCredentialFixture.failure = null;
+      DspCredentialFixture.afterPersist = null; DataAccessManager.failOpen = false;
     }
   }
 
@@ -100,7 +170,7 @@ public final class HthApiPasswordTransactionTest {
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_OPERATION (REQUEST_ID VARCHAR(40) PRIMARY KEY, PARTY_ID VARCHAR(40), "
         + "USER_ID VARCHAR(80), OPERATION VARCHAR(10), CODE_ID VARCHAR(40), STATUS VARCHAR(20), CREATED_BY VARCHAR(80), "
         + "CREATION_DATE TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), LAST_UPDATE_DATE TIMESTAMP, OBJECT_STATUS CHAR(1), "
-        + "OBJECT_VERSION_NUMBER INT, STORAGE_BACKEND VARCHAR(20), REFERENCE_NUMBER VARCHAR(40))");
+        + "OBJECT_VERSION_NUMBER INT, STORAGE_BACKEND VARCHAR(20), REMOTE_CLIENT_ID VARCHAR(512), REFERENCE_NUMBER VARCHAR(40))");
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CREDENTIAL (PARTY_ID VARCHAR(40), USER_ID VARCHAR(80), "
         + "PASSWORD_HASH VARCHAR(200), LAST_REQUEST_ID VARCHAR(40), LAST_UPDATED_BY VARCHAR(80), "
         + "CREDENTIAL_STATUS VARCHAR(20), CREDENTIAL_VERSION INT, CREATED_AT TIMESTAMP, UPDATED_AT TIMESTAMP, "

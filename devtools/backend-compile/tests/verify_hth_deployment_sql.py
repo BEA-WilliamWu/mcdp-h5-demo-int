@@ -62,8 +62,15 @@ def connect():
         'DIGX_EP_MSG_TMPL_B': 'COD_TMPL_ID,DETERMINANT_VALUE',
         'DIGX_EP_EVT_REC_B': 'COD_ACT_ID,COD_EVENT_ID,COD_ACTION_ID,TXT_DEST_TYP,LOCALE',
         'DIGX_FW_ERROR_MESSAGES': 'ERROR_CODE,USER_LOCALE',
+        'DIGX_MD_GEN_ATTR_LEGACY_B': 'COD_CONSTRAINT_ATTR_ID',
+        'DIGX_MD_SERVICE_ATTR': 'COD_SERVICE_ATTR_ID',
+        'DIGX_EP_MSG_ATTR_B': 'COD_MESS_TMPL_ID,COD_ATTR_ID,DETERMINANT_VALUE',
+        'DIGX_EP_MSG_SRC_B': 'COD_MESS_TMPL_ID,COD_ATTR_ID,COD_ACT_ID,DETERMINANT_VALUE',
     }
     refs = {
+        'DIGX_MD_SERVICE_ATTR': 'FOREIGN KEY(COD_ATTR_ID) REFERENCES DIGX_MD_GEN_ATTR_LEGACY_B(COD_CONSTRAINT_ATTR_ID)',
+        'DIGX_EP_MSG_ATTR_B': 'FOREIGN KEY(COD_MESS_TMPL_ID,DETERMINANT_VALUE) REFERENCES DIGX_EP_MSG_TMPL_B(COD_TMPL_ID,DETERMINANT_VALUE),FOREIGN KEY(COD_ATTR_ID) REFERENCES DIGX_MD_GEN_ATTR_LEGACY_B(COD_CONSTRAINT_ATTR_ID)',
+        'DIGX_EP_MSG_SRC_B': 'FOREIGN KEY(COD_MESS_TMPL_ID,COD_ATTR_ID,DETERMINANT_VALUE) REFERENCES DIGX_EP_MSG_ATTR_B(COD_MESS_TMPL_ID,COD_ATTR_ID,DETERMINANT_VALUE),FOREIGN KEY(COD_SERVICE_ATTR_ID) REFERENCES DIGX_MD_SERVICE_ATTR(COD_SERVICE_ATTR_ID)',
         'DIGX_EP_ACT_EVT_B': 'FOREIGN KEY(COD_ACT_ID) REFERENCES DIGX_EP_ACT_B(COD_ACT_ID)',
         'DIGX_EP_ACT_EVT_ACN_B': 'FOREIGN KEY(COD_ACT_ID,COD_EVENT_ID) REFERENCES DIGX_EP_ACT_EVT_B(COD_ACT_ID,COD_EVENT_ID)',
         'DIGX_EP_EVT_REC_B': 'FOREIGN KEY(COD_ACT_ID,COD_EVENT_ID,COD_ACTION_ID) REFERENCES DIGX_EP_ACT_EVT_ACN_B(COD_ACT_ID,COD_EVENT_ID,COD_ACTION_ID)',
@@ -117,12 +124,42 @@ for iteration in range(2):
     for table, count in [('DIGX_EP_ACT_B', 4), ('DIGX_PM_EVENT_ALL_B', 4),
                          ('DIGX_EP_ACT_EVT_B', 4), ('DIGX_EP_ACT_EVT_ACN_B', 4),
                          ('DIGX_EP_EVT_REC_B', 18), ('DIGX_EP_MSG_TMPL_B', 18),
-                         ('DIGX_FW_ERROR_MESSAGES', 31)]:
+                         ('DIGX_FW_ERROR_MESSAGES', 31), ('DIGX_MD_GEN_ATTR_LEGACY_B', 2),
+                         ('DIGX_MD_SERVICE_ATTR', 2), ('DIGX_EP_MSG_ATTR_B', 12), ('DIGX_EP_MSG_SRC_B', 12)]:
         assert db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] == count, table
     assert db.execute("SELECT OBJECT_STATUS FROM DIGX_EP_ACT_B WHERE COD_ACT_ID='BCO_EXISTING'").fetchone()[0] == 'A'
     assert db.execute("SELECT ERROR_MESSAGE FROM DIGX_FW_ERROR_MESSAGES WHERE ERROR_CODE='BCO_EXISTING'").fetchone()[0] == 'unchanged'
     assert db.execute("SELECT COUNT(*) FROM DIGX_FW_ERROR_MESSAGES WHERE ERROR_CODE LIKE 'DIGX_CZ_HTH_API_PASSWORD_%' GROUP BY USER_LOCALE").fetchall() == [(10,), (10,), (10,)]
 print('PASS: two deployments retain BCO rows, 3 HTH Activities, 4 events/actions, 18 recipients/templates, 30 error messages')
+
+# Verify every placeholder through the full deployed metadata chain and real diagnostic query.
+metadata_query = SQL[7].split('WITH expected_templates AS (', 1)[1].split(';', 1)[0]
+metadata_query = 'WITH expected_templates AS (' + metadata_query
+rows = db.execute(metadata_query).fetchall()
+assert len(rows) == 12 and all(row[-1] == 'OK' for row in rows), rows
+for mutation in [
+        "DELETE FROM DIGX_EP_MSG_SRC_B",
+        "UPDATE DIGX_MD_SERVICE_ATTR SET REF_FIELD_DEFN_ID='WrongDTO.WrongGetter'",
+        "UPDATE DIGX_MD_SERVICE_ATTR SET TYP_DATA_SRC='INPUT'",
+        "UPDATE DIGX_EP_MSG_ATTR_B SET DOMAIN_OBJECT_EXTN='OTHER'"]:
+    db.execute('SAVEPOINT missing_mapping')
+    db.execute(mutation)
+    assert any(row[-1] != 'OK' for row in db.execute(metadata_query)), mutation
+    db.execute('ROLLBACK TO missing_mapping')
+    db.execute('RELEASE missing_mapping')
+
+# An old deployment without source mappings is repaired, as are incorrect getter paths.
+db.execute('DELETE FROM DIGX_EP_MSG_SRC_B')
+db.execute("UPDATE DIGX_MD_SERVICE_ATTR SET REF_FIELD_DEFN_ID='WrongDTO.WrongGetter'")
+replay(db, body(6))
+assert all(row[-1] == 'OK' for row in db.execute(metadata_query))
+# Preserve another business unit's same-name template and metadata on rerun.
+code_template='HTH_API_PWD_CODE_USER_EMAIL_en'
+db.execute("INSERT INTO DIGX_EP_MSG_TMPL_B(COD_TMPL_ID,DETERMINANT_VALUE,TXT_MSG_TMPL) VALUES (?,'OTHER_BU','other unit')", (code_template,))
+db.execute("INSERT INTO DIGX_EP_MSG_ATTR_B(COD_MESS_TMPL_ID,COD_ATTR_ID,DETERMINANT_VALUE,ATTR_MASK) VALUES (?,'hthApiPasswordUserName','OTHER_BU','X')", (code_template,))
+replay(db, body(6))
+assert db.execute("SELECT ATTR_MASK FROM DIGX_EP_MSG_ATTR_B WHERE DETERMINANT_VALUE='OTHER_BU'").fetchone()[0]=='X'
+print('PASS: 12 complete template mappings, missing/wrong mappings detected and repaired, other BU retained')
 
 # A stored activity reference and another business unit's template must survive reruns.
 activity = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset'
@@ -130,7 +167,7 @@ db.execute('CREATE TABLE EXISTING_ACTIVITY_REFERENCE(ID PRIMARY KEY, ACTIVITY_ID
 db.execute('INSERT INTO EXISTING_ACTIVITY_REFERENCE VALUES (1,?)', (activity,))
 db.execute("INSERT INTO DIGX_EP_MSG_TMPL_B(COD_TMPL_ID,DETERMINANT_VALUE,TXT_MSG_TMPL) VALUES ('HTH_API_PWD_RESET_USER_EMAIL_en','OTHER_BU','preserve me')")
 replay(db, body(6))
-assert db.execute("SELECT TXT_MSG_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE DETERMINANT_VALUE='OTHER_BU'").fetchone()[0] == 'preserve me'
+assert db.execute("SELECT TXT_MSG_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE DETERMINANT_VALUE='OTHER_BU' AND COD_TMPL_ID='HTH_API_PWD_RESET_USER_EMAIL_en'").fetchone()[0] == 'preserve me'
 notification_check(db)
 
 # Reproduce the observed missing Activity, then verify the same script repairs it.
@@ -228,6 +265,24 @@ assert "Existing Code key differs; refusing to overwrite." in adapter
 assert all("DETERMINANT_VALUE = 'OBDX_BU'" in stmt for stmt in statements(adapter)
            if stmt.startswith('DELETE FROM DIGX_FW_CONFIG_ALL_O'))
 print('PASS: property helper preserves key/UAM/disabled/policy/timeout values and inserts no duplicates')
+# DSP defaults must retain the environment's confirmed response match and gateway credentials.
+for prop, value in {'DSP_APIC_CLIENT_SECRET': 'synthetic-secret',
+                    'DSP_SUCCESS_HTTP_STATUSES': '200',
+                    'DSP_SUCCESS_JSON_POINTER': '/result/saved',
+                    'DSP_SUCCESS_JSON_VALUE': 'true'}.items():
+    put(prop, value)
+for _ in range(2):
+    put('DSP_SUCCESS_HTTP_STATUSES', '200,201,204')
+    put('DSP_SUCCESS_JSON_POINTER', None)
+    put('DSP_SUCCESS_JSON_VALUE', None)
+assert db.execute("SELECT PROP_VALUE FROM DIGX_FW_CONFIG_ADAPTER_PROP_B WHERE PROP_ID='DSP_APIC_CLIENT_SECRET'").fetchone()[0] == 'synthetic-secret'
+assert db.execute("SELECT PROP_VALUE FROM DIGX_FW_CONFIG_ADAPTER_PROP_B WHERE PROP_ID='DSP_SUCCESS_JSON_POINTER'").fetchone()[0] == '/result/saved'
+assert db.execute("SELECT PROP_VALUE FROM DIGX_FW_CONFIG_ADAPTER_PROP_B WHERE PROP_ID='DSP_SUCCESS_HTTP_STATUSES'").fetchone()[0] == '200'
+assert "STORAGE_BACKEND IN ('DATABASE','UAM','DSP')" in SQL[1]
+assert 'REMOTE_CLIENT_ID VARCHAR2(512 BYTE)' in SQL[1]
+assert "EXISTING_PROPERTY('DSP_APIC_CLIENT_SECRET', NULL)" in adapter
+print('PASS: DSP configuration defaults preserve secrets/response rules; schema contains DSP/client binding upgrade')
+
 
 for number, sql in SQL.items():
     assert not re.search(r'(?im)^\s*(?:DEFINE|UNDEFINE|WHENEVER|PROMPT|SPOOL)\b|^\s*/\s*$', sql), number

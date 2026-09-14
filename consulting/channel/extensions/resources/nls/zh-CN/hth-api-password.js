@@ -6,6 +6,7 @@ define({
     description: "请输入用于 HTH API 渠道登录的密码。",
     newPassword: "新密码",
     confirmPassword: "重新输入密码",
+    togglePasswordVisibility: "显示或隐藏密码",
     passwordCode: "一次性密码（OTP）",
     codeHelp: "请输入授权人在 CM Portal 中生成的 HTH API 密码代码。",
     submit: "提交",

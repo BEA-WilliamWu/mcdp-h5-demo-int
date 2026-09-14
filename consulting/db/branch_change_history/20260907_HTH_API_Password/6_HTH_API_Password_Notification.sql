@@ -1,12 +1,35 @@
 -- Oracle SQL/PLSQL; execute the complete BEGIN ... END; block as one statement.
 -- Run in the OBDX configuration schema; no SQL*Plus commands or slash delimiter.
--- 789: Code approval emails to user/company, deduplicated by the service.
+-- 789: Code approval emails to user/all actual approvers/company, deduplicated by the service.
 -- 1204/1205: successful setup/reset user email and SMS, like BCO Login PIN reset.
 -- Uses the existing BCO event/action/recipient dispatch mechanism and retry policy.
 -- No passwords or Code values are included in templates. Re-runnable.
 
 BEGIN
   SAVEPOINT HTH_API_PASSWORD_CONFIG;
+
+-- Remove only child mappings of these six templates before replacing the templates.
+DELETE FROM DIGX_EP_MSG_SRC_B
+ WHERE COD_MESS_TMPL_ID IN (
+   'HTH_API_PWD_CODE_USER_EMAIL_en',
+   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN',
+   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hant',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_en',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant'
+ ) AND DETERMINANT_VALUE = 'OBDX_BU';
+
+DELETE FROM DIGX_EP_MSG_ATTR_B
+ WHERE COD_MESS_TMPL_ID IN (
+   'HTH_API_PWD_CODE_USER_EMAIL_en',
+   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN',
+   'HTH_API_PWD_CODE_USER_EMAIL_zh-Hant',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_en',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN',
+   'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant'
+ ) AND DETERMINANT_VALUE = 'OBDX_BU';
+
+
 
 -- Activities are parents of event mappings; preserve their identity on rerun.
 -- PC / A / CZ follows the existing BCO Login PIN notification Activity registration.
@@ -408,6 +431,165 @@ VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'EMAIL', 'HTH API Password COD
 INSERT INTO DIGX_EP_EVT_REC_B (COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, COD_MSG_TMPL_ID, TXT_DEST_TYP, COD_DEC_ID, FLG_CONDITIONAL, SUBSCRIBER_TYPE, RECIPIENT_TYPE, ALERTTYPE, DOMAIN_OBJECT_EXTN, LOCALE, GROUPE_NAME, BANKER_TYPE, AMOUNT, UNSECURE_MSG_TMPL_ID, SUBSCRIBER_VALUE)
 VALUES ('com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT', 'A', 'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'EMAIL', '0', 'N', 'EXTERNAL', NULL, 'M', 'CZ', 'zh-Hant', NULL, 'NA', 0, NULL, 'USER');
 
+
+-- Template placeholders require the same four metadata layers as BCO Login PIN.
+-- DTO getters alone are not discovered by the notification renderer.
+-- Preserve generic/service attribute identities because other mappings may reference them.
+UPDATE DIGX_MD_GEN_ATTR_LEGACY_B
+   SET TXT_CONSTRAINT_ATTR_NAME = 'hthApiPasswordUserName', DATA_TYPE = 'java.lang.String',
+       OBJECT_STATUS = 'A', LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_CONSTRAINT_ATTR_ID = 'hthApiPasswordUserName';
+INSERT INTO DIGX_MD_GEN_ATTR_LEGACY_B
+  (COD_CONSTRAINT_ATTR_ID, TXT_CONSTRAINT_ATTR_NAME, DATA_TYPE, CREATED_BY, CREATION_DATE,
+   LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS)
+SELECT 'hthApiPasswordUserName', 'hthApiPasswordUserName', 'java.lang.String',
+       USER, SYSDATE, USER, SYSDATE, 1, 'A'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_MD_GEN_ATTR_LEGACY_B WHERE COD_CONSTRAINT_ATTR_ID = 'hthApiPasswordUserName');
+
+UPDATE DIGX_MD_SERVICE_ATTR
+   SET TYP_DATA_AVAIL = 'INDIRECT', TYP_DATA_SRC = 'DTO', COD_ATTR_ID = 'hthApiPasswordUserName',
+       COD_SERVICE_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval',
+       PARAMETER_NAME = NULL, REF_ENT_DEFN_ID = NULL, KEY_SERVICE_ATTR_ID = NULL,
+       REF_FIELD_DEFN_ID = 'com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO.HthApiPasswordUserName', OBJECT_STATUS = 'A',
+       LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_SERVICE_ATTR_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO';
+INSERT INTO DIGX_MD_SERVICE_ATTR
+  (COD_SERVICE_ATTR_ID, TYP_DATA_AVAIL, TYP_DATA_SRC, COD_ATTR_ID, COD_SERVICE_ID,
+   PARAMETER_NAME, REF_ENT_DEFN_ID, KEY_SERVICE_ATTR_ID, CREATED_BY, CREATION_DATE,
+   LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, REF_FIELD_DEFN_ID)
+SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'INDIRECT', 'DTO', 'hthApiPasswordUserName',
+       'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', NULL, NULL, NULL, USER, SYSDATE, USER, SYSDATE, 1, 'A', 'com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO.HthApiPasswordUserName'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_MD_SERVICE_ATTR WHERE COD_SERVICE_ATTR_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO');
+
+UPDATE DIGX_MD_GEN_ATTR_LEGACY_B
+   SET TXT_CONSTRAINT_ATTR_NAME = 'hthApiPasswordExpiryDateTime', DATA_TYPE = 'java.lang.String',
+       OBJECT_STATUS = 'A', LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_CONSTRAINT_ATTR_ID = 'hthApiPasswordExpiryDateTime';
+INSERT INTO DIGX_MD_GEN_ATTR_LEGACY_B
+  (COD_CONSTRAINT_ATTR_ID, TXT_CONSTRAINT_ATTR_NAME, DATA_TYPE, CREATED_BY, CREATION_DATE,
+   LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS)
+SELECT 'hthApiPasswordExpiryDateTime', 'hthApiPasswordExpiryDateTime', 'java.lang.String',
+       USER, SYSDATE, USER, SYSDATE, 1, 'A'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_MD_GEN_ATTR_LEGACY_B WHERE COD_CONSTRAINT_ATTR_ID = 'hthApiPasswordExpiryDateTime');
+
+UPDATE DIGX_MD_SERVICE_ATTR
+   SET TYP_DATA_AVAIL = 'INDIRECT', TYP_DATA_SRC = 'DTO', COD_ATTR_ID = 'hthApiPasswordExpiryDateTime',
+       COD_SERVICE_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval',
+       PARAMETER_NAME = NULL, REF_ENT_DEFN_ID = NULL, KEY_SERVICE_ATTR_ID = NULL,
+       REF_FIELD_DEFN_ID = 'com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO.HthApiPasswordExpiryDateTime', OBJECT_STATUS = 'A',
+       LAST_UPDATED_BY = USER, LAST_UPDATED_DATE = SYSDATE,
+       OBJECT_VERSION_NUMBER = NVL(OBJECT_VERSION_NUMBER, 0) + 1
+ WHERE COD_SERVICE_ATTR_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO';
+INSERT INTO DIGX_MD_SERVICE_ATTR
+  (COD_SERVICE_ATTR_ID, TYP_DATA_AVAIL, TYP_DATA_SRC, COD_ATTR_ID, COD_SERVICE_ID,
+   PARAMETER_NAME, REF_ENT_DEFN_ID, KEY_SERVICE_ATTR_ID, CREATED_BY, CREATION_DATE,
+   LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, OBJECT_STATUS, REF_FIELD_DEFN_ID)
+SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'INDIRECT', 'DTO', 'hthApiPasswordExpiryDateTime',
+       'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', NULL, NULL, NULL, USER, SYSDATE, USER, SYSDATE, 1, 'A', 'com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO.HthApiPasswordExpiryDateTime'
+  FROM DUAL
+ WHERE NOT EXISTS (SELECT 1 FROM DIGX_MD_SERVICE_ATTR WHERE COD_SERVICE_ATTR_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_en', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_en', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_en', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_en', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hant', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hant', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hant', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_USER_EMAIL_zh-Hant', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_en', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_en', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_en', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_en', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'hthApiPasswordUserName', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'hthApiPasswordUserName',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordUserName.DTO', 'OBDX_BU');
+
+INSERT INTO DIGX_EP_MSG_ATTR_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, ATTR_MASK, DATA_ATTR_ORDER, DOMAIN_OBJECT_EXTN, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'hthApiPasswordExpiryDateTime', 'D', NULL, 'CZ', 'OBDX_BU');
+INSERT INTO DIGX_EP_MSG_SRC_B
+  (COD_MESS_TMPL_ID, COD_ATTR_ID, COD_ACT_ID, COD_SERVICE_ATTR_ID, DETERMINANT_VALUE)
+VALUES ('HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant', 'hthApiPasswordExpiryDateTime',
+        'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval', 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval.hthApiPasswordExpiryDateTime.DTO', 'OBDX_BU');
 
 COMMIT;
 EXCEPTION

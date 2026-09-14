@@ -91,7 +91,7 @@ let child;
         let value;
         vm.runInNewContext(fs.readFileSync(path.join(app,id+'.js'),'utf8'), {
             window:{crypto:crypto.webcrypto},navigator:{appName:'Netscape',appVersion:'5'},Uint8Array,
-            document:{getElementById:()=>({})},
+            document:{getElementById:()=>({querySelector:()=>null})},
             require:(deps,callback)=>callback(...deps.map(load)),
             define:(deps,factory)=>{value=factory?factory(...deps.map(dep=>load(dep.startsWith('.')?path.posix.join(path.posix.dirname(id),dep):dep))):deps;}
         },{filename:id});

@@ -1,7 +1,9 @@
 """Exercise production transaction methods and SQL with EclipseLink/OBDX ORM and H2.
 
 WebLogic transaction suspension, configuration and service bootstrap are fixtures.
-EntityManager, ORM Session/Query/Transaction wrappers and Code crypto are real.
+EntityManager, ORM Session/Query/Transaction wrappers, change() orchestration and Code crypto are real.
+For change() tests, session decryption, DSP and notification delivery are fixtures;
+the separate transport tests exercise real RSA and HTTPS.
 The STATE MERGE source parameters receive explicit VARCHAR casts for H2 type inference,
 and Oracle's approval expiry arithmetic uses H2 DATEADD. Service method bodies are unchanged.
 This does not replace Oracle/WebLogic deployment tests. Requires JAVA_HOME and H2_JAR.
@@ -46,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 
     # Copy complete service method bodies, including transaction order and close logic.
     methods = []
-    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findSuccessfulOperation", "resolveCodePurpose", "credentialState", "storageBackend", "activateApprovedCode"):
+    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findDspCredentialState", "findSuccessfulOperation", "resolveCodePurpose", "credentialState", "storageBackend", "activateApprovedCode", "change", "validateRequest", "validatePassword", "passwordPolicy", "complete", "fail"):
         match = re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S)
         assert match, name
         methods.append(match.group())
@@ -60,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
     def call(expression):
         return expression.replace("request.getRequestId()", "requestId").replace("storage.name()", '"DATABASE"')
 
+    policy_constants = re.findall(r'  private static final String POLICY_.*?;', source, re.S)
     fields = []
     for kind in ("Code", "Credential", "State", "Operation"):
         name = "LocalHthApiPassword" + kind + "RepositoryAdapter"
@@ -88,13 +91,36 @@ import com.ofss.fc.infra.config.ConfigurationFactory;
 import javax.transaction.TransactionManager;
 import weblogic.transaction.TransactionHelper;
 import java.util.List;
+import java.util.UUID;
+import java.util.prefs.Preferences;
 import java.util.logging.*;
-public class PasswordTransactionHarness {
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordPolicyDTO;
+public class PasswordTransactionHarness extends PolicyFixture {
   private static final Logger LOGGER = Logger.getLogger("transaction-test");
   private static final String SETUP = "SETUP", RESET = "RESET";
   private static final String ADAPTER_CATEGORY = "HthApiCredentialAdapterConfig";
   private static final FormatterFixture FORMATTER = new FormatterFixture();
   private IHthApiCredentialAdapter adapter() { return RemoteCredentialFixture.INSTANCE; }
+  private IHthApiCredentialAdapter dspAdapter() { return DspCredentialFixture.INSTANCE; }
+  static int setupNotifications, resetNotifications;
+  private boolean isFeatureEnabled() { return true; }
+  private HostToHostApiPasswordResponseDTO response() { return new HostToHostApiPasswordResponseDTO(); }
+  private List<String> decryptCredentials(HostToHostApiPasswordRequestDTO request, String user, String operation) throws Exception {
+    if ("BAD_TRANSPORT".equals(request.encrypted)) throw new Exception("DIGX_CZ_HTH_API_PASSWORD_010");
+    return java.util.Arrays.asList(request.password, request.code);
+  }
+  private void notifySetupSuccess(SessionContext session, Identity identity) { setupNotifications++; }
+  private void notifyResetSuccess(SessionContext session, Identity identity) { resetNotifications++; }
+  public String changeDsp(String operation, String password, String code, String requestId) throws Exception {
+    HostToHostApiPasswordRequestDTO request = new HostToHostApiPasswordRequestDTO();
+    request.requestId = requestId; request.password = password; request.code = code;
+    request.encrypted = "BAD_TRANSPORT".equals(password) ? password : "synthetic-encrypted-envelope";
+    return change(new SessionContext(), request, operation, "test-service").state;
+  }
+  public String dspState() throws Exception {
+    Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DSP);
+    return credentialState(identity, true, HthApiPasswordStorage.DSP);
+  }
   public String codePurpose(String partyId, String userName, String requested) throws Exception {
     return resolveCodePurpose(partyId, userName, requested);
   }
@@ -127,7 +153,7 @@ public class PasswordTransactionHarness {
   }
 """.replace("RESERVE_CALL", call(reserve_call)).replace("COMPLETE_CALL", call(complete_call))
        .replace("STATUS_CALL", status_call).replace("LOOKUP_CALL", call(lookup_call))
-       + "\n".join(fields + methods) + identity_class + lease + "\n}")
+       + "\n".join(policy_constants + fields + methods) + identity_class + lease + "\n}")
     write("IdentityFixtures.java", """
 import java.sql.*;
 import com.ofss.digx.infra.exceptions.Exception;
@@ -163,7 +189,48 @@ class HthUserProfileRepository {
 class HthManagement {
   HthManagement findActiveByPartyId(String partyId) { return this; }
   String getHthStatus() { return "ENABLE"; }
-  String getUamClientId() { return "CLIENT"; }
+  static String clientId = "CLIENT";
+  String getUamClientId() { return clientId; }
+}
+class PolicyFixture {
+  protected void checkAccessPolicy(String id, SessionContext session, Object request) { }
+  protected void checkResponsePolicy(SessionContext session, Object response) { }
+}
+class Interaction {
+  static void begin(SessionContext session) { }
+  static void close() { }
+}
+class HostToHostApiPasswordRequestDTO {
+  String requestId, password, code, encrypted;
+  String getRequestId() { return requestId; }
+  String getEncryptedCredentials() { return encrypted; }
+  void setEncryptedCredentials(String value) { encrypted = value; }
+}
+class HostToHostApiPasswordResponseDTO {
+  String state;
+  final StatusFixture status = new StatusFixture();
+  StatusFixture getStatus() { return status; }
+  void setSetupState(String value) { state = value; }
+  void setResetAllowed(boolean value) { }
+}
+class StatusFixture {
+  void setReferenceNumber(String value) { }
+  void setExternalReferenceNumber(String value) { }
+}
+class DspCredentialFixture implements com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter {
+  static final DspCredentialFixture INSTANCE = new DspCredentialFixture();
+  static int calls;
+  static String failure, lastPassword, lastUser, lastClient;
+  static Runnable afterPersist;
+  public String getStatus(String p, String u, String c) { throw new AssertionError("No DSP status API"); }
+  public String setup(String p, String u, String c, String v, String r) throws Exception { return persist(p,u,c,v,r); }
+  public String reset(String p, String u, String c, String v, String r) throws Exception { return persist(p,u,c,v,r); }
+  private String persist(String p, String u, String c, String v, String r) throws Exception {
+    calls++; lastUser = u; lastClient = c; lastPassword = v;
+    if (failure != null) throw new com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException(!"BEFORE_POST".equals(failure));
+    if (afterPersist != null) afterPersist.run();
+    return r;
+  }
 }
 class FormatterFixture {
   String formatMessage(String text, Object... args) { return String.format(text, args); }
@@ -216,7 +283,7 @@ public class TransactionHelper {
   private static final TransactionHelper INSTANCE = new TransactionHelper();
   private static final TransactionManager MANAGER = (TransactionManager) Proxy.newProxyInstance(
       TransactionManager.class.getClassLoader(), new Class<?>[] {TransactionManager.class}, (p, m, a) -> {
-    if ("suspend".equals(m.getName())) { Transaction saved = current; current = null; suspends++; return saved; }
+    if ("suspend".equals(m.getName())) { Transaction saved = current; current = null; if (saved != null) suspends++; return saved; }
     if ("resume".equals(m.getName())) { if (current != null) throw new AssertionError(); current = (Transaction) a[0]; resumes++; return null; }
     throw new AssertionError("Independent ORM work must not complete the outer JTA transaction: " + m.getName());
   });
@@ -270,7 +337,8 @@ public class DataAccessManager {
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="OFF"/>
 </properties></persistence-unit></persistence>""")
     common = ROOT / "consulting/middleware/projects/common"
-    sources += [str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
+    sources += [str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordPolicyDTO.java"),
+                str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/HthApiCredentialWriteException.java"), str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
                 str(BASE / "app/hosttohost/util/HthApiPasswordHash.java"),
                 str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HthApiPasswordGenerateDTO.java"),
                 str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java"),

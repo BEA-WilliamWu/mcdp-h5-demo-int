@@ -43,7 +43,7 @@ SELECT INDEX_NAME, STATUS
 -- ENABLED retains its configured value on rerun; true is required to use the feature.
 -- DATABASE needs no UAM URL.
 -- For UAM only, SERVICE_URL must be the approved HTTPS URL and contain no CHANGE_ME.
--- APIC secrets are deliberately reused from DSPApi and are not selected here.
+-- DSP uses dedicated APIC properties; no secret values are selected.
 SELECT PROP_ID, PROP_VALUE
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
  WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
@@ -208,7 +208,7 @@ SELECT COUNT(*) AS CODE_CIPHER_KEY_CONFIG_COUNT
 
 -- Selected credential store. Missing property means DATABASE in Java; empty/invalid is rejected.
 SELECT CASE WHEN COUNT(*) = 0 THEN 'DATABASE'
-            WHEN COUNT(*) = 1 AND UPPER(TRIM(MAX(PROP_VALUE))) IN ('DATABASE', 'UAM')
+            WHEN COUNT(*) = 1 AND UPPER(TRIM(MAX(PROP_VALUE))) IN ('DATABASE', 'UAM', 'DSP')
               THEN UPPER(TRIM(MAX(PROP_VALUE)))
             ELSE 'INVALID' END AS STORAGE_BACKEND
   FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
@@ -226,3 +226,65 @@ SELECT PROP_ID, PROP_VALUE, DETERMINANT_VALUE FROM DIGX_FW_CONFIG_ALL_O
    AND PROP_ID IN ('HTH_API_PASSWORD_CREDENTIAL_LOCAL_REPOSITORY_ADAPTER',
        'HTH_API_PASSWORD_STATE_LOCAL_REPOSITORY_ADAPTER',
        'HTH_API_PASSWORD_OPERATION_LOCAL_REPOSITORY_ADAPTER');
+
+-- Expected: 12 rows, all CONFIG_STATUS=OK (six Code emails x two placeholders).
+-- This detects missing mappings even when the templates themselves exist.
+WITH expected_templates AS (
+ SELECT 'HTH_API_PWD_CODE_USER_EMAIL_en' AS TEMPLATE_ID FROM DUAL
+ UNION ALL
+ SELECT 'HTH_API_PWD_CODE_USER_EMAIL_zh-Hans-CN' AS TEMPLATE_ID FROM DUAL
+ UNION ALL
+ SELECT 'HTH_API_PWD_CODE_USER_EMAIL_zh-Hant' AS TEMPLATE_ID FROM DUAL
+ UNION ALL
+ SELECT 'HTH_API_PWD_CODE_COMPANY_EMAIL_en' AS TEMPLATE_ID FROM DUAL
+ UNION ALL
+ SELECT 'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hans-CN' AS TEMPLATE_ID FROM DUAL
+ UNION ALL
+ SELECT 'HTH_API_PWD_CODE_COMPANY_EMAIL_zh-Hant' AS TEMPLATE_ID FROM DUAL
+), expected_attributes AS (
+ SELECT 'hthApiPasswordUserName' AS ATTRIBUTE_ID FROM DUAL
+ UNION ALL
+ SELECT 'hthApiPasswordExpiryDateTime' AS ATTRIBUTE_ID FROM DUAL
+)
+SELECT t.TEMPLATE_ID, a.ATTRIBUTE_ID,
+       CASE WHEN mt.COD_TMPL_ID IS NOT NULL AND ma.ATTR_MASK = 'D'
+                  AND ma.DOMAIN_OBJECT_EXTN = 'CZ'
+                  AND sa.TYP_DATA_AVAIL = 'INDIRECT' AND sa.TYP_DATA_SRC = 'DTO'
+                  AND sa.COD_ATTR_ID = a.ATTRIBUTE_ID
+                  AND sa.COD_SERVICE_ID = ms.COD_ACT_ID
+                  AND sa.OBJECT_STATUS = 'A' AND ga.OBJECT_STATUS = 'A'
+                  AND ga.DATA_TYPE = 'java.lang.String'
+                  AND sa.REF_FIELD_DEFN_ID =
+                      'com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordActivityLogDTO.' ||
+                      UPPER(SUBSTR(a.ATTRIBUTE_ID, 1, 1)) || SUBSTR(a.ATTRIBUTE_ID, 2)
+            THEN 'OK' ELSE 'MISSING_MAPPING' END AS CONFIG_STATUS
+  FROM expected_templates t CROSS JOIN expected_attributes a
+  LEFT JOIN DIGX_EP_MSG_TMPL_B mt ON mt.COD_TMPL_ID = t.TEMPLATE_ID
+       AND mt.DETERMINANT_VALUE = 'OBDX_BU'
+  LEFT JOIN DIGX_EP_MSG_ATTR_B ma ON ma.COD_MESS_TMPL_ID = t.TEMPLATE_ID
+       AND ma.COD_ATTR_ID = a.ATTRIBUTE_ID AND ma.DETERMINANT_VALUE = 'OBDX_BU'
+  LEFT JOIN DIGX_EP_MSG_SRC_B ms ON ms.COD_MESS_TMPL_ID = t.TEMPLATE_ID
+       AND ms.COD_ATTR_ID = a.ATTRIBUTE_ID AND ms.DETERMINANT_VALUE = 'OBDX_BU'
+       AND ms.COD_ACT_ID = 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+  LEFT JOIN DIGX_MD_SERVICE_ATTR sa ON sa.COD_SERVICE_ATTR_ID = ms.COD_SERVICE_ATTR_ID
+  LEFT JOIN DIGX_MD_GEN_ATTR_LEGACY_B ga ON ga.COD_CONSTRAINT_ATTR_ID = sa.COD_ATTR_ID
+ ORDER BY t.TEMPLATE_ID, a.ATTRIBUTE_ID;
+
+-- DSP preflight. Never select the APIC secret value into a deployment log.
+SELECT PROP_ID,
+       CASE WHEN PROP_ID = 'HTH_API_PASSWORD.DSP_APIC_CLIENT_SECRET'
+            THEN CASE WHEN TRIM(PROP_VALUE) IS NULL THEN 'MISSING' ELSE '[PROTECTED]' END
+            ELSE PROP_VALUE END AS PROP_VALUE
+  FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
+ WHERE CATEGORY_ID = 'HthApiCredentialAdapterConfig'
+   AND PROP_ID LIKE 'HTH_API_PASSWORD.DSP\_%' ESCAPE '\'
+ ORDER BY PROP_ID;
+
+-- UNKNOWN/IN_PROGRESS blocks new DSP setup/reset for this owner/client until reconciled.
+SELECT STATUS, COUNT(*) AS OPERATION_COUNT
+  FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
+ WHERE STORAGE_BACKEND = 'DSP'
+ GROUP BY STATUS;
+SELECT COUNT(*) AS INVALID_DSP_BINDING_COUNT
+  FROM HTH_BEA.HTH_API_PASSWORD_OPERATION
+ WHERE STORAGE_BACKEND = 'DSP' AND REMOTE_CLIENT_ID IS NULL;

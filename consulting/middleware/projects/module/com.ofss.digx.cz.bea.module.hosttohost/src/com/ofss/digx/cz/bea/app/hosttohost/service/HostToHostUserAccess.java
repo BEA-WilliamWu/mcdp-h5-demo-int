@@ -1,5 +1,6 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
+import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -320,6 +321,12 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
    */
   private HostToHostUserAccessResponseDTO saveResponse(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, serviceId, "ACCESS_" + actionType)) {
+    try {
+
+    if (requestDTO != null) audit.put("partyId",requestDTO.getPartyId())
+        .put("targetUserId",HthOnboardingAudit.fullUser(requestDTO.getCloseId(),requestDTO.getPartyId()))
+        .put("accessPartyId",requestDTO.getAccessPartyId()).put("linkageType",requestDTO.getLinkageType());
     super.checkAccessPolicy(serviceId, sessionContext, requestDTO);
     HostToHostUserAccessResponseDTO response = new HostToHostUserAccessResponseDTO();
     response.setStatus(fetchStatus());
@@ -333,15 +340,19 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       response.getStatus().setExternalReferenceNumber(referenceNumber);
     }
 
+    audit.put("approvalReference",referenceNumber);
     Interaction.begin(sessionContext);
     try {
       validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
       if (approvedExecution) {
+        java.util.Map<String,java.util.Map<String,Object>> before = HthUserAccessAudit.effective(requestDTO);
         HthUserAccessNotification.Snapshot notification = HthUserAccessNotification.capture(
             sessionContext, requestDTO, actionType, referenceNumber);
         applyApprovedAccess(requestDTO, actionType, readUserId(sessionContext));
         HthUserAccessNotification.stage(notification);
+        HthUserAccessAudit.changes(audit, before, HthUserAccessAudit.effective(requestDTO));
       }
+      audit.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
       requestDTO.setReferenceNumber(referenceNumber);
       response.setAccess(requestDTO);
       /*
@@ -351,12 +362,14 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
        * is replaced here, the quick-approval link receives no transaction ID.
        */
     } catch (Exception e) {
+      audit.failure(e);
       fillTransactionStatus(transactionStatus, e);
       response.setStatus(buildStatus(transactionStatus));
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while processing HTH user access action '%s' for party '%s'",
           actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
     } catch (RuntimeException e) {
+      audit.failure(e);
       fillTransactionStatus(transactionStatus, e);
       response.setStatus(buildStatus(transactionStatus));
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
@@ -367,7 +380,13 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
 
     super.checkResponsePolicy(sessionContext, response);
+    audit.response(response);
     return response;
+      } catch (java.lang.Exception auditFailure) {
+      audit.failure(auditFailure);
+      throw auditFailure;
+    }
+    }
   }
 
   /**
@@ -380,6 +399,12 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
    */
   private TransactionStatus saveStatus(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, serviceId, "ACCESS_" + actionType)) {
+    try {
+
+    if (requestDTO != null) audit.put("partyId",requestDTO.getPartyId())
+        .put("targetUserId",HthOnboardingAudit.fullUser(requestDTO.getCloseId(),requestDTO.getPartyId()))
+        .put("accessPartyId",requestDTO.getAccessPartyId()).put("linkageType",requestDTO.getLinkageType());
     super.checkAccessPolicy(serviceId, sessionContext, requestDTO);
     TransactionStatus transactionStatus = fetchTransactionStatus();
     boolean approvedExecution = isApprovedExecution();
@@ -389,22 +414,28 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
       setExternalReferenceNumber(referenceNumber);
     }
 
+    audit.put("approvalReference",referenceNumber);
     Interaction.begin(sessionContext);
     try {
       validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
       if (approvedExecution) {
+        java.util.Map<String,java.util.Map<String,Object>> before = HthUserAccessAudit.effective(requestDTO);
         HthUserAccessNotification.Snapshot notification = HthUserAccessNotification.capture(
             sessionContext, requestDTO, actionType, referenceNumber);
         applyApprovedAccess(requestDTO, actionType, readUserId(sessionContext));
         HthUserAccessNotification.stage(notification);
+        HthUserAccessAudit.changes(audit, before, HthUserAccessAudit.effective(requestDTO));
       }
+      audit.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
       requestDTO.setReferenceNumber(referenceNumber);
     } catch (Exception e) {
+      audit.failure(e);
       fillTransactionStatus(transactionStatus, e);
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while processing HTH user access action '%s' for party '%s'",
           actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
     } catch (RuntimeException e) {
+      audit.failure(e);
       fillTransactionStatus(transactionStatus, e);
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Runtime exception while processing HTH user access action '%s' for party '%s'",
@@ -414,7 +445,13 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
 
     super.checkResponsePolicy(sessionContext, transactionStatus);
+    audit.response(transactionStatus);
     return transactionStatus;
+      } catch (java.lang.Exception auditFailure) {
+      audit.failure(auditFailure);
+      throw auditFailure;
+    }
+    }
   }
 
   private void validateContext(String partyId, String closeId, String accessPartyId,

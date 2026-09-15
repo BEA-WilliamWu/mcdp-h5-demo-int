@@ -6,6 +6,7 @@ import com.ofss.fc.infra.das.orm.DataAccessManager;
 import java.lang.reflect.Proxy;
 import java.security.SecureRandom;
 import java.sql.*;
+import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import java.util.Base64;
 import javax.persistence.*;
 import javax.transaction.Transaction;
@@ -125,6 +126,14 @@ public final class HthApiPasswordTransactionTest {
       check("UNKNOWN".equals(SERVICE.dspState()), "IN_PROGRESS from unavailable local DB remains unresolved");
       check("IN_PROGRESS".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='dsp-commit'")), "Failed local completion retains reservation");
       check(PasswordTransactionHarness.setupNotifications == 1, "Local completion failure does not notify success");
+      java.util.Stack<?> auditStack = (java.util.Stack<?>) com.ofss.digx.infra.thread.ThreadAttribute.get(
+          com.ofss.digx.infra.thread.ThreadAttribute.AUDIT_DETAILS_STACK);
+      String audit = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(auditStack);
+      check(audit.contains("SUCCESS") && audit.contains("FAILURE") && audit.contains("RESET") && audit.contains("SETUP"), "Actual orchestration publishes success and failure audit");
+      check(audit.contains("DIGX_CZ_HTH_API_PASSWORD_010") && audit.contains("\"idempotentReplay\":true"), "Decrypt failure and replay represented");
+      check(!audit.contains(CODE) && !audit.contains("Example") && !audit.contains("synthetic-encrypted-envelope"), "Real setup/reset audit never contains submitted credentials");
+      HthOnboardingAudit.clearRequestStack();
+      System.out.println("PASS: setup/reset orchestration emits safe success, failure and replay summaries");
       System.out.println("PASS: production change() DSP setup/reset, full identity/client binding, Code checks, replay, no local hash, known/unknown failure, commit failure and notification gating");
     } finally {
       config.remove("HTH_API_PASSWORD.STORAGE_BACKEND");

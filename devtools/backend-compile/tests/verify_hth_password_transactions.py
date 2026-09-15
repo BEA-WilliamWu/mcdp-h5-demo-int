@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 
     # Copy complete service method bodies, including transaction order and close logic.
     methods = []
-    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findDspCredentialState", "findSuccessfulOperation", "resolveCodePurpose", "credentialState", "storageBackend", "activateApprovedCode", "change", "validateRequest", "validatePassword", "passwordPolicy", "complete", "fail"):
+    for name in ("string", "validateAndReserveCode", "completeInternal", "completeDatabase", "openIndependent", "open", "logPhaseFailure", "identity", "canonicalUser", "normalize", "findDatabaseCredentialState", "findDspCredentialState", "findSuccessfulOperation", "resolveCodePurpose", "credentialState", "storageBackend", "activateApprovedCode", "change", "auditedChange", "validateRequest", "validatePassword", "passwordPolicy", "complete", "fail"):
         match = re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S)
         assert match, name
         methods.append(match.group())
@@ -85,6 +85,7 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.infra.das.orm.*;
 import com.ofss.fc.infra.jdbc.ConnectionUtil;
+import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
 import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
 import com.ofss.fc.infra.config.ConfigurationFactory;
@@ -115,7 +116,7 @@ public class PasswordTransactionHarness extends PolicyFixture {
     HostToHostApiPasswordRequestDTO request = new HostToHostApiPasswordRequestDTO();
     request.requestId = requestId; request.password = password; request.code = code;
     request.encrypted = "BAD_TRANSPORT".equals(password) ? password : "synthetic-encrypted-envelope";
-    return change(new SessionContext(), request, operation, "test-service").state;
+    return auditedChange(new SessionContext(), request, operation, "test-service").state;
   }
   public String dspState() throws Exception {
     Identity identity = identity(new SessionContext(), true, HthApiPasswordStorage.DSP);
@@ -157,7 +158,7 @@ public class PasswordTransactionHarness extends PolicyFixture {
     write("IdentityFixtures.java", """
 import java.sql.*;
 import com.ofss.digx.infra.exceptions.Exception;
-class SessionContext {
+class SessionContext extends com.ofss.fc.app.context.SessionContext {
   public String getUserId() { return "USER@PARTY"; }
   public String getTransactingPartyCode() { return "PARTY"; }
 }
@@ -214,7 +215,9 @@ class HostToHostApiPasswordResponseDTO {
   void setResetAllowed(boolean value) { }
 }
 class StatusFixture {
-  void setReferenceNumber(String value) { }
+  private String reference;
+  String getReferenceNumber() { return reference; }
+  void setReferenceNumber(String value) { reference=value; }
   void setExternalReferenceNumber(String value) { }
 }
 class DspCredentialFixture implements com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter {
@@ -266,6 +269,7 @@ package com.ofss.digx.infra.exceptions;
 public class Exception extends java.lang.Exception {
   public Exception(String code) { super(code); }
   public Exception(java.lang.Exception cause) { super(cause); }
+  public String getErrorCode() { return getMessage(); }
 }
 """)
     write("ConnectionUtil.java", """
@@ -337,6 +341,7 @@ public class DataAccessManager {
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="OFF"/>
 </properties></persistence-unit></persistence>""")
     common = ROOT / "consulting/middleware/projects/common"
+    sources += [str(next((ROOT / "consulting/middleware/projects").rglob("HthOnboardingAudit.java")))]
     sources += [str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordPolicyDTO.java"),
                 str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/HthApiCredentialWriteException.java"), str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
                 str(BASE / "app/hosttohost/util/HthApiPasswordHash.java"),

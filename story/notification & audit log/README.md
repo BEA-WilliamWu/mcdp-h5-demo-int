@@ -1,6 +1,6 @@
 # HTH Notification & Audit Log — Technical Design Review
 
-**更新：2026-09-16。** 851 已按用户确认的联系人规则实现；1216 Link/Edit 通知也已实现，按当前规则假设运行、独立开关默认关闭，收件矩阵仍待确认。两者本地编译、运行、SQL 检查通过；791 仍是技术设计。SQL 尚未在 UAT 执行，真实收件尚未验收。成套模块、SQL、状态和测试分别见 [851 部署说明](</Users/devs/CProj/hth-application/consulting/db/branch_change_history/20260915_HTH_Profile_Contact_851/README.md>)、[1216 部署说明](</Users/devs/CProj/hth-application/consulting/db/branch_change_history/20260916_HTH_User_Access_1216/README.md>)。
+**更新：2026-09-16。** 851 已按用户确认的联系人规则实现；1216 Link/Edit 通知也已实现，按当前规则假设运行、独立开关默认关闭，收件矩阵仍待确认。851/1216 本地编译、运行、SQL 检查通过；791 已实现审计采集、敏感数据过滤和详情导出，并通过本地测试。SQL 尚未在 UAT 执行，真实收件尚未验收。成套模块、SQL、状态和测试分别见 [851 部署说明](</Users/devs/CProj/hth-application/consulting/db/branch_change_history/20260915_HTH_Profile_Contact_851/README.md>)、[1216 部署说明](</Users/devs/CProj/hth-application/consulting/db/branch_change_history/20260916_HTH_User_Access_1216/README.md>)。
 
 ## 1. 三个 Story 的结论
 
@@ -10,17 +10,17 @@
 | 1216 / 1303 | [User Accounts & Service Access Notification](</Users/devs/CProj/hth-application/story/notification & audit log/BCOH2H-1216-TECHNICAL-DESIGN.md>) | 在 HTH 独立权限生效路径接入通知，复用 BCO 派送 | 不能直接认定零开发；用户权限与公司 HTH 开关是不同服务 |
 | 791 / 1299 | [HTH Onboarding Audit Log](</Users/devs/CProj/hth-application/story/notification & audit log/BCOH2H-791-TECHNICAL-DESIGN.md>) | 任务映射、安全业务摘要、现有查询及导出增强 | request 与 response 都要脱敏；操作人和目标用户不能混淆 |
 
-851/1216 TD 已更新为实际实现、验证结果与待确认项；791 保留设计方案。三份 TD 包含 AC 映射、数据来源、时序、代码/SQL、异常处理、BCO 影响及 SIT/UAT 用例。下文集中描述共用部分，避免两个通知 Story 各自实现一套 fallback 或重复修改公共类。
+851/1216 TD 已更新为实际实现、验证结果与待确认项；791 已实现安全业务摘要、既有审计查询和详情 CSV 导出，本地验证通过，待 UAT。三份 TD 包含 AC 映射、数据来源、时序、代码/SQL、异常处理、BCO 影响及 SIT/UAT 用例。下文集中描述共用部分，避免两个通知 Story 各自实现一套 fallback 或重复修改公共类。
 
 ## 2. 公共代码改动及 BCO 影响
 
-下表覆盖三个 Story，类型沿用评审时的“必改/条件修改”分类。851/1216 的实际交付以各自实现版 TD 和部署说明为准；791 为拟改清单。两个通知 Story 已使用独立同事务 ledger，共用派送状态机，并在原 BatchExecutionScheduler 之后分别消费；原因是现有 ActivityLog 无法保证提交前不派送及业务去重。
+下表覆盖三个 Story，类型沿用评审时的“必改/条件修改”分类。851/1216 的实际交付以各自实现版 TD 和部署说明为准；791 的实际修改与验证见其 TD 第 0 节及部署说明。两个通知 Story 已使用独立同事务 ledger，共用派送状态机，并在原 BatchExecutionScheduler 之后分别消费；原因是现有 ActivityLog 无法保证提交前不派送及业务去重。
 
 | 代码 / 配置 | Story | 类型 | 拟改内容 | BCO 影响与必要回归 |
 | --- | --- | --- | --- | --- |
 | SMS `UserExtensionData` | 851、791 | 必改，共用入口 | HTH Contact before/after、批准后事件；安全审计上下文 | 普通用户及 Merchant 原通知不变；回归 User Create/Edit、审批、Email/Mobile 通知 |
 | BCO `UserAccountAccessExt` | 1216 | 参考复用，原则上不改 | 参考现有通知 DTO 和文案；不把整个 postCreate 接到 HTH | 避免重复 eAdvice / BCO 权限副作用；回归原账户服务权限通知 |
-| HTH `HostToHostUserAccess` | 1216、791 | 必改，HTH 服务 | 最终生效差异和 reference 一次计算，分别供通知与审计使用 | 业务授权、Related/Associated 校验及审批规则不变 |
+| HTH `HostToHostUserAccess` | 1216、791 | 必改，HTH 服务 | 最终生效差异和 reference；791 独立读取无通知开关的前后状态 | 业务授权、Related/Associated 校验及审批规则不变 |
 | HTH `HostToHostApiPassword` | 791 | 必改，HTH 服务 | 生成、重新生成、setup/reset 的安全结果摘要 | 回归真实 setup/reset、幂等、获准查看旧 Code；不改传输/存储协议 |
 | xface DTO / 小范围 helper | 三个 | 新增 | 版本化通知上下文与审计投影 | 通知需要的地址不进入通用审计；不改变原公共 DTO 的业务响应 |
 | `EmailDispatcher` / `SMSDispatcher` | 851、1216 | 条件修改，共用类 | HTH event 的收件角色、地址来源及关联；保留旧值快照 | HTH allowlist 内适配；BCO 原事件不改变收件人或派送次数 |
@@ -135,7 +135,7 @@ H2H 上线较晚、BCO 每月上线且共用 UAT，已实现两个独立控制�
 
 已对照本目录全部三个 Story、七页补充矩阵、相关 HTH/BCO Service、Dispatcher/Bounce、审计 Handler/ORM/UI/SQL。补充矩阵保留的红字、绿色替换文字和删除线已按待评审内容处理。
 
-没有访问 UAT 数据库、网关或部署服务器，没有验证通知实际送达或运行时导出链路。851/1216 已用生产源码配合 H2、真实 OBDX ORM/metadata 完成提交/回滚、并发、派送失败及 SQL 测试；1216 全部 12 个模板已用真实 DTO getter 取值后替换验证。银行仓库、Event 与网络使用 fixture，仍需 UAT。791 实施、通知矩阵签定和真实送达验收属于后续工作。
+没有访问 UAT 数据库、网关或部署服务器，没有验证通知实际送达或运行时导出链路。851/1216 已用生产源码配合 H2、真实 OBDX ORM/metadata 完成提交/回滚、并发、派送失败及 SQL 测试；1216 全部 12 个模板已用真实 DTO getter 取值后替换验证。银行仓库、Event 与网络使用 fixture，仍需 UAT。791 本地实现与测试已完成；Oracle/WebLogic/JMS/FMO 的部署验收、通知矩阵签定和真实送达验证仍待 UAT。
 
 ## 7. 源文件索引
 
@@ -161,4 +161,4 @@ H2H 上线较晚、BCO 每月上线且共用 UAT，已实现两个独立控制�
 | [Audit Extension](</Users/devs/CProj/hth-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java:63>) | 任务名称增强、过滤及 FMO 控制。 |
 | [Audit 页面 Model](</Users/devs/CProj/hth-application/consulting/channel/extensions/components/audit/audit-log/model.js:111>) | 现有 activity 下拉及审计查询 API。 |
 | [Audit Export XSL](</Users/devs/CProj/hth-application/consulting/config_core/resources/com/ofss/digx/app/audit/dto/AuditListResponseDTO.xsl:86>) | 源码中的现有审计报告转换；实际 UAT 调用链待验证。 |
-| [Preferences.xml](</Users/devs/CProj/hth-application/consulting/config/Preferences.xml:1>) | 851/1216 通知配置类别已绑定；791 尚未实现。 |
+| [Preferences.xml](</Users/devs/CProj/hth-application/consulting/config/Preferences.xml:1>) | 851/1216 通知配置类别已绑定；791 不新增配置开关，安全投影随代码生效。 |

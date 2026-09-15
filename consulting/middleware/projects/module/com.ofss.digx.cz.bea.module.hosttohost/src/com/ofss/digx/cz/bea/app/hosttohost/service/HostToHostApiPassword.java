@@ -1,5 +1,6 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
+import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -192,7 +193,7 @@ public class HostToHostApiPassword extends AbstractApplication
       aspects = {TaskAspect.AUDIT}, type = TaskType.NONFINANCIAL_TRANSACTION)
   public HostToHostApiPasswordResponseDTO setup(SessionContext sessionContext,
       HostToHostApiPasswordRequestDTO request) throws Exception {
-    return change(sessionContext, request, SETUP, SETUP_SERVICE);
+    return auditedChange(sessionContext, request, SETUP, SETUP_SERVICE);
   }
 
   @Override
@@ -205,11 +206,26 @@ public class HostToHostApiPassword extends AbstractApplication
       aspects = {TaskAspect.AUDIT}, type = TaskType.NONFINANCIAL_TRANSACTION)
   public HostToHostApiPasswordResponseDTO reset(SessionContext sessionContext,
       HostToHostApiPasswordRequestDTO request) throws Exception {
-    return change(sessionContext, request, RESET, RESET_SERVICE);
+    return auditedChange(sessionContext, request, RESET, RESET_SERVICE);
+  }
+
+  private HostToHostApiPasswordResponseDTO auditedChange(SessionContext context,
+      HostToHostApiPasswordRequestDTO request, String operation, String service) throws Exception {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(context, service, operation)) {
+      audit.put("targetUserId", context.getUserId()).put("requestId", request == null ? null : request.getRequestId());
+      try {
+        HostToHostApiPasswordResponseDTO result = change(context, request, operation, service, audit);
+        audit.result("SUCCESS").response(result).put("referenceNumber", result.getStatus().getReferenceNumber());
+        return result;
+      } catch (java.lang.Exception failure) {
+        audit.failure(failure);
+        throw failure;
+      }
+    }
   }
 
   private HostToHostApiPasswordResponseDTO change(SessionContext sessionContext,
-      HostToHostApiPasswordRequestDTO request, String operation, String serviceId)
+      HostToHostApiPasswordRequestDTO request, String operation, String serviceId, HthOnboardingAudit.Entry audit)
       throws Exception {
     super.checkAccessPolicy(serviceId, sessionContext, request);
     if (!isFeatureEnabled()) {
@@ -228,9 +244,11 @@ public class HostToHostApiPassword extends AbstractApplication
       HthApiPasswordStorage storage = storageBackend();
       stage = "IDENTITY";
       Identity identity = identity(sessionContext, true, storage);
+      audit.put("partyId", identity.partyId).put("targetUserId", HthOnboardingAudit.fullUser(identity.userId, identity.partyId));
       stage = "OPERATION_LOOKUP";
       OperationResult previous = findSuccessfulOperation(
           request.getRequestId(), identity.partyId, identity.profileUserId, operation, storage.name(), identity.uamClientId);
+      audit.put("idempotentReplay", Boolean.valueOf(previous != null && "SUCCESS".equals(previous.status)));
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
           response.setSetupState("ACTIVE");
@@ -267,6 +285,7 @@ public class HostToHostApiPassword extends AbstractApplication
         codeId = validateAndReserveCode(identity.partyId, identity.userId, identity.profileUserId, operation,
             code, request.getRequestId(), storage.name(), identity.uamClientId);
 
+        audit.put("codeId", codeId).put("purpose", operation);
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
           stage = "DATABASE_COMPLETE";
@@ -673,6 +692,9 @@ public class HostToHostApiPassword extends AbstractApplication
       type = TaskType.ADMINISTRATION)
   public HthApiPasswordCodeResponseDTO generate(SessionContext sessionContext,
       HthApiPasswordGenerateDTO requestDTO) throws Exception {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, GENERATE_SERVICE_ID, "GENERATE")) {
+    try {
+
     super.checkAccessPolicy(GENERATE_SERVICE_ID, sessionContext, requestDTO);
     HthApiPasswordCodeResponseDTO response = new HthApiPasswordCodeResponseDTO();
     response.setStatus(fetchStatus());
@@ -692,6 +714,11 @@ public class HostToHostApiPassword extends AbstractApplication
       String operator = readUserId(sessionContext);
       LocalHthApiPasswordCodeRepositoryAdapter adapter =
           LocalHthApiPasswordCodeRepositoryAdapter.getInstance();
+      HthApiPasswordCode previousCode = adapter.findLatestByOwner(partyId, userName);
+      audit.put("partyId", partyId).put("targetUserId", HthOnboardingAudit.fullUser(userName, partyId)).put("purpose", purpose);
+      if (previousCode != null) {
+        audit.put("operation", "REGENERATE").put("previousCodeId", previousCode.getKey().getId());
+      }
       retirePendingCodes(partyId, userName, purpose, operator);
       String plaintext = HthApiPasswordCrypto.randomDigits(CODE_LENGTH);
       HthApiPasswordCode row = new HthApiPasswordCode();
@@ -725,7 +752,13 @@ public class HostToHostApiPassword extends AbstractApplication
     }
 
     super.checkResponsePolicy(sessionContext, response);
+    audit.result("SUCCESS").response(response).put("codeId", response.getCodeId()).put("codeStatus", "PENDING");
     return response;
+      } catch (java.lang.Exception auditFailure) {
+      audit.failure(auditFailure);
+      throw auditFailure;
+    }
+    }
   }
 
   /** Resolve the target user's credential state, independently of the maker's own password. */

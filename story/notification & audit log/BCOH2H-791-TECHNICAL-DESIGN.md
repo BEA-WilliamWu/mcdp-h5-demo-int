@@ -4,10 +4,37 @@
 | --- | --- |
 | Story / TD | BCOH2H-791 / BCOH2H-1299 |
 | 功能 | Enhance BCO Audit Log to Support HTH API Onboarding Activities |
-| 状态 | Proposed for Review；本文件不代表功能已实现或通过 UAT |
+| 状态 | Implemented locally；已完成本地验证，待共享 UAT 验收 |
 | 需求基线 | 2026-09-14 导出的 Story PDF，第 1–2 页 |
-| 代码基线 | hth-application `be5abc68`，2026-09-14 阅读现有源码 |
+| 代码基线 | hth-application `c97d9260` 上实现，2026-09-16；未包含既有 .project 修改 |
 | 范围 | CM 用户维护、Code 生成/重新生成、HTH 账户服务权限、API Password setup/reset、既有审计查询及导出 |
+
+
+## 0. 2026-09-16 实际交付与验证
+
+部署和 UAT 操作见 [791 部署说明](../../consulting/db/branch_change_history/20260916_HTH_Audit_791/README.md)。下文保留 AC/评审设计；以本节说明实际实现和未验证边界。
+
+- 业务采集：UserExtensionData create/update（包含 HTH→BCO）、Code generate/re-generate（查原 Code 记录）、Access 最终生效的账户/API 差异、setup/reset 成功失败及 replay。审批待处理使用 PENDING_APPROVAL，用户维护完成使用 COMPLETED，密码成功使用 SUCCESS；都不引入新的主表状态枚举。
+- 公共 helper 放在 **com.ofss.digx.cz.bea.common** 已有依赖中。业务 scope 只写安全 summary 到已有 audit stack；Handler 在原始日志/stack/JMS 前投影，REST finally 清理该 stack。没有额外线程上下文，业务请求/响应不修改。
+- `CZAsyncAuditHandler` 保留高风险、BCM/bulk 分支和原 JMS 路由；HTH 才进行字段 allowlist、Header/URL 脱敏和 JMS ChannelContext 安全副本。主表 ERROR 结果不因外层 SUCCESSFUL 而显示成功。
+- `CZVoidAuditExt` 保留原过滤与 FMO，之后才投影 HTH 读/列表结果，缺 task 保留原 activity。历史记录不会补造业务摘要，也不会批量删除。
+- 原详情组件 `channel/components/audit/audit-log-results` 新增 HTH 条件区及 CSV 下载，复用同一次获准的详情数据；普通 BCO 继续原布局。当前组件没有通用导出入口，未猜改无调用依据的 AuditListResponseDTO.xsl。
+- Access 使用独立差异采集，因为 1216 受开关、事件类型和最终审批条件限制，且其 hash 集合不能直接展示账户。增加的读操作只发生在 HTH 最终执行路径；普通 BCO 不增加这些查询。后续可在性能基线确认后复用无开关的原始快照。
+
+本地验证：
+
+```sh
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+python3 devtools/backend-compile/tests/verify_hth_audit_compile.py
+python3 devtools/backend-compile/tests/verify_hth_audit_runtime.py
+H2_JAR=/tmp/hth-h2-1.4.200.jar python3 devtools/backend-compile/tests/verify_hth_password_transactions.py
+python3 devtools/backend-compile/tests/verify_hth_contact_runtime.py
+node devtools/backend-compile/tests/hth-audit-ui.test.js
+```
+
+已通过：Java 8 定向编译；真实框架 AuditDTO + Java JMS 序列化；独立 ChannelContext 不泄漏请求/响应 nonce；HOST/SERVICE/REST 敏感字段和伪造摘要排除；真实 setup/reset 方法编排与 H2/OBDX ORM 的成功、失败、幂等审计；1000 条同数量服务替换差异；851/1216 派送、事务、metadata 回归；前端 600 项差异导出、公式转义、false 值和 BCO 显示隔离；ESLint/OBDX 规则。
+
+没有连接 UAT Oracle、WebLogic 审批/AOP 或 JMS 队列。配置、会话服务、银行仓库及外部 DSP/MNG 边界是测试 fixture。最终事务状态、查询权限、实际页面、SQL 重跑和落库结果保留为部署验收项，不能以本地成功替代。
 
 ## 1. 设计结论
 
@@ -67,7 +94,7 @@ HTH 是**被维护用户的 User Channel Type**；实际执行入口仍可能是
 
 ## 5. 安全业务摘要
 
-拟新增内部 `HthOnboardingAuditSummaryDTO`（名称建议），作为现有 AuditDetails request/response 的安全投影，不作为公开业务 API 入参。
+实际新增 `common.audit.HthOnboardingAudit.Entry`，以版本化 Map 保存在原 AuditDetails.request.hthOnboarding，operationName 为 `HTH_ONBOARDING_791`。不新增公开业务 DTO。客户端同名 JSON 不被接受为可信摘要。
 
 | 字段 | 规则 |
 | --- | --- |
@@ -166,7 +193,7 @@ PDF、CSV/Excel 等实际启用格式均只能读取安全摘要；无权限的�
 
 既有 request exclusion 只能作为额外防护，不代替 response/嵌套 payload 投影。不得为脱敏关闭整个 task 审计，也不得把 GENERATE/SETUP/RESET 改成 `VALCALL_NO_AUDIT`。
 
-SQL 按 `1_Task_Audit_Mapping → 2_Task_Labels_Config → 3_Verification` 顺序组织，使用可重跑的集合式更新，保留普通 BCO 映射及缓存策略；应用资源变更按现有发布流程刷新/重启。历史不完整摘要不补造，已存在敏感历史数据如被核实需独立受控处理，不在本次发布脚本中批量删除审计。
+SQL 实际为 `1_HTH_Audit_Mapping → 2_Verification`，本地化使用既有 CommonTask 三个资源文件，使用可重跑的集合式更新，保留普通 BCO 映射及缓存策略；应用资源变更按现有发布流程刷新/重启。历史不完整摘要不补造，已存在敏感历史数据如被核实需独立受控处理，不在本次发布脚本中批量删除审计。
 
 ## 10. 修改清单与 BCO 影响
 
@@ -174,7 +201,7 @@ SQL 按 `1_Task_Audit_Mapping → 2_Task_Labels_Config → 3_Verification` 顺�
 | --- | --- | --- |
 | UserExtensionData | 提供 HTH channel、target、Code 关联的安全摘要 | 仅补 HTH 扩展；原 BCO 审批、创建及更新不变 |
 | HostToHostApiPassword | 提供生成/重新生成、setup/reset 的实际结果摘要 | 不改加解密、密码/Code 校验、通知及业务响应 |
-| HostToHostUserAccess | 提供有效权限 before/after 与审批关联 | 与 1216 共用一次差异计算；审计不依赖通知成功 |
+| HostToHostUserAccess | 提供有效权限 before/after 与审批关联 | 独立读取已生效 before/after；不依赖 1216 通知开关。通知现有 hash 去重计算保持不变 |
 | xface / Audit helper | 安全、版本化 DTO 投影 | 不直接序列化业务 DTO；兼容旧摘要缺失 |
 | CZAsyncAuditHandler | HTH payload 在日志/栈/JMS 前脱敏，保留原公共流程 | 保持原审计路由、过滤和 BCO 全局 audit 配置 |
 | CZVoidAuditExt / task 配置 | 名称、必要的摘要展示适配 | 保持 isFilterOut、FMO 和权限边界；不随意重写共用 Repository 查询 |

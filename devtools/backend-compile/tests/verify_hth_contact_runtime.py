@@ -1,4 +1,4 @@
-"""851 production policy, capture/staging, JDBC ledger, dispatcher and metadata tests.
+"""851/1216 production policy, capture/staging, JDBC ledger, dispatcher and metadata tests.
 
 Uses H2 + the real EclipseLink/OBDX ORM wrapper; bank repositories, JNDI, config,
 Event registration and MNG network boundaries are fixtures. No real notification
@@ -6,10 +6,13 @@ is sent. Target compilation separately checks integration with all real classes.
 """
 from pathlib import Path
 import os
+import base64
 import re
 import subprocess
 import tempfile
 from verify_hth_contact_sql import deployed, SQL_DIR
+from verify_hth_access_sql import deployed as access_deployed, SQL_DIR as ACCESS_SQL_DIR
+from hth_access_test_fixtures import write_access_fixtures
 
 ROOT = Path(__file__).resolve().parents[3]
 PROJECTS = ROOT / 'consulting/middleware/projects'
@@ -19,7 +22,7 @@ if not H2.is_file():
     raise SystemExit('Set HTH_TEST_H2_JAR to the existing H2 1.4.200 test dependency')
 CP = os.pathsep.join([str(H2), str(ROOT / 'devtools/backend-compile/build/classes/java/main')] +
                      [str(p) for p in (ROOT / 'consulting/middleware/lib').rglob('*.jar')])
-SOURCES = list(PROJECTS.rglob('Hth*Contact*.java'))
+SOURCES = list(PROJECTS.rglob('Hth*Contact*.java')) + list(PROJECTS.rglob('HthUserAccess*Notification*.java')) + list(PROJECTS.rglob('HthUserAccessActivityLogDTO.java'))
 DISPATCH = next(PROJECTS.rglob('HthContactNotificationDispatch.java')).parent
 HELPER = next(PROJECTS.rglob('HthProfileContactNotification.java'))
 
@@ -61,7 +64,7 @@ public final class Bank {
  public static int profileReads, approvalReads, networkCalls, publications;
  public static String outcome="SUCCESS"; public static Object lastRequest;
  public static final Map<String,String> profiles=new HashMap<>();
- public static final List<com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileContactUpdateActivityLogDTO> logs=new ArrayList<>();
+ public static final List<com.ofss.digx.app.alerts.dto.eventgen.ActivityLog> logs=new ArrayList<>();
  public static void check(boolean ok,String text){if(!ok)throw new AssertionError(text);}
  public static String scalar(String sql) throws Exception {try(Connection c=source.getConnection();Statement s=c.createStatement();ResultSet rs=s.executeQuery(sql)){return rs.next()?rs.getString(1):null;}}
  public static void sql(String sql) throws Exception {try(Connection c=source.getConnection();Statement s=c.createStatement()){s.execute(sql);}}
@@ -98,7 +101,7 @@ public class ConfigurationFactory {
 public class AbstractApplication {
  protected String registerActivityAndGenerateEvent(com.ofss.fc.app.context.SessionContext context,String activity,String event,
   com.ofss.fc.datatype.Date date,com.ofss.digx.app.alerts.dto.eventgen.ActivityLog log){
-  fixture.Bank.publications++;fixture.Bank.logs.add((com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileContactUpdateActivityLogDTO)log);return "fixture-activity";}
+  fixture.Bank.publications++;fixture.Bank.logs.add(log);return "fixture-activity";}
 }''')
     write('com/ofss/digx/app/alerts/dto/eventgen/ActivityLog.java',
           'package com.ofss.digx.app.alerts.dto.eventgen; public class ActivityLog extends com.ofss.fc.xface.ep.dto.ActivityLog {}')
@@ -114,7 +117,7 @@ public class ExtxfaceAdapterFactory {
         imports = '\n'.join(re.findall(r'^import .*;', source, re.M))
         write(cls + '.java', 'package com.ofss.digx.cz.bea.domain.service.dispatch;\n' + imports + '\npublic class ' + cls + ' {\n' + builder + '\n}')
     write('com/ofss/digx/cz/bea/app/logger/BeaSystemOut.java', '''package com.ofss.digx.cz.bea.app.logger;
-public class BeaSystemOut {public static void println(Object o){} public static void printErr(Object o){throw new AssertionError(o);}}
+public class BeaSystemOut {public static void println(Object o){} public static void println(String o){} public static void printErr(Object o){throw new AssertionError(o);}}
 ''')
     bean('com.ofss.digx.cz.bea.app.sms.dto.user', 'UserExtensionDataDTO',
          {'CdcNo': 'String', 'UserID': 'String', 'MobileCode': 'String', 'UserDTO': 'com.ofss.digx.domain.sms.entity.user.User'})
@@ -141,6 +144,7 @@ public class Transaction {
  public static String status="APPROVED",signers="FIRST~FINAL~",service=com.ofss.digx.cz.bea.app.sms.dto.user.HthContactNotificationPlan.ACTIVITY;
  public Transaction read(TransactionKey key){fixture.Bank.approvalReads++;return this;}
  public String getServiceId(){return service;}
+ public static Object snapshot; public Object getTransactionSnapshot(){return snapshot;}
  public Approval getApprovalDetails(){return new Approval();}
  public static class Approval {public String getStatus(){return status;}public String getSignedBy(){return signers;}}
 }''')
@@ -154,10 +158,14 @@ public class TestOrmAccess {public static com.ofss.fc.infra.das.orm.Session wrap
     write('com/ofss/fc/infra/das/orm/DataAccessManager.java', '''package com.ofss.fc.infra.das.orm;
 public class DataAccessManager {public static Session current;public static DataAccessManager getManager(){return new DataAccessManager();}public Session fetchCurrentSession(){return current;}}
 ''')
+    write_access_fixtures(write, bean)
     # Uses the actual DDL, only extracting/unquoting the EXECUTE IMMEDIATE string.
     ddl = (SQL_DIR / '1_HTH_Contact_Notification_Ledger.sql').read_text()
     ddl = re.search(r"EXECUTE IMMEDIATE '(CREATE TABLE .*?)';", ddl, re.S).group(1).replace("''", "'")
     write('ledger.sql', ddl)
+    access_ddl = (ACCESS_SQL_DIR / '1_HTH_Access_Notification_Ledger.sql').read_text()
+    access_ddl = re.search(r"EXECUTE IMMEDIATE '(CREATE TABLE .*?)';", access_ddl, re.S).group(1).replace("''", "'")
+    write('access-ledger.sql', access_ddl)
     write('META-INF/persistence.xml', '''<?xml version="1.0" encoding="UTF-8"?>
 <persistence xmlns="http://xmlns.jcp.org/xml/ns/persistence" version="2.1"><persistence-unit name="test" transaction-type="RESOURCE_LOCAL">
 <provider>org.eclipse.persistence.jpa.PersistenceProvider</provider><exclude-unlisted-classes>true</exclude-unlisted-classes><properties>
@@ -168,8 +176,13 @@ public class DataAccessManager {public static Session current;public static Data
     db = deployed()
     fields = list(db.execute('SELECT COD_ATTR_ID,REF_FIELD_DEFN_ID FROM DIGX_MD_SERVICE_ATTR'))
     write('metadata.tsv', '\n'.join('\t'.join(row) for row in fields))
+    access_db = access_deployed()
+    fields = list(access_db.execute("SELECT COD_ATTR_ID,REF_FIELD_DEFN_ID FROM DIGX_MD_SERVICE_ATTR WHERE COD_SERVICE_ID LIKE '%HostToHostUserAccess.%'"))
+    write('access-metadata.tsv', '\n'.join('\t'.join(row) for row in fields))
+    templates = list(access_db.execute("SELECT COD_TMPL_ID,TXT_MSG_TMPL,TXT_SUBJECT_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID LIKE 'HTH_1216_%' AND DETERMINANT_VALUE='OBDX_BU' ORDER BY COD_TMPL_ID"))
+    write('access-templates.tsv', '\n'.join('\t'.join([row[0]] + [base64.b64encode((value or '').encode('utf-8')).decode('ascii') for value in row[1:]]) for row in templates))
     tests = [str(Path(__file__).with_name(f)) for f in
-             ('HthContactCaptureTest.java', 'HthContactDeliveryTest.java', 'HthContactRuntimeTest.java')]
+             ('HthContactCaptureTest.java', 'HthContactDeliveryTest.java', 'HthContactRuntimeTest.java', 'HthAccessCaptureTest.java', 'HthAccessDeliveryTest.java')]
     compiled = subprocess.run([str(JDK / 'javac'), '--release', '8', '-proc:none', '-cp', CP, '-d', tmp,
                     *fixture_sources, *map(str, SOURCES), *tests], check=False)
     if compiled.returncode:

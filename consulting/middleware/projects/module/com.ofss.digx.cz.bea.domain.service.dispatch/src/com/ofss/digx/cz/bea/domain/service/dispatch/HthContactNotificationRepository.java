@@ -1,6 +1,7 @@
 package com.ofss.digx.cz.bea.domain.service.dispatch;
 
 import com.ofss.digx.cz.bea.app.sms.dto.user.HthContactNotificationPlan;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthUserAccessNotificationPlan;
 import com.ofss.fc.infra.config.ConfigurationFactory;
 import java.sql.*;
 import java.util.ArrayList;
@@ -10,14 +11,22 @@ import javax.sql.DataSource;
 
 /** Delivery ledger only. Business staging uses the caller's DIGX ORM transaction. */
 final class HthContactNotificationRepository {
-    private static final String TABLE = "DIGX_CZ_HTH_CONTACT_NOTIFY";
+    private final String table;
+    private final boolean access;
+    private final String prefix;
     private final DataSource source;
-    HthContactNotificationRepository(DataSource source) { this.source = source; }
-    static HthContactNotificationRepository configured() throws java.lang.Exception {
-        String jndi = ConfigurationFactory.getInstance().getConfigurations("HthProfileContactNotification")
+    HthContactNotificationRepository(DataSource source) { this(source, false); }
+    HthContactNotificationRepository(DataSource source, boolean access) {
+        this.source = source; this.access = access;
+        table = access ? "DIGX_CZ_HTH_ACCESS_NOTIFY" : "DIGX_CZ_HTH_CONTACT_NOTIFY";
+        prefix = access ? "HA" : "HC";
+    }
+    static HthContactNotificationRepository configured() throws java.lang.Exception { return configured(false); }
+    static HthContactNotificationRepository configured(boolean access) throws java.lang.Exception {
+        String jndi = ConfigurationFactory.getInstance().getConfigurations(access ? "HthUserAccessNotification" : "HthProfileContactNotification")
                 .get("dispatchDataSource", "NONXA");
         InitialContext context = new InitialContext();
-        try { return new HthContactNotificationRepository((DataSource) context.lookup(jndi)); }
+        try { return new HthContactNotificationRepository((DataSource) context.lookup(jndi), access); }
         finally { context.close(); }
     }
     private static final class Work implements AutoCloseable {
@@ -38,25 +47,25 @@ final class HthContactNotificationRepository {
         }
     }
     List<Row> pending(String unit) throws SQLException {
-        try (Work work = new Work(source); PreparedStatement p = work.connection.prepareStatement("SELECT * FROM " + TABLE
+        try (Work work = new Work(source); PreparedStatement p = work.connection.prepareStatement("SELECT * FROM " + table
                 + " WHERE TARGET_UNIT = ? AND (STATE = 'READY' OR (STATE IN ('PUBLISHING','PUBLISHED') "
                 + "AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '5' MINUTE)) ORDER BY CREATED_AT, ID")) {
             p.setString(1, unit); p.setMaxRows(100);
             List<Row> rows = new ArrayList<Row>();
-            try (ResultSet rs = p.executeQuery()) { while (rs.next()) rows.add(new Row(rs)); }
+            try (ResultSet rs = p.executeQuery()) { while (rs.next()) rows.add(new Row(rs, access)); }
             work.connection.commit(); return rows;
         }
     }
     Row read(Connection c, String id) throws SQLException {
-        try (PreparedStatement p = c.prepareStatement("SELECT * FROM " + TABLE + " WHERE ID = ?")) {
+        try (PreparedStatement p = c.prepareStatement("SELECT * FROM " + table + " WHERE ID = ?")) {
             p.setString(1, id);
-            try (ResultSet rs = p.executeQuery()) { return rs.next() ? new Row(rs) : null; }
+            try (ResultSet rs = p.executeQuery()) { return rs.next() ? new Row(rs, access) : null; }
         }
     }
     boolean claimPublication(String id) throws SQLException {
         try (Work work = new Work(source)) {
             Connection c = work.connection;
-            int count = update(c, "UPDATE " + TABLE + " SET STATE = 'PUBLISHING', UPDATED_AT = CURRENT_TIMESTAMP "
+            int count = update(c, "UPDATE " + table + " SET STATE = 'PUBLISHING', UPDATED_AT = CURRENT_TIMESTAMP "
                 + "WHERE ID = ? AND (STATE = 'READY' OR (STATE IN ('PUBLISHING','PUBLISHED') "
                 + "AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '5' MINUTE))", id);
             c.commit(); return count == 1;
@@ -65,7 +74,7 @@ final class HthContactNotificationRepository {
     void published(String id) throws SQLException {
         try (Work work = new Work(source)) {
             Connection c = work.connection;
-            update(c, "UPDATE " + TABLE + " SET STATE = 'PUBLISHED', UPDATED_AT = CURRENT_TIMESTAMP "
+            update(c, "UPDATE " + table + " SET STATE = 'PUBLISHED', UPDATED_AT = CURRENT_TIMESTAMP "
                     + "WHERE ID = ? AND STATE = 'PUBLISHING'", id);
             c.commit();
         }
@@ -78,7 +87,7 @@ final class HthContactNotificationRepository {
             if (row == null || !channel.equals(row.channel) || !row.event().equals(event)) {
                 c.rollback(); throw new SQLException("HTH contact notification context mismatch");
             }
-            int count = update(c, "UPDATE " + TABLE + " SET STATE = 'SENDING', COD_ACT_DATA_ID = ?, "
+            int count = update(c, "UPDATE " + table + " SET STATE = 'SENDING', COD_ACT_DATA_ID = ?, "
                 + "UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ? AND STATE IN ('PUBLISHING','PUBLISHED')",
                 activityDataId, id);
             if (count == 0) { c.rollback(); return null; }
@@ -88,8 +97,7 @@ final class HthContactNotificationRepository {
                 + "RESPONSE_STATUS, COD_ACT_DATA_ID, TXNTYPE, LAST_UPDATED_DATE) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?, 'A', ?, ?, ?, 'Pending', ?, ?, CURRENT_TIMESTAMP)",
                 row.mngRef(), row.address, bodyHash, subject, row.recipientUser, row.party,
-                HthContactNotificationPlan.ACTIVITY, event, row.reference, channel, activityDataId,
-                "HTH Profile Contact Update");
+                row.activity(), event, row.reference, channel, activityDataId, row.description());
             c.commit(); return row;
         }
     }
@@ -98,11 +106,11 @@ final class HthContactNotificationRepository {
             throw new IllegalArgumentException("Invalid dispatch outcome");
         try (Work work = new Work(source)) {
             Connection c = work.connection;
-            update(c, "UPDATE " + TABLE + " SET STATE = ?, UPDATED_AT = CURRENT_TIMESTAMP "
+            update(c, "UPDATE " + table + " SET STATE = ?, UPDATED_AT = CURRENT_TIMESTAMP "
                     + "WHERE ID = ? AND STATE = 'SENDING'", state, id);
             update(c, "UPDATE DIGX_CZ_EMAIL_MNG SET RESPONSE_STATUS = ?, LAST_UPDATED_DATE = CURRENT_TIMESTAMP "
                     + "WHERE REFNUMBER = ?", "SUBMITTED".equals(state) ? "Success" :
-                    ("REJECTED".equals(state) ? "Failed" : "Exception"), "HC" + id);
+                    ("REJECTED".equals(state) ? "Failed" : "Exception"), prefix + id);
             c.commit();
         }
     }
@@ -110,18 +118,18 @@ final class HthContactNotificationRepository {
         try (Work work = new Work(source)) {
             Connection c = work.connection;
             // This table contains negative EMAIL delivery receipts. Its generic processed flag is irrelevant.
-            update(c, "UPDATE " + TABLE + " N SET STATE = 'DELIVERY_FAILED', UPDATED_AT = CURRENT_TIMESTAMP "
+            update(c, "UPDATE " + table + " N SET STATE = 'DELIVERY_FAILED', UPDATED_AT = CURRENT_TIMESTAMP "
                 + "WHERE TARGET_UNIT = ? AND CHANNEL = 'EMAIL' AND STATE IN ('SUBMITTED','UNKNOWN','SENDING') "
                 + "AND EXISTS (SELECT 1 FROM DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL B "
-                + "WHERE B.SRC_SYS_REF_NUM = 'HC' || N.ID)", unit);
+                + "WHERE B.SRC_SYS_REF_NUM = '" + prefix + "' || N.ID)", unit);
             // A crashed in-flight submission is UNKNOWN, never automatically resent.
-            update(c, "UPDATE " + TABLE + " SET STATE = 'UNKNOWN', UPDATED_AT = CURRENT_TIMESTAMP "
+            update(c, "UPDATE " + table + " SET STATE = 'UNKNOWN', UPDATED_AT = CURRENT_TIMESTAMP "
                 + "WHERE TARGET_UNIT = ? AND STATE = 'SENDING' "
                 + "AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '15' MINUTE", unit);
             c.commit();
         }
         List<String> ids = new ArrayList<String>();
-        try (Work work = new Work(source); PreparedStatement p = work.connection.prepareStatement("SELECT ID FROM " + TABLE
+        try (Work work = new Work(source); PreparedStatement p = work.connection.prepareStatement("SELECT ID FROM " + table
                 + " WHERE TARGET_UNIT = ? AND STATE IN ('REJECTED','DELIVERY_FAILED') ORDER BY CREATED_AT, ID")) {
             p.setString(1, unit); p.setMaxRows(100);
             try (ResultSet rs = p.executeQuery()) { while (rs.next()) ids.add(rs.getString(1)); }
@@ -133,7 +141,7 @@ final class HthContactNotificationRepository {
         try (Work work = new Work(source)) {
             Connection c = work.connection;
             // Row lock serializes concurrent receipt processing; child PK also enforces once only.
-            try (PreparedStatement lock = c.prepareStatement("SELECT ID FROM " + TABLE + " WHERE ID = ? FOR UPDATE")) {
+            try (PreparedStatement lock = c.prepareStatement("SELECT ID FROM " + table + " WHERE ID = ? FOR UPDATE")) {
                 lock.setString(1, id); try (ResultSet ignored = lock.executeQuery()) { if (!ignored.next()) return; }
             }
             Row row = read(c, id);
@@ -146,17 +154,31 @@ final class HthContactNotificationRepository {
                 }
             }
             boolean fallback = !address.isEmpty() && !address.equals(HthContactNotificationPlan.email(row.address));
+            // 1216 also notifies the company initially. Never send identical content twice to it.
+            if (fallback && access) {
+                try (PreparedStatement p = c.prepareStatement("SELECT ID FROM " + table
+                        + " WHERE TARGET_UNIT=? AND APPROVAL_REF=? AND TARGET_USER_ID=? AND CLOSE_ID=?"
+                        + " AND ACCESS_PARTY_ID=? AND LINKAGE_TYPE=? AND CHANGE_TYPE=? AND CHANNEL='EMAIL' AND ADDRESS=?")) {
+                    Object[] args = {row.unit, row.reference, row.user, row.closeId, row.accessParty,
+                            row.linkage, row.change, address};
+                    for (int i=0; i<args.length; i++) p.setObject(i+1, args[i]);
+                    try (ResultSet rs = p.executeQuery()) { if (rs.next()) fallback = false; }
+                }
+            }
             if (fallback) {
-                String child = HthContactNotificationPlan.id(row.id, "FALLBACK");
-                update(c, "INSERT INTO " + TABLE + " (ID, TARGET_UNIT, APPROVAL_REF, PARTY_ID, TARGET_USER_ID, "
+                String child = access ? HthUserAccessNotificationPlan.id(row.id, "FALLBACK")
+                        : HthContactNotificationPlan.id(row.id, "FALLBACK");
+                update(c, "INSERT INTO " + table + " (ID, TARGET_UNIT, APPROVAL_REF, PARTY_ID, TARGET_USER_ID, "
                     + "APPROVER_ID, CHANGE_TYPE, RECIPIENT_ROLE, CHANNEL, ADDRESS, RECIPIENT_USER_ID, USER_LOCALE, "
-                    + "APPROVED_AT, STATE, PARENT_ID, CREATED_AT, UPDATED_AT) "
+                    + "APPROVED_AT, STATE, PARENT_ID, CREATED_AT, UPDATED_AT"
+                    + (access ? ", CLOSE_ID, ACCESS_PARTY_ID, LINKAGE_TYPE, COMPANY_NAME" : "") + ") "
                     + "SELECT ?, TARGET_UNIT, APPROVAL_REF, PARTY_ID, TARGET_USER_ID, APPROVER_ID, CHANGE_TYPE, "
                     + "'FALLBACK', 'EMAIL', ?, TARGET_USER_ID, USER_LOCALE, APPROVED_AT, 'READY', ID, "
-                    + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM " + TABLE + " WHERE ID = ? "
-                    + "AND NOT EXISTS (SELECT 1 FROM " + TABLE + " WHERE ID = ?)", child, address, id, child);
+                    + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP"
+                    + (access ? ", CLOSE_ID, ACCESS_PARTY_ID, LINKAGE_TYPE, COMPANY_NAME" : "") + " FROM " + table + " WHERE ID = ? "
+                    + "AND NOT EXISTS (SELECT 1 FROM " + table + " WHERE ID = ?)", child, address, id, child);
             }
-            update(c, "UPDATE " + TABLE + " SET STATE = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?",
+            update(c, "UPDATE " + table + " SET STATE = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?",
                     fallback ? "FALLBACK_QUEUED" : "FAILED_FINAL", id);
             c.commit();
         }
@@ -164,7 +186,14 @@ final class HthContactNotificationRepository {
     static final class Row {
         final String id, unit, reference, party, user, approver, change, role, channel, address,
                 recipientUser, locale, approvedAt, state, parent;
-        Row(ResultSet r) throws SQLException {
+        final boolean access;
+        final String closeId, accessParty, linkage, companyName;
+        Row(ResultSet r, boolean access) throws SQLException {
+            this.access=access;
+            closeId=access ? r.getString("CLOSE_ID") : null;
+            accessParty=access ? r.getString("ACCESS_PARTY_ID") : null;
+            linkage=access ? r.getString("LINKAGE_TYPE") : null;
+            companyName=access ? r.getString("COMPANY_NAME") : null;
             id=r.getString("ID"); unit=r.getString("TARGET_UNIT"); reference=r.getString("APPROVAL_REF");
             party=r.getString("PARTY_ID"); user=r.getString("TARGET_USER_ID"); approver=r.getString("APPROVER_ID");
             change=r.getString("CHANGE_TYPE"); role=r.getString("RECIPIENT_ROLE"); channel=r.getString("CHANNEL");
@@ -172,7 +201,9 @@ final class HthContactNotificationRepository {
             locale=r.getString("USER_LOCALE"); approvedAt=r.getString("APPROVED_AT");
             state=r.getString("STATE"); parent=r.getString("PARENT_ID");
         }
-        String mngRef() { return "HC" + id; }
-        String event() { return HthContactNotificationPlan.event(change, role); }
+        String mngRef() { return (access ? "HA" : "HC") + id; }
+        String event() { return access ? HthUserAccessNotificationPlan.event(change) : HthContactNotificationPlan.event(change, role); }
+        String activity() { return access ? HthUserAccessNotificationPlan.activity(change) : HthContactNotificationPlan.ACTIVITY; }
+        String description() { return access ? "HTH User Account and Service Access Update" : "HTH Profile Contact Update"; }
     }
 }

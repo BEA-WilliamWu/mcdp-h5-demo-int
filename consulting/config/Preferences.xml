@@ -3,6 +3,7 @@
 <Preferences>
 	<Nodes>
 		<Preference name="HthProfileContactNotification" PreferencesProvider="com.ofss.digx.infra.config.impl.DBBasedPropertyProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ALL_B where category_id = 'HthProfileContactNotification'" syncTimeInterval="90000" />
+		<Preference name="HthUserAccessNotification" PreferencesProvider="com.ofss.digx.infra.config.impl.DBBasedPropertyProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ALL_B where category_id = 'HthUserAccessNotification'" syncTimeInterval="90000" />
 		<Preference name="FMOConfiguration" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from digx_fw_config_all_o where preference_name = 'FMOConfiguration'"  syncTimeInterval="36000000" />
 		<Preference name="CRMConfiguration" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from digx_fw_config_all_o where preference_name = 'CRMConfiguration'"  syncTimeInterval="36000000" />
 		<Preference name="ErrorMessagesConfig_zh-hans-cn" PreferencesProvider="com.ofss.digx.infra.config.impl.DBBasedPropertyProvider" parent="jdbcpreference" propertyFileName="select ERROR_CODE, ERROR_MESSAGE from DIGX_FW_ERROR_MESSAGES where USER_LOCALE = 'zh-hans-cn'" syncTimeInterval="36000000" />

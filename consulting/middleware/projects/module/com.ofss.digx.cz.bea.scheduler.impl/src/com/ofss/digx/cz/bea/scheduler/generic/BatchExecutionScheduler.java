@@ -86,6 +86,11 @@ public class BatchExecutionScheduler implements Serializable, Job {
             } catch (java.lang.Exception e) {
                 logger.log(Level.WARNING, "HTH_CONTACT stage=SCHEDULER exception={0}", e.getClass().getSimpleName());
             }
+            try {
+                new com.ofss.digx.cz.bea.domain.service.dispatch.HthUserAccessNotificationService().process(sessionContext);
+            } catch (java.lang.Exception e) {
+                logger.log(Level.WARNING, "HTH_ACCESS stage=SCHEDULER exception={0}", e.getClass().getSimpleName());
+            }
 
 			if (logger.isLoggable(Level.SEVERE)) {
 				logger.log(Level.SEVERE,

@@ -563,6 +563,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 		UserKey userKey = new UserKey();
 		UserAssembler userAssembler = null;
 		boolean isSignerDeleted = false;
+		HthProfileContactNotification.Snapshot hthContactSnapshot = null;
+		boolean hthContactUpdateSucceeded = false;
 		BeaSystemOut.println("Entering update UserExtensionData, update requestDTO:"+SerializationUtils.toJsonString(requestDTO));
 
 		try {
@@ -912,6 +914,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("##########Old Mob No:- " + oldMobNo);
 				BeaSystemOut.println("#############Old Email:- " + userDomain.getEmailId());
 				resultDto = checkAlerts(requestDTO, userDomain);
+				hthContactSnapshot = HthProfileContactNotification.capture(sessionContext, requestDTO, userDomain, domain);
 
 				// UserExtensionDataKey key = new UserExtensionDataKey();
 				// key.setUserExtensionKey(requestDTO.getUserExtensionKey());
@@ -962,7 +965,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				if (transactionStatus!=null && transactionStatus.getErrorCode()==null) {
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
-					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo);
+					hthContactUpdateSucceeded = true;
+					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthContactSnapshot != null);
 					BeaSystemOut.println("##############Executed alertUserProfileUpdate method");
 				}
 			}
@@ -1097,6 +1101,9 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 //			----------------------- MigratedUserResetPassword changes - ENDS -----------------------
 	
 			extensionExecutor.postUpdate(sessionContext, requestDTO, transactionStatus);
+			if (hthContactUpdateSucceeded && transactionStatus != null && transactionStatus.getErrorCode() == null) {
+				HthProfileContactNotification.stage(hthContactSnapshot);
+			}
 
 						
 		} catch (Exception e) {
@@ -1910,6 +1917,12 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 	 */
 	public void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
 			UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain, String oldMobNo) {
+		alertUserProfileUpdate(sessionContext, resultDTO, requestDTO, userDomain, oldMobNo, false);
+	}
+
+	private void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
+			UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain, String oldMobNo,
+			boolean hthContactNotification) {
 
 		UserProfUpdateActivityLogDTO activityLog = new UserProfUpdateActivityLogDTO();
 		UserManagementActivityLogDTO usermgmtActivityLog = new UserManagementActivityLogDTO();
@@ -1973,6 +1986,9 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 						UserExtensionDataConstants.USER_MANAGEMENT_EDIT, new Date(), usermgmtActivityLog);
 				BeaSystemOut.println("############### Executed User Management Edit Alert");
 			}
+
+			// 851 replaces only HTH contact notices; USER_MANAGEMENT_EDIT above is preserved.
+			if (hthContactNotification) return;
 
 			// Executing other User management update alerts
 			// ---------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # HTH Notification & Audit Log — Technical Design Review
 
-**评审版本：2026-09-14，Proposed for Review。** 基于本目录四份 PDF 及 `hth-application` 源码 `be5abc68`。本次交付是技术设计，包含代码差距分析；不代表新增业务代码、SQL 已执行或 UAT 已通过。
+**更新：2026-09-15。** 851 已按本次用户确认的联系人规则实现，本地测试通过，开关默认关闭；1216、791 仍是技术设计。原设计基线为 `be5abc68`，851 实施基线为 `3a33b998`。SQL 尚未在 UAT 执行，实际收件尚未验收。851 的成套模块、SQL、状态与测试见 [部署说明](</Users/devs/CProj/hth-application/consulting/db/branch_change_history/20260915_HTH_Profile_Contact_851/README.md>)。
 
 ## 1. 三个 Story 的结论
 
@@ -14,7 +14,7 @@
 
 ## 2. 公共代码改动及 BCO 影响
 
-“必改”指本设计实施需要；“条件修改”指先验证既有能力，只在存在差距时修改。以下均为拟改清单。
+“必改”指本设计实施需要；“条件修改”指先验证既有能力，只在存在差距时修改。下表仍覆盖三个 Story；851 实际改动以其实现版 TD 为准，1216/791 为拟改清单。851 额外增加同事务通知 ledger，并在原 BatchExecutionScheduler 之后消费，原因是现有 ActivityLog 无法保证提交前不派送及业务去重。
 
 | 代码 / 配置 | Story | 类型 | 拟改内容 | BCO 影响与必要回归 |
 | --- | --- | --- | --- | --- |
@@ -116,18 +116,18 @@ H2H 上线较晚、BCO 每月上线且共用 UAT，建议新增两个独立控�
 
 | ID | 决策 | 当前证据 / 缺口 | 建议负责人 | 决策影响 |
 | --- | --- | --- | --- | --- |
-| D1 | API Contact 是否为 HTH User 联系方式；BCO Account Profile 是否为公司 officeEmail | HTH_USER_PROFILE 无独立联系字段 | BA/PO + User Management 开发 | 两个通知 Story 的数据来源 |
-| D2 | 851 #8/#9 是否通知一次未变通道；Approver 是否双通道 | 矩阵删除线仅划掉 old/new，仍 Pending Review | BA/PO | 收件次数和模板 |
+| D1 | API Contact 是否为 HTH User 联系方式；BCO Account Profile 是否为公司 officeEmail | 851 已确认：CM User 联系方式 + 公司 officeEmail；1216 待确认 | BA/PO + User Management 开发 | 两个通知 Story 的数据来源 |
+| D2 | 851 #8/#9 是否通知一次未变通道；Approver 是否双通道 | 851 已确认：未变通道一次；最终 Approver Email + SMS | BA/PO | 收件次数和模板 |
 | D3 | 1216 每个角色 Email + SMS 还是 Email or Mobile | #3/#4/#5 编辑痕迹冲突 | BA/PO | 不能提前承诺“三方都收到邮件短信” |
 | D4 | #3 公司 disable 与用户整组 access delete 的归属 | 两套独立 Service；名称混用 | BA/PO | 1216 开发与测试范围 |
 | D5 | #3 正确 Email、#9 标题、语言组合及占位符 | #3 仍为 PIN Activation，#9 标题/正文不一致，&1..&5 未定义 | BA/PO + 通知模板负责人 | 最终 SQL/模板不能直接照抄 PDF |
 | D6 | 1216 是否采用一次 fallback 后终止；“may”具体启用规则 | 851 明确终止，1216 未明确 | BA/PO | Bounce 策略及收件边界 |
-| D7 | 活动注册事务、持久去重、派送回执关联 | ORM 有持久载体，运行能力尚未验证 | Alert/平台开发 + DBA | 是否只需适配，是否需额外持久化设计 |
+| D7 | 活动注册事务、持久去重、派送回执关联 | 851 已实现同事务 ledger、并发领取及 MNG-before-IO，本地运行通过；UAT 待验证 | Alert/平台开发 + DBA | 是否只需适配，是否需额外持久化设计 |
 | D8 | 791 详情原型、targetUser 检索、导出链路 | PDF 提到 Figma 未给内容；现有查询按 actor | BA/PO + 前端/平台开发 | UI/接口改动范围 |
 | D9 | 共用 UAT 启用范围、版本清单与 Batch 构建来源 | HTH/BCO 发布节奏不同 | Release/UAT 负责人 | 防止月度发布漏文件或提前启用 |
-| D10 | 851/1216 通知最终一位还是全部实际审批人 | 9 月 15 日补充截图及 BCO sendNotifications 证明 Code 通知使用 signedBy 全部签署人；不自动等于这两个 Story 的 AC | BA/PO | approverIds、收件顺序与去重范围 |
+| D10 | 851/1216 通知最终一位还是全部实际审批人 | 851 已确认只通知最终审批人；1216 待确认，Code 通知全部签署人规则不外推 | BA/PO | approverIds、收件顺序与去重范围 |
 
-上述为评审待办，文档没有把它们写成已确认需求。三份 TD 的实际实现验证完成后，再更新状态、结论和验收证据。
+已确认项仅按表中 Story 范围生效；其余继续作为评审待办。851 三语正式文案与真实 UAT 派送证据仍需补齐。
 
 ## 6. 本次检查范围与限制
 
@@ -135,7 +135,7 @@ H2H 上线较晚、BCO 每月上线且共用 UAT，建议新增两个独立控�
 
 已对照本目录全部三个 Story、七页补充矩阵、相关 HTH/BCO Service、Dispatcher/Bounce、审计 Handler/ORM/UI/SQL。补充矩阵保留的红字、绿色替换文字和删除线已按待评审内容处理。
 
-本次没有访问 UAT 数据库、网关或部署服务器，没有验证通知实际送达、事务提交顺序或运行时导出链路。设计中“现有实现”来自源码；“拟新增”“建议”“待确认”分别标识后续工作。代码和 PDF 引用见各 TD 的末尾及下方索引。
+没有访问 UAT 数据库、网关或部署服务器，没有验证通知实际送达或运行时导出链路。851 已用生产源码配合 H2、真实 OBDX ORM/metadata 完成提交/回滚、并发、派送失败及 SQL 测试；银行仓库、Event 与网络使用 fixture，仍需 UAT 验证。1216/791 的拟新增、建议和待确认项仍是后续工作。
 
 ## 7. 源文件索引
 
@@ -161,4 +161,4 @@ H2H 上线较晚、BCO 每月上线且共用 UAT，建议新增两个独立控�
 | [Audit Extension](</Users/devs/CProj/hth-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java:63>) | 任务名称增强、过滤及 FMO 控制。 |
 | [Audit 页面 Model](</Users/devs/CProj/hth-application/consulting/channel/extensions/components/audit/audit-log/model.js:111>) | 现有 activity 下拉及审计查询 API。 |
 | [Audit Export XSL](</Users/devs/CProj/hth-application/consulting/config_core/resources/com/ofss/digx/app/audit/dto/AuditListResponseDTO.xsl:86>) | 源码中的现有审计报告转换；实际 UAT 调用链待验证。 |
-| [Preferences.xml](</Users/devs/CProj/hth-application/consulting/config/Preferences.xml:1>) | 配置类别绑定文件；设计控制项尚未在此实现。 |
+| [Preferences.xml](</Users/devs/CProj/hth-application/consulting/config/Preferences.xml:1>) | 851 配置类别已绑定；1216/791 控制项仍属设计。 |

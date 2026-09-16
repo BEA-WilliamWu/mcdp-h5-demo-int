@@ -121,15 +121,6 @@ public class SMSDispatcher extends Dispatcher {
 	 */
 	@Override
 	public DispatchResult dispatchAlert(AlertRequestDTO alertRequestDTO, IDispatchData data) throws FatalException {
-        // BCOH2H-851: only the HTH marker DTO uses durable recipient snapshots.
-        if (HthContactNotificationDispatch.matches(alertRequestDTO)) {
-            String body = data.fetchFormattedData(fetchDispatchMessageTemplate(data.getDispatchData()));
-            if (!isSecureMessage(body) || body == null) return new DispatchResult();
-            body = body.replaceAll("\\<.*?\\>", "");
-            if (body.length() > AlertPollerPoolConstant.fetchUniqueInstance().fetchSMSLength()) return new DispatchResult();
-            return HthContactNotificationDispatch.dispatch(alertRequestDTO, "SMS", body, "");
-        }
-
 
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Entered the method SMSDispatcher.dispatchAlert"));
@@ -536,6 +527,16 @@ public class SMSDispatcher extends Dispatcher {
 			}
 		}
 		com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("#########post country block ");
+        // 851 final-approver SMS only: retain target-user template values, route to the captured AP.
+        if (alertRequestDTO.getActivityLog() instanceof com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO) {
+            com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO approverLog =
+                    (com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO) alertRequestDTO.getActivityLog();
+            if (!approverLog.isApproverSms(activityId, eventId)) return dispatchResult;
+            recipientId = approverLog.getApproverMobile();
+            countryCode = approverLog.getApproverCountryCode();
+            onScreenUserId = approverLog.getApproverId();
+            alertRequestDTO.setUserId(onScreenUserId);
+        }
 		String refNumber = "CDC" + TXnRefNo + ShortString(TxnName);
 		com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("##############SMS DISPATCHER : recipientId is " + recipientId);
 		recipientId = countryCode + recipientId;
@@ -634,7 +635,7 @@ public class SMSDispatcher extends Dispatcher {
 		return sb.toString();
 	}
 
-	List<MNGSmsAlertDTO> buildMNGrequest(String recipientId, String messageBody, String RefNumber,
+	private List<MNGSmsAlertDTO> buildMNGrequest(String recipientId, String messageBody, String RefNumber,
 			String activityId, String txnName) {
 
 		List<MNGSmsAlertDTO> request = new ArrayList();

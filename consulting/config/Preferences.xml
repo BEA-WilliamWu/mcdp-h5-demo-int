@@ -272,6 +272,5 @@
 		<Preference name="H2HApiAdapterImplConfig" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ADAPTER_PROP_V where category_id  ='H2HApi'" syncTimeInterval="36000000" />
 		<Preference name="DSPApiAdapterImplConfig" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ADAPTER_PROP_V where category_id  ='DSPApi'" syncTimeInterval="36000000" />
 		<Preference name="HthApiCredentialAdapterConfig" PreferencesProvider="com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ADAPTER_PROP_V where category_id = 'HthApiCredentialAdapterConfig'" syncTimeInterval="36000000" />
-		<Preference name="HthProfileContactNotification" PreferencesProvider="com.ofss.digx.infra.config.impl.DBBasedPropertyProvider" parent="jdbcpreference" propertyFileName="select prop_id, prop_value from DIGX_FW_CONFIG_ALL_B where category_id = 'HthProfileContactNotification'" syncTimeInterval="300000" />
 	</Nodes>
 </Preferences>

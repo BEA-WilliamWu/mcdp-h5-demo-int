@@ -9,8 +9,8 @@ projects = root / 'consulting/middleware/projects'
 java = Path(os.environ['JAVA_HOME']) / 'bin/javac'
 cp = os.pathsep.join([str(root / 'devtools/backend-compile/build/classes/java/main')] +
                     [str(p) for p in (root / 'consulting/middleware/lib').rglob('*.jar')])
-files = list(projects.rglob('Hth*Contact*.java')) + list(projects.rglob('UserProfUpdateActivityLogDTO.java'))
-for name in ('UserExtensionData.java', 'EmailDispatcher.java', 'SMSDispatcher.java', 'BatchExecutionScheduler.java'):
+files = list(projects.rglob('HthProfileApprover*.java')) + list(projects.rglob('UserProfUpdateActivityLogDTO.java'))
+for name in ('UserExtensionData.java', 'SMSDispatcher.java'):
     files.extend(p for p in (projects / 'module').rglob(name)
                  if name != 'UserExtensionData.java' or '/app/sms/service/user/' in str(p))
 with tempfile.TemporaryDirectory(prefix='hth-contact-compile-') as output:
@@ -18,14 +18,4 @@ with tempfile.TemporaryDirectory(prefix='hth-contact-compile-') as output:
                            *map(str, files)], check=False).returncode
     if code:
         raise SystemExit(code)
-for variant in ('', 'UAT', 'PRD'):
-    source = root / 'consulting/middleware/batchJobs' / variant
-    with tempfile.TemporaryDirectory(prefix='hth-contact-batch-') as output:
-        code = subprocess.run([str(java), '-proc:none', '--release', '8', '-cp', cp,
-                               '-sourcepath', str(source), '-d', output,
-                               str(source / 'inboundbatchprocessor/ValidateAndSendBounceNotify.java')],
-                              check=False).returncode
-        if code:
-            raise SystemExit(code)
-print('PASS: root/UAT/PRD bounce batch sources compile')
-print('PASS: 851 production classes and shared hooks compile against real repository dependencies (Java 8 target)')
+print('PASS: narrow 851 helper/DTO and two shared classes compile against real dependencies (Java 8 target)')

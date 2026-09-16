@@ -1,0 +1,128 @@
+package com.ofss.digx.cz.bea.app.sms.service.user;
+
+import com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO;
+import com.ofss.digx.cz.bea.app.sms.dto.user.UserAlertRequestDTO;
+import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataDTO;
+import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData;
+import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionDataKey;
+import com.ofss.digx.domain.sms.entity.user.User;
+import com.ofss.digx.domain.sms.entity.user.UserKey;
+import com.ofss.digx.framework.domain.transaction.Transaction;
+import com.ofss.digx.framework.domain.transaction.TransactionKey;
+import com.ofss.digx.infra.thread.ThreadAttribute;
+import com.ofss.fc.app.context.SessionContext;
+import com.ofss.fc.enumeration.ep.DestinationType;
+import com.ofss.fc.enumeration.ep.SubscriberType;
+import com.ofss.fc.xface.ep.dto.NotificationDetail;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/** Adds the final HTH approver to the existing BCO contact notification flow. */
+final class HthProfileApproverNotification {
+    private static final Logger LOG = Logger.getLogger(HthProfileApproverNotification.class.getName());
+    private static final String ACTIVITY = "com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData.update";
+    private HthProfileApproverNotification() { }
+
+    static Approver resolve(SessionContext context, UserExtensionDataDTO request,
+            UserAlertRequestDTO changes, UserExtensionData stored) {
+        // Use the profile already loaded by update: ordinary BCO has no additional repository dependency.
+        if (stored == null || !"OBDX_BU".equals(context.getTargetUnit())
+                || !("HTH".equalsIgnoreCase(text(stored.getUserChannelType()))
+                    || "H2H".equalsIgnoreCase(text(stored.getUserChannelType())))
+                || (changes.getEmailId() && changes.getMobNo())) return null;
+        Approver result = new Approver();
+        result.oldTargetCountry = stored.getMobileCode();
+        if ("VALIDATE".equals(String.valueOf(context.getServiceCallContextType()))) return result;
+        try {
+            if (!text(request.getUserID()).equals(stored.getUserID())
+                    || !text(request.getCdcNo()).equals(stored.getCdcNo()))
+                throw new IllegalStateException("HTH profile owner mismatch");
+            String reference = (String) ThreadAttribute.get(ThreadAttribute.TRANSACTION_REFERENCE_NO);
+            if (text(reference).isEmpty()) throw new IllegalStateException("Approval reference missing");
+            TransactionKey key = new TransactionKey(); key.setId(reference);
+            Transaction transaction = new Transaction().read(key);
+            if (transaction == null || transaction.getApprovalDetails() == null
+                    || !"APPROVED".equals(String.valueOf(transaction.getApprovalDetails().getStatus()))
+                    || !ACTIVITY.equals(transaction.getServiceId())) return result;
+            String signer = finalSigner(transaction.getApprovalDetails().getSignedBy());
+            if (signer.isEmpty()) throw new IllegalStateException("Final approver missing");
+            UserKey userKey = new UserKey(); userKey.setUserId(signer);
+            User user = new User().read(userKey);
+            if (user == null) throw new IllegalStateException("Final approver profile missing");
+            result.id = signer;
+            result.email = text(user.getEmailId());
+            result.mobile = digits(user.getMobileNumber());
+            UserExtensionDataKey extKey = new UserExtensionDataKey(); extKey.setUserExtensionKey(signer);
+            UserExtensionData extension = new UserExtensionData().read(extKey);
+            result.country = extension == null ? "" : digits(extension.getMobileCode());
+        } catch (java.lang.Exception e) {
+            // Never replace an unresolved final approver with the maker or background execution user.
+            // Keep existing target/company notifications on their original path.
+            LOG.log(Level.WARNING, "HTH_851 stage=APPROVER_RESOLUTION exception={0}", e.getClass().getSimpleName());
+        }
+        return result;
+    }
+
+    static String finalSigner(String signedBy) {
+        String last = "";
+        int count = 0;
+        for (String signer : text(signedBy).split("~")) {
+            if (!signer.trim().isEmpty()) { last = signer.trim(); count++; }
+        }
+        // The first entry is the maker; only the final approved signer is a recipient.
+        return count > 1 ? last : "";
+    }
+
+    static void addEmail(List<String> existing, Approver approver) {
+        if (approver == null || text(approver.email).isEmpty()) return;
+        for (String address : existing) {
+            if (text(address).split("~", 2)[0].trim().equalsIgnoreCase(approver.email)) return;
+        }
+        // Existing BCO convention: suffix identifies the recipient in MNG without changing the body.
+        existing.add(approver.email + "~" + approver.id);
+    }
+
+    static List<HthProfileApproverActivityLogDTO> sms(Approver approver, UserAlertRequestDTO changes,
+            UserExtensionDataDTO request, String oldMobile) {
+        List<HthProfileApproverActivityLogDTO> messages = new ArrayList<>();
+        if (approver == null || text(approver.id).isEmpty()
+                || !text(approver.country).matches("[0-9]{1,4}")
+                || !text(approver.mobile).matches("[0-9]{4,14}")) return messages;
+        if (!changes.getMobNo() && !sameMobile(approver, approver.oldTargetCountry, oldMobile))
+            messages.add(message(approver, request, HthProfileApproverActivityLogDTO.MOBILE_EVENT));
+        if (!changes.getEmailId() && !sameMobile(approver, request.getMobileCode(), request.getUserDTO().getMobileNumber()))
+            messages.add(message(approver, request, HthProfileApproverActivityLogDTO.EMAIL_EVENT));
+        return messages;
+    }
+
+    private static HthProfileApproverActivityLogDTO message(Approver approver,
+            UserExtensionDataDTO request, String event) {
+        HthProfileApproverActivityLogDTO log = new HthProfileApproverActivityLogDTO();
+        log.setUserId(request.getUserID());
+        log.setProfileUser(text(request.getUserID()).split("@", 2)[0]);
+        log.setCustomerId(request.getCdcNo());
+        log.setEmailId(text(request.getUserDTO().getEmailId()).replaceAll("(?<=.....).", "*"));
+        log.setApproverId(approver.id);
+        log.setApproverMobile(approver.mobile);
+        log.setApproverCountryCode(approver.country);
+        log.setApproverEventId(event);
+        NotificationDetail detail = new NotificationDetail();
+        detail.setRecipientId(request.getCdcNo());
+        detail.setRecipientType(SubscriberType.EXTERNAL.toString());
+        detail.setDestination(DestinationType.SMS);
+        detail.setDispatchAddress(approver.mobile);
+        log.setNotificationDetails(new NotificationDetail[] {detail});
+        return log;
+    }
+
+    private static boolean sameMobile(Approver approver, String country, String number) {
+        return approver.country.equals(digits(country)) && approver.mobile.equals(digits(number));
+    }
+    private static String digits(String value) { return text(value).replaceAll("[+\\s()-]", ""); }
+    private static String text(String value) { return value == null ? "" : value.trim(); }
+    static final class Approver {
+        String id, email, mobile, country, oldTargetCountry;
+    }
+}

@@ -83,11 +83,6 @@ public class ValidateAndSendBounceNotify extends GenericInBoundProcessor {
 			}
 
 			conn.setAutoCommit(true);
-            boolean hthContactOutbox = hasHthContactOutbox(conn);
-            if (hthContactOutbox) processHthContactOfficeFailures(conn, LOG_FILE_NAME);
-            String hthContactExclusion = hthContactOutbox ?
-                    " AND NOT EXISTS (SELECT 1 FROM DIGX_CZ_HTH_CONTACT_OUTBOX H WHERE M.REFNUMBER = 'H851' || H.ID) " : "";
-
 			Statement stmt = conn.createStatement();
 
 			// *************************** BOUNCED EMAIL
@@ -121,7 +116,6 @@ public class ValidateAndSendBounceNotify extends GenericInBoundProcessor {
 					+ "  FROM DIGX_CZ_EMAIL_MNG M, DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL C\r\n" + " WHERE M.eventid in\r\n"
 					+ "       (SELECT DISTINCT EVENTID FROM DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST WHERE EVENTID NOT IN ('HTH_PROFILE_CONTACT_UPDATED_API','HTH_PROFILE_CONTACT_UPDATED_AP','HTH_PROFILE_EMAIL_UPDATED_API','HTH_PROFILE_EMAIL_UPDATED_AP','HTH_PROFILE_MOBILE_UPDATED_API','HTH_PROFILE_MOBILE_UPDATED_AP','HTH_USER_ACCESS_LINKED','HTH_USER_ACCESS_UPDATED'))\r\n"
 					+ "   AND M.REFNUMBER = C.SRC_SYS_REF_NUM\r\n"
-                    + hthContactExclusion
 					+ "   AND M.PARTYID=(select party_id from digx_um_userparty_relation  where user_id=M.CUSTOMERID and rownum=1) \r\n"
 					+ "   AND C.IS_VALSENDBOUNCENOTIF_PROCESSED = 'N'";
 			System.out.println(query);
@@ -826,11 +820,6 @@ public class ValidateAndSendBounceNotify extends GenericInBoundProcessor {
 
 	public void sendSysAdminWebMail(String officeEmail, String partyid, Connection conn, String wmUserId,
 			String LOG_FILE_NAME) throws SQLException {
-        sendSysAdminWebMail(officeEmail, partyid, conn, wmUserId, LOG_FILE_NAME, true);
-    }
-
-    private void sendSysAdminWebMail(String officeEmail, String partyid, Connection conn, String wmUserId,
-            String LOG_FILE_NAME, boolean legacyAutoCommit) throws SQLException {
 
 		System.out.println("Sending webmail to sysadmin " + wmUserId);
 		writeLog(LOG_FILE_NAME, System.getProperty("line.separator") + "Sending webmail to sysadmin " + wmUserId, true);
@@ -879,7 +868,7 @@ public class ValidateAndSendBounceNotify extends GenericInBoundProcessor {
 			bbNextSeq = rs.getString("id");
 		}
 
-		if (legacyAutoCommit) conn.setAutoCommit(true);
+		conn.setAutoCommit(true);
 		qryInsMBMUSER = "insert into DIGX_CO_MAILBOX_MAILER_USER (ID, MESSAGE_ID, USER_NAME, USER_ID, SUBJECT, PRIORITY, MSG_STATUS, RECEIVED_DATE, DISMISSED, CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE, VERSION, DETERMINANT_VALUE)"
 				+ "		values ('" + bbNextSeq + "', '" + bbNextSeq + "', null, '" + wmUserId + "', '" + subject
 				+ "', 'H', 'U', sysdate, 'N', 'batchuser', sysdate, 'batchuser', sysdate, 1, 'OBDX_BU')";
@@ -945,62 +934,6 @@ public class ValidateAndSendBounceNotify extends GenericInBoundProcessor {
 			// TO DO SMS CHECK
 		}
 	}
-
-
-    private boolean hasHthContactOutbox(Connection conn) throws SQLException {
-        try (java.sql.PreparedStatement p = conn.prepareStatement(
-                "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = 'DIGX_CZ_HTH_CONTACT_OUTBOX'");
-                ResultSet r = p.executeQuery()) { return r.next() && r.getInt(1) > 0; }
-    }
-
-    // Company failure uses the BCO AP reminder and sysadmin webmail, once per approved update/address.
-    // The source address/role comes from the original send, even after contact details have changed.
-    void processHthContactOfficeFailures(Connection conn, String logFile) throws SQLException {
-        boolean autoCommit = conn.getAutoCommit();
-        ArrayList<String> ids = new ArrayList<String>();
-        try (java.sql.PreparedStatement p = conn.prepareStatement(
-                "SELECT ID FROM DIGX_CZ_HTH_CONTACT_OUTBOX WHERE TARGET_UNIT = 'OBDX_BU' AND STATE = 'OFFICE_FOLLOWUP'");
-                ResultSet r = p.executeQuery()) { while (r.next()) ids.add(r.getString(1)); }
-        for (String id : ids) {
-            conn.setAutoCommit(false);
-            try (java.sql.PreparedStatement p = conn.prepareStatement(
-                    "SELECT PARTY_ID, ADDRESS FROM DIGX_CZ_HTH_CONTACT_OUTBOX WHERE ID = ? AND STATE = 'OFFICE_FOLLOWUP' FOR UPDATE")) {
-                p.setString(1, id);
-                try (ResultSet r = p.executeQuery()) {
-                    if (r.next()) {
-                        String party = r.getString(1), office = r.getString(2);
-                        int recipientCount = 0;
-                        // Same recipients and reminder value as the existing BCO company-failure handling.
-                        try (java.sql.PreparedStatement users = conn.prepareStatement(
-                                "SELECT DISTINCT USERNAME FROM DIGX_UM_USER_PRINCIPAL WHERE PRINCIPAL LIKE '%SYSADM%' "
-                                + "AND USERNAME IN (SELECT USER_ID FROM DIGX_UM_USERPARTY_RELATION WHERE PARTY_ID = ?)")) {
-                            users.setString(1, party);
-                            try (ResultSet recipients = users.executeQuery()) {
-                                while (recipients.next()) {
-                                    String user = recipients.getString(1);
-                                    recipientCount++;
-                                    try (java.sql.PreparedStatement reminder = conn.prepareStatement(
-                                            "UPDATE DIGX_CZ_UM_EXTENSIONDATA SET BOUNCE_BACK_REMINDER = 'AP' WHERE USER_ID = ?")) {
-                                        reminder.setString(1, user); reminder.executeUpdate();
-                                    }
-                                    sendSysAdminWebMail(office, party, conn, user, logFile, false);
-                                }
-                            }
-                        }
-                        if (recipientCount == 0) throw new SQLException("No BCO followup recipient");
-                        try (java.sql.PreparedStatement done = conn.prepareStatement(
-                                "UPDATE DIGX_CZ_HTH_CONTACT_OUTBOX SET STATE = 'OFFICE_NOTIFIED', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?")) {
-                            done.setString(1, id); done.executeUpdate();
-                        }
-                    }
-                }
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                writeLog(logFile, "HTH_CONTACT stage=OFFICE_FOLLOWUP exception=" + e.getClass().getSimpleName(), true);
-            } finally { conn.setAutoCommit(autoCommit); }
-        }
-    }
 
 	public void PrepareEmailBounceKundli(ValidateAndSendBounceModel record, Connection conn, String LOG_FILE_NAME,
 			String[] args) throws Exception {

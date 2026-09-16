@@ -565,7 +565,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 		boolean isSignerDeleted = false;
 		BeaSystemOut.println("Entering update UserExtensionData, update requestDTO:"+SerializationUtils.toJsonString(requestDTO));
 
-		HthProfileContactNotification.Snapshot hthContactSnapshot = null;
 		try {
 			extensionExecutor.preUpdate(sessionContext, requestDTO);
 			requestDTO.validate(sessionContext);
@@ -913,7 +912,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("##########Old Mob No:- " + oldMobNo);
 				BeaSystemOut.println("#############Old Email:- " + userDomain.getEmailId());
 				resultDto = checkAlerts(requestDTO, userDomain);
-				hthContactSnapshot = HthProfileContactNotification.capture(sessionContext, requestDTO, userDomain, domain);
+				HthProfileApproverNotification.Approver hthApprover =
+						HthProfileApproverNotification.resolve(sessionContext, requestDTO, resultDto, domain);
 
 				// UserExtensionDataKey key = new UserExtensionDataKey();
 				// key.setUserExtensionKey(requestDTO.getUserExtensionKey());
@@ -964,7 +964,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				if (transactionStatus!=null && transactionStatus.getErrorCode()==null) {
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
-					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthContactSnapshot != null);
+					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthApprover);
 					BeaSystemOut.println("##############Executed alertUserProfileUpdate method");
 				}
 			}
@@ -1099,9 +1099,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 //			----------------------- MigratedUserResetPassword changes - ENDS -----------------------
 	
 			extensionExecutor.postUpdate(sessionContext, requestDTO, transactionStatus);
-			if (transactionStatus != null && transactionStatus.getErrorCode() == null) {
-				HthProfileContactNotification.stage(hthContactSnapshot);
-			}
 
 						
 		} catch (Exception e) {
@@ -1915,12 +1912,12 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 	 */
 	public void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
 			UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain, String oldMobNo) {
-        alertUserProfileUpdate(sessionContext, resultDTO, requestDTO, userDomain, oldMobNo, false);
+        alertUserProfileUpdate(sessionContext, resultDTO, requestDTO, userDomain, oldMobNo, null);
     }
 
     private void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
             UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain,
-            String oldMobNo, boolean hthContactHandled) {
+            String oldMobNo, HthProfileApproverNotification.Approver hthApprover) {
 
 		UserProfUpdateActivityLogDTO activityLog = new UserProfUpdateActivityLogDTO();
 		UserManagementActivityLogDTO usermgmtActivityLog = new UserManagementActivityLogDTO();
@@ -1985,9 +1982,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("############### Executed User Management Edit Alert");
 			}
 
-			// 851 stages only contact notifications; preserve USER_MANAGEMENT_EDIT above.
-			if (hthContactHandled) return;
-
 			// Executing other User management update alerts
 			// ---------------------------------------------------------------------------------------------------------------
 
@@ -2022,8 +2016,10 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				com.ofss.digx.domain.sms.entity.user.User signerUser = new com.ofss.digx.domain.sms.entity.user.User();
 				UserKey userKey = new UserKey();
 
-				userKey.setUserId(sessionContext.getUserId());
-				signerUser = signerUser.read(userKey);
+                if (hthApprover == null) {
+                    userKey.setUserId(sessionContext.getUserId());
+                    signerUser = signerUser.read(userKey);
+                }
 
 				if (partyDetails != null && partyDetails.getOfficeEmailId() != null) {
 					userEmailList.add(partyDetails.getOfficeEmailId());
@@ -2031,7 +2027,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 
 				userEmailList.add(userDomain.getEmailId() + "~" + requestDTO.getUserID());
 				userEmailList.add(requestDTO.getUserDTO().getEmailId() + "~" + requestDTO.getUserID());
-				userEmailList.add(signerUser.getEmailId());
+                if (hthApprover == null) userEmailList.add(signerUser.getEmailId());
+                else HthProfileApproverNotification.addEmail(userEmailList, hthApprover);
 
 				for (String userEmail : userEmailList) {
 					BeaSystemOut.println("###############Entered Email IDs list: " + userEmail);
@@ -2142,8 +2139,10 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				 * userFromDb.read(userKey);
 				 */
 
-				userKey.setUserId(sessionContext.getUserId());
-				signerUser = signerUser.read(userKey);
+                if (hthApprover == null) {
+                    userKey.setUserId(sessionContext.getUserId());
+                    signerUser = signerUser.read(userKey);
+                }
 
 				if (partyDetails != null && partyDetails.getOfficeEmailId() != null) {
 					userEmailList.add(partyDetails.getOfficeEmailId());
@@ -2151,7 +2150,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 
 				// userEmailList.add(userDomain.getEmailId());
 				userEmailList.add(requestDTO.getUserDTO().getEmailId() + "~" + requestDTO.getUserID());
-				userEmailList.add(signerUser.getEmailId());
+                if (hthApprover == null) userEmailList.add(signerUser.getEmailId());
+                else HthProfileApproverNotification.addEmail(userEmailList, hthApprover);
 
 				for (String userEmail : userEmailList) {
 					BeaSystemOut.println("###############Entered Email IDs list for MobNo Update: " + userEmail);
@@ -2213,8 +2213,10 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				com.ofss.digx.domain.sms.entity.user.User signerUser = new com.ofss.digx.domain.sms.entity.user.User();
 				UserKey userKey = new UserKey();
 
-				userKey.setUserId(sessionContext.getUserId());
-				signerUser = signerUser.read(userKey);
+                if (hthApprover == null) {
+                    userKey.setUserId(sessionContext.getUserId());
+                    signerUser = signerUser.read(userKey);
+                }
 
 				if (partyDetails != null && partyDetails.getOfficeEmailId() != null) {
 					userEmailList.add(partyDetails.getOfficeEmailId());
@@ -2222,7 +2224,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 
 				userEmailList.add(userDomain.getEmailId() + "~" + requestDTO.getUserID());
 				userEmailList.add(requestDTO.getUserDTO().getEmailId() + "~" + requestDTO.getUserID());
-				userEmailList.add(signerUser.getEmailId());
+                if (hthApprover == null) userEmailList.add(signerUser.getEmailId());
+                else HthProfileApproverNotification.addEmail(userEmailList, hthApprover);
 
 				for (String userEmail : userEmailList) {
 					BeaSystemOut.println("###############Entered Email IDs list for Email & MobNo Update: " + userEmail);
@@ -2358,6 +2361,12 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("######################Executed the USER_EMAIL_ADDRESS_UPDATE SMS Alert##########");
 
 			}
+            // Reuse the BCO events/templates and existing transactional Alert registration.
+            for (com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO approverLog :
+                    HthProfileApproverNotification.sms(hthApprover, resultDTO, requestDTO, oldMobNo)) {
+                super.registerActivityAndGenerateEvent(sessionContext, THIS_COMPONENT_NAME + ".update",
+                        approverLog.getApproverEventId(), new Date(), approverLog);
+            }
 		} catch (Exception e) {
 			logger.log(Level.SEVERE, formatter.formatMessage(
 					" FatalException has occurred while getting response object of inside the alertUserProfileUpdate method of %s. Exception details are %s",

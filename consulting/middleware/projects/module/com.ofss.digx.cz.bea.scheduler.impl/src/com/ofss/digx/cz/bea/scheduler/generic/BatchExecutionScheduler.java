@@ -60,8 +60,6 @@ public class BatchExecutionScheduler implements Serializable, Job {
 				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Entering the executor method to trigger the sendBatchAlert method");
 	
 				BatchAlertGeneric service = new BatchAlertGeneric();
-                // 851 consumes only committed notification plans; ordinary BCO processing is unchanged.
-                new com.ofss.digx.cz.bea.domain.service.dispatch.HthContactNotificationService().process(sessionContext);
 				service.sendBatchAlert(sessionContext);
 				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Exiting the batch alert execute method ");
 	

@@ -1,6 +1,7 @@
 package com.ofss.digx.cz.bea.app.sms.service.user;
 
-import com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO;
+import com.ofss.digx.cz.bea.app.sms.dto.user.UserProfUpdateActivityLogDTO;
+import com.ofss.fc.framework.domain.common.dto.NameValuePairDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserAlertRequestDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataDTO;
 import com.ofss.digx.cz.bea.domain.sms.entity.user.UserExtensionData;
@@ -23,6 +24,8 @@ import java.util.logging.Logger;
 final class HthProfileApproverNotification {
     private static final Logger LOG = Logger.getLogger(HthProfileApproverNotification.class.getName());
     private static final String ACTIVITY = "com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData.update";
+    static final String EMAIL_EVENT = "USER_EMAIL_ADDRESS_UPDATE";
+    static final String MOBILE_EVENT = "USER_MOBILE_NUMBER_UPDATED_REMINDER";
     private HthProfileApproverNotification() { }
 
     static Approver resolve(SessionContext context, UserExtensionDataDTO request,
@@ -84,37 +87,40 @@ final class HthProfileApproverNotification {
         existing.add(approver.email + "~" + approver.id);
     }
 
-    static List<HthProfileApproverActivityLogDTO> sms(Approver approver, UserAlertRequestDTO changes,
+    static List<Notification> sms(Approver approver, UserAlertRequestDTO changes,
             UserExtensionDataDTO request, String oldMobile) {
-        List<HthProfileApproverActivityLogDTO> messages = new ArrayList<>();
+        List<Notification> messages = new ArrayList<>();
         if (approver == null || text(approver.id).isEmpty()
                 || !text(approver.country).matches("[0-9]{1,4}")
                 || !text(approver.mobile).matches("[0-9]{4,14}")) return messages;
         if (!changes.getMobNo() && !sameMobile(approver, approver.oldTargetCountry, oldMobile))
-            messages.add(message(approver, request, HthProfileApproverActivityLogDTO.MOBILE_EVENT));
+            messages.add(message(approver, request, MOBILE_EVENT));
         if (!changes.getEmailId() && !sameMobile(approver, request.getMobileCode(), request.getUserDTO().getMobileNumber()))
-            messages.add(message(approver, request, HthProfileApproverActivityLogDTO.EMAIL_EVENT));
+            messages.add(message(approver, request, EMAIL_EVENT));
         return messages;
     }
 
-    private static HthProfileApproverActivityLogDTO message(Approver approver,
+    private static Notification message(Approver approver,
             UserExtensionDataDTO request, String event) {
-        HthProfileApproverActivityLogDTO log = new HthProfileApproverActivityLogDTO();
-        log.setUserId(request.getUserID());
+        UserProfUpdateActivityLogDTO log = new UserProfUpdateActivityLogDTO();
+        // UserId routes SMS, while ProfileUser is the user described by the BCO template.
+        log.setUserId(approver.id);
+        // Existing SDK ExternalRecipientDerivationHelper forwards this to AlertRequest.userId.
+        // This also selects the AP country code when the event is not in the dispatcher lookup list.
+        NameValuePairDTO recipient = new NameValuePairDTO();
+        recipient.setName("recipientUserId");
+        recipient.setValue(approver.id);
+        log.setInputfacts(new NameValuePairDTO[] {recipient});
         log.setProfileUser(text(request.getUserID()).split("@", 2)[0]);
         log.setCustomerId(request.getCdcNo());
         log.setEmailId(text(request.getUserDTO().getEmailId()).replaceAll("(?<=.....).", "*"));
-        log.setApproverId(approver.id);
-        log.setApproverMobile(approver.mobile);
-        log.setApproverCountryCode(approver.country);
-        log.setApproverEventId(event);
         NotificationDetail detail = new NotificationDetail();
         detail.setRecipientId(request.getCdcNo());
         detail.setRecipientType(SubscriberType.EXTERNAL.toString());
         detail.setDestination(DestinationType.SMS);
         detail.setDispatchAddress(approver.mobile);
         log.setNotificationDetails(new NotificationDetail[] {detail});
-        return log;
+        return new Notification(event, log);
     }
 
     private static boolean sameMobile(Approver approver, String country, String number) {
@@ -122,6 +128,14 @@ final class HthProfileApproverNotification {
     }
     private static String digits(String value) { return text(value).replaceAll("[+\\s()-]", ""); }
     private static String text(String value) { return value == null ? "" : value.trim(); }
+    static final class Notification {
+        final String eventId;
+        final UserProfUpdateActivityLogDTO log;
+        Notification(String eventId, UserProfUpdateActivityLogDTO log) {
+            this.eventId = eventId;
+            this.log = log;
+        }
+    }
     static final class Approver {
         String id, email, mobile, country, oldTargetCountry;
     }

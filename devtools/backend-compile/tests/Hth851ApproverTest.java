@@ -15,8 +15,14 @@ import com.ofss.fc.xface.ep.dto.NotificationDetail;
 import com.ofss.digx.cz.bea.app.email.dto.alerts.MNGSmsAlertDTO;
 import com.ofss.digx.cz.bea.domain.service.dispatch.SMSDispatcher;
 import com.ofss.digx.app.alerts.dto.eventgen.ActivityLog;
+import com.ofss.fc.domain.ep.service.recipient.ExternalRecipientDerivationHelper;
+import com.ofss.fc.domain.ep.entity.action.subscriber.IRecipientMessageTemplate;
+import com.ofss.fc.domain.ep.entity.action.subscriber.RecipientMessageTemplateKey;
+import com.ofss.fc.app.ep.dto.AlertPartyDetailsDTO;
+import com.ofss.fc.enumeration.ep.DestinationType;
+import com.ofss.fc.enumeration.ep.SubscriberType;
 
-public final class HthContactRuntimeTest {
+public final class Hth851ApproverTest {
     static final String ACTIVITY="com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData.update";
     static User oldUser, finalUser;
     static UserExtensionDataDTO request;
@@ -66,11 +72,19 @@ public final class HthContactRuntimeTest {
         cursor.getClass().getMethod("set"+parts[parts.length-1],value.getClass()).invoke(cursor,value);
     }
     static boolean send(UserProfUpdateActivityLogDTO log,String event,String activity)throws Exception{
-        AlertRequestDTO a=new AlertRequestDTO();a.setActivityLog(log);a.setUserId("TARGET@PARTY");a.setCodActDataId("TEST-ACTIVITY");
+        RecipientMessageTemplateKey key=new RecipientMessageTemplateKey();
+        key.setSubscriberType(SubscriberType.EXTERNAL);key.setDestinationType(DestinationType.SMS);
+        IRecipientMessageTemplate template=(IRecipientMessageTemplate)Proxy.newProxyInstance(IRecipientMessageTemplate.class.getClassLoader(),new Class[]{IRecipientMessageTemplate.class},
+                (p,m,args)->m.getName().equals("getRecipientMessageTemplateKey")?key:null);
+        List<AlertPartyDetailsDTO> recipients=new ExternalRecipientDerivationHelper().deriveRecipients(Bank.context,log,template,null);
+        check(recipients.size()==1,"real SDK resolves external recipient");
+        AlertPartyDetailsDTO recipient=recipients.get(0);
+        if(log.getInputfacts()!=null) check("FINAL".equals(recipient.getUserId()),"real SDK respects recipientUserId input fact");
+        AlertRequestDTO a=new AlertRequestDTO();a.setActivityLog(log);a.setUserId(recipient.getUserId());a.setCodActDataId("TEST-ACTIVITY");
         bean(a,"EventAction.KeyDTO.ActivityId",activity);bean(a,"EventAction.KeyDTO.EventId",event);bean(a,"EventAction.KeyDTO.ActionId","A");
         bean(a,"RecipientMessageTemplate.KeyDTO.EventId",event);bean(a,"RecipientMessageTemplate.KeyDTO.MessageTemplateId","BCO-TEMPLATE");
-        bean(a,"AlertContactPreference.DispatchAddress","63456789");bean(a,"PreferredRecipient.ContactDetails.PartyId","PARTY");
-        NameValuePair pair=new NameValuePair();pair.setName("UserId");pair.setGenericName("UserId");pair.setValue("TARGET@PARTY");
+        bean(a,"AlertContactPreference.DispatchAddress",recipient.getElectronicAddress());bean(a,"PreferredRecipient.ContactDetails.PartyId",recipient.getPartyId());
+        NameValuePair pair=new NameValuePair();pair.setName("UserId");pair.setGenericName("UserId");pair.setValue(log.getUserId());
         IDispatchData data=(IDispatchData)Proxy.newProxyInstance(IDispatchData.class.getClassLoader(),new Class[]{IDispatchData.class},(p,m,args)->m.getName().equals("getDispatchData")?new NameValuePair[]{pair}:null);
         return new SMSDispatcher().test(a,data,"BCO reminder for TARGET").getIsDispatchSuccessfull();
     }
@@ -104,20 +118,25 @@ public final class HthContactRuntimeTest {
             check(emails("company@example.test")==1,"company email preserved");
             check(emails("new@example.test")==1 && emails("old@example.test")== (flags[0]?1:0),"target mail preserved");
             check(Bank.events.contains("USER_MANAGEMENT_EDIT"),"independent user-management notification retained");
-            List<HthProfileApproverActivityLogDTO> sms=new ArrayList<>();
-            for(ActivityLog l:Bank.logs)if(l instanceof HthProfileApproverActivityLogDTO)sms.add((HthProfileApproverActivityLogDTO)l);
+            List<UserProfUpdateActivityLogDTO> sms=new ArrayList<>();
+            List<String> smsEvents=new ArrayList<>();
+            for(int i=0;i<Bank.logs.size();i++){
+                ActivityLog l=Bank.logs.get(i);
+                if(l instanceof UserProfUpdateActivityLogDTO && l.getInputfacts()!=null){sms.add((UserProfUpdateActivityLogDTO)l);smsEvents.add(Bank.events.get(i));}
+            }
             check(sms.size()==(flags[0]?1:0)+(flags[1]?1:0),"AP receives only corresponding BCO reminders");
-            for(HthProfileApproverActivityLogDTO l:sms){
-                check("TARGET".equals(l.getProfileUser()) && "TARGET@PARTY".equals(l.getUserId()),"body identifies changed user");
-                check("FINAL".equals(l.getApproverId()),"serialized marker carries final recipient");
+            for(int i=0;i<sms.size();i++){
+                UserProfUpdateActivityLogDTO l=sms.get(i);String event=smsEvents.get(i);
+                check("TARGET".equals(l.getProfileUser()),"body identifies changed user");
+                check("FINAL".equals(l.getUserId()),"UserId routes to final recipient");
+                check("recipientUserId".equals(l.getInputfacts()[0].getName()) && "FINAL".equals(l.getInputfacts()[0].getValue()),"serialized SDK recipient identity preserved");
                 for(boolean configured:new boolean[]{false,true}){
-                    Bank.includeSmsEvents=configured;check(send(l,l.getApproverEventId(),ACTIVITY),"SMS MNG success");
+                    Bank.includeSmsEvents=configured;check(send(l,event,ACTIVITY),"SMS MNG success");
                     MNGSmsAlertDTO sent=(MNGSmsAlertDTO)((List<?>)Bank.lastRequest).get(0);
                     check("85363456789".equals(sent.getBody()[0].getSms().getDistNo()),"AP country/number survive legacy target lookup with event configured="+configured);
                     check("FINAL".equals(com.ofss.digx.cz.bea.domain.emailmng.EmailMNG.last.getCustomerId()),"MNG records AP recipient");
                 }
-                int count=Bank.networkCalls;send(l,l.getApproverEventId(),"other.activity");check(count==Bank.networkCalls,"marker cannot route unrelated activity");
-                Bank.reject=true;check(!send(l,l.getApproverEventId(),ACTIVITY),"MNG rejection retained");Bank.reject=false;
+                Bank.reject=true;check(!send(l,event,ACTIVITY),"MNG rejection retained");Bank.reject=false;
             }
         }
         System.out.println("PASS: real BCO notification method matches baseline for AC1/AC2/AC3/no-op; final AP email/SMS, templates, MNG routing and failure handling");
@@ -127,8 +146,9 @@ public final class HthContactRuntimeTest {
         ap.country="852";ap.mobile="62345678";check(HthProfileApproverNotification.sms(ap,changes(true,false),request,"61234567").isEmpty(),"same email-reminder target SMS dedup");
         ap.mobile="61234567";check(HthProfileApproverNotification.sms(ap,changes(false,true),request,"6123-4567").isEmpty(),"same mobile-reminder target SMS dedup");
         ap.mobile="62345678";check(HthProfileApproverNotification.sms(ap,changes(false,true),request,"61234567").size()==1,"new-number welcome is distinct from AP reminder");
-        UserProfUpdateActivityLogDTO normal=new UserProfUpdateActivityLogDTO();normal.setUserId("TARGET@PARTY");Bank.includeSmsEvents=true;
-        check(send(normal,HthProfileApproverActivityLogDTO.EMAIL_EVENT,ACTIVITY),"ordinary BCO SMS success");
+        UserProfUpdateActivityLogDTO normal=new UserProfUpdateActivityLogDTO();normal.setUserId("TARGET@PARTY");normal.setCustomerId("PARTY");
+        NotificationDetail detail=new NotificationDetail();detail.setRecipientId("PARTY");detail.setDestination(DestinationType.SMS);detail.setRecipientType(SubscriberType.EXTERNAL.toString());detail.setDispatchAddress("61234567");normal.setNotificationDetails(new NotificationDetail[]{detail});Bank.includeSmsEvents=true;
+        check(send(normal,HthProfileApproverNotification.EMAIL_EVENT,ACTIVITY),"ordinary BCO SMS success");
         MNGSmsAlertDTO bco=(MNGSmsAlertDTO)((List<?>)Bank.lastRequest).get(0);check("85261234567".equals(bco.getBody()[0].getSms().getDistNo()),"BCO legacy lookup/country retained");
         System.out.println("PASS: same-content recipient dedup, ordinary BCO SMS routing unchanged");
     }

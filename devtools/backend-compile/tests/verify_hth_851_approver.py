@@ -1,5 +1,6 @@
-"""Narrow 851 regression tests. Execute production recipient/notification methods and
-full SMS routing/MNG builder with bank repositories and network replaced by fixtures.
+"""Minimal 851 regression tests. Execute production recipient/notification methods,
+the real SDK external recipient helper and unmodified SMS routing/MNG builder.
+Bank repositories and network are replaced by fixtures.
 Compare ordinary BCO event payloads with dca7ea48; no real notifications are sent.
 """
 from pathlib import Path
@@ -61,7 +62,7 @@ public class Bank {
   return Proxy.newProxyInstance(types[0].getClassLoader(),types,(p,m,a)->{
    if(m.getName().equals("getPartyPreferences")){com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO d=new com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO();d.setOfficeEmailId(company);d.setPartyName("Company");return d;}
    if(m.getName().equals("getConfiguationDetails"))return "fixture";
-   if(m.getName().equals("readUser")){com.ofss.digx.app.sms.dto.user.UserResponseDTO r=new com.ofss.digx.app.sms.dto.user.UserResponseDTO();com.ofss.digx.app.sms.dto.user.UserDTO u=new com.ofss.digx.app.sms.dto.user.UserDTO();u.setMobileNumber("61234567");u.setEmailId("target@example.test");r.setUserDTO(u);return r;}
+   if(m.getName().equals("readUser")){com.ofss.digx.app.sms.dto.user.UserResponseDTO r=new com.ofss.digx.app.sms.dto.user.UserResponseDTO();com.ofss.digx.app.sms.dto.user.UserDTO u=new com.ofss.digx.app.sms.dto.user.UserDTO();com.ofss.digx.domain.sms.entity.user.User row=com.ofss.digx.domain.sms.entity.user.User.rows.get((String)a[1]);u.setMobileNumber(row==null?"61234567":row.getMobileNumber());u.setEmailId(row==null?"target@example.test":row.getEmailId());r.setUserDTO(u);return r;}
    throw new AssertionError(m.getName());});
  }
  public static <T>T network(Class<T> type){return type.cast(Proxy.newProxyInstance(type.getClassLoader(),new Class[]{type},(p,m,a)->{
@@ -116,7 +117,7 @@ public class ExtxfaceAdapterFactory {public static ExtxfaceAdapterFactory getIns
 ''')
     bean('com.ofss.digx.cz.bea.domain.emailmng', 'CountryCodeKey', {'Id':'String'})
     write('com/ofss/digx/cz/bea/domain/emailmng/CountryCode.java','''package com.ofss.digx.cz.bea.domain.emailmng;
-public class CountryCode {public String getMobile_code(){return fixture.Bank.country;}public CountryCode read(CountryCodeKey key) throws com.ofss.digx.infra.exceptions.Exception{return this;}}
+public class CountryCode {private String country;public String getMobile_code(){return country;}public CountryCode read(CountryCodeKey key) throws com.ofss.digx.infra.exceptions.Exception{country="FINAL".equals(key.getId())?"853":fixture.Bank.country;return this;}}
 ''')
     bean('com.ofss.digx.cz.bea.domain.emailmng', 'EmailMNG',
          {**{k:'String' for k in ('RecipientId','MessageBody','Subject','CustomerId','PartyId','ActivityId','ActionId','EventId','CodActDataId','TxnType','OrgTxnRefNO','Alert_type','ResponseStatus')},'LastUpdatedDate':'com.ofss.fc.datatype.Date','Key':'EmailMNGKey'},
@@ -146,10 +147,10 @@ public class CountryCode {public String getMobile_code(){return fixture.Bank.cou
  public SessionContext getSessionContext() throws FatalException{return fixture.Bank.context;}
  public DispatchResultDTO test(AlertRequestDTO request,IDispatchData data,String body){return dispatchMNGSms(request,data,body);}
 '''+ '\n'.join(method(source,sig) for sig in signatures)+'}')
-    sources=list(PROJECTS.rglob('HthProfileApprover*.java'))
+    sources=list(PROJECTS.rglob('HthProfileApproverNotification.java'))
     for name in ('UserProfUpdateActivityLogDTO.java','UserExtensionDataDTO.java','UserAlertRequestDTO.java'):
         sources+=list(PROJECTS.rglob(name))
     subprocess.run([str(JDK/'javac'),'--release','8','-proc:none','-cp',CP,'-d',tmp,*fixtures,*map(str,sources),
-                    str(Path(__file__).with_name('HthContactRuntimeTest.java'))],check=True)
-    result=subprocess.run([str(JDK/'java'),'-cp',tmp+os.pathsep+CP,'com.ofss.digx.cz.bea.app.sms.service.user.HthContactRuntimeTest'])
+                    str(Path(__file__).with_name('Hth851ApproverTest.java'))],check=True)
+    result=subprocess.run([str(JDK/'java'),'-cp',tmp+os.pathsep+CP,'com.ofss.digx.cz.bea.app.sms.service.user.Hth851ApproverTest'])
     raise SystemExit(result.returncode)

@@ -2362,10 +2362,10 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 
 			}
             // Reuse the BCO events/templates and existing transactional Alert registration.
-            for (com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileApproverActivityLogDTO approverLog :
+            for (HthProfileApproverNotification.Notification notification :
                     HthProfileApproverNotification.sms(hthApprover, resultDTO, requestDTO, oldMobNo)) {
                 super.registerActivityAndGenerateEvent(sessionContext, THIS_COMPONENT_NAME + ".update",
-                        approverLog.getApproverEventId(), new Date(), approverLog);
+                        notification.eventId, new Date(), notification.log);
             }
 		} catch (Exception e) {
 			logger.log(Level.SEVERE, formatter.formatMessage(

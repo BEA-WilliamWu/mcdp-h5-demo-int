@@ -1,49 +1,46 @@
-# BCOH2H-851 — Profile Contact Update Notification
+# BCOH2H-851 — 联系方式更新通知（最小版本）
 
-小范围版本 · 2026-09-17 · 已实现，待 UAT 验收
+2026-09-17 · 基线：本次同步并回退后的 `dca7ea48`
 
-**本次只补齐 H2H 最终审批人的通知，复用 BCO 的事件、模板和发送流程。普通 BCO 保持原流程。**
+**只补齐 H2H 最终审批人的通知，复用原 BCO 模板和发送流程。普通 BCO 保持原样。**
 
-## 各 AC 怎么处理
+## AC 对照
 
-以下 BCO 行为按本轮修改前源码 `dca7ea48` 对照。
-
-| AC | BCO 原有行为 | 本次 H2H 修改 |
+| AC | BCO 原有行为 | 本次 H2H 调整 |
 | --- | --- | --- |
-| AC1：Email、Mobile 都改 | 邮件发用户旧、新邮箱、当前执行人及公司邮箱；短信发用户旧、新手机号 | 用户和公司的通知沿用；当前执行人邮件改为最终审批人邮件，补最终审批人短信 |
-| AC2：只改 Email | 邮件发用户旧、新邮箱、当前执行人及公司邮箱；用户未变手机号也收到提醒 | 同上；审批人使用原 BCO Email 修改提醒模板 |
-| AC3：只改 Mobile | 短信发用户旧、新手机号；邮件发用户未变邮箱、当前执行人及公司邮箱 | 同上；审批人使用原 BCO Mobile 修改提醒模板 |
-| AC4：邮件退信 | 已有 BCO 退信处理，按条件转短信、站内信或公司邮箱 | 本次不增强退信，也不承诺新增的退信关联、防重复规则；继续原 BCO 行为，后续单独评审 |
+| AC1：邮箱、手机都改 | 邮件通知用户旧、新邮箱、当前执行人及公司；短信通知用户旧、新手机 | 用户、公司通知沿用；执行人邮件改为最终审批人邮件，补审批人的邮箱修改、手机修改两种短信提醒 |
+| AC2：只改邮箱 | 邮件通知用户旧、新邮箱、当前执行人及公司；用户未变手机号也收提醒 | 用户、公司通知沿用；执行人邮件改为最终审批人邮件，补审批人邮箱修改短信提醒 |
+| AC3：只改手机 | 短信通知用户旧、新手机；邮件通知用户未变邮箱、当前执行人及公司 | 用户、公司通知沿用；执行人邮件改为最终审批人邮件，补审批人手机修改短信提醒 |
+| AC4：退信补发 | BCO 已有退信处理，按条件转短信、站内信或公司联系人 | 本次沿用，不增强退信关联或跨发送去重；如仍有差异，后续单独评审 |
 
-## 通知规则
+## 实现方式
 
-- 根据更新前已读出的用户资料 `userChannelType=HTH/H2H` 识别 H2H；普通 BCO 不增加审批记录或 HTH 表查询。
-- 从本笔已批准的 `UserExtensionData.update` 审批记录取得最后一位审批人，取该人的邮箱、手机号和国家码。Maker、前面的审批人及后台执行账号不作为本次新增通知的收件人。
-- 用户资料更新成功后，沿用原来的 Alert 事件登记和事务处理。审批人无法确认时不猜收件人，记录阶段及异常类型；用户和公司仍走原通知流程。
-- 邮件沿用原 BCO 邮件事件和模板；最终审批人地址已在本次邮件列表中时不再加入。
-- 审批人短信复用 `USER_EMAIL_ADDRESS_UPDATE`、`USER_MOBILE_NUMBER_UPDATED_REMINDER`。Email、Mobile 都改时，审批人收到两种对应提醒；不向审批人发送用户的新号码欢迎短信。
-- 模板中的用户仍指被修改的用户，短信实际收件人为最终审批人。审批人手机号及国家码与本次相同事件的用户收件号码相同时不重复加入；不同内容的提醒保留。
-- 保留 BCO 的未变化通道提醒和首次公司 `officeEmail` 通知。此次只对新增审批人做去重，不重写原有用户/公司之间的去重，也不新增跨重试去重或自动重发机制。
+1. 根据更新前已读取的 `userChannelType=HTH/H2H` 识别 H2H，普通 BCO 不额外查询审批记录或 HTH 表。
+2. 从本笔已批准的 `UserExtensionData.update` 审批记录中取得最后一位审批人，读取其邮箱、手机号及国家码。只在资料更新成功后走原 Alert 登记流程。
+3. 邮件沿用 `INFO_UPDATE_BY_CORP_ADMIN`。将 H2H 原先的“当前执行人”收件位置改为“最终审批人”；邮箱已在本次用户/公司列表中则不再加入。
+4. 短信沿用 `USER_EMAIL_ADDRESS_UPDATE`、`USER_MOBILE_NUMBER_UPDATED_REMINDER`。不向审批人发送新手机号欢迎短信；同一事件、相同号码及国家码不重复加入。
+5. 复用现有 `UserProfUpdateActivityLogDTO`：`ProfileUser` 表示被修改的用户，`UserId` 表示本条短信的审批人收件身份；`NotificationDetail` 保留公司 ID、EXTERNAL 类型和审批人号码。
+6. 同时设置框架已有的 `inputfacts.recipientUserId`。本地 SDK 的 `ExternalRecipientDerivationHelper` 会把它带到收件信息，再交给 `AlertRequestDTO.userId`；原 `SMSDispatcher` 据此查询审批人的国家码。事件配置为按 `UserId` 查号码时，也会查审批人。因此无需新增公共 DTO 或修改发送类。
 
-## 代码范围与 BCO 影响
+审批记录或联系人无法确认时记录阶段与异常类型，不回退到 Maker、前序审批人或后台执行账号。缺少可用手机号/国家码时不新增该审批人短信；原用户、公司通知仍走原流程。
 
-相对 `dca7ea48`，业务代码只改 **2 个现有公共类，新增 2 个 H2H 类**。
+去重仅针对本次加入的审批人通知，不重写 BCO 原有用户/公司去重，不新增跨重试去重、Outbox、重发或退信补偿。
 
-| 文件/模块 | 作用及范围 |
+## 修改范围及 BCO 影响
+
+| 文件 | 修改 |
 | --- | --- |
-| `UserExtensionData.java` / `com.ofss.digx.cz.bea.module.sms` | H2H 联系方式更新时确认最终审批人，替换原当前执行人邮箱，并登记审批人短信。普通 BCO 继续原分支；原公开方法签名保留 |
-| `SMSDispatcher.java` / `com.ofss.digx.cz.bea.domain.service.dispatch` | 仅对 H2H 审批人 DTO 和上述两个事件使用审批人号码、国家码，防止原逻辑改回目标用户号码；其他通知维持原处理 |
-| `HthProfileApproverNotification.java` / `com.ofss.digx.cz.bea.module.sms`（新增） | 最终审批人查询、联系方式和本次通知去重 |
-| `HthProfileApproverActivityLogDTO.java` / `com.ofss.digx.cz.bea.app.xface`（新增） | 分开保存模板中的目标用户和实际审批人收件信息，随原 Alert 活动数据传递 |
+| `UserExtensionData.java` | 唯一修改的原有类。在 H2H 分支接入审批人信息，普通 BCO 保留原收件及事件逻辑；原公开方法签名保留 |
+| `HthProfileApproverNotification.java` | 新增于同一用户管理模块，集中处理最终审批人识别、收件人去重和原 DTO 组装 |
 
-上一版的 Outbox 类、SQL、Preferences、EmailDispatcher、BatchExecutionScheduler、三份退信批处理改动已撤回。没有新的表、事件配置、模板配置或定时任务；依赖环境已有的 BCO 通知配置。
+两个文件均在 `com.ofss.digx.cz.bea.module.sms`。**不改 batch、scheduler、SMSDispatcher、EmailDispatcher、公共 DTO/common 包、Preferences、SQL 或前端；不新增表、事件或模板。**
 
 ## 部署与验收
 
-构建并部署上述三个模块的 JAR。若已部署过上一版，还需把该版改动过的配置、调度和退信批处理更新为本次恢复后的版本；重新构建时避免残留已删除的 Outbox 类。本次没有 SQL 要执行，也不会删除环境中已建的表或历史数据。若旧 Outbox 已产生待发记录，切换前核对这些记录，避免与新流程重复发送。
+- 构建并部署 `com.ofss.digx.cz.bea.module.sms`，使用环境已有 BCO 通知配置。本版无 SQL 执行步骤。
+- 测试入口：`devtools/backend-compile/tests/verify_hth_851_compile.py`、`verify_hth_851_approver.py`，需配置 `JAVA_HOME`。
+- 本地验证已通过：Java 8 目标编译；实际 BCO 通知方法与基线比较；H2H 最终审批人识别、去重；真实 SDK 外部收件人解析；原 SMSDispatcher 路由及 MNG 请求构造。数据库、网络和服务器时钟使用测试替身。另已检查 SDK 事件登记链路，现有 `inputfacts` 会继续传入事件处理。
+- UAT：AC1–AC3 的原用户和公司通知仍在，最终审批人收到对应邮件/短信；多级审批不增加前序审批人，跨国家码正确，相同事件/地址不重复；普通 BCO 回归三种修改。
+- 环境模板正文/属性配置不在这份源码中；UAT 应核对正文仍显示目标用户 `ProfileUser`，以及实际邮件、短信送达。本地验证不能代替真实送达验收。
 
-本地已完成 Java 8 目标编译、实际通知方法与旧 BCO 方法的对照测试，以及短信路由/MNG 请求构造测试。数据库、银行网络和服务器时钟使用测试替身，尚未证明 UAT 实际送达。
-
-验证脚本：`devtools/backend-compile/tests/verify_hth_contact_compile.py`、`verify_hth_contact_runtime.py`（需设置 `JAVA_HOME`）。
-
-UAT 验收：H2H 的 AC1–AC3 分别核对旧/新联系方式、未变化通道、公司及最终审批人；验证多级审批只增加最终审批人、相同地址不重复加入、跨国家码短信送达。再用普通 BCO 跑同样三种修改，确认原通知未变。
+以本次干净基线实施；mcdp 已清空，本次不恢复之前交付文件。

@@ -17,6 +17,11 @@ import com.ofss.fc.infra.config.ConfigurationFactory;
 import com.ofss.fc.infra.das.orm.DataAccessManager;
 import com.ofss.fc.infra.das.orm.Query;
 import com.ofss.fc.infra.das.orm.Session;
+import com.ofss.digx.app.adapter.AdapterFactoryConfigurator;
+import com.ofss.digx.cz.bea.app.sms.adapter.user.IUserExtensionAdapter;
+import com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO;
+import com.ofss.digx.cz.bea.common.constants.CommonAdapterFactoryConstants;
+import com.ofss.digx.cz.bea.common.constants.CommonAdapterConstants;
 import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +38,6 @@ final class HthProfileContactNotification {
         String party = HthContactNotificationPlan.text(request.getCdcNo());
         String user = HthContactNotificationPlan.text(request.getUserID());
         if (party.isEmpty() || !user.endsWith("@" + party)) return null;
-        if (!party.equals(oldExtension.getCdcNo()) || !user.equals(oldExtension.getUserID()))
-            throw new IllegalStateException("HTH contact profile owner mismatch");
         // Profile existence is the server-side HTH discriminator. No account-access/status dependency.
         IHthUserProfileAdapter profiles = (IHthUserProfileAdapter) RepositoryAdapterFactory.getInstance()
             .getRepositoryAdapter(IHthUserProfileAdapter.HTH_USER_PROFILE_LOCAL_REPOSITORY_ADAPTER);
@@ -42,6 +45,8 @@ final class HthProfileContactNotification {
         String shortUser = user.substring(0, user.length() - party.length() - 1);
         if (!closeIds.containsKey(IHthUserProfileAdapter.userProfileKey(party, user))
                 && !closeIds.containsKey(IHthUserProfileAdapter.userProfileKey(party, shortUser))) return null;
+        if (!party.equals(oldExtension.getCdcNo()) || !user.equals(oldExtension.getUserID()))
+            throw new IllegalStateException("HTH contact profile owner mismatch");
         Snapshot snapshot = new Snapshot();
         snapshot.party = party; snapshot.user = user; snapshot.unit = context.getTargetUnit();
         snapshot.locale = context.getUserLocale();
@@ -76,9 +81,14 @@ final class HthProfileContactNotification {
         UserExtensionData extension = new UserExtensionData().read(extensionKey);
         String approverMobile = extension == null ? "" :
                 HthContactNotificationPlan.mobile(extension.getMobileCode(), approver.getMobileNumber());
+        IUserExtensionAdapter contacts = (IUserExtensionAdapter) AdapterFactoryConfigurator.getInstance()
+            .getAdapterFactory(CommonAdapterFactoryConstants.USER_EXTENSION_ADAPTER_FACTORY)
+            .getAdapter(CommonAdapterConstants.USER_EXTENSION_ADAPTER);
+        CZPartyPreferenceDTO company = contacts.getPartyPreferences(party);
+        snapshot.newEmail = HthContactNotificationPlan.text(request.getUserDTO().getEmailId());
         snapshot.recipients = HthContactNotificationPlan.recipients(snapshot.change, user, snapshot.approver,
                 oldUser.getEmailId(), request.getUserDTO().getEmailId(), oldMobile, newMobile,
-                approver.getEmailId(), approverMobile);
+                approver.getEmailId(), approverMobile, company == null ? "" : company.getOfficeEmailId());
         SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         format.setTimeZone(TimeZone.getTimeZone("Asia/Hong_Kong"));
         snapshot.approvedAt = format.format(new java.util.Date());
@@ -90,31 +100,33 @@ final class HthProfileContactNotification {
     }
     static String finalSigner(String signers) {
         String last = "";
+        int count = 0;
         for (String signer : HthContactNotificationPlan.text(signers).split("~"))
-            if (!signer.trim().isEmpty()) last = signer.trim();
-        return last;
+            if (!signer.trim().isEmpty()) { last = signer.trim(); count++; }
+        // The first non-empty signer is the maker in the existing approval chain.
+        return count > 1 ? last : "";
     }
     static void stage(Snapshot snapshot) throws Exception {
         if (snapshot == null || snapshot.recipients == null) return;
         Session session = DataAccessManager.getManager().fetchCurrentSession();
         if (session == null) throw new IllegalStateException("HTH contact business transaction missing");
         for (Recipient recipient : snapshot.recipients) {
-            String id = HthContactNotificationPlan.id(snapshot.unit, snapshot.reference, snapshot.user,
-                    snapshot.change, recipient.role, recipient.channel, recipient.address);
-            Query query = session.createSQLQuery("INSERT INTO DIGX_CZ_HTH_CONTACT_NOTIFY "
+            String id = HthContactNotificationPlan.deliveryId(snapshot.unit, snapshot.reference, snapshot.user,
+                    snapshot.change, recipient.event, recipient.channel, recipient.address);
+            Query query = session.createSQLQuery("INSERT INTO DIGX_CZ_HTH_CONTACT_OUTBOX "
                 + "(ID, TARGET_UNIT, APPROVAL_REF, PARTY_ID, TARGET_USER_ID, APPROVER_ID, CHANGE_TYPE, "
-                + "RECIPIENT_ROLE, CHANNEL, ADDRESS, RECIPIENT_USER_ID, USER_LOCALE, APPROVED_AT, STATE, CREATED_AT, UPDATED_AT) "
-                + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'READY', SYSTIMESTAMP, SYSTIMESTAMP FROM DUAL "
-                + "WHERE NOT EXISTS (SELECT 1 FROM DIGX_CZ_HTH_CONTACT_NOTIFY WHERE ID = ?)");
+                + "RECIPIENT_ROLE, CHANNEL, ADDRESS, RECIPIENT_USER_ID, USER_LOCALE, APPROVED_AT, EVENT_ID, NEW_EMAIL, STATE, CREATED_AT, UPDATED_AT) "
+                + "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'READY', SYSTIMESTAMP, SYSTIMESTAMP FROM DUAL "
+                + "WHERE NOT EXISTS (SELECT 1 FROM DIGX_CZ_HTH_CONTACT_OUTBOX WHERE ID = ?)");
             Object[] values = {id, snapshot.unit, snapshot.reference, snapshot.party, snapshot.user,
                 snapshot.approver, snapshot.change, recipient.role, recipient.channel, recipient.address,
-                recipient.user, snapshot.locale, snapshot.approvedAt, id};
+                recipient.user, snapshot.locale, snapshot.approvedAt, recipient.event, snapshot.newEmail, id};
             for (int i = 0; i < values.length; i++) query.setParameter(i + 1, values[i]);
             query.executeUpdate();
         }
     }
     static final class Snapshot {
-        String party, user, unit, locale, change, reference, approver, approvedAt;
+        String party, user, unit, locale, change, reference, approver, approvedAt, newEmail;
         List<Recipient> recipients;
     }
 }

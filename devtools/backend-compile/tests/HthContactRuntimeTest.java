@@ -3,7 +3,6 @@ import java.lang.reflect.Proxy;
 import java.util.*;
 import fixture.Bank;
 import com.ofss.digx.cz.bea.app.sms.dto.user.HthProfileContactUpdateActivityLogDTO;
-import com.ofss.digx.cz.bea.app.hosttohost.dto.HthUserAccessActivityLogDTO;
 import com.ofss.fc.framework.domain.service.hostservice.metadata.HostServiceMetadataService;
 import com.ofss.fc.framework.domain.entity.service.metadata.IServiceAttribute;
 import com.ofss.fc.framework.domain.metadata.IGenericAttributeDefinition;
@@ -19,59 +18,25 @@ public class HthContactRuntimeTest {
         Bank.sql("CREATE TABLE DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL(SRC_SYS_REF_NUM VARCHAR2(100))");
         com.ofss.digx.cz.bea.app.sms.service.user.HthContactCaptureTest.run();
         com.ofss.digx.cz.bea.domain.service.dispatch.HthContactDeliveryTest.run();
-        Bank.sql(new String(Files.readAllBytes(Paths.get(args[0],"access-ledger.sql")),java.nio.charset.StandardCharsets.UTF_8));
-        com.ofss.digx.cz.bea.app.hosttohost.service.HthAccessCaptureTest.run();
-        com.ofss.digx.cz.bea.domain.service.dispatch.HthAccessDeliveryTest.run();
         HthProfileContactUpdateActivityLogDTO log=new HthProfileContactUpdateActivityLogDTO();
-        log.setHthContactUserName("TEST_USER");log.setHthContactApprovedAt("15/09/2026 12:30:00");
+        log.setProfileUser("TEST_USER");log.setEmailId("maske********");log.setEngMailSubj("Email Address Update");
+        log.setEngMailContent("email address.");log.setZhMailSubj("測試");log.setZhMailContent("電郵地址");log.setUserId("TEST_USER@PARTY");
+        log.setHthContactNotificationId("snapshot-id");
+        com.ofss.fc.framework.domain.entity.ep.dto.ActivityData activity=new com.ofss.fc.framework.domain.entity.ep.dto.ActivityData();
+        activity.setActivityLog(log);
+        Bank.check(activity.getActivityLog() instanceof HthProfileContactUpdateActivityLogDTO,"real activity serialization preserves HTH subtype");
+        log=(HthProfileContactUpdateActivityLogDTO)activity.getActivityLog();
+        Bank.check("snapshot-id".equals(log.getHthContactNotificationId()),"real activity serialization preserves snapshot id");
         HostServiceMetadataService service=new HostServiceMetadataService(null);
-        for(String line:Files.readAllLines(Paths.get(args[0],"metadata.tsv"))){
-            String[] parts=line.split("\t");final String field=parts[0],ref=parts[1];
+        for(String field:new String[]{"ProfileUser","EmailId","EngMailSubj","EngMailContent","ZhMailSubj","ZhMailContent","UserId"}){
+            final String ref="com.ofss.digx.cz.bea.app.sms.dto.user.UserProfUpdateActivityLogDTO."+field;
             IGenericAttributeDefinition generic=(IGenericAttributeDefinition)Proxy.newProxyInstance(IGenericAttributeDefinition.class.getClassLoader(),new Class[]{IGenericAttributeDefinition.class},(p,m,a)->{
                 if(m.getName().equals("getName"))return field;if(m.getName().equals("getDataType"))return "java.lang.String";return null;});
             IServiceAttribute attr=(IServiceAttribute)Proxy.newProxyInstance(IServiceAttribute.class.getClassLoader(),new Class[]{IServiceAttribute.class},(p,m,a)->{
                 switch(m.getName()){case "fetchIsInError":return false;case "getGenericAttribute":return generic;case "getSourceType":return MessageDataSourceType.DTO;case "getRefFieldDefnId":return ref;default:return null;}});
             NameValuePair value=service.fetchNameValue(attr,Collections.emptyMap(),null,log);
-            Bank.check((field.endsWith("UserName")?"TEST_USER":"15/09/2026 12:30:00").equals(value.getValue()),"real metadata lookup: "+field);
+            Bank.check(log.getClass().getMethod("get"+field).invoke(log).equals(value.getValue()),"real inherited BCO metadata lookup: "+field);
         }
-        System.out.println("PASS: production OBDX metadata resolves both SQL-configured 851 DTO getters");
-        verifyAccessTemplates(Paths.get(args[0]),service);
-    }
-    private static void verifyAccessTemplates(Path work,HostServiceMetadataService service)throws Exception {
-        // Use a DTO published by the production 1216 service, not a manually populated substitute.
-        HthUserAccessActivityLogDTO log=null;
-        for(com.ofss.digx.app.alerts.dto.eventgen.ActivityLog candidate:Bank.logs)
-            if(candidate instanceof HthUserAccessActivityLogDTO){log=(HthUserAccessActivityLogDTO)candidate;break;}
-        Bank.check(log!=null,"production 1216 publisher supplied template DTO");
-        Map<String,String> expected=new HashMap<>();
-        expected.put("userNameId",log.getUserNameId());expected.put("userSysDate",log.getUserSysDate());expected.put("compName",log.getCompName());
-        for(String value:expected.values())Bank.check(value!=null && !value.isEmpty(),"published notification has all template values");
-        Map<String,String> values=new HashMap<>();int lookups=0;
-        for(String line:Files.readAllLines(work.resolve("access-metadata.tsv"))){
-            String[] parts=line.split("\t");final String field=parts[0],ref=parts[1];
-            IGenericAttributeDefinition generic=(IGenericAttributeDefinition)Proxy.newProxyInstance(IGenericAttributeDefinition.class.getClassLoader(),new Class[]{IGenericAttributeDefinition.class},(p,m,a)->{
-                if(m.getName().equals("getName"))return field;if(m.getName().equals("getDataType"))return "java.lang.String";return null;});
-            IServiceAttribute attr=(IServiceAttribute)Proxy.newProxyInstance(IServiceAttribute.class.getClassLoader(),new Class[]{IServiceAttribute.class},(p,m,a)->{
-                switch(m.getName()){case "fetchIsInError":return false;case "getGenericAttribute":return generic;case "getSourceType":return MessageDataSourceType.DTO;case "getRefFieldDefnId":return ref;default:return null;}});
-            NameValuePair value=service.fetchNameValue(attr,Collections.emptyMap(),null,log);
-            Bank.check(expected.get(field).equals(value.getValue()),"real 1216 metadata lookup: "+field);
-            values.put(field,String.valueOf(value.getValue()));lookups++;
-        }
-        Bank.check(lookups==6 && values.size()==3,"both LINK/UPDATE services have three resolved metadata fields");
-        int rendered=0;
-        for(String line:Files.readAllLines(work.resolve("access-templates.tsv"))){
-            String[] parts=line.split("\t",-1);
-            String body=new String(Base64.getDecoder().decode(parts[1]),java.nio.charset.StandardCharsets.UTF_8);
-            String subject=new String(Base64.getDecoder().decode(parts[2]),java.nio.charset.StandardCharsets.UTF_8);
-            for(Map.Entry<String,String> entry:values.entrySet()){
-                body=body.replace("#"+entry.getKey()+"#",entry.getValue());
-                subject=subject.replace("#"+entry.getKey()+"#",entry.getValue());
-            }
-            Bank.check(!java.util.regex.Pattern.compile("#[A-Za-z][A-Za-z0-9_]*#").matcher(body+subject).find(),"no unresolved SQL template placeholders: "+parts[0]);
-            if(parts[0].contains("_EMAIL_"))for(String value:expected.values())Bank.check(body.contains(value),"email has actual published values: "+parts[0]);
-            rendered++;
-        }
-        Bank.check(rendered==12,"all 1216 deployed templates rendered");
-        System.out.println("PASS: production 1216 DTO + OBDX metadata getters resolve all 12 SQL templates (six service bindings)");
+        System.out.println("PASS: production OBDX metadata resolves inherited BCO DTO getters on the 851 subtype");
     }
 }

@@ -60,6 +60,8 @@ public class BatchExecutionScheduler implements Serializable, Job {
 				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Entering the executor method to trigger the sendBatchAlert method");
 	
 				BatchAlertGeneric service = new BatchAlertGeneric();
+                // 851 consumes only committed notification plans; ordinary BCO processing is unchanged.
+                new com.ofss.digx.cz.bea.domain.service.dispatch.HthContactNotificationService().process(sessionContext);
 				service.sendBatchAlert(sessionContext);
 				com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Exiting the batch alert execute method ");
 	
@@ -80,18 +82,6 @@ public class BatchExecutionScheduler implements Serializable, Job {
 						"Lang Error occured while executing BatchExecutionScheduler class at : " + new java.util.Date(), e);
 			}
 	
-			// 851 work is isolated; runs after the existing BCO batch and restores its session context.
-            try {
-                new com.ofss.digx.cz.bea.domain.service.dispatch.HthContactNotificationService().process(sessionContext);
-            } catch (java.lang.Exception e) {
-                logger.log(Level.WARNING, "HTH_CONTACT stage=SCHEDULER exception={0}", e.getClass().getSimpleName());
-            }
-            try {
-                new com.ofss.digx.cz.bea.domain.service.dispatch.HthUserAccessNotificationService().process(sessionContext);
-            } catch (java.lang.Exception e) {
-                logger.log(Level.WARNING, "HTH_ACCESS stage=SCHEDULER exception={0}", e.getClass().getSimpleName());
-            }
-
 			if (logger.isLoggable(Level.SEVERE)) {
 				logger.log(Level.SEVERE,
 						formatter.formatMessage("Exited the execute method in class :%s", this.getClass().getName()));

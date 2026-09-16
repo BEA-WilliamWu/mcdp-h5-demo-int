@@ -1049,16 +1049,12 @@ public class EmailDispatcher extends Dispatcher {
 	 */
 	@Override
 	public DispatchResult dispatchAlert(AlertRequestDTO alertRequestDTO, IDispatchData data) throws FatalException {
+        // BCOH2H-851: only the HTH marker DTO uses durable recipient snapshots.
         if (HthContactNotificationDispatch.matches(alertRequestDTO)) {
             String body = data.fetchFormattedData(fetchDispatchMessageTemplate(data.getDispatchData()));
             String subject = data.fetchFormattedData(fetchDispatchMessageSubject(data.getDispatchData()));
-            if (isSecureMessage(body) && isSecureMessage(subject)) {
-                return HthContactNotificationDispatch.dispatch(alertRequestDTO, "EMAIL", body, subject);
-            }
-            DispatchResult rejected = new DispatchResult();
-            rejected.setIsDispatchSuccessfull(false);
-            rejected.setMessage("Unacceptable HTH contact notification template");
-            return rejected;
+            if (!isSecureMessage(body) || !isSecureMessage(subject)) return new DispatchResult();
+            return HthContactNotificationDispatch.dispatch(alertRequestDTO, "EMAIL", body, subject);
         }
 
 		//BCOCDC4728

@@ -121,19 +121,13 @@ public class SMSDispatcher extends Dispatcher {
 	 */
 	@Override
 	public DispatchResult dispatchAlert(AlertRequestDTO alertRequestDTO, IDispatchData data) throws FatalException {
+        // BCOH2H-851: only the HTH marker DTO uses durable recipient snapshots.
         if (HthContactNotificationDispatch.matches(alertRequestDTO)) {
             String body = data.fetchFormattedData(fetchDispatchMessageTemplate(data.getDispatchData()));
-            String subject = "";
-            if (body != null && isSecureMessage(body)) {
-                body = body.replaceAll("\\<.*?\\>", "").replace("\"", "");
-                if (body.length() <= AlertPollerPoolConstant.fetchUniqueInstance().fetchSMSLength()) {
-                    return HthContactNotificationDispatch.dispatch(alertRequestDTO, "SMS", body, subject);
-                }
-            }
-            DispatchResult rejected = new DispatchResult();
-            rejected.setIsDispatchSuccessfull(false);
-            rejected.setMessage("Unacceptable HTH contact notification template");
-            return rejected;
+            if (!isSecureMessage(body) || body == null) return new DispatchResult();
+            body = body.replaceAll("\\<.*?\\>", "");
+            if (body.length() > AlertPollerPoolConstant.fetchUniqueInstance().fetchSMSLength()) return new DispatchResult();
+            return HthContactNotificationDispatch.dispatch(alertRequestDTO, "SMS", body, "");
         }
 
 

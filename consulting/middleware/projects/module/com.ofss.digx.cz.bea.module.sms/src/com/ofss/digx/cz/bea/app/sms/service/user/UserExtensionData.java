@@ -1,6 +1,5 @@
 package com.ofss.digx.cz.bea.app.sms.service.user;
 
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -546,11 +545,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			TaskAspect.TWO_FACTOR_AUTHENTICATION, TaskAspect.APPROVALS,
 			TaskAspect.AUDIT }, type = TaskType.NONFINANCIAL_TRANSACTION)
 	public TransactionStatus update(SessionContext sessionContext, UserExtensionDataDTO requestDTO) throws Exception {
-    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "UPDATE",
-        requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
-        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId())) {
-    try {
-
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Entered into update() : requestDTO = %s in class %s ",
 					requestDTO, THIS_COMPONENT_NAME));
@@ -569,10 +563,9 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 		UserKey userKey = new UserKey();
 		UserAssembler userAssembler = null;
 		boolean isSignerDeleted = false;
-		HthProfileContactNotification.Snapshot hthContactSnapshot = null;
-		boolean hthContactUpdateSucceeded = false;
 		BeaSystemOut.println("Entering update UserExtensionData, update requestDTO:"+SerializationUtils.toJsonString(requestDTO));
 
+		HthProfileContactNotification.Snapshot hthContactSnapshot = null;
 		try {
 			extensionExecutor.preUpdate(sessionContext, requestDTO);
 			requestDTO.validate(sessionContext);
@@ -629,7 +622,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			key.setUserExtensionKey(requestDTO.getUserExtensionKey());
 			domain.setUserExtensionDataKey(key);
 			domain = domain.read(key);
-            audit.channel(domain == null ? null : domain.getUserChannelType(), requestDTO.getUserChannelType());
 			String bypassFlag = requestDTO.getBypassFlag();
 			String bypassCode = requestDTO.getBypassCode();
 			if(StringUtils.isNotBlank(bypassFlag)) {
@@ -972,7 +964,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				if (transactionStatus!=null && transactionStatus.getErrorCode()==null) {
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
-					hthContactUpdateSucceeded = true;
 					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthContactSnapshot != null);
 					BeaSystemOut.println("##############Executed alertUserProfileUpdate method");
 				}
@@ -1108,18 +1099,16 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 //			----------------------- MigratedUserResetPassword changes - ENDS -----------------------
 	
 			extensionExecutor.postUpdate(sessionContext, requestDTO, transactionStatus);
-			if (hthContactUpdateSucceeded && transactionStatus != null && transactionStatus.getErrorCode() == null) {
+			if (transactionStatus != null && transactionStatus.getErrorCode() == null) {
 				HthProfileContactNotification.stage(hthContactSnapshot);
 			}
 
 						
 		} catch (Exception e) {
-			audit.failure(e);
 			fillTransactionStatus(transactionStatus, e);
 			logger.log(Level.SEVERE, formatter.formatMessage("Exception from update() for requestDTO '%s' in class %s",
 					requestDTO, THIS_COMPONENT_NAME), e);
 		} catch (RuntimeException rte) {
-			audit.failure(rte);
 			fillTransactionStatus(transactionStatus, rte);
 			logger.log(Level.SEVERE,
 					formatter.formatMessage("RuntimeException from update() for requestDTO '%s' in class %s",
@@ -1133,14 +1122,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			logger.log(Level.FINE,
 					formatter.formatMessage("Exiting from update() : transactionStatus = %s", transactionStatus));
 		}
-    audit.result("COMPLETED").response(transactionStatus);
 		return transactionStatus;
-	    } catch (java.lang.Exception auditFailure) {
-      audit.failure(auditFailure);
-      throw auditFailure;
-    }
-    }
-  }
+	}
 
 	@Override
 	@Entitlement(name = "validatePinStatus UserExtensionData", action = ActionType.PERFORM, requiredResources = {})
@@ -1322,11 +1305,6 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			TaskAspect.AUDIT }, type = TaskType.NONFINANCIAL_TRANSACTION)
 	public UserExtensionDataResponseDTO create(SessionContext sessionContext, UserExtensionDataDTO requestDTO)
 			throws Exception {
-    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "CREATE",
-        requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
-        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId())) {
-    try {
-
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Entered into create() : requestDTO = %s in class %s ",
 					requestDTO, THIS_COMPONENT_NAME));
@@ -1534,12 +1512,10 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			response.setUserResponseDTO(userResponseDTO);
 			extensionExecutor.postCreate(sessionContext, requestDTO, response);
 		} catch (Exception e) {
-			audit.failure(e);
 			fillTransactionStatus(transactionStatus, e);
 			logger.log(Level.SEVERE, formatter.formatMessage("Exception from create() for requestDTO '%s' in class %s",
 					requestDTO, THIS_COMPONENT_NAME), e);
 		} catch (RuntimeException rte) {
-			audit.failure(rte);
 			fillTransactionStatus(transactionStatus, rte);
 			logger.log(Level.SEVERE,
 					formatter.formatMessage("RuntimeException from create() for requestDTO '%s' in class %s",
@@ -1552,14 +1528,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Exiting from create() : response = %s", response));
 		}
-    audit.result("COMPLETED").response(response);
 		return response;
-	    } catch (java.lang.Exception auditFailure) {
-      audit.failure(auditFailure);
-      throw auditFailure;
-    }
-    }
-  }
+	}
 
 	@Override
 	@NoEntitlement()
@@ -1945,12 +1915,12 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 	 */
 	public void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
 			UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain, String oldMobNo) {
-		alertUserProfileUpdate(sessionContext, resultDTO, requestDTO, userDomain, oldMobNo, false);
-	}
+        alertUserProfileUpdate(sessionContext, resultDTO, requestDTO, userDomain, oldMobNo, false);
+    }
 
-	private void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
-			UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain, String oldMobNo,
-			boolean hthContactNotification) {
+    private void alertUserProfileUpdate(SessionContext sessionContext, UserAlertRequestDTO resultDTO,
+            UserExtensionDataDTO requestDTO, com.ofss.digx.domain.sms.entity.user.User userDomain,
+            String oldMobNo, boolean hthContactHandled) {
 
 		UserProfUpdateActivityLogDTO activityLog = new UserProfUpdateActivityLogDTO();
 		UserManagementActivityLogDTO usermgmtActivityLog = new UserManagementActivityLogDTO();
@@ -2015,8 +1985,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("############### Executed User Management Edit Alert");
 			}
 
-			// 851 replaces only HTH contact notices; USER_MANAGEMENT_EDIT above is preserved.
-			if (hthContactNotification) return;
+			// 851 stages only contact notifications; preserve USER_MANAGEMENT_EDIT above.
+			if (hthContactHandled) return;
 
 			// Executing other User management update alerts
 			// ---------------------------------------------------------------------------------------------------------------

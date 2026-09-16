@@ -1,4 +1,4 @@
-"""851/1216 production policy, capture/staging, JDBC ledger, dispatcher and metadata tests.
+"""851 production policy, capture/staging, JDBC ledger, dispatcher and metadata tests.
 
 Uses H2 + the real EclipseLink/OBDX ORM wrapper; bank repositories, JNDI, config,
 Event registration and MNG network boundaries are fixtures. No real notification
@@ -10,9 +10,7 @@ import base64
 import re
 import subprocess
 import tempfile
-from verify_hth_contact_sql import deployed, SQL_DIR
-from verify_hth_access_sql import deployed as access_deployed, SQL_DIR as ACCESS_SQL_DIR
-from hth_access_test_fixtures import write_access_fixtures
+from verify_hth_contact_sql import SQL_DIR
 
 ROOT = Path(__file__).resolve().parents[3]
 PROJECTS = ROOT / 'consulting/middleware/projects'
@@ -22,7 +20,7 @@ if not H2.is_file():
     raise SystemExit('Set HTH_TEST_H2_JAR to the existing H2 1.4.200 test dependency')
 CP = os.pathsep.join([str(H2), str(ROOT / 'devtools/backend-compile/build/classes/java/main')] +
                      [str(p) for p in (ROOT / 'consulting/middleware/lib').rglob('*.jar')])
-SOURCES = list(PROJECTS.rglob('Hth*Contact*.java')) + list(PROJECTS.rglob('HthUserAccess*Notification*.java')) + list(PROJECTS.rglob('HthUserAccessActivityLogDTO.java'))
+SOURCES = list(PROJECTS.rglob('Hth*Contact*.java')) + list(PROJECTS.rglob('UserProfUpdateActivityLogDTO.java'))
 DISPATCH = next(PROJECTS.rglob('HthContactNotificationDispatch.java')).parent
 HELPER = next(PROJECTS.rglob('HthProfileContactNotification.java'))
 
@@ -97,11 +95,16 @@ public class ConfigurationFactory {
 }''')
     bean('com.ofss.fc.app.context', 'SessionContext',
          {'TargetUnit': 'String', 'UserLocale': 'String', 'TransactingPartyCode': 'String', 'ServiceCallContextType': 'String'})
+    write('com/ofss/digx/app/Interaction.java', """package com.ofss.digx.app;
+public class Interaction { public static boolean open;
+ public static void begin(com.ofss.fc.app.context.SessionContext c){fixture.Bank.check(!open,"balanced begin");open=true;}
+ public static void close(){fixture.Bank.check(open,"balanced close");open=false;} }
+""")
     write('com/ofss/digx/app/AbstractApplication.java', '''package com.ofss.digx.app;
 public class AbstractApplication {
- protected String registerActivityAndGenerateEvent(com.ofss.fc.app.context.SessionContext context,String activity,String event,
+ protected com.ofss.fc.service.response.TransactionStatus registerActivityAndGenerateEvent(com.ofss.fc.app.context.SessionContext context,String activity,String event,
   com.ofss.fc.datatype.Date date,com.ofss.digx.app.alerts.dto.eventgen.ActivityLog log){
-  fixture.Bank.publications++;fixture.Bank.logs.add(log);return "fixture-activity";}
+  fixture.Bank.check(com.ofss.digx.app.Interaction.open,"publisher owns OBDX interaction"); fixture.Bank.publications++;fixture.Bank.logs.add(log);return new com.ofss.fc.service.response.TransactionStatus();}
 }''')
     write('com/ofss/digx/app/alerts/dto/eventgen/ActivityLog.java',
           'package com.ofss.digx.app.alerts.dto.eventgen; public class ActivityLog extends com.ofss.fc.xface.ep.dto.ActivityLog {}')
@@ -133,6 +136,20 @@ public interface IHthUserProfileAdapter {
  java.util.Map<String,String> listCloseIdsByUserKey(String party);
  static String userProfileKey(String p,String u){return p.length()+":"+p+u;}
 }''')
+    write('com/ofss/digx/app/adapter/AdapterFactoryConfigurator.java', """package com.ofss.digx.app.adapter;
+public class AdapterFactoryConfigurator {
+ public static AdapterFactoryConfigurator getInstance(){return new AdapterFactoryConfigurator();}
+ public Factory getAdapterFactory(String name){return new Factory();}
+ public static class Factory {public Object getAdapter(String name){
+  return java.lang.reflect.Proxy.newProxyInstance(com.ofss.digx.cz.bea.app.sms.adapter.user.IUserExtensionAdapter.class.getClassLoader(),
+   new Class[]{com.ofss.digx.cz.bea.app.sms.adapter.user.IUserExtensionAdapter.class},(p,m,a)->{
+    if(!m.getName().equals("getPartyPreferences"))throw new AssertionError(m.getName());
+    com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO dto=new com.ofss.digx.cz.bea.app.party.dto.profile.CZPartyPreferenceDTO();
+    dto.setOfficeEmailId("company@example.test");return dto;});}}
+}""")
+    write('com/ofss/digx/cz/bea/app/customconfig/util/CustomConfigUtil.java', """package com.ofss.digx.cz.bea.app.customconfig.util;
+public class CustomConfigUtil { public static String readConfigValue(String key,String fallback){return "BCO_"+key;} }
+""")
     write('com/ofss/digx/framework/domain/repository/RepositoryAdapterFactory.java', '''package com.ofss.digx.framework.domain.repository;
 public class RepositoryAdapterFactory {
  public static RepositoryAdapterFactory getInstance(){return new RepositoryAdapterFactory();}
@@ -158,14 +175,10 @@ public class TestOrmAccess {public static com.ofss.fc.infra.das.orm.Session wrap
     write('com/ofss/fc/infra/das/orm/DataAccessManager.java', '''package com.ofss.fc.infra.das.orm;
 public class DataAccessManager {public static Session current;public static DataAccessManager getManager(){return new DataAccessManager();}public Session fetchCurrentSession(){return current;}}
 ''')
-    write_access_fixtures(write, bean)
     # Uses the actual DDL, only extracting/unquoting the EXECUTE IMMEDIATE string.
-    ddl = (SQL_DIR / '1_HTH_Contact_Notification_Ledger.sql').read_text()
+    ddl = (SQL_DIR / '1_HTH_Contact_Notification_Outbox.sql').read_text()
     ddl = re.search(r"EXECUTE IMMEDIATE '(CREATE TABLE .*?)';", ddl, re.S).group(1).replace("''", "'")
     write('ledger.sql', ddl)
-    access_ddl = (ACCESS_SQL_DIR / '1_HTH_Access_Notification_Ledger.sql').read_text()
-    access_ddl = re.search(r"EXECUTE IMMEDIATE '(CREATE TABLE .*?)';", access_ddl, re.S).group(1).replace("''", "'")
-    write('access-ledger.sql', access_ddl)
     write('META-INF/persistence.xml', '''<?xml version="1.0" encoding="UTF-8"?>
 <persistence xmlns="http://xmlns.jcp.org/xml/ns/persistence" version="2.1"><persistence-unit name="test" transaction-type="RESOURCE_LOCAL">
 <provider>org.eclipse.persistence.jpa.PersistenceProvider</provider><exclude-unlisted-classes>true</exclude-unlisted-classes><properties>
@@ -173,16 +186,8 @@ public class DataAccessManager {public static Session current;public static Data
 <property name="javax.persistence.jdbc.user" value="sa"/><property name="javax.persistence.jdbc.password" value=""/>
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="WARNING"/>
 </properties></persistence-unit></persistence>''')
-    db = deployed()
-    fields = list(db.execute('SELECT COD_ATTR_ID,REF_FIELD_DEFN_ID FROM DIGX_MD_SERVICE_ATTR'))
-    write('metadata.tsv', '\n'.join('\t'.join(row) for row in fields))
-    access_db = access_deployed()
-    fields = list(access_db.execute("SELECT COD_ATTR_ID,REF_FIELD_DEFN_ID FROM DIGX_MD_SERVICE_ATTR WHERE COD_SERVICE_ID LIKE '%HostToHostUserAccess.%'"))
-    write('access-metadata.tsv', '\n'.join('\t'.join(row) for row in fields))
-    templates = list(access_db.execute("SELECT COD_TMPL_ID,TXT_MSG_TMPL,TXT_SUBJECT_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID LIKE 'HTH_1216_%' AND DETERMINANT_VALUE='OBDX_BU' ORDER BY COD_TMPL_ID"))
-    write('access-templates.tsv', '\n'.join('\t'.join([row[0]] + [base64.b64encode((value or '').encode('utf-8')).decode('ascii') for value in row[1:]]) for row in templates))
     tests = [str(Path(__file__).with_name(f)) for f in
-             ('HthContactCaptureTest.java', 'HthContactDeliveryTest.java', 'HthContactRuntimeTest.java', 'HthAccessCaptureTest.java', 'HthAccessDeliveryTest.java')]
+             ('HthContactCaptureTest.java', 'HthContactDeliveryTest.java', 'HthContactRuntimeTest.java')]
     compiled = subprocess.run([str(JDK / 'javac'), '--release', '8', '-proc:none', '-cp', CP, '-d', tmp,
                     *fixture_sources, *map(str, SOURCES), *tests], check=False)
     if compiled.returncode:

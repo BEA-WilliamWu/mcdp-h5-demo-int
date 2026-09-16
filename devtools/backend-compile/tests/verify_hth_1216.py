@@ -87,7 +87,12 @@ public class Transaction {
  public static class Approval {public String getStatus(){return status;}public String getSignedBy(){return signers;}}
 }''')
     write('com/ofss/digx/infra/thread/ThreadAttribute.java', '''package com.ofss.digx.infra.thread;
-public class ThreadAttribute {public static final String TRANSACTION_REFERENCE_NO="reference";public static Object reference="APPROVAL-1216";public static Object get(String key){return reference;}}
+public class ThreadAttribute {
+ public static final String TRANSACTION_REFERENCE_NO="reference", AUDIT_DETAILS_STACK="audit";
+ public static Object reference="APPROVAL-1216"; private static final java.util.Map<String,Object> data=new java.util.HashMap<>();
+ public static Object get(String key){return TRANSACTION_REFERENCE_NO.equals(key)?reference:data.get(key);}
+ public static void set(String key,Object value){data.put(key,value);}public static void clear(String key){data.remove(key);}
+}
 ''')
     write('com/ofss/fc/infra/thread/ThreadAttribute.java', '''package com.ofss.fc.infra.thread;
 public class ThreadAttribute {public static final String CURRENT_TASK="task";public static Object get(String key){return null;}}
@@ -168,8 +173,19 @@ public class Interaction {public static void begin(com.ofss.fc.app.context.Sessi
  public SessionContext getSessionContext() throws FatalException{return fixture.Bank.context;}
  public DispatchResultDTO test(AlertRequestDTO request,IDispatchData data,String body){return dispatchMNGSms(request,data,body);}
 '''+ '\n'.join(method(source,sig) for sig in signatures)+'}')
+    # Audit snapshots use the same fixture storage boundary as the access writes.
+    # No database/network access is introduced into the notification regression test.
+    for entity,method,args in (
+        ('HthUserAccessAccount','listByContext','String party,String user,String access,String linkage'),
+        ('HthUserAccessAccountApi','listByAccountId','String account')):
+        repo=entity+'Repository'
+        write('com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/'+repo+'.java',
+            'package com.ofss.digx.cz.bea.domain.hosttohost.entity.repository;'
+            'import com.ofss.digx.cz.bea.domain.hosttohost.entity.'+entity+';'
+            'public class '+repo+' {public static '+repo+' getInstance(){return new '+repo+'();}'
+            'public java.util.List<'+entity+'> '+method+'('+args+'){return java.util.Collections.emptyList();}}')
     sources=list(PROJECTS.rglob('HthUserAccessNotification.java'))
-    for name in ('UserManagementActivityLogDTO.java','HostToHostUserAccessDTO.java','HostToHostUserAccessResponseDTO.java'):
+    for name in ('UserManagementActivityLogDTO.java','HostToHostUserAccessDTO.java','HostToHostUserAccessResponseDTO.java','HthOnboardingAudit.java','HthUserAccessAudit.java'):
         sources+=list(PROJECTS.rglob(name))
     # Only the server Date construction is replaced. The real DTO serialization and recipient helper run.
     helper=sources[0]

@@ -1,0 +1,87 @@
+<div class="user-list-details">
+    <page-section heading="[[nls.header.userList]]">
+        <div>
+            <div id="pagingControlAll" class="oj-sm-12 oj-sm-padding-2x">
+                <oj-table id="table" :aria-label="[[$component.nls.header.details]]" 
+                columns="[[[{headerText:nls.header.dateTime,field:'startTime'},
+                {headerText:nls.header.userName,field:'userId'},
+                {headerText:nls.header.partyData,field:'partyName'},
+                {headerText:nls.header.userType,field:'userType'},
+                {headerText:nls.header.event,field:'activity'},
+                {headerText:nls.header.loginDateTime,field:'loginDateTime'},
+                {headerText:nls.header.ipAddress,field:'ipAddress'},
+                {headerText:nls.header.browserInfo,field:'browserInfo'},
+                {headerText:nls.header.countryRegion,field:'countryRegion'},
+                {headerText:nls.header.isSuspiciousIndicator,field:'isSuspiciousIndicator'},
+                {headerText:nls.header.action,field:'action'},
+                {headerText:nls.header.reference,field:'referenceNo'},
+                {headerText:nls.header.status,field:'status'}]]]"
+                columns-default="[[{sortable:'enabled'}]]" selection-mode="[[{row:'multiple',column:'multiple'}]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('list_template', true)]]" data="[[paginationDataSource]]">
+                </oj-table>
+                <oj-paging-control id="paging_1" slot="bottom" :page-size="[[10]]" data="[[paginationDataSource]]">
+                </oj-paging-control>
+            </div>
+
+            <!-- ko if:$component.loadResults() -->
+            <script type="text/html" id="list_template">
+                <tr class="record">
+                    <td>
+                        <span data-bind="text:$formatter.formatDate(startTime,'headerTimeFormat')"></span>
+                    </td>
+                    <td>
+                        <span class="linktext" data-bind="text:userId"></span>
+                        <span data-bind="text:userName"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:partyId.displayValue"></span>
+                        <span data-bind="text:partyName"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:userType"></span>
+                    </td>
+                    <td>
+                        <a href="#" data-bind="text:activity, click:$component.openJSON"></a>
+                    </td>
+                    <td>
+                        <span data-bind="text:loginDateTime"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:ipAddress"></span>
+                    </td>
+                    <td>
+                        <span data-bind="html:browserInfo"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:countryRegion"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:isSuspiciousIndicator"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:action"></span>
+                    </td>
+                    <td>
+                        <span data-bind="text:referenceNo"></span>
+                    </td>
+                    <td>
+
+                        <!-- ko if:status==='SUCCESS' -->
+                        <div class="status" data-bind="css: 'processed'">
+                            <span class="icons icon-accept"></span>
+                            <span class="span-text" data-bind="text:$component.nls.audit.successful"></span>
+                        </div>
+                        <!-- /ko -->
+
+                        <!-- ko if:status==='FAILURE'  -->
+                        <div class="status" data-bind="css: 'rejected'">
+                            <span class="icons icon-reject "></span>
+                            <span class="span-text" data-bind="text:$component.nls.audit.failed"></span>
+                        </div>
+                        <!-- /ko -->
+                    </td>
+                </tr>
+            </script>
+            <!-- /ko -->
+        </div>
+    </page-section>
+</div>

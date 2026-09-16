@@ -124,7 +124,8 @@ public class CountryCode {private String country;public String getMobile_code(){
          'public static EmailMNG last;public void create(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}public void update(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}')
     current=USER.read_text()
     baseline=subprocess.check_output(['git','show','dca7ea48:'+str(USER.relative_to(ROOT))],cwd=ROOT).decode().replace('\r\n','\n')
-    imports='\n'.join(re.findall(r'^import .*;',current,re.M))
+    # This fixture extracts only the notification method, not the new audit scopes.
+    imports='\n'.join(line for line in re.findall(r'^import .*;',current,re.M) if '.common.audit.' not in line)
     for cls,source in [('UserExtensionData',current),('UserExtensionDataBaseline',baseline)]:
         block=source[source.index('\tpublic void alertUserProfileUpdate('):source.index('\tpublic void userCreateWelcomeAlert(')]
         write(cls+'.java','package com.ofss.digx.cz.bea.app.sms.service.user;\n'+imports+'\npublic class '+cls+' extends AbstractApplication {\n'+'''
@@ -150,7 +151,8 @@ public class CountryCode {private String country;public String getMobile_code(){
     sources=list(PROJECTS.rglob('HthProfileApproverNotification.java'))
     for name in ('UserProfUpdateActivityLogDTO.java','UserExtensionDataDTO.java','UserAlertRequestDTO.java'):
         sources+=list(PROJECTS.rglob(name))
-    subprocess.run([str(JDK/'javac'),'--release','8','-proc:none','-cp',CP,'-d',tmp,*fixtures,*map(str,sources),
-                    str(Path(__file__).with_name('Hth851ApproverTest.java'))],check=True)
+    compiled=subprocess.run([str(JDK/'javac'),'--release','8','-proc:none','-cp',CP,'-d',tmp,*fixtures,*map(str,sources),
+                    str(Path(__file__).with_name('Hth851ApproverTest.java'))],check=False)
+    if compiled.returncode: raise SystemExit(compiled.returncode)
     result=subprocess.run([str(JDK/'java'),'-cp',tmp+os.pathsep+CP,'com.ofss.digx.cz.bea.app.sms.service.user.Hth851ApproverTest'])
     raise SystemExit(result.returncode)

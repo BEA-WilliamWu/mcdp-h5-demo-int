@@ -58,7 +58,6 @@ import com.ofss.fc.infra.log.impl.MultiEntityLogger;
 import com.ofss.fc.service.response.TransactionStatus;
 import com.ofss.fc.xface.ep.dto.NotificationDetail;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.ObjectUtils;
 
 import java.lang.Override;
 import java.lang.RuntimeException;
@@ -335,50 +334,6 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
         return response;
     }
 
-    private void notifyHostToHostManagement(SessionContext sessionContext, HostToHostManagementDTO requestDTO, String actionType) throws Exception {
-        NotificationDetail[] details = new NotificationDetail[1];
-        String eventId;
-        System.out.println("[HTH-NOTIFICATION] Start notification,PartyId"+requestDTO.getPartyId());
-        logger.log(Level.FINE,
-                formatter.formatMessage(
-                        "[HTH-NOTIFICATION] Start notification, actionType=%s, partyId=%s",
-                        actionType,
-                        requestDTO == null ? null : requestDTO.getPartyId()));
-        com.ofss.digx.app.adapter.IAdapterFactory adapterFactory = com.ofss.digx.app.adapter.AdapterFactoryConfigurator
-                .getInstance().getAdapterFactory(
-                        com.ofss.digx.cz.bea.common.constants.CommonAdapterFactoryConstants.USER_EXTENSION_ADAPTER_FACTORY);
-        IUserExtensionAdapter adapter = (IUserExtensionAdapter) adapterFactory
-                .getAdapter(com.ofss.digx.cz.bea.common.constants.CommonAdapterConstants.USER_EXTENSION_ADAPTER);
-        CZPartyPreferenceDTO partyDetails = adapter.getPartyPreferences(requestDTO.getPartyId());
-
-        NotificationDetail detail = buildNotification(partyDetails);
-        if (ObjectUtils.isEmpty(detail.getDestination())) {
-            return;
-        }
-        UserProfUpdateActivityLogDTO activityLog =
-                new UserProfUpdateActivityLogDTO();
-        activityLog.setNotificationDetails(
-                new NotificationDetail[]{detail});
-
-        activityLog.setCustomerId(requestDTO.getPartyId());
-        eventId = getEventId(actionType);
-        String activityId= getActivityId(actionType);
-        System.out.println("#########################HTH-NOTIFICATION usermgmtActivityLog: - " + detail.toString());
-        super.registerActivityAndGenerateEvent(
-                sessionContext,
-                activityId,
-                eventId,
-                new Date(),
-                activityLog);
-        System.out.println("#########################HTH-NOTIFICATION##########activityId:"+activityId+"####  eventId:"+eventId);
-        logger.log(Level.FINE,
-                formatter.formatMessage(
-                        "[HTH-NOTIFICATION] Notification submitted successfully, activityId=%s, eventId=%s",
-                        activityId,
-                        eventId));
-    }
-
-
     private String getActivityId(String actionType) {
 
         if (ACTION_ENABLE.equals(actionType)) {
@@ -505,40 +460,19 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
         }
     }
 
-    private NotificationDetail buildNotification(CZPartyPreferenceDTO partyDetails) {
-
-        NotificationDetail detail = new NotificationDetail();
-
-        if (!isBlank(partyDetails.getOfficeEmailId())) {
-
-            detail.setDestination(DestinationType.EMAIL);
-
-            detail.setDispatchAddress(partyDetails.getOfficeEmailId());
-
-        } else if (!isBlank(partyDetails.getOfficeTelNo())) {
-
-            detail.setDestination(DestinationType.SMS);
-
-            detail.setDispatchAddress(partyDetails.getOfficeTelNo());
-        }
-        detail.setRecipientType(SubscriberType.EXTERNAL.toString());
-        detail.setRecipientId(partyDetails.getPartyIdValue());
-
-        return detail;
-    }
-
-
-
-    // BCOH2H-1288: private to BM HTH Disable/Edit; ordinary BCO and Enable retain their paths.
+    // BCOH2H-597/1288: BM HTH Enable/Disable/Edit company notification only.
     private boolean shouldNotifyCompanyChange(SessionContext context, HostToHostManagementDTO request,
                                               String actionType) {
         if (context == null || !"OBDX_BU".equals(context.getTargetUnit())
                 || "VALIDATE".equals(String.valueOf(context.getServiceCallContextType()))
-                || !(isDisableAction(actionType) || isEditAction(actionType))) {
+                || !(isEnableAction(actionType) || isDisableAction(actionType) || isEditAction(actionType))) {
             return false;
         }
         try {
             HthManagement current = new HthManagement().findActiveByPartyId(request.getPartyId());
+            if (isEnableAction(actionType)) {
+                return current == null || HTH_STATUS_DISABLE.equals(normalize(current.getHthStatus()));
+            }
             if (current == null || !HTH_STATUS_ENABLE.equals(normalize(current.getHthStatus()))) {
                 return false;
             }
@@ -671,9 +605,7 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
             // Capture the effective API set before applyApprovedConfiguration replaces it.
             boolean notifyCompanyChange = shouldNotifyCompanyChange(sessionContext, requestDTO, actionType);
             referenceNumber = executeApprovedSave(sessionContext, requestDTO, actionType);
-            if (isEnableAction(actionType)) {
-                notifyHostToHostManagement(sessionContext, requestDTO, actionType); // BCOH2H-597 unchanged.
-            } else if (notifyCompanyChange) {
+            if (notifyCompanyChange) {
                 notifyCompanyChange(sessionContext, requestDTO, actionType);
             }
         } else {

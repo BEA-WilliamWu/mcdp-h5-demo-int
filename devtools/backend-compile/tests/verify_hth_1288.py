@@ -1,4 +1,4 @@
-"""1288 runtime tests. Real service methods, DTO serialization and SDK recipient resolution.
+"""597/1288 runtime tests. Real service methods, DTO serialization and SDK recipient resolution.
 Bank storage/approval attributes, clock, Alert registration and network are fixtures.
 The real SMSDispatcher method is executed against a fake MNG endpoint; no messages are sent.
 """
@@ -7,6 +7,8 @@ import os
 import re
 import subprocess
 import tempfile
+import json
+from verify_hth_management_templates import templates
 
 ROOT = Path(__file__).resolve().parents[3]
 PROJECTS = ROOT / 'consulting/middleware/projects'
@@ -33,6 +35,8 @@ with tempfile.TemporaryDirectory(prefix='hth1288-test-') as tmp:
         if name.endswith('.java'):
             fixtures.append(str(path))
 
+    write('fixture/Templates.java', 'package fixture; public class Templates { public static String sms(String action) {' + ''.join('if(action.equals(' + json.dumps(action + '/' + lang) + '))return ' + json.dumps(value) + ';' for action,item in templates().items() for lang,value in item['sms_locales'].items()) + 'throw new AssertionError(action);}}')
+
     def bean(pkg, cls, fields, extra=''):
         body = 'package ' + pkg + '; public class ' + cls + ' {'
         for field, typ in fields.items():
@@ -45,10 +49,10 @@ import com.ofss.fc.app.context.SessionContext;
 import com.ofss.digx.app.alerts.dto.eventgen.ActivityLog;
 public class Bank {
  public static SessionContext context;
- public static boolean contactFailure, missingCompany, snapshotFailure, writeFailure, registerFailure, registerStatusFailure, registerNull, reject;
- public static int writes, snapshots, legacy, registrations, countryReads, networkCalls;
+ public static boolean contactFailure, missingCompany, missingManagement, snapshotFailure, writeFailure, registerFailure, registerStatusFailure, registerNull, reject;
+ public static int writes, snapshots, registrations, countryReads, networkCalls;
  public static String email="company@example.test",phone="+86-13800138000",approval="APPROVED",status="ENABLE";
- public static String skip="HTH_API_SERVICE_DISABLE_SUCCESS,HTH_API_SERVICE_EDIT_SUCCESS";
+ public static String skip="HTH_API_SERVICE_SUBMIT_SUCCESS,HTH_API_SERVICE_DISABLE_SUCCESS,HTH_API_SERVICE_EDIT_SUCCESS";
  public static Set<String> oldApis=new HashSet<>(Arrays.asList("A","B"));
  public static List<String> events=new ArrayList<>(),activities=new ArrayList<>();
  public static List<ActivityLog> logs=new ArrayList<>(); public static Object lastRequest;
@@ -93,6 +97,7 @@ public class AbstractApplication {
     write('com/ofss/digx/app/alerts/dto/eventgen/ActivityLog.java', 'package com.ofss.digx.app.alerts.dto.eventgen; public class ActivityLog extends com.ofss.fc.xface.ep.dto.ActivityLog {}')
     bean('com.ofss.digx.cz.bea.domain.hosttohost.entity', 'HthManagement', {'Key':'HthManagementKey','HthStatus':'String'},
          '''public HthManagement findActiveByPartyId(String party){if(fixture.Bank.snapshotFailure)throw new IllegalStateException("PRIVATE_SNAPSHOT");
+         if(fixture.Bank.missingManagement)return null;
          HthManagement m=new HthManagement();m.setHthStatus(fixture.Bank.status);HthManagementKey k=new HthManagementKey();k.setId("M");m.setKey(k);return m;}''')
     for pkg in ('com.ofss.fc.infra.thread', 'com.ofss.digx.infra.thread'):
         write(pkg.replace('.', '/') + '/ThreadAttribute.java', 'package ' + pkg + ''';
@@ -105,10 +110,8 @@ public class CustomConfigUtil {public static String readConfigValue(String key,S
  if(key.equals("SMS_DISPATCHER_ALERT_EVENTID_LIST"))return "";return fallback;}}
 ''')
     s = SERVICE.read_text()
-    # Ensure Enable/597's notification implementation has not been edited at all.
-    baseline = subprocess.check_output(['git', 'show', 'HEAD:' + str(SERVICE.relative_to(ROOT))], cwd=ROOT, text=True)
-    for name in ('notifyHostToHostManagement', 'buildNotification'):
-        assert method(s, name) == method(baseline, name), '597 changed: ' + name
+    # Enable now shares the company-only path; there must be no second legacy sender.
+    assert 'notifyHostToHostManagement(' not in s
     imports = '\n'.join(re.findall(r'^import .*;', s, re.M))
     constants = '\n'.join(re.findall(r'^    private static final String [^;]+;', s, re.M))
     names = ('processSave','shouldNotifyCompanyChange','notifyCompanyChange','companySmsAddress','logCompanyNotification',
@@ -124,7 +127,6 @@ public class HostToHostManagement extends AbstractApplication {
  private String executeApprovedSave(SessionContext c,HostToHostManagementDTO r,String a){
   if(fixture.Bank.writeFailure)throw new IllegalStateException("TEST_SAVE_FAILURE");fixture.Bank.writes++;
   fixture.Bank.oldApis=extractSelectedApiCodes(r);fixture.Bank.status="DISABLE".equals(a)?"DISABLE":"ENABLE";return "REF-1288";}
- private void notifyHostToHostManagement(SessionContext c,HostToHostManagementDTO r,String a){fixture.Bank.legacy++;}
  private void createRequestSnapshotForCurrentTransaction(HostToHostManagementDTO r,String a,String ref,SessionContext c){fixture.Bank.snapshots++;}
  private void populateSaveResponse(HostToHostManagementResponseDTO response,HostToHostManagementDTO r,String ref){}
  public void testSave(SessionContext c,HostToHostManagementDTO r,String action) throws Exception {

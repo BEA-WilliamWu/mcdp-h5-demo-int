@@ -1,55 +1,52 @@
-# BCOH2H-1288 部署及验证
+# BM HTH Enable / Disable / Edit 通知部署（597 / 1288）
 
-本次业务改动仅 `HostToHostManagement.java` 和本目录的通知 SQL。新增测试/说明不需要部署。
+生产改动为 `HostToHostManagement.java` 和 `1288_HTH_Management_Notification.sql`；测试、说明和只读核查 SQL 不需要打包。
 
-## 行为
+## 发送规则
 
-- BM 公司 HTH Disable：最终审批、实际 ENABLE → DISABLE 保存成功后，登记一次公司通知。
-- BM Edit：最终审批时比较保存前后的 API code 集合，实际增加/删除才通知；只调整顺序、审批流程或收费账户不发本通知。
-- 有 `officeEmailId`：只发公司邮件。邮箱无效记录错误，不自动改发短信。
-- 无邮箱：使用公司 `officeTelNo`，当前支持 `+852-61234567` / `+86 13800138000` 等明确分隔国家码的格式。现有 BCO 公司联系人适配器已把这个字段映射为 WORK_MOBILE。
-- 无号码、缺少国家码、无分隔的号码（如 `+85261234567`）暂不发送，日志为 `MissingOrAmbiguousCompanyMobile`，不猜测国家码。其他存储格式仍待业务确认。
-- 公司邮箱和手机都没有时不发送；不通知目标用户或审批人。
-- Enable/597、851、1216 继续原流程；不改 batch、公共 DTO、发送类或普通 BCO 业务代码。
+| 操作 | 发送条件 | 事件 |
+| --- | --- | --- |
+| Enable | 最终审批、首次启用或 DISABLE → ENABLE 保存成功 | HTH_API_SERVICE_SUBMIT_SUCCESS |
+| Disable | 最终审批、ENABLE → DISABLE 保存成功 | HTH_API_SERVICE_DISABLE_SUCCESS |
+| Edit | 最终审批、公司启用中，API code 集合实际增加或删除，保存成功 | HTH_API_SERVICE_EDIT_SUCCESS |
 
-## 模板范围
+公司有 `officeEmailId` 时只邮件；邮箱为空才使用 `officeTelNo` 发短信；两者都没有则不登记。邮箱格式无效会记录错误，不自动换短信。不通知目标用户或审批人。API 顺序调整、仅审批流程或收费账户改变不触发 Edit 通知。
 
-当前 SQL **仅包含 `en` 映射**，正文是附件 #2/#3 的英文；没有可读取的完整繁简中文模板。繁简页面是否暂用英文仍待确认，未擅自绑定。此版本可做英文 UAT；不要当作三语通知已齐全。
+Enable 已移除旧私有通知方法，三个操作共用公司通知路径，每次符合条件的执行只登记一次；不承诺跨请求 exactly-once。审批、业务保存和权限流程沿用原有代码。
 
-邮件电话 `2211 1056`、短信电话 `2211 1321` 保留附件原文。模板没有动态占位符，无须新增公共 DTO 属性映射。
+公司号码支持明确国家码格式，如 `+852-61234567`、`+86 13800138000`。无国家码或未分隔号码（如 `+85261234567`）不猜测，记录 `MissingOrAmbiguousCompanyMobile`。收件人来自公司资料，不使用 BM 操作员手机或国家码。
 
-## 执行
+## 模板完成范围
 
-1. 在 UAT 先导出这两个事件在 `DIGX_PM_EVENT_ALL_B`、`DIGX_EP_ACT_EVT_B`、`DIGX_EP_ACT_EVT_ACN_B`、`DIGX_EP_EVT_REC_B` 的原行，及两个 HTH 活动在 `DIGX_EP_ACT_B` 的原行；若已有 `HTH1288_` 模板，同时备份模板、属性、来源行。
-2. 备份 `DIGX_CZ_FW_CONFIG_ALL_O` 的 `DayOneConfig` / `OBDX_BU` / `SMS_DISPATCHER_SKIP_COUNTRY_CODE_EVENTID_LIST` 原值，并记下原行是否存在。
-3. 在 OBDX 配置 schema 完整执行 `1288_HTH_Management_Notification.sql` 的 `DECLARE…END;` 块。DBeaver 用执行语句；SQL*Plus/SQLcl 在块后另输入 `/`。不要单独执行块内语句。
-4. 部署包含修改后 `HostToHostManagement` 的后端。按环境既有流程刷新 Alert / CustomConfig 缓存，或重启承载节点，再开始测试。
+以 `story/notification/1.Customer Onboarding BM - Notification (Clear)-v12-20260917_192646.docx` 的 #1/#2/#3 为准：
 
-脚本重复执行会替换本 story 的 Alert 收件映射，不叠加第二组；事务成功只提交一次，异常回滚本脚本。其他 Alert 动作、原有模板和启用事件不删除。原短信国家码跳过名单只追加两个 HTH 事件；原行缺失/空值时保留发送类的默认五项再追加。若发现 HTH 事件被其他活动使用、模板被其他事件引用、公司地址会被公共名单重算，则报错并回滚，避免带着歧义上线。
+- 邮件主题及正文完整保留英文＋繁体中文，各语言均使用这份双语内容；文档没有独立简体邮件，不自行翻译。
+- 短信分别使用 EN、TC、SC 原文，对应 `en`、`zh-hant`、`zh-hans-cn`。
+- 3 操作 × 2 通道 × 3 locale，共 18 条收件映射及模板。模板 ID 如 `HTH1288_ENABLE_EMAIL_en`、`HTH1288_ENABLE_SMS_zh-hant`。
+- 邮件电话 2211 1056、短信电话 2211 1321 保留原文。Disable 简体短信的「详情请参阅电邮。」也按原文保留，即使此通道是无邮箱时使用；如业务要删除，应先更新模板要求。
+- 文档仍标注 H2H API 名称未最终确定，本次保持指定原文。没有动态占位符。
 
-这次没有连接 Oracle/UAT，SQL 未实际执行；“可重复执行”是脚本设计，仍需在 UAT 连续执行两次确认。
+先前 PDF 缺中文，现已从 DOCX 的原始表格文字补齐，并做逐字比对；不再以旧 PDF 或本地缺字体的渲染作为中文内容依据。
 
-## 核对与测试
+## 部署和重跑
 
-```sql
-SELECT COD_ACT_ID, COD_EVENT_ID, TXT_DEST_TYP, LOCALE, COD_MSG_TMPL_ID,
-       SUBSCRIBER_TYPE, COUNT(*) AS ROWS_PER_BINDING
-FROM DIGX_EP_EVT_REC_B
-WHERE COD_EVENT_ID IN ('HTH_API_SERVICE_DISABLE_SUCCESS', 'HTH_API_SERVICE_EDIT_SUCCESS')
-GROUP BY COD_ACT_ID, COD_EVENT_ID, TXT_DEST_TYP, LOCALE, COD_MSG_TMPL_ID, SUBSCRIBER_TYPE;
--- 当前预期 4 行：2 个事件 × EMAIL/SMS × en，每行 COUNT=1，SUBSCRIBER_TYPE=EXTERNAL。
+1. 备份三个事件的活动、事件、Alert 动作、收件映射及 `HTH1288_` 模板、属性、来源记录；备份短信国家码跳过名单的原值及是否存在。
+2. 在 OBDX 配置 schema 以 UTF-8 打开并完整执行通知 SQL 的 `DECLARE…END;` 块；不要选取块内部分语句。SQL*Plus/SQLcl 在块后另输入 `/`。
+3. 配套部署 Java。按现有部署流程刷新 Alert / CustomConfig 缓存或承载节点；尤其 Enable 新路径需要 SUBMIT 事件的短信国家码配置。
+4. 执行 `1288_Verify_Notification.sql`，应有18 条收件映射（3 操作 × EMAIL/SMS × 3 locale）、每条 EXTERNAL，模板有效。
 
-SELECT PROP_VALUE FROM DIGX_CZ_FW_CONFIG_ALL_O
-WHERE PROP_ID = 'SMS_DISPATCHER_SKIP_COUNTRY_CODE_EVENTID_LIST'
-  AND PREFERENCE_NAME = 'DayOneConfig' AND DETERMINANT_VALUE = 'OBDX_BU';
-```
+脚本仅重建这三个事件的三个受支持语言的 EMAIL/SMS Alert 收件映射，模板原位更新，允许重跑；单次成功提交，失败回滚。保留其他语言映射及其他动作。共享模板/事件发生歧义时主动报错，避免覆盖其他配置。公共短信国家码跳过名单只追加三个 HTH 事件，保留已有值和默认项；不修改 batch、公共 DTO、邮件/短信发送类或 BCO 业务。
 
-- Disable 单级审批、Edit 多级审批：中间审批没有成功通知，最终审批只登记一次；保存失败/真实事务回滚不得投递成功通知。
-- 公司同时有邮箱和手机：只邮件。移除邮箱后用有国家码号码：只短信。公司 `+86` 与 BM 用户 `+852` 不同，核对 MNG 目标号码仍为公司 `86…`。
-- 本地执行了真实 `ActivityData` 序列化、SDK `ExternalRecipientDerivationHelper`、原 `SMSDispatcher`，其 MNG 网络出口替换为 fixture；真实队列、数据库事务和邮件/SMS送达需 UAT 验证。
-- `[HTH-1288] … outcome=Registered` 仅代表登记返回成功，不代表送达。`UnsuccessfulStatus` / 异常类型表示登记失败；`MissingSmsCountryRouting` 表示 SQL 配置未生效，已停止短信以防错号。
-- 回归 Enable/597 及普通 BCO、851、1216 通知。
+**Enable 英文短信长 220 字符**，Disable 123、Edit 133。原 SMSDispatcher 在发往 MNG 前检查 `AlertPollerPool.SMSLength`；需核对运行时上限至少覆盖 220，且 `DispatchDetails.isDispatchMocked` 不为 true。不要为本功能直接盲改全局上限；需要环境负责人确认现有 MNG 支持及 BCO 影响。保留 DOCX 原文，未擅自缩短短信。
+
+## 验证与排查
+
+本地定向 Java 8 编译、三操作审批/状态/联系人测试、真实 ActivityData 序列化及 SDK EXTERNAL 收件解析、真实 `dispatchMNGSms` 到模拟 MNG 的号码与 DOCX 三语正文检查通过。双语邮件及三语短信对照 DOCX 检查通过。数据库、队列及 MNG 网络使用替身；没有执行 Oracle SQL、真实完整发送器或真实投递验证。
+
+UAT 需执行脚本两次确认无重复，并分别测试三个 locale 的邮件和短信；检查首次启用/重新启用、停用及多级 Edit 最终审批；中间审批、保存失败、无实际变化不通知。验证 Email 优先及无 Email 的 SMS；公司 +86、BM 操作员 +852 时号码仍应为公司号码。回归 BCO、851、1216。
+
+`[HTH-1288] action=… stage=… outcome=Registered` 仅表示登记返回成功，不代表送达。`MissingSmsCountryRouting` 表示配置缺失；`MissingOrAmbiguousCompanyMobile` 表示号码不可明确解析。MNG 表 Success 表示接口接受请求；无数据需继续检查 Alert 登记、队列消费、模板解析、短信长度/模拟配置以及发送日志，不能直接认定未发送。
 
 ## 回退
 
-回退本次 Java 后，按备份恢复上述两个事件的原有活动关系、Alert 动作和收件映射；若原来不存在则仅删除这两个事件的新增行。仅清理本次 `HTH1288_` 模板，不删除被其他配置引用的记录。活动父记录及原 597 数据保留。短信跳过名单只移除本次新增的两项；不要用旧整串覆盖他人后续追加的事件。原来已存在的 HTH 项不得移除。按相同流程刷新缓存。
+Java 与三个事件配置一起按备份回退。只清理本次新增且没有其他引用的模板/配置；国家码名单仅移除本次新增项，保留他人后续改动，不覆盖整个名单。回退后按既有流程刷新缓存。

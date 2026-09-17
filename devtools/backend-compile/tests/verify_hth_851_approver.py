@@ -16,6 +16,18 @@ CP = os.pathsep.join([str(ROOT / 'devtools/backend-compile/build/classes/java/ma
                     [str(p) for p in (ROOT / 'consulting/middleware/lib').rglob('*.jar')])
 USER = next(p for p in PROJECTS.rglob('UserExtensionData.java') if '/app/sms/service/user/' in str(p))
 SMS = next(PROJECTS.rglob('SMSDispatcher.java'))
+EXT = next(PROJECTS.rglob('CZUserExtensionDataExt.java'))
+
+
+def block(source, signature):
+    start = source.index(signature)
+    opening = source.index('{', start)
+    depth = 1
+    end = opening + 1
+    while depth:
+        depth += (source[end] == '{') - (source[end] == '}')
+        end += 1
+    return source[start:end]
 
 
 def method(source, signature):
@@ -78,7 +90,7 @@ public class Bank {
          'public static final java.util.Map<String,User> rows=new java.util.HashMap<>(); public User read(UserKey k) throws com.ofss.digx.infra.exceptions.Exception {fixture.Bank.userReads++;return rows.get(k.getUserId());}')
     bean('com.ofss.digx.cz.bea.domain.sms.entity.user', 'UserExtensionDataKey', {'UserExtensionKey':'String'})
     bean('com.ofss.digx.cz.bea.domain.sms.entity.user', 'UserExtensionData',
-         {k:'String' for k in ('UserChannelType','CdcNo','UserID','MobileCode')},
+         {k:'String' for k in ('UserChannelType','CdcNo','UserID','MobileCode','SecurityQuestionsBypass')},
          'public static final java.util.Map<String,UserExtensionData> rows=new java.util.HashMap<>();public UserExtensionData read(UserExtensionDataKey k) throws com.ofss.digx.infra.exceptions.Exception {if(fixture.Bank.extensionFailure)throw new IllegalStateException();return rows.get(k.getUserExtensionKey());}')
     bean('com.ofss.digx.framework.domain.transaction', 'TransactionKey', {'Id':'String'})
     write('com/ofss/digx/framework/domain/transaction/Transaction.java', '''package com.ofss.digx.framework.domain.transaction;
@@ -89,7 +101,13 @@ public class Transaction {
  public static class Approval {public String getStatus(){return status;}public String getSignedBy(){return signers;}}
 }''')
     write('com/ofss/digx/infra/thread/ThreadAttribute.java', '''package com.ofss.digx.infra.thread;
-public class ThreadAttribute {public static final String TRANSACTION_REFERENCE_NO="reference";public static Object reference="APPROVAL-851";public static Object get(String key){return reference;}}
+public class ThreadAttribute {
+ public static final String TRANSACTION_REFERENCE_NO="reference";
+ public static Object reference="APPROVAL-851";
+ private static final java.util.Map<String,Object> values=new java.util.HashMap<>();
+ public static Object get(String key){return TRANSACTION_REFERENCE_NO.equals(key)?reference:values.get(key);}
+ public static void set(String key,Object value){if(value==null)values.remove(key);else values.put(key,value);}
+}
 ''')
     write('com/ofss/fc/infra/thread/ThreadAttribute.java', '''package com.ofss.fc.infra.thread;
 public class ThreadAttribute {public static final String CURRENT_TASK="task";public static Object get(String key){return null;}}
@@ -123,18 +141,36 @@ public class CountryCode {private String country;public String getMobile_code(){
          {**{k:'String' for k in ('RecipientId','MessageBody','Subject','CustomerId','PartyId','ActivityId','ActionId','EventId','CodActDataId','TxnType','OrgTxnRefNO','Alert_type','ResponseStatus')},'LastUpdatedDate':'com.ofss.fc.datatype.Date','Key':'EmailMNGKey'},
          'public static EmailMNG last;public void create(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}public void update(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}')
     current=USER.read_text()
+    ext=EXT.read_text()
+    # Execute the real postUpdate branch with unrelated iToken/host work stubbed.
+    # Count calls to the unchanged PIN reminder sender; no real emails are sent.
+    ext_imports='\n'.join(re.findall(r'^import .*;',ext,re.M))
+    write('CZUserExtensionDataExt.java','package com.ofss.digx.cz.bea.app.sms.service.user.ext;\n'+ext_imports+'''
+public class CZUserExtensionDataExt {
+ private static final String IS_ADMIN="isAdmin", IS_OMB_ENABLED="IS_OMB_ENABLED";
+ public static int pinCalls, itokenCalls;
+ public static boolean failHook;
+ private void handleItokenAfterUserUpdate(SessionContext c,UserExtensionDataDTO r,TransactionStatus t){
+  itokenCalls++;if(failHook)throw new IllegalStateException("fixture");
+ }
+ private void sendNotifications(SessionContext c,UserExtensionDataDTO r,List<String> ids,String target){pinCalls++;}
+ private void rejectOtherPendingRecord(SessionContext c,ResetUserPinRecord r,List<Object[]> transactions,IHostUserDetailsInvocationAdapter adapter){}
+'''+re.search(r'public static final String HTH_LOGIN_PIN_RESET_NOTIFICATION[^;]+;',ext).group(0)
+        +'\n'+block(ext,'public void postUpdate(')+'}')
     baseline=subprocess.check_output(['git','show','dca7ea48:'+str(USER.relative_to(ROOT))],cwd=ROOT).decode().replace('\r\n','\n')
     # This fixture extracts only the notification method, not the new audit scopes.
     imports='\n'.join(line for line in re.findall(r'^import .*;',current,re.M) if '.common.audit.' not in line)
     for cls,source in [('UserExtensionData',current),('UserExtensionDataBaseline',baseline)]:
-        block=source[source.index('\tpublic void alertUserProfileUpdate('):source.index('\tpublic void userCreateWelcomeAlert(')]
+        notification_methods=source[source.index('\tpublic void alertUserProfileUpdate('):source.index('\tpublic void userCreateWelcomeAlert(')]
+        if cls=='UserExtensionData':
+            notification_methods+='\nprivate IUserExtensionDataExtExecutor extensionExecutor;\n'+block(source,'private void postUpdateWithHthPinNotification(')
         write(cls+'.java','package com.ofss.digx.cz.bea.app.sms.service.user;\n'+imports+'\npublic class '+cls+' extends AbstractApplication {\n'+'''
  private static final String THIS_COMPONENT_NAME="com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData";
  private static final java.util.logging.Logger logger=java.util.logging.Logger.getLogger("test");
  private static final fixture.Bank.Format formatter=new fixture.Bank.Format();
  public String getFormatDate(Date d){return "fixed";} public static String maskName(List<String> names,int start){return "Company";}
  public static List<String> sepChar(String value,String delimiter){return java.util.Collections.singletonList(value);}
-'''+block+'}')
+'''+notification_methods+'}')
     # The bank Date constructor boots server XML configuration. Stub only this clock
     # value; recipient routing, MNG construction and success/failure handling stay real.
     source=SMS.read_text().replace('new Date(new java.util.Date())', 'null')

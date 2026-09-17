@@ -29,14 +29,13 @@ final class HthProfileApproverNotification {
     private HthProfileApproverNotification() { }
 
     static Approver resolve(SessionContext context, UserExtensionDataDTO request,
-            UserAlertRequestDTO changes, UserExtensionData stored) {
+            UserAlertRequestDTO changes, UserExtensionData stored, User oldUser) {
         // Use the profile already loaded by update: ordinary BCO has no additional repository dependency.
-        if (stored == null || !"OBDX_BU".equals(context.getTargetUnit())
-                || !("HTH".equalsIgnoreCase(text(stored.getUserChannelType()))
-                    || "H2H".equalsIgnoreCase(text(stored.getUserChannelType())))
-                || (changes.getEmailId() && changes.getMobNo())) return null;
+        if (!isHth(context, stored) || (changes.getEmailId() && changes.getMobNo())) return null;
         Approver result = new Approver();
         result.oldTargetCountry = stored.getMobileCode();
+        // Copy before persistence; a managed User may subsequently contain the new address.
+        result.oldTargetEmail = oldUser.getEmailId();
         if ("VALIDATE".equals(String.valueOf(context.getServiceCallContextType()))) return result;
         try {
             if (!text(request.getUserID()).equals(stored.getUserID())
@@ -66,6 +65,23 @@ final class HthProfileApproverNotification {
             LOG.log(Level.WARNING, "HTH_851 stage=APPROVER_RESOLUTION exception={0}", e.getClass().getSimpleName());
         }
         return result;
+    }
+
+    static Boolean loginPinResetChanged(SessionContext context, UserExtensionData stored,
+            UserExtensionDataDTO request) {
+        if (!isHth(context, stored)) return null; // Preserve the BCO hook's original behavior.
+        if ("VALIDATE".equals(String.valueOf(context.getServiceCallContextType()))) return false;
+        String before = stored.getSecurityQuestionsBypass();
+        String after = request.getBypassFlag();
+        // Match the two actual state transitions in UserExtensionData.update.
+        return ("N".equalsIgnoreCase(before) && "Y".equalsIgnoreCase(after))
+                || ("Y".equalsIgnoreCase(before) && "N".equalsIgnoreCase(after));
+    }
+
+    private static boolean isHth(SessionContext context, UserExtensionData stored) {
+        return stored != null && "OBDX_BU".equals(context.getTargetUnit())
+                && ("HTH".equalsIgnoreCase(text(stored.getUserChannelType()))
+                    || "H2H".equalsIgnoreCase(text(stored.getUserChannelType())));
     }
 
     static String finalSigner(String signedBy) {
@@ -137,6 +153,6 @@ final class HthProfileApproverNotification {
         }
     }
     static final class Approver {
-        String id, email, mobile, country, oldTargetCountry;
+        String id, email, mobile, country, oldTargetCountry, oldTargetEmail;
     }
 }

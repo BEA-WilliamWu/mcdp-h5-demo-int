@@ -21,6 +21,9 @@ import com.ofss.fc.domain.ep.entity.action.subscriber.RecipientMessageTemplateKe
 import com.ofss.fc.app.ep.dto.AlertPartyDetailsDTO;
 import com.ofss.fc.enumeration.ep.DestinationType;
 import com.ofss.fc.enumeration.ep.SubscriberType;
+import com.ofss.digx.cz.bea.app.sms.service.user.ext.CZUserExtensionDataExt;
+import com.ofss.digx.cz.bea.app.sms.service.user.ext.IUserExtensionDataExtExecutor;
+import com.ofss.fc.service.response.TransactionStatus;
 
 public final class Hth851ApproverTest {
     static final String ACTIVITY="com.ofss.digx.cz.bea.app.sms.service.user.UserExtensionData.update";
@@ -30,7 +33,7 @@ public final class Hth851ApproverTest {
     static void check(boolean ok,String name){Bank.check(ok,name);}
     static User user(String mail,String phone){User u=new User();u.setEmailId(mail);u.setMobileNumber(phone);return u;}
     static UserAlertRequestDTO changes(boolean email,boolean mobile){UserAlertRequestDTO c=new UserAlertRequestDTO();c.setEmailId(!email);c.setMobNo(!mobile);return c;}
-    static HthProfileApproverNotification.Approver resolve(UserAlertRequestDTO c){return HthProfileApproverNotification.resolve(Bank.context,request,c,stored);}
+    static HthProfileApproverNotification.Approver resolve(UserAlertRequestDTO c){return HthProfileApproverNotification.resolve(Bank.context,request,c,stored,oldUser);}
     static void reset(){
         Bank.context=new SessionContext();Bank.context.setUserId("WORKER@PARTY");Bank.context.setTargetUnit("OBDX_BU");
         Bank.context.setServiceCallContextType("EXECUTE");Bank.context.setTransactingPartyCode("PARTY");
@@ -87,6 +90,54 @@ public final class Hth851ApproverTest {
         NameValuePair pair=new NameValuePair();pair.setName("UserId");pair.setGenericName("UserId");pair.setValue(log.getUserId());
         IDispatchData data=(IDispatchData)Proxy.newProxyInstance(IDispatchData.class.getClassLoader(),new Class[]{IDispatchData.class},(p,m,args)->m.getName().equals("getDispatchData")?new NameValuePair[]{pair}:null);
         return new SMSDispatcher().test(a,data,"BCO reminder for TARGET").getIsDispatchSuccessfull();
+    }
+    static void hook(Boolean notify)throws Exception{
+        UserExtensionData service=new UserExtensionData();
+        Field executor=UserExtensionData.class.getDeclaredField("extensionExecutor");executor.setAccessible(true);
+        executor.set(service,Proxy.newProxyInstance(IUserExtensionDataExtExecutor.class.getClassLoader(),
+                new Class[]{IUserExtensionDataExtExecutor.class},(p,m,a)->{
+                    check("postUpdate".equals(m.getName()),"only existing postUpdate is invoked");
+                    new CZUserExtensionDataExt().postUpdate((SessionContext)a[0],(UserExtensionDataDTO)a[1],(TransactionStatus)a[2]);
+                    return null;
+                }));
+        Method post=UserExtensionData.class.getDeclaredMethod("postUpdateWithHthPinNotification",
+                SessionContext.class,UserExtensionDataDTO.class,TransactionStatus.class,Boolean.class);
+        post.setAccessible(true);post.invoke(service,Bank.context,request,new TransactionStatus(),notify);
+    }
+    static void pinNotificationTests()throws Exception{
+        reset();String key=CZUserExtensionDataExt.HTH_LOGIN_PIN_RESET_NOTIFICATION;
+        com.ofss.digx.infra.thread.ThreadAttribute.set("isAdmin",false);
+        // Contact-only saves do not change PIN reset state; real toggles still send.
+        for(String[] state:new String[][]{{"N","N"},{"Y","Y"},{"N",null},{"Y",null},{"N","Y"},{"Y","N"}}){
+            stored.setSecurityQuestionsBypass(state[0]);request.setBypassFlag(state[1]);
+            Boolean notify=HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request);
+            CZUserExtensionDataExt.pinCalls=0;CZUserExtensionDataExt.itokenCalls=0;
+            hook(notify);
+            boolean changed=state[1]!=null&&!state[0].equals(state[1]);
+            check(CZUserExtensionDataExt.pinCalls==(changed?1:0),"PIN reminder only for actual HTH transition "+Arrays.toString(state));
+            check(CZUserExtensionDataExt.itokenCalls==1,"unrelated iToken hook still runs");
+            check(com.ofss.digx.infra.thread.ThreadAttribute.get(key)==null,"request marker cleaned");
+        }
+        stored.setSecurityQuestionsBypass("N");request.setBypassFlag("Y");
+        Bank.context.setServiceCallContextType("VALIDATE");
+        check(Boolean.FALSE.equals(HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request)),"validate phase has no PIN notification");
+        Bank.context.setServiceCallContextType("EXECUTE");
+        CZUserExtensionDataExt.pinCalls=0;hook(false);check(CZUserExtensionDataExt.pinCalls==0,"unsaved/failed update gate");
+        for(String channel:new String[]{"BCO",null,""}){
+            stored.setUserChannelType(channel);request.setBypassFlag("N");
+            Boolean notify=HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request);
+            check(notify==null,"BCO receives no HTH override");
+            CZUserExtensionDataExt.pinCalls=0;hook(notify);check(CZUserExtensionDataExt.pinCalls==1,"BCO original PIN hook preserved");
+        }
+        stored.setUserChannelType("H2H");request.setBypassFlag("Y");
+        check(Boolean.TRUE.equals(HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request)),"H2H alias covered");
+        com.ofss.digx.infra.thread.ThreadAttribute.set(key,true);
+        CZUserExtensionDataExt.failHook=true;
+        try {hook(false);throw new AssertionError("expected hook exception");} catch(InvocationTargetException expected){}
+        finally {CZUserExtensionDataExt.failHook=false;}
+        check(Boolean.TRUE.equals(com.ofss.digx.infra.thread.ThreadAttribute.get(key)),"nested marker restored on hook exception");
+        com.ofss.digx.infra.thread.ThreadAttribute.set(key,null);
+        System.out.println("PASS: real postUpdate hook suppresses HTH contact-only PIN mail; actual PIN changes, iToken and BCO path retained; marker cleanup");
     }
     public static void main(String[] args)throws Exception{
         reset();UserAlertRequestDTO both=changes(true,true);
@@ -150,6 +201,16 @@ public final class Hth851ApproverTest {
         NotificationDetail detail=new NotificationDetail();detail.setRecipientId("PARTY");detail.setDestination(DestinationType.SMS);detail.setRecipientType(SubscriberType.EXTERNAL.toString());detail.setDispatchAddress("61234567");normal.setNotificationDetails(new NotificationDetail[]{detail});Bank.includeSmsEvents=true;
         check(send(normal,HthProfileApproverNotification.EMAIL_EVENT,ACTIVITY),"ordinary BCO SMS success");
         MNGSmsAlertDTO bco=(MNGSmsAlertDTO)((List<?>)Bank.lastRequest).get(0);check("85261234567".equals(bco.getBody()[0].getSms().getDistNo()),"BCO legacy lookup/country retained");
+        // A managed user object may be updated in place before the notification is built.
+        for(boolean mobile:new boolean[]{false,true}) {
+            reset();UserAlertRequestDTO c=changes(true,mobile);
+            HthProfileApproverNotification.Approver snapshot=resolve(c);
+            oldUser.setEmailId(request.getUserDTO().getEmailId());
+            invoke(c,snapshot);
+            check(emails("old@example.test")==1 && emails("new@example.test")==1,
+                    "pre-save old email survives in-place user update");
+        }
         System.out.println("PASS: same-content recipient dedup, ordinary BCO SMS routing unchanged");
+        pinNotificationTests();
     }
 }

@@ -10,7 +10,8 @@ java = Path(os.environ['JAVA_HOME']) / 'bin/javac'
 cp = os.pathsep.join([str(root / 'devtools/backend-compile/build/classes/java/main')] +
                     [str(p) for p in (root / 'consulting/middleware/lib').rglob('*.jar')])
 files = list(projects.rglob('HthProfileApprover*.java')) + list(projects.rglob('UserProfUpdateActivityLogDTO.java'))
-for name in ('UserExtensionData.java',):
+files += list(projects.rglob('HthOnboardingAudit.java'))
+for name in ('UserExtensionData.java', 'CZUserExtensionDataExt.java'):
     files.extend(p for p in (projects / 'module').rglob(name)
                  if name != 'UserExtensionData.java' or '/app/sms/service/user/' in str(p))
 with tempfile.TemporaryDirectory(prefix='hth-contact-compile-') as output:

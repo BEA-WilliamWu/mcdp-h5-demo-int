@@ -110,6 +110,7 @@ import com.ofss.digx.cz.bea.app.sms.dto.user.UserProfUpdateActivityLogDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserTokenDataDTO;
 import com.ofss.digx.cz.bea.app.sms.dto.user.ValidateUserResponseDTO;
 import com.ofss.digx.cz.bea.app.sms.service.user.ext.IUserExtensionDataExtExecutor;
+import com.ofss.digx.cz.bea.app.sms.service.user.ext.CZUserExtensionDataExt;
 import com.ofss.digx.cz.bea.app.sms.user.dto.credentials.HostCredentialsRequestDTO;
 import com.ofss.digx.cz.bea.app.sms.user.dto.credentials.HostCredentialsResponseDTO;
 import com.ofss.digx.cz.bea.common.constants.CZCommonConstants;
@@ -633,6 +634,9 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
                 audit.put("targetUserId", HthOnboardingAudit.fullUser(domain.getUserID(), domain.getCdcNo()))
                     .put("partyId", domain.getCdcNo());
             }
+            Boolean hthPinResetChanged = HthProfileApproverNotification.loginPinResetChanged(
+                    sessionContext, domain, requestDTO);
+            boolean hthProfileUpdated = false;
 			String bypassFlag = requestDTO.getBypassFlag();
 			String bypassCode = requestDTO.getBypassCode();
 			if(StringUtils.isNotBlank(bypassFlag)) {
@@ -925,7 +929,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("#############Old Email:- " + userDomain.getEmailId());
 				resultDto = checkAlerts(requestDTO, userDomain);
 				HthProfileApproverNotification.Approver hthApprover =
-						HthProfileApproverNotification.resolve(sessionContext, requestDTO, resultDto, domain);
+						HthProfileApproverNotification.resolve(sessionContext, requestDTO, resultDto, domain, userDomain);
 
 				// UserExtensionDataKey key = new UserExtensionDataKey();
 				// key.setUserExtensionKey(requestDTO.getUserExtensionKey());
@@ -977,6 +981,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				if (transactionStatus!=null && transactionStatus.getErrorCode()==null) {
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
+                    hthProfileUpdated = true;
 					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthApprover);
 					BeaSystemOut.println("##############Executed alertUserProfileUpdate method");
 				}
@@ -1111,7 +1116,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			}
 //			----------------------- MigratedUserResetPassword changes - ENDS -----------------------
 	
-			extensionExecutor.postUpdate(sessionContext, requestDTO, transactionStatus);
+            postUpdateWithHthPinNotification(sessionContext, requestDTO, transactionStatus,
+                    hthPinResetChanged == null ? null : hthProfileUpdated && hthPinResetChanged);
 
 						
 		} catch (Exception e) {
@@ -1142,6 +1148,22 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
     }
     }
   }
+
+    private void postUpdateWithHthPinNotification(SessionContext context, UserExtensionDataDTO request,
+            TransactionStatus status, Boolean notifyPinReset) throws Exception {
+        if (notifyPinReset == null) {
+            extensionExecutor.postUpdate(context, request, status);
+            return;
+        }
+        String key = CZUserExtensionDataExt.HTH_LOGIN_PIN_RESET_NOTIFICATION;
+        Object previous = com.ofss.digx.infra.thread.ThreadAttribute.get(key);
+        try {
+            com.ofss.digx.infra.thread.ThreadAttribute.set(key, notifyPinReset);
+            extensionExecutor.postUpdate(context, request, status);
+        } finally {
+            com.ofss.digx.infra.thread.ThreadAttribute.set(key, previous);
+        }
+    }
 
 	@Override
 	@Entitlement(name = "validatePinStatus UserExtensionData", action = ActionType.PERFORM, requiredResources = {})
@@ -2061,7 +2083,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 					userEmailList.add(partyDetails.getOfficeEmailId());
 				}
 
-				userEmailList.add(userDomain.getEmailId() + "~" + requestDTO.getUserID());
+				userEmailList.add((hthApprover == null ? userDomain.getEmailId() : hthApprover.oldTargetEmail)
+                        + "~" + requestDTO.getUserID());
 				userEmailList.add(requestDTO.getUserDTO().getEmailId() + "~" + requestDTO.getUserID());
                 if (hthApprover == null) userEmailList.add(signerUser.getEmailId());
                 else HthProfileApproverNotification.addEmail(userEmailList, hthApprover);
@@ -2258,7 +2281,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 					userEmailList.add(partyDetails.getOfficeEmailId());
 				}
 
-				userEmailList.add(userDomain.getEmailId() + "~" + requestDTO.getUserID());
+				userEmailList.add((hthApprover == null ? userDomain.getEmailId() : hthApprover.oldTargetEmail)
+                        + "~" + requestDTO.getUserID());
 				userEmailList.add(requestDTO.getUserDTO().getEmailId() + "~" + requestDTO.getUserID());
                 if (hthApprover == null) userEmailList.add(signerUser.getEmailId());
                 else HthProfileApproverNotification.addEmail(userEmailList, hthApprover);

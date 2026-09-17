@@ -2,7 +2,7 @@
 
 2026-09-17 · 基线：本次同步并回退后的 `dca7ea48`
 
-**只补齐 H2H 最终审批人的通知，复用原 BCO 模板和发送流程。普通 BCO 保持原样。**
+**补齐 H2H 最终审批人的通知，复用原 BCO 模板和发送流程。另修正 HTH 联系方式编辑时的 PIN 通知误触发，并固定保存前的旧邮箱。普通 BCO 保持原样。**
 
 ## AC 对照
 
@@ -30,10 +30,19 @@
 
 | 文件 | 修改 |
 | --- | --- |
-| `UserExtensionData.java` | 唯一修改的原有类。在 H2H 分支接入审批人信息，普通 BCO 保留原收件及事件逻辑；原公开方法签名保留 |
-| `HthProfileApproverNotification.java` | 新增于同一用户管理模块，集中处理最终审批人识别、收件人去重和原 DTO 组装 |
+| `UserExtensionData.java` | 在 H2H 分支接入审批人及旧邮箱快照；保存前比较 PIN Reset Code 状态，并仅在本次 postUpdate 调用期间传递 HTH 通知标记；原公开方法签名保留 |
+| `HthProfileApproverNotification.java` | 同一用户管理模块内处理最终审批人识别、收件人去重、旧邮箱快照及 HTH PIN 状态变化判断 |
+| `ext/CZUserExtensionDataExt.java` | HTH 未改变 PIN Reset Code 状态时跳过对应启用／停用通知；仍执行其他更新后处理；没有 HTH 标记的 BCO 和其他入口保留原逻辑 |
 
-两个文件均在 `com.ofss.digx.cz.bea.module.sms`。**不改 batch、scheduler、SMSDispatcher、EmailDispatcher、公共 DTO/common 包、Preferences、SQL 或前端；不新增表、事件或模板。**
+三个生产文件均在 `com.ofss.digx.cz.bea.module.sms`。**不改 batch、scheduler、SMSDispatcher、EmailDispatcher、公共 DTO/common 包、Preferences、SQL 或前端；不新增表、事件或模板。**
+
+## UAT 反馈：修改联系方式后收到 PIN 停用邮件
+
+- 截图的 `Notification of Login PIN Reset Code Disablement` 对应 `LOGIN_PIN_RESET_DISABLE_REMINDER_CORPORATE_USER`／`...COMPANY`，是独立 PIN 通知。原 `postUpdate` 按当前 bypassFlag 选启用或停用模板，没有判断状态是否变化；读取的是更新后的邮箱，因此这封邮件本来就不会使用旧邮箱。
+- HTH 修正：更新前比较实际存储的 N→Y／Y→N，资料保存成功才允许对应 PIN 通知。只改联系方式、状态不变或校验阶段不触发。临时标记在 finally 中恢复，避免污染后续调用；其他 iToken／BM 处理保留。
+- 联系方式修改邮件仍使用 `INFO_UPDATE_BY_CORP_ADMIN`。HTH 在保存前复制旧邮箱，发送时不再从可能已更新的 User 对象取旧值；AC1、AC2 都使用该快照。旧手机号码原本已有独立快照。
+- 本地已复现“User 对象原地更新导致旧邮箱丢失”的用例，并验证修复后旧、新邮箱各保留一份。该测试证明快照有效，**不能单凭截图认定 UAT 此次漏发就是对象更新导致**；还需查看 `INFO_UPDATE_BY_CORP_ADMIN` 的事件、发送记录及实际邮件。
+- 回归覆盖真实 postUpdate 分支的通知门控：HTH 联系方式编辑不误发，真正 PIN 启停仍通知，iToken hook 仍执行，异常时清理标记。网络／数据库使用测试替身，未在 UAT 发送邮件。
 
 ## 部署与验收
 

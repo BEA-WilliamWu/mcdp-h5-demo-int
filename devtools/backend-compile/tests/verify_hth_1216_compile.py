@@ -5,7 +5,8 @@ root=Path(__file__).resolve().parents[3]
 projects=root/'consulting/middleware/projects'
 cp=os.pathsep.join([str(root/'devtools/backend-compile/build/classes/java/main')]+[str(p) for p in (root/'consulting/middleware/lib').rglob('*.jar')])
 files=[]
-for name in ('HostToHostUserAccess.java','HthUserAccessNotification.java','UserManagementActivityLogDTO.java'):
+for name in ('HostToHostUserAccess.java','HthUserAccessNotification.java','UserManagementActivityLogDTO.java',
+             'HthOnboardingAudit.java','HthUserAccessAudit.java'):
     files.extend(p for p in projects.rglob(name) if '/appx/' not in str(p))
 with tempfile.TemporaryDirectory(prefix='hth1216-compile-') as output:
     result = subprocess.run([str(Path(os.environ['JAVA_HOME'])/'bin/javac'),'-proc:none','--release','8','-cp',cp,'-d',output,*map(str,files)],check=False)

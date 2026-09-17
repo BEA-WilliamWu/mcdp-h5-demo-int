@@ -109,6 +109,12 @@ public final class Hth1216NotificationTest {
             reset();Transaction.service=HostToHostUserAccess.class.getName()+"."+op;
             new HostToHostUserAccess().testSave(Bank.context,request,op);
             check(Bank.writes==1 && Bank.events.size()==5 && Bank.committed.size()==5,"real "+op+" save method registers one notification group after storage");
+            check(Collections.frequency(Bank.events,HthUserAccessNotification.EVENT)==4,"target and final approver use BCO user templates");
+            check(Collections.frequency(Bank.events,HthUserAccessNotification.COMPANY_EVENT)==1,"company uses its own BCO template once");
+            UserManagementActivityLogDTO companyLog=(UserManagementActivityLogDTO)Bank.logs.get(4);
+            check(companyLog.getNotificationDetails()[0].getDestination()==DestinationType.EMAIL
+                    && "company@example.test".equals(companyLog.getNotificationDetails()[0].getDispatchAddress()),
+                    "company event contains company email only");
             reset();Transaction.service=HostToHostUserAccess.class.getName()+"."+op;Bank.writeFailure=true;
             new HostToHostUserAccess().testSave(Bank.context,request,op);
             check(Bank.events.isEmpty() && Bank.committed.isEmpty(),"storage failure prevents notifications");
@@ -122,6 +128,20 @@ public final class Hth1216NotificationTest {
         reset();Bank.context.setTargetUnit("OTHER");check(prepare().isEmpty() && Bank.approvalReads==0,"other unit excluded");
         reset();check(new HthUserAccessNotification().prepare(Bank.context,request,ACTIVITY,"").isEmpty(),"missing transaction reference excluded");
         System.out.println("PASS: actual create/edit hook ordering, negative approval gates and delete isolation");
+
+        reset();Bank.company=" TARGET@EXAMPLE.TEST ";
+        new HthUserAccessNotification().notifyApproved(Bank.context,request,ACTIVITY,"REF");
+        check(Bank.events.size()==4 && !Bank.events.contains(HthUserAccessNotification.COMPANY_EVENT),
+                "shared target/company email is sent once with the user template");
+        reset();Bank.company=" FINAL@EXAMPLE.TEST ";
+        new HthUserAccessNotification().notifyApproved(Bank.context,request,ACTIVITY,"REF");
+        check(Bank.events.size()==4 && !Bank.events.contains(HthUserAccessNotification.COMPANY_EVENT),
+                "shared approver/company email is sent once with the user template");
+        reset();User.rows.remove(TARGET);User.rows.remove("FINAL");
+        new HthUserAccessNotification().notifyApproved(Bank.context,request,ACTIVITY,"REF");
+        check(Bank.events.equals(Collections.singletonList(HthUserAccessNotification.COMPANY_EVENT)),
+                "company notification remains separate when user contacts are unavailable");
+        System.out.println("PASS: user/company event routing and dedup across template variants");
 
         reset();final List<String> diagnostics=new ArrayList<>();Logger logger=Logger.getLogger(HthUserAccessNotification.class.getName());
         Handler handler=new Handler(){public void publish(LogRecord r){diagnostics.add(r.getMessage()+Arrays.toString(r.getParameters()));}public void flush(){}public void close(){}};logger.addHandler(handler);

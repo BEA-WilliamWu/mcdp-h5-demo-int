@@ -33,6 +33,7 @@ import java.util.logging.Logger;
 /** BCOH2H-1216: explicit HTH recipients, using the existing BCO template DTO and Alert pipeline. */
 final class HthUserAccessNotification extends AbstractApplication {
     static final String EVENT = "HTH_USER_ACCOUNT_ACCESS_UPDATE";
+    static final String COMPANY_EVENT = "HTH_USER_ACCOUNT_ACCESS_COMPANY";
     private static final String SERVICE = HostToHostUserAccess.class.getName();
     private static final Logger LOG = Logger.getLogger(HthUserAccessNotification.class.getName());
 
@@ -40,8 +41,10 @@ final class HthUserAccessNotification extends AbstractApplication {
             String activity, String reference) {
         for (UserManagementActivityLogDTO log : prepare(context, request, activity, reference)) {
             try {
+                // Only the company email has no delivery user. Keep BCO's user/company templates separate.
+                String event = text(log.getUserId()).isEmpty() ? COMPANY_EVENT : EVENT;
                 TransactionStatus status = super.registerActivityAndGenerateEvent(
-                        context, activity, EVENT, new Date(), log);
+                        context, activity, event, new Date(), log);
                 if (status == null || status.getReplyCode() != 0) {
                     diagnostic(reference, "REGISTER", "RECIPIENT", "UnsuccessfulStatus");
                 }

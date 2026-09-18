@@ -53,3 +53,16 @@
 - 环境模板正文/属性配置不在这份源码中；UAT 应核对正文仍显示目标用户 `ProfileUser`，以及实际邮件、短信送达。本地验证不能代替真实送达验收。
 
 以本次干净基线实施；mcdp 已清空，本次不恢复之前交付文件。
+
+## 2026-09-18 UAT 日志补充
+
+交易 `1809ABDF0AF0` 在 09:10:57 返回 replyCode=0、errorCode="0"、validationErrors=null；原入口仅接受 errorCode=null，因此未调用联系方式通知方法。HTH 分支现接受 replyCode=0 且 errorCode 为 null/"0"、无 validationErrors 的结果；普通 BCO 保留原判断。失败或空状态不发送成功通知。
+
+日志同时显示 postUpdate 调用了 PIN reset disable 的 sendNotifications。该点不能由上述成功判定缺陷单独解释：若之前的 HTH 门控完整生效，资料通知未执行时也应禁止 PIN 通知。请求中的 userChannelType=HTH 不能证明更新前持久化资料或运行时 targetUnit 命中门控，也不能证明 UAT 已部署全部类。新增无敏感值日志：
+
+- `HTH_851 stage=PROFILE_RESULT success=true/false`：HTH 更新结果判定。
+- `HTH_851 stage=POST_UPDATE hthGate=true/false pinNotify=true/false/null`：是否命中 HTH 门控及是否允许 PIN 通知。
+
+若 hthGate=false，核对更新前持久化 userChannelType 与 targetUnit；若 hthGate=true、pinNotify=false 仍进入 PIN sendNotifications，核对部署的 CZUserExtensionDataExt 是否包含门控。日志缺少新标记时先核对运行节点/包版本及日志级别。不要通过修改 PIN 模板掩盖错误事件。
+
+本地已验证日志中的零值成功状态、错误状态、旧新邮箱快照、原通知方法及 postUpdate 门控；未执行 UAT 真实投递，未修改通知模板或公共发送类。

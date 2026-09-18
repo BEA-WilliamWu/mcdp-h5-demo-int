@@ -978,7 +978,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("Transaction Status: "+ transactionStatus);
 				BeaSystemOut.println("Transaction Status Replytext + code : "+ transactionStatus.getReplyText() + "+" + transactionStatus.getReplyCode());
 				BeaSystemOut.println("Transaction Status ErrorCOde + code : "+ transactionStatus.getErrorCode() + "+" + transactionStatus.getValidationErrors());
-				if (transactionStatus!=null && transactionStatus.getErrorCode()==null) {
+				if (HthProfileApproverNotification.profileUpdateSucceeded(transactionStatus, hthPinResetChanged)) {
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
                     hthProfileUpdated = true;
@@ -1151,6 +1151,11 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 
     private void postUpdateWithHthPinNotification(SessionContext context, UserExtensionDataDTO request,
             TransactionStatus status, Boolean notifyPinReset) throws Exception {
+        if (notifyPinReset != null || "HTH".equalsIgnoreCase(request.getUserChannelType())
+                || "H2H".equalsIgnoreCase(request.getUserChannelType())) {
+            logger.log(Level.INFO, "HTH_851 stage=POST_UPDATE hthGate={0} pinNotify={1}",
+                    new Object[]{notifyPinReset != null, notifyPinReset});
+        }
         if (notifyPinReset == null) {
             extensionExecutor.postUpdate(context, request, status);
             return;

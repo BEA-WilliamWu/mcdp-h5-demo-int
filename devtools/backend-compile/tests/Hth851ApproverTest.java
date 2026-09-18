@@ -139,7 +139,23 @@ public final class Hth851ApproverTest {
         com.ofss.digx.infra.thread.ThreadAttribute.set(key,null);
         System.out.println("PASS: real postUpdate hook suppresses HTH contact-only PIN mail; actual PIN changes, iToken and BCO path retained; marker cleanup");
     }
+    static void profileStatusTests() {
+        TransactionStatus status = new TransactionStatus();
+        status.setReplyCode(0);status.setErrorCode("0");
+        check(HthProfileApproverNotification.profileUpdateSucceeded(status, false), "UAT reply=0/error=0 is HTH success");
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO error=0 legacy decision unchanged");
+        status.setErrorCode(null);
+        check(HthProfileApproverNotification.profileUpdateSucceeded(status, false), "null error remains success");
+        check(HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO null error legacy decision unchanged");
+        status.setReplyCode(99);
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(status, false), "nonzero reply cannot send success alert");
+        status.setReplyCode(0);status.setErrorCode("FAILURE");
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(status, false), "business error cannot send success alert");
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(null, false), "null status cannot send success alert");
+        System.out.println("PASS: UAT zero error code accepted for HTH; failure gates and BCO legacy behavior retained");
+    }
     public static void main(String[] args)throws Exception{
+        profileStatusTests();
         reset();UserAlertRequestDTO both=changes(true,true);
         for(String channel:new String[]{"BCO",null,""}){
             stored.setUserChannelType(channel);check(resolve(both)==null,"non-HTH legacy path");

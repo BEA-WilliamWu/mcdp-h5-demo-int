@@ -141,6 +141,7 @@ public class CountryCode {private String country;public String getMobile_code(){
          {**{k:'String' for k in ('RecipientId','MessageBody','Subject','CustomerId','PartyId','ActivityId','ActionId','EventId','CodActDataId','TxnType','OrgTxnRefNO','Alert_type','ResponseStatus')},'LastUpdatedDate':'com.ofss.fc.datatype.Date','Key':'EmailMNGKey'},
          'public static EmailMNG last;public void create(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}public void update(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}')
     current=USER.read_text()
+    assert "if (HthProfileApproverNotification.profileUpdateSucceeded(transactionStatus, hthPinResetChanged))" in current
     ext=EXT.read_text()
     # Execute the real postUpdate branch with unrelated iToken/host work stubbed.
     # Count calls to the unchanged PIN reminder sender; no real emails are sent.

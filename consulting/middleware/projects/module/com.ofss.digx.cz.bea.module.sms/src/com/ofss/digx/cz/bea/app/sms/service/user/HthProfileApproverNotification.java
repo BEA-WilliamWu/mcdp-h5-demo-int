@@ -67,6 +67,17 @@ final class HthProfileApproverNotification {
         return result;
     }
 
+    static boolean profileUpdateSucceeded(com.ofss.fc.service.response.TransactionStatus status,
+            Boolean hthPinResetChanged) {
+        // Keep ordinary BCO's existing decision; HTH must also accept SDK success code "0".
+        if (hthPinResetChanged == null) return status != null && status.getErrorCode() == null;
+        boolean success = status != null && status.getReplyCode() == 0
+                && (status.getErrorCode() == null || "0".equals(status.getErrorCode()))
+                && (status.getValidationErrors() == null || status.getValidationErrors().length == 0);
+        LOG.log(Level.INFO, "HTH_851 stage=PROFILE_RESULT success={0}", success);
+        return success;
+    }
+
     static Boolean loginPinResetChanged(SessionContext context, UserExtensionData stored,
             UserExtensionDataDTO request) {
         if (!isHth(context, stored)) return null; // Preserve the BCO hook's original behavior.

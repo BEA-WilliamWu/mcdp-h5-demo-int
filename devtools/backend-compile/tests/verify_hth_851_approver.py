@@ -83,6 +83,21 @@ public class Bank {
   if(reject)response.setErrorCode("TEST_FAILURE");return Collections.singletonList(response);
  }));}
 }'''.replace('d.setPartyName("Company")','d.setCompanyName("Company")'))
+    write('com/ofss/digx/framework/domain/repository/RepositoryAdapterFactory.java', '''package com.ofss.digx.framework.domain.repository;
+import java.util.*;
+import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
+public class RepositoryAdapterFactory {
+ public static final Map<String,String> profiles=new HashMap<>();
+ public static boolean fail; public static int reads;
+ public static RepositoryAdapterFactory getInstance(){return new RepositoryAdapterFactory();}
+ public Object getRepositoryAdapter(String key){
+  fixture.Bank.check(IHthUserProfileAdapter.HTH_USER_PROFILE_LOCAL_REPOSITORY_ADAPTER.equals(key),"profile adapter selected");
+  return new IHthUserProfileAdapter(){
+   public void createUserProfile(String party,String close){throw new AssertionError("read only");}
+   public Map<String,String> listCloseIdsByUserKey(String party){reads++;if(fail)throw new IllegalStateException("fixture");return profiles;}
+  };
+ }
+}''')
     bean('com.ofss.fc.app.context', 'SessionContext',
          {k:'String' for k in ('TargetUnit','UserLocale','TransactingPartyCode','ServiceCallContextType','UserId','ServiceCode','ExternalReferenceNo','InternalReferenceNo')})
     bean('com.ofss.digx.domain.sms.entity.user', 'UserKey', {'UserId':'String'})
@@ -142,6 +157,12 @@ public class CountryCode {private String country;public String getMobile_code(){
          'public static EmailMNG last;public void create(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}public void update(EmailMNG m) throws com.ofss.digx.infra.exceptions.Exception{last=m;}')
     current=USER.read_text()
     assert "if (HthProfileApproverNotification.profileUpdateSucceeded(transactionStatus, hthPinResetChanged))" in current
+    # Enrichment must run before the real update method makes either notification decision.
+    update=block(current,'public TransactionStatus update(')
+    assert update.index('domain = domain.read(key);') < update.index('HthProfileApproverNotification.loadStoredChannel')
+    assert update.index('HthProfileApproverNotification.loadStoredChannel') < update.index('HthProfileApproverNotification.loginPinResetChanged') < update.index('domain.setSecurityQuestionsBypass')
+    orm=ROOT/'consulting/config/orm/eclipselink/mappings/cz/sms/user/UserExtensionData/UserExtensionData.orm.xml'
+    assert '<transient name="userChannelType"/>' in orm.read_text()
     ext=EXT.read_text()
     # Execute the real postUpdate branch with unrelated iToken/host work stubbed.
     # Count calls to the unchanged PIN reminder sender; no real emails are sent.
@@ -185,7 +206,7 @@ public class CZUserExtensionDataExt {
  public SessionContext getSessionContext() throws FatalException{return fixture.Bank.context;}
  public DispatchResultDTO test(AlertRequestDTO request,IDispatchData data,String body){return dispatchMNGSms(request,data,body);}
 '''+ '\n'.join(method(source,sig) for sig in signatures)+'}')
-    sources=list(PROJECTS.rglob('HthProfileApproverNotification.java'))
+    sources=list(PROJECTS.rglob('HthProfileApproverNotification.java')) + list(PROJECTS.rglob('IHthUserProfileAdapter.java'))
     for name in ('UserProfUpdateActivityLogDTO.java','UserExtensionDataDTO.java','UserAlertRequestDTO.java'):
         sources+=list(PROJECTS.rglob(name))
     compiled=subprocess.run([str(JDK/'javac'),'--release','8','-proc:none','-cp',CP,'-d',tmp,*fixtures,*map(str,sources),

@@ -104,6 +104,35 @@ public final class Hth851ApproverTest {
                 SessionContext.class,UserExtensionDataDTO.class,TransactionStatus.class,Boolean.class);
         post.setAccessible(true);post.invoke(service,Bank.context,request,new TransactionStatus(),notify);
     }
+    static void storedChannelTests()throws Exception{
+        reset();
+        // Match the actual ORM read: the transient channel is absent even for an HTH user.
+        stored.setUserChannelType(null);stored.setSecurityQuestionsBypass("N");request.setBypassFlag("N");
+        com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory.profiles.clear();
+        String key=com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter.userProfileKey("PARTY","TARGET@PARTY");
+        com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory.profiles.put(key,"TARGET@PARTY");
+        HthProfileApproverNotification.loadStoredChannel(Bank.context,stored);
+        Boolean pin=HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request);
+        check(Boolean.FALSE.equals(pin),"unhydrated HTH read resolves contact-only PIN suppression");
+        TransactionStatus status=new TransactionStatus();status.setReplyCode(0);status.setErrorCode("0");
+        check(HthProfileApproverNotification.profileUpdateSucceeded(status,pin),"resolved HTH accepts actual UAT success");
+        HthProfileApproverNotification.Approver ap=resolve(changes(true,true));
+        oldUser.setEmailId(request.getUserDTO().getEmailId());
+        invoke(changes(true,true),ap);
+        check(emails("old@example.test")==1 && emails("new@example.test")==1,"resolved channel preserves old/new email");
+        check(emails("final@example.test")==1,"resolved channel includes final approver");
+        com.ofss.digx.infra.thread.ThreadAttribute.set("isAdmin",false);
+        CZUserExtensionDataExt.pinCalls=0;hook(pin);
+        check(CZUserExtensionDataExt.pinCalls==0,"real postUpdate sends no wrong PIN reminder");
+        // A stale HTH cache field / HTH request cannot turn a persisted BCO user into HTH.
+        com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory.profiles.clear();
+        HthProfileApproverNotification.loadStoredChannel(Bank.context,stored);
+        check("BCO".equals(stored.getUserChannelType()) && HthProfileApproverNotification.loginPinResetChanged(Bank.context,stored,request)==null,"BCO verified from persistence");
+        com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory.fail=true;
+        try {HthProfileApproverNotification.loadStoredChannel(Bank.context,stored);throw new AssertionError("lookup failure must propagate");}
+        catch(IllegalStateException expected){}finally{com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory.fail=false;}
+        System.out.println("PASS: transient ORM channel resolved from persisted HTH ownership; old/new email, final AP and actual PIN hook verified; lookup failure never falls back to BCO");
+    }
     static void pinNotificationTests()throws Exception{
         reset();String key=CZUserExtensionDataExt.HTH_LOGIN_PIN_RESET_NOTIFICATION;
         com.ofss.digx.infra.thread.ThreadAttribute.set("isAdmin",false);
@@ -173,7 +202,7 @@ public final class Hth851ApproverTest {
         Bank.extensionFailure=true;HthProfileApproverNotification.Approver partial=resolve(both);
         List<String> mail=new ArrayList<>();HthProfileApproverNotification.addEmail(mail,partial);check(mail.size()==1,"email survives missing AP mobile extension");
         check(HthProfileApproverNotification.sms(partial,both,request,oldUser.getMobileNumber()).isEmpty(),"missing country never guessed");Bank.extensionFailure=false;
-        System.out.println("PASS: persisted-channel gate, no BCO extra reads, final approval and failure isolation");
+        System.out.println("PASS: channel gate, no BCO approver reads, final approval and failure isolation");
 
         for(boolean[] flags:new boolean[][]{{true,false},{false,true},{true,true},{false,false}}){
             reset();UserAlertRequestDTO c=changes(flags[0],flags[1]);stored.setUserChannelType("BCO");
@@ -227,6 +256,7 @@ public final class Hth851ApproverTest {
                     "pre-save old email survives in-place user update");
         }
         System.out.println("PASS: same-content recipient dedup, ordinary BCO SMS routing unchanged");
+        storedChannelTests();
         pinNotificationTests();
     }
 }

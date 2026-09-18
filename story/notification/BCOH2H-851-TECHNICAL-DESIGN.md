@@ -15,7 +15,7 @@
 
 ## 实现方式
 
-1. 根据更新前已读取的 `userChannelType=HTH/H2H` 识别 H2H，普通 BCO 不额外查询审批记录或 HTH 表。
+1. 更新前复用现有 HTH 用户资料适配器，按数据库中的公司及完整用户 ID 查询 `HTH_USER_PROFILE`，补齐临时渠道字段后识别 H2H。`domain.read()` 不会加载该字段；不能直接用它判断，也不信任请求中的渠道。普通 BCO 不额外查询审批记录，但 OBDX_BU 用户更新均增加一次 HTH 资料查询。
 2. 从本笔已批准的 `UserExtensionData.update` 审批记录中取得最后一位审批人，读取其邮箱、手机号及国家码。只在资料更新成功后走原 Alert 登记流程。
 3. 邮件沿用 `INFO_UPDATE_BY_CORP_ADMIN`。将 H2H 原先的“当前执行人”收件位置改为“最终审批人”；邮箱已在本次用户/公司列表中则不再加入。
 4. 短信沿用 `USER_EMAIL_ADDRESS_UPDATE`、`USER_MOBILE_NUMBER_UPDATED_REMINDER`。不向审批人发送新手机号欢迎短信；同一事件、相同号码及国家码不重复加入。
@@ -63,6 +63,24 @@
 - `HTH_851 stage=PROFILE_RESULT success=true/false`：HTH 更新结果判定。
 - `HTH_851 stage=POST_UPDATE hthGate=true/false pinNotify=true/false/null`：是否命中 HTH 门控及是否允许 PIN 通知。
 
-若 hthGate=false，核对更新前持久化 userChannelType 与 targetUnit；若 hthGate=true、pinNotify=false 仍进入 PIN sendNotifications，核对部署的 CZUserExtensionDataExt 是否包含门控。日志缺少新标记时先核对运行节点/包版本及日志级别。不要通过修改 PIN 模板掩盖错误事件。
+若 hthGate=false，核对渠道查询结果与 targetUnit；若 hthGate=true、pinNotify=false 仍进入 PIN sendNotifications，核对部署的 CZUserExtensionDataExt 是否包含门控。日志缺少新标记时先核对运行节点/包版本及日志级别。不要通过修改 PIN 模板掩盖错误事件。
 
 本地已验证日志中的零值成功状态、错误状态、旧新邮箱快照、原通知方法及 postUpdate 门控；未执行 UAT 真实投递，未修改通知模板或公共发送类。
+
+## 2026-09-18 渠道识别根因修正
+
+已确认 ORM 将 `userChannelType` 声明为 transient，单条 `LocalUserExtensionDataRepositoryAdapter.read()` 只执行实体读取；页面的 read/listUsers 另行补齐渠道，update 原先没有。因此页面显示 HTH 不代表 update 的 domain 含有 HTH，两个通知修复都会被渠道门控跳过。此前测试预先赋值 HTH，未覆盖该生产读取形态。
+
+本次仅修改两个生产文件：helper 新增 `loadStoredChannel`，update 在读取旧资料后、任何状态修改前调用一次。复用已有接口 `IHthUserProfileAdapter.listCloseIdsByUserKey`，不修改公共接口、ORM、数据库、batch 或发送器。根据存储的 partyId/userId 精确匹配，不使用前端渠道，也覆盖可能残留的 ORM 临时渠道缓存。
+
+影响：OBDX_BU 用户更新增加一次现有 HTH 资料查询；无 HTH 记录的用户保持 BCO 原通知逻辑。查询异常或用户标识缺失会在保存前终止，不能悄悄按 BCO 继续发送 PIN 通知。这是新增依赖，应回归普通 BCO 的资料更新。
+
+新增 `HTH_851 stage=CHANNEL_RESOLUTION source=HTH_USER_PROFILE hth=true/false`。只改 HTH 联系方式且成功保存时，预期依次出现：
+
+```text
+HTH_851 stage=CHANNEL_RESOLUTION source=HTH_USER_PROFILE hth=true
+HTH_851 stage=PROFILE_RESULT success=true
+HTH_851 stage=POST_UPDATE hthGate=true pinNotify=false
+```
+
+回归从渠道为空的实体开始，通过数据库适配器替身补齐，再运行实际通知方法及 postUpdate：旧新邮箱、最终审批人通知保留，PIN 通知为零；另覆盖无 HTH 记录、请求误报 HTH、缓存残留 HTH 和查询异常。测试数据库/网络仍为替身，UAT 实际投递需部署后验证。本次无新增 SQL，重新部署 SMS 模块即可使用环境已有 HTH 资料适配器。

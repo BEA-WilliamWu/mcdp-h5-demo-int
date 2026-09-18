@@ -17,6 +17,9 @@ import com.ofss.fc.enumeration.ep.SubscriberType;
 import com.ofss.fc.xface.ep.dto.NotificationDetail;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import com.ofss.digx.cz.bea.app.hosttohost.adapter.IHthUserProfileAdapter;
+import com.ofss.digx.framework.domain.repository.RepositoryAdapterFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -30,7 +33,7 @@ final class HthProfileApproverNotification {
 
     static Approver resolve(SessionContext context, UserExtensionDataDTO request,
             UserAlertRequestDTO changes, UserExtensionData stored, User oldUser) {
-        // Use the profile already loaded by update: ordinary BCO has no additional repository dependency.
+        // update resolves the transient channel before entering this notification path.
         if (!isHth(context, stored) || (changes.getEmailId() && changes.getMobNo())) return null;
         Approver result = new Approver();
         result.oldTargetCountry = stored.getMobileCode();
@@ -65,6 +68,30 @@ final class HthProfileApproverNotification {
             LOG.log(Level.WARNING, "HTH_851 stage=APPROVER_RESOLUTION exception={0}", e.getClass().getSimpleName());
         }
         return result;
+    }
+
+    static void loadStoredChannel(SessionContext context, UserExtensionData stored)
+            throws com.ofss.digx.infra.exceptions.Exception {
+        if (stored == null || !"OBDX_BU".equals(context.getTargetUnit())) return;
+        // userChannelType is transient. read(key) does not perform listUsers' HTH enrichment.
+        // Resolve from persisted ownership, never from the client-supplied channel or an ORM cache.
+        try {
+            if (text(stored.getCdcNo()).isEmpty() || text(stored.getUserID()).isEmpty())
+                throw new IllegalStateException("Stored profile owner missing");
+            IHthUserProfileAdapter adapter = (IHthUserProfileAdapter) RepositoryAdapterFactory
+                    .getInstance().getRepositoryAdapter(
+                            IHthUserProfileAdapter.HTH_USER_PROFILE_LOCAL_REPOSITORY_ADAPTER);
+            Map<String, String> profiles = adapter.listCloseIdsByUserKey(stored.getCdcNo());
+            if (profiles == null) throw new IllegalStateException("HTH profile lookup returned no result");
+            boolean hth = profiles.containsKey(IHthUserProfileAdapter.userProfileKey(
+                    stored.getCdcNo(), stored.getUserID()));
+            stored.setUserChannelType(hth ? "HTH" : "BCO");
+            LOG.log(Level.INFO, "HTH_851 stage=CHANNEL_RESOLUTION source=HTH_USER_PROFILE hth={0}", hth);
+        } catch (com.ofss.digx.infra.exceptions.Exception | RuntimeException e) {
+            LOG.log(Level.WARNING, "HTH_851 stage=CHANNEL_RESOLUTION exception={0}", e.getClass().getSimpleName());
+            // Do not silently execute the BCO PIN notification branch after a failed lookup.
+            throw e;
+        }
     }
 
     static boolean profileUpdateSucceeded(com.ofss.fc.service.response.TransactionStatus status,

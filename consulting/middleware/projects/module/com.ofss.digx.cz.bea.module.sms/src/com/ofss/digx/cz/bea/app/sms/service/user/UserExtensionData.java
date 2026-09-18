@@ -629,6 +629,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			key.setUserExtensionKey(requestDTO.getUserExtensionKey());
 			domain.setUserExtensionDataKey(key);
 			domain = domain.read(key);
+            HthProfileApproverNotification.loadStoredChannel(sessionContext, domain);
             audit.channel(domain == null ? null : domain.getUserChannelType(), requestDTO.getUserChannelType());
             if (domain != null) {
                 audit.put("targetUserId", HthOnboardingAudit.fullUser(domain.getUserID(), domain.getCdcNo()))

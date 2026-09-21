@@ -67,7 +67,7 @@ define([
 
             if (typeof object === "object") {
                 for (property in object) {
-                    if (object[property] !== undefined && object[property] !== null) {
+                    if (object[property]) {
                         const wrapper = {
                             attr: {
                                 id: rootParams.baseModel.incrementIdCount(),

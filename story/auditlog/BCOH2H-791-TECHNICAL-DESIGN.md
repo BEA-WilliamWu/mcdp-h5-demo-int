@@ -61,7 +61,7 @@
 - 核对三个 HTH User Access Task 的环境配置。当前 CM 页面会过滤 `ADMINISTRATION` 类型，而 Java 中三个 HUA Task 声明了此类型；实际返回类型还取决于环境 Task 配置，因此截图不足以判定它们缺失的原因。
 - 若服务已返回这些 Task、但页面把它们过滤，只对这三个 CM HTH Task 补充显示条件；不全量开放 `ADMINISTRATION`，不为显示菜单修改审批 Task 分类。若服务未返回，先补缺失的 HTH audit/resource 配置。
 - 当前公共详情组件残留旧版 `HTH_ONBOARDING_791` 摘要和独立 CSV 代码，还强制依赖仓库中已不存在的 `extensions/resources/nls/hth-audit.js`。本版清理这段不完整扩展，复用 BCO 原 JSON 详情，安全摘要放入其可显示的 REST 明细。
-- 查询结果 JS 已有 `openJSON`，但当前扩展 HTML 未见点击绑定。实施时核对实际加载组件，补接已有详情查看方法及原权限校验，不另建详情页面。此处属于公共页面变化，需同时回归 BCO。
+- 2026-09-21 按用户要求保持 BCO 原界面：撤回扩展 HTML 的 Event 超链接，恢复原 `<span>` 普通文字。保留已有 `openJSON` 和详情接口，但当前列表不再通过 Event 打开详情，HTH 记录也相同。HTH 创建/修改用户共用 BCO Activity，不能仅凭 Activity 名称安全区分；本次不增加列表逐条详情请求或后端字段。
 - 导出按现有 BCO 报表字段及入口处理 HTH 记录，不新增 HTH 独立 CSV。仓库中的标准 XSL 是摘要报表，不能据此声称已支持账户/服务逐项明细导出；UAT 要验证实际使用的标准导出入口。如需要新增逐项明细导出，应另行确认范围。
 
 ## 4. 预计修改范围、BCO 影响
@@ -128,3 +128,13 @@
 4. 按第 5 节做真实 CM 操作，并核对 JMS 落库、CM 查询/详情、标准导出、跨公司权限和 BCO 回归。这些依赖 WebLogic/Oracle/UAT，本地尚未执行；Oracle 修补脚本也尚未在数据库执行。
 
 没有修改 batch、异步消费者、通知公共包、审计查询 Repository、表结构或跨公司权限。历史审计未清理，标准导出仍为 BCO 原摘要字段。
+
+## 2026-09-21 UI 范围调整
+
+撤回 791 新增的公共 Event 点击入口，保持 BCO 原展示。审计记录、HTH Task 筛选及后端详情保留；从列表点击查看 HTH 明细暂不提供，不能再将该入口列为已完成。后续若需要仅向 HTH 显示入口，应先提供可靠的逐条 HTH 标识并另行确认。前端回归验证 Event 为纯文字且没有 openJSON 点击绑定，保留对既有详情处理方法的测试。
+
+### 进一步收窄公共详情页改动
+
+按“尽量不改 BCO 原内容”的要求，`components/audit/audit-log-results/audit-log-results.js` 与 `.html` 已恢复为首次 story 实施前的 `19e464f6` 版本，字节一致。此前大段删除来自旧 HTH 摘要/CSV 扩展，而非原 BCO 逻辑；不恢复这些扩展及其缺失的 hth-audit NLS 依赖。撤回 false/0 显示增强，原详情页继续不显示这些假值，这是保留原行为的已知限制，不影响后台保存。
+
+当前保留的 791 前端功能差异仅为扩展 `audit-log.js` 中三个 HTH User Access Task 的 CM 筛选例外。其他 BCO Task 的筛选和 BM 分支保持原条件；CM Activity 列表会增加这三个 HTH 选项，但服务端权限不由此授予。列表 Event 恢复普通文字，公共详情页无相对原 BCO 基线的改动。

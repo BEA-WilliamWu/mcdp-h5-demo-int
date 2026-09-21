@@ -25,9 +25,9 @@ function render(request, response) {
 }
 const changes = Array.from({length: 1000}, (_, i) => ({change: i % 2 ? "ADD" : "REMOVE", maskedAccountNumber: "****1234", apiMasterId: "API" + i})),
     hth = render({hthOnboarding: {operation: "ACCESS_EDIT", businessOutcome: "SUCCESS", idempotentReplay: false, accessChanges: changes}}, {attemptCount: 0});
-assert(JSON.stringify(hth.requestData.data).includes('"value":false'));
+assert(!JSON.stringify(hth.requestData.data).includes('"value":false'), 'Retain BCO falsy-value display behavior');
 assert(JSON.stringify(hth.requestData.data).includes('"value":"API999"'));
-assert(JSON.stringify(hth.responseData.data).includes('"value":0'));
+assert(!JSON.stringify(hth.responseData.data).includes('"value":0'), 'Retain BCO zero-value display behavior');
 const bco = render({bcoField: "retained", account: {displayValue: "****1234"}}, {result: "SUCCESSFUL"});
 assert(JSON.stringify(bco.requestData.data).includes('"value":"retained"'));
 assert(JSON.stringify(bco.responseData.data).includes('"value":"SUCCESSFUL"'));
@@ -60,9 +60,11 @@ assert.deepStrictEqual(filter(true, ["Administrator"]), activities.filter(item =
 assert.deepStrictEqual(filter(false, ["administrator"]), []);
 assert.deepStrictEqual(filter(true, ["corporateuser"]), []);
 
-// The link uses the existing detail API rather than the list payload; navigation keeps filters.
+// The existing (unbound) detail handler still uses the detail API and keeps filters.
 const resultHtml = read("extensions/components/audit/audit-log-search-results/audit-log-search-results.html");
-assert(resultHtml.includes("click:$component.openJSON") || resultHtml.includes("click: $component.openJSON"));
+// Preserve the original BCO Event cell; the existing detail handler remains available.
+assert(resultHtml.includes('<span data-bind="text:activity"></span>'));
+assert(!/click:\s*\$component\.openJSON/.test(resultHtml));
 const openStart = resultsSource.indexOf("self.openJSON = function (data)"),
     openEnd = resultsSource.indexOf("self.paginationDataSource", openStart),
     self = {};
@@ -75,4 +77,4 @@ self.openJSON({id: "AUDIT-791"});
 assert.strictEqual(requestedId, "AUDIT-791");
 assert.strictEqual(lastNavigation[0], "audit-log-results");
 assert.strictEqual(lastNavigation[1].dataToPass.selectedActivity, "UAT_N_HUA_EDT");
-console.log("PASS: production BCO JSON detail/back navigation; false/zero and 1000 HTH changes; CM HUA-only exception, existing BM filter, detail API link");
+console.log("PASS: production BCO JSON detail/back navigation; legacy falsy-value handling and 1000 HTH changes; CM HUA-only exception, existing BM filter, plain Event cell");

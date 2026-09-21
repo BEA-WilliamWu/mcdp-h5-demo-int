@@ -146,8 +146,16 @@
 - 改动限于已有 HTH 审计 helper：在 `finish`（审计数据送入异步队列前）检查原 Task 是 Generate，且 SERVICE 明细包含 generate 服务产生的 `HTH_ONBOARDING_791` 摘要、schemaVersion=1、operation=REGENERATE 和非空 previousCodeId，才替换审计 DTO 的 Task Code。
 - 服务端现有逻辑按是否已有该用户的 Code 记录区分首次/再次生成；与 SETUP/RESET 用途无关。状态仍独立记录成功/失败；在识别旧 Code 前失败的请求保留 Generate，不猜测是重新生成。
 - 不改变线程 CURRENT_TASK、Generate 业务接口、资源映射、审批、授权、通知及普通 BCO 记录；仅修改持久化审计副本的分类。HTH 创建/修改用户仍是原 BCO Activity。
-- SQL `3_HTH_Audit_Regenerate.sql` 复制现有 Generate 的 Task 元数据，设新 ID/名称，并仅配置 audit aspect；不添加服务、菜单或权限映射。源 Task 和历史日志不改。重复执行更新同一条定义；部署前确认没有将此新 ID 映射为业务服务。
-- 先执行新增 SQL，再部署包含 `HthOnboardingAudit` 的 common 模块；沿用已安装的 `CZAsyncAuditHandler.finish` 调用点。资源 Task 缓存如未刷新，应按环境既有刷新/重启流程处理。
+- SQL `1_HTH_Audit_Config.sql`（已合并的最终脚本） 复制现有 Generate 的 Task 元数据，设新 ID/名称，并仅配置 audit aspect；不添加服务、菜单或权限映射。源 Task 和历史日志不改。重复执行更新同一条定义；部署前确认没有将此新 ID 映射为业务服务。
+- 先执行合并后的最终 SQL，再部署包含 `HthOnboardingAudit` 的 common 模块；沿用已安装的 `CZAsyncAuditHandler.finish` 调用点。资源 Task 缓存如未刷新，应按环境既有刷新/重启流程处理。
 - 原查询列表按新 Task 配置显示名称，筛选参数使用新 ID；既有报表是否包含新名称须 UAT 验证。历史 Generate 日志不自动重分类。
 
 本地验证：真实审计 DTO 的 Generate/Re-Generate、成功/失败、重复处理、JMS 序列化；客户端 REST 伪造 operation 不能改变分类；没有 previousCodeId 不分类；共享用户修改 Task 保持；原 UI 无需生产改动即可通过 MAINTENANCE 类型筛选。SQL 尚未在 Oracle 执行，真实 Task 下拉框/缓存、审计落库及导出须 UAT 验收。
+
+## 最终 SQL 执行方式
+
+只需执行 `1_HTH_Audit_Config.sql`，它已合并原 1 和 3 的操作；独立的 3 文件移除，避免重复交付。无论之前执行过旧 1、旧 3、两者或均未执行，均使用这份最终脚本（前置七个业务 Task 必须已存在）。`2_HTH_Audit_Verify.sql` 仍为只读核对。
+
+重复执行时不会重复插入，也不会更新已正确的 audit 标记或 Re-Generate 名称/时间。每个前置 Task 单独校验，冲突映射、重复配置会报错并回滚本次全部操作；不自动删除环境异常数据。使用三个配置表的短期 NOWAIT DML 锁，避免并发插入及 MAX(ID)+1 冲突，遇到忙表立即失败，待其他事务完成再执行。请在没有其他未提交修改的独立会话中整块执行，成功只有一次 COMMIT。
+
+不改历史审计、原 BCO Task、审批/权限、通知或菜单。脚本未经真实 Oracle 环境执行，不能把静态检查等同于 UAT 验证。

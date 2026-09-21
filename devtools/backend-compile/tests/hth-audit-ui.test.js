@@ -41,6 +41,7 @@ const start = searchSource.indexOf("AuditLogModel.fetchActivities().done("),
     activities = [
         {id: "MT_N_CUS", type: "NONFINANCIAL_TRANSACTION"},
         {id: "UAT_N_HAP_GEN", type: "MAINTENANCE"},
+        {id: "UAT_N_HAP_REGEN", type: "MAINTENANCE"},
         ...["UAT_N_HUA_NEW", "UAT_N_HUA_EDT", "UAT_N_HUA_DEL", "BM_ONLY"].map(id => ({id, type: "ADMINISTRATION"})),
         {id: "NO_TYPE"}
     ];
@@ -55,7 +56,7 @@ function filter(isBM, roles) {
     assert(loaded);
     return list.map(item => item.id);
 }
-assert.deepStrictEqual(filter(false, ["corporateuser"]), ["MT_N_CUS", "UAT_N_HAP_GEN", "UAT_N_HUA_NEW", "UAT_N_HUA_EDT", "UAT_N_HUA_DEL"]);
+assert.deepStrictEqual(filter(false, ["corporateuser"]), ["MT_N_CUS", "UAT_N_HAP_GEN", "UAT_N_HAP_REGEN", "UAT_N_HUA_NEW", "UAT_N_HUA_EDT", "UAT_N_HUA_DEL"]);
 assert.deepStrictEqual(filter(true, ["Administrator"]), activities.filter(item => item.type).map(item => item.id));
 assert.deepStrictEqual(filter(false, ["administrator"]), []);
 assert.deepStrictEqual(filter(true, ["corporateuser"]), []);

@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[3]
 projects=root/'consulting/middleware/projects'
 cp=os.pathsep.join([str(root/'devtools/backend-compile/build/classes/java/main')]+[str(p) for p in (root/'consulting/middleware/lib').rglob('*.jar')])
 files=[]
-for name in ('HthOnboardingAudit.java','HthUserAccessAudit.java','HthUserAccessNotification.java','HostToHostUserAccess.java','HostToHostApiPassword.java','CZAsyncAuditHandler.java'):
+for name in ('HthOnboardingAudit.java','HthUserAccessAudit.java','HthUserAccessNotification.java','HostToHostUserAccess.java','HostToHostApiPassword.java','CZAsyncAuditHandler.java','CZUserExtensionDataExt.java'):
     files.extend(projects.rglob(name))
 files += [p for p in projects.rglob('UserExtensionData.java') if '/app/sms/service/user/' in str(p)]
 files += list(projects.rglob('HthApiCredentialWriteException.java')) + list(projects.rglob('IHthApiPassword*.java')) + list(projects.rglob('LocalHthApiPassword*.java'))

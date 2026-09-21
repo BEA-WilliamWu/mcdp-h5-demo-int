@@ -24,7 +24,7 @@
 | 创建 HTH 用户 | `UserExtensionData.create` 已有 `MT_N_CUS` 审计；请求 DTO 已有 `userChannelType` | 沿用 BCO 创建用户 Activity；确保详情有目标用户、公司、HTH Channel，以及操作人、时间、动作和结果，不重复新增一条 HTH 创建记录 |
 | 修改 HTH 用户 | `UserExtensionData.update` 已有 `MT_N_UUS` 审计 | 沿用 BCO 修改用户 Activity；补充 HTH 相关修改的目标用户及修改前后 Channel。识别被修改用户，不能按当前管理员自己的 Channel 判断 |
 | 创建用户时生成 Code | 已有 Generate Task；生成后先是 `PENDING`，原用户维护审批完成才激活 | 复用 Generate 记录，补充目标用户、公司、Code ID、用途、生成动作及状态；生成成功不表示用户已批准或 Code 已可用 |
-| 编辑用户时重新生成 Code | 仍调用同一个 Generate 接口；已有替换旧 Code 的业务逻辑 | 在同一 Activity 的详情中区分 `GENERATE` / `REGENERATE`，保留新旧 Code ID，不记录 Code 内容；不额外建立 Re-Generate Task |
+| 编辑用户时重新生成 Code | 仍调用同一个 Generate 接口；已有替换旧 Code 的业务逻辑 | 列表单独显示 Re-Generate：服务端确认存在旧 Code 后，仅将审计 DTO 的 Task Code 改为 `UAT_N_HAP_REGEN`；业务调用及审批仍使用 Generate。保留新旧 Code ID，不记录 Code 内容 |
 | API Accounts & Services Access 新增、删除、修改 | 已有 `UAT_N_HUA_NEW / EDT / DEL` 三个 Task，Java 声明了审计；SQL 复制对应 BCO 权限 Task 的配置 | 复用三个 Task；补充目标用户、关联公司、账户及 API Service 的实际新增/移除变化，不能只记录“调用了 Edit” |
 | API Password 首次设置、重设 | Setup / Reset 已有审计 Task；现有请求是加密输入 | 保留两项 Activity；明确记录目标用户、操作、时间、业务结果及安全的错误码，不保存密码、Code 或传输凭证 |
 | 原 Audit Log 查询、展示、导出 | 已有查询接口、Task 名称转换、列表及详情代码 | 沿用原日期、Activity、User ID、公司、动作、结果等条件及权限；补齐 HTH 记录的可查、可看、可导出验证 |
@@ -82,7 +82,7 @@
 ## 5. 验收重点
 
 1. 创建/修改 HTH 用户：原 Activity 可查；操作人、目标用户、公司、Channel、时间和结果正确；普通 BCO 创建/修改记录保持原行为。
-2. 首次生成、重新生成 Code：同一 Generate Activity 能在详情中区分；审批前为 Pending，批准后能通过 Code ID/交易记录关联，取消/拒绝不显示为已生效。
+2. 首次生成、重新生成 Code：分别在列表显示 Generate / Re-Generate；审批前为 Pending，批准后能通过 Code ID/交易记录关联，取消/拒绝不显示为已生效。
 3. 权限新增、Edit 中增删服务、整笔 Delete：记录正确的账户/服务变化；Maker 提交、中间审批和最终落地不混淆。
 4. Setup / Reset 成功与失败：至少覆盖正确 Code、错误 Code、过期 Code、解密失败，以及相同 requestId 重试；结果与真实业务一致。
 5. Generate / Reveal 的浏览器仍能按原权限查看 Code；审计明细、应用日志及导出均不能出现测试密码或 Code。覆盖嵌套响应、异常路径及审计处理失败。
@@ -138,3 +138,16 @@
 按“尽量不改 BCO 原内容”的要求，`components/audit/audit-log-results/audit-log-results.js` 与 `.html` 已恢复为首次 story 实施前的 `19e464f6` 版本，字节一致。此前大段删除来自旧 HTH 摘要/CSV 扩展，而非原 BCO 逻辑；不恢复这些扩展及其缺失的 hth-audit NLS 依赖。撤回 false/0 显示增强，原详情页继续不显示这些假值，这是保留原行为的已知限制，不影响后台保存。
 
 当前保留的 791 前端功能差异仅为扩展 `audit-log.js` 中三个 HTH User Access Task 的 CM 筛选例外。其他 BCO Task 的筛选和 BM 分支保持原条件；CM Activity 列表会增加这三个 HTH 选项，但服务端权限不由此授予。列表 Event 恢复普通文字，公共详情页无相对原 BCO 基线的改动。
+
+## 2026-09-21 列表区分 Generate / Re-Generate
+
+不恢复详情入口，不修改生产 JS/HTML。列表根据 Task Code 显示名称，因此新增仅用于审计展示和筛选的 `UAT_N_HAP_REGEN`（HTH API Password Code - Re-Generate）。`UAT_N_HAP_GEN` 及其名称不变。
+
+- 改动限于已有 HTH 审计 helper：在 `finish`（审计数据送入异步队列前）检查原 Task 是 Generate，且 SERVICE 明细包含 generate 服务产生的 `HTH_ONBOARDING_791` 摘要、schemaVersion=1、operation=REGENERATE 和非空 previousCodeId，才替换审计 DTO 的 Task Code。
+- 服务端现有逻辑按是否已有该用户的 Code 记录区分首次/再次生成；与 SETUP/RESET 用途无关。状态仍独立记录成功/失败；在识别旧 Code 前失败的请求保留 Generate，不猜测是重新生成。
+- 不改变线程 CURRENT_TASK、Generate 业务接口、资源映射、审批、授权、通知及普通 BCO 记录；仅修改持久化审计副本的分类。HTH 创建/修改用户仍是原 BCO Activity。
+- SQL `3_HTH_Audit_Regenerate.sql` 复制现有 Generate 的 Task 元数据，设新 ID/名称，并仅配置 audit aspect；不添加服务、菜单或权限映射。源 Task 和历史日志不改。重复执行更新同一条定义；部署前确认没有将此新 ID 映射为业务服务。
+- 先执行新增 SQL，再部署包含 `HthOnboardingAudit` 的 common 模块；沿用已安装的 `CZAsyncAuditHandler.finish` 调用点。资源 Task 缓存如未刷新，应按环境既有刷新/重启流程处理。
+- 原查询列表按新 Task 配置显示名称，筛选参数使用新 ID；既有报表是否包含新名称须 UAT 验证。历史 Generate 日志不自动重分类。
+
+本地验证：真实审计 DTO 的 Generate/Re-Generate、成功/失败、重复处理、JMS 序列化；客户端 REST 伪造 operation 不能改变分类；没有 previousCodeId 不分类；共享用户修改 Task 保持；原 UI 无需生产改动即可通过 MAINTENANCE 类型筛选。SQL 尚未在 Oracle 执行，真实 Task 下拉框/缓存、审计落库及导出须 UAT 验收。

@@ -15,7 +15,7 @@ public final class HthOnboardingAudit {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(HthOnboardingAudit.class.getName());
     private static final Set<String> TASKS = new HashSet<String>(Arrays.asList(
-        "UAT_N_HAP_GEN", "UAT_N_HAP_RVL", "CM_N_HAP_SETUP", "CM_N_HAP_RESET",
+        "UAT_N_HAP_GEN", "UAT_N_HAP_REGEN", "UAT_N_HAP_RVL", "CM_N_HAP_SETUP", "CM_N_HAP_RESET",
         "UAT_N_HUA_NEW", "UAT_N_HUA_EDT", "UAT_N_HUA_DEL"));
     private static final Set<String> FIELDS = new HashSet<String>(Arrays.asList(
         "schemaVersion", "operation", "actorUserId", "targetUserId", "partyId", "targetUnit",
@@ -263,6 +263,8 @@ public final class HthOnboardingAudit {
     }
     /** Drop credentials from the JMS copy, preserving the context required by the stock listener. */
     public static void finish(AuditDTO dto) {
+        // Only change the completed audit DTO, never CURRENT_TASK or the business resource mapping.
+        classifyCodeGeneration(dto);
         project(dto);
         dto.setSessionID(null);
         Map<String,Object> context=new HashMap<String,Object>();
@@ -304,6 +306,29 @@ public final class HthOnboardingAudit {
             }
         }
     }
+    private static void classifyCodeGeneration(AuditDTO dto) {
+        if (dto == null || !"UAT_N_HAP_GEN".equals(dto.getTaskCode())
+                || dto.getAuditDetailsDTOList() == null) return;
+        for (AuditDetailsDTO detail : dto.getAuditDetailsDTOList()) {
+            // Trust only the service-created summary, not an operation supplied in the REST body.
+            if (detail == null || detail.getAuditType() != Type.SERVICE
+                    || !MARKER.equals(detail.getOperationName())
+                    || !("HostToHostApiPassword.generate".equals(detail.getServiceName())
+                        || "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.generate"
+                            .equals(detail.getServiceName()))) continue;
+            Object value = object(detail.getRequest()).get("hthOnboarding");
+            if (!(value instanceof Map)) continue;
+            Map<String,Object> summary = cast(value);
+            if ("1".equals(summary.get("schemaVersion"))
+                    && "REGENERATE".equals(summary.get("operation"))
+                    && summary.get("previousCodeId") instanceof String
+                    && !((String) summary.get("previousCodeId")).trim().isEmpty()) {
+                dto.setTaskCode("UAT_N_HAP_REGEN");
+                return;
+            }
+        }
+    }
+
     public static void clearRequestStack() {
         com.ofss.digx.infra.thread.ThreadAttribute.clear(com.ofss.digx.infra.thread.ThreadAttribute.AUDIT_DETAILS_STACK);
     }

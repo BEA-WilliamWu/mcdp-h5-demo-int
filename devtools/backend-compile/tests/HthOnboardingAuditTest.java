@@ -24,7 +24,43 @@ public final class HthOnboardingAuditTest {
     @SuppressWarnings("unchecked") static Stack<AuditDetailsDTO> stack() {
         return (Stack<AuditDetailsDTO>)com.ofss.digx.infra.thread.ThreadAttribute.get(com.ofss.digx.infra.thread.ThreadAttribute.AUDIT_DETAILS_STACK);
     }
+    static void generationActivityTests() throws java.lang.Exception {
+        for (String operation : Arrays.asList("GENERATE", "REGENERATE")) {
+            for (Status outcome : Arrays.asList(Status.SUCCESS, Status.FAILURE)) {
+                AuditDTO audit=dto(Type.REST,map("operation","REGENERATE"),null);
+                audit.setTaskCode("UAT_N_HAP_GEN"); audit.setStatus(outcome);
+                AuditDetailsDTO summary=new AuditDetailsDTO(); summary.setAuditType(Type.SERVICE);
+                summary.setServiceName("com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.generate");
+                summary.setOperationName(HthOnboardingAudit.MARKER);
+                summary.setRequest(map("hthOnboarding",map("schemaVersion","1","operation",operation,"previousCodeId","OLD-ROW")));
+                audit.getAuditDetailsDTOList().add(summary);
+                HthOnboardingAudit.prepare(audit);
+                HthOnboardingAudit.finish(audit);
+                String expected="REGENERATE".equals(operation)?"UAT_N_HAP_REGEN":"UAT_N_HAP_GEN";
+                check(expected.equals(audit.getTaskCode()),"Separate generation activity independently of success/failure");
+                ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+                new ObjectOutputStream(bytes).writeObject(audit);
+                AuditDTO restored=(AuditDTO)new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray())).readObject();
+                check(expected.equals(restored.getTaskCode()),"Audit task survives JMS serialization");
+                HthOnboardingAudit.finish(audit);
+                check(expected.equals(audit.getTaskCode()),"Classification is idempotent");
+                audit.setTaskCode("MT_N_UUS"); HthOnboardingAudit.finish(audit);
+                check("MT_N_UUS".equals(audit.getTaskCode()),"Never reclassify shared user-edit activity");
+            }
+        }
+        AuditDTO forged=dto(Type.REST,map("hthOnboarding",map("schemaVersion","1","operation","REGENERATE","previousCodeId","FAKE")),null);
+        forged.setTaskCode("UAT_N_HAP_GEN"); HthOnboardingAudit.finish(forged);
+        check("UAT_N_HAP_GEN".equals(forged.getTaskCode()),"REST input cannot select regeneration activity");
+        AuditDTO noEvidence=dto(Type.SERVICE,map("hthOnboarding",map("schemaVersion","1","operation","REGENERATE")),null);
+        noEvidence.setTaskCode("UAT_N_HAP_GEN");
+        noEvidence.getAuditDetailsDTOList().get(0).setOperationName(HthOnboardingAudit.MARKER);
+        noEvidence.getAuditDetailsDTOList().get(0).setServiceName("HostToHostApiPassword.generate");
+        HthOnboardingAudit.finish(noEvidence);
+        check("UAT_N_HAP_GEN".equals(noEvidence.getTaskCode()),"No previous-code evidence retains Generate");
+        System.out.println("PASS: Generate/Re-Generate audit task separation, JMS roundtrip, failure records, spoof rejection and shared activity isolation");
+    }
     public static void main(String[] args) throws java.lang.Exception {
+        generationActivityTests();
         SessionContext context=new SessionContext(); context.setUserId("MAKER@PARTY"); context.setTargetUnit("OBDX_BU");
         String secret="SYNTHETIC-SECRET-791";
         try (HthOnboardingAudit.Entry scope=HthOnboardingAudit.begin(context,"HostToHostApiPassword.setup","SETUP")) {

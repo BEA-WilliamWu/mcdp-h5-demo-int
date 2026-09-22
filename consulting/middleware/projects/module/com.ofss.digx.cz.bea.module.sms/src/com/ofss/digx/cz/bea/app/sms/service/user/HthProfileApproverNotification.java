@@ -96,8 +96,10 @@ final class HthProfileApproverNotification {
 
     static boolean profileUpdateSucceeded(com.ofss.fc.service.response.TransactionStatus status,
             Boolean hthPinResetChanged) {
-        // Keep ordinary BCO's existing decision; HTH must also accept SDK success code "0".
-        if (hthPinResetChanged == null) return status != null && status.getErrorCode() == null;
+        // BCO profile updates also return SDK success code "0".
+        if (hthPinResetChanged == null) {
+            return status != null && (status.getErrorCode() == null || "0".equals(status.getErrorCode()));
+        }
         boolean success = status != null && status.getReplyCode() == 0
                 && (status.getErrorCode() == null || "0".equals(status.getErrorCode()))
                 && (status.getValidationErrors() == null || status.getValidationErrors().length == 0);

@@ -172,7 +172,7 @@ public final class Hth851ApproverTest {
         TransactionStatus status = new TransactionStatus();
         status.setReplyCode(0);status.setErrorCode("0");
         check(HthProfileApproverNotification.profileUpdateSucceeded(status, false), "UAT reply=0/error=0 is HTH success");
-        check(!HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO error=0 legacy decision unchanged");
+        check(HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO error=0 is success");
         status.setErrorCode(null);
         check(HthProfileApproverNotification.profileUpdateSucceeded(status, false), "null error remains success");
         check(HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO null error legacy decision unchanged");
@@ -180,8 +180,10 @@ public final class Hth851ApproverTest {
         check(!HthProfileApproverNotification.profileUpdateSucceeded(status, false), "nonzero reply cannot send success alert");
         status.setReplyCode(0);status.setErrorCode("FAILURE");
         check(!HthProfileApproverNotification.profileUpdateSucceeded(status, false), "business error cannot send success alert");
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(status, null), "BCO business error cannot send success alert");
+        check(!HthProfileApproverNotification.profileUpdateSucceeded(null, null), "BCO null status cannot send success alert");
         check(!HthProfileApproverNotification.profileUpdateSucceeded(null, false), "null status cannot send success alert");
-        System.out.println("PASS: UAT zero error code accepted for HTH; failure gates and BCO legacy behavior retained");
+        System.out.println("PASS: null and zero error codes accepted for BCO and HTH; failure gates retained");
     }
     public static void main(String[] args)throws Exception{
         profileStatusTests();

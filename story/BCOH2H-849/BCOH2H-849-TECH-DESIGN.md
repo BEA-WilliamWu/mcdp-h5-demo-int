@@ -1,6 +1,6 @@
 # BCOH2H-849 — HTH CM / BM MTB 数据保存技术设计
 
-> 2026-09-23 实现补充：采用 HTH 专用 common/mtb 包供现有 HTH 快照、审批和业务模块共用，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
+> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/mtb 只保留接口和简单 DTO。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
 
 日期：2026-09-23。实施设计基线；本次只出设计，尚未修改生产代码、执行 SQL 或完成 UAT 验证。
 

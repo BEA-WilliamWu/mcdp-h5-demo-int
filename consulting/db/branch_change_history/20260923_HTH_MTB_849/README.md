@@ -4,14 +4,18 @@
 
 HTH 独立同步采集，写 `HTH_BEA.HTH_MTB_EVENT_DETAILS`。不写原 BCO CRM 表，不修改 batch、前端、通知模板或 CRMAsserter。普通 BCO 的原 CRM 记录继续原流程。
 
-新代码位于 `common/mtb` 专用包，原因是现有 HTH 用户快照位于 common，SMS、审批和 HTH 模块都需使用，不能让 common 反向依赖 HTH 模块。这里没有改变通用配置类或通用持久化类。
+实现位于 hosttohost 模块的 `com.ofss.digx.cz.bea.app.hosttohost.mtb`：Collector、Assembler、Event、Scope、Writer、Repository、LocalAdapter，以及跨模块 Adapter 实现与 Factory。common 的 `common/mtb` 仅保留 `IHthMtbAdapter` 接口和 `HthMtbSnapshot` 数据对象，不含事务、配置读取或数据库实现。
+
+SMS 的 `HthUserMtbScope` 只负责收集调用结果及 HTH 渠道门控，再通过现有 AdapterFactoryConfigurator 调用 HTH 实现；审批 helper 同样走 Adapter。两者不直接依赖 HTH MTB 实现类。普通 BCO 在查找 Adapter 前返回。
 
 既有生产文件仅增加以下采集调用：
 
-- `HthOnboardingAudit.Entry.close`：HTH scope 已启用时，将已有白名单数据交给独立 MTB sink；不等待审计消息消费，不改变审计 DTO 内容。普通 BCO scope 原来就直接返回。
+- `HthOnboardingAudit.Entry.close`：移除上版新增的 MTB 调用，恢复审计独立性。
+- `UserExtensionData.create/update`：独立 SMS scope 捕获操作结果，支持从数据库补充 HTH 渠道；不依赖 audit 是否启用。
+- `HostToHostUserAccess`：独立 MTB scope 捕获授权提交/生效结果；既有 audit 调用保留。
 - 审批 `Transaction`：两个单笔/worker 执行路径在最终事务更新 commit 后调用 HthMtbApproval。该 helper 对普通 BCO snapshot 在读配置/访问数据库前返回；不修改审批结果或状态。
 - `HostToHostManagement`：专用 MTB scope 记录 Enable/Edit/Disable；不增加公司 Audit Log 事件。
-- `HostToHostApiPassword`：Code 实际激活成功时采集 APPLY；Setup/Reset/生成操作由已有 HTH scope 采集。
+- `HostToHostApiPassword`：Code 实际激活成功时采集 APPLY；Setup/Reset/生成操作由独立 MTB scope 采集。
 
 分层为 Collector / Assembler / immutable Event / Repository / LocalAdapter。持久化使用现有 ORM Session 的参数化 SQL，参考 HTH Password repository 的方式；没有额外注册 Entity ORM，也不修改共享 persistence 映射。此为最终实现对设计中拟新增 ORM Entity 的收敛。
 
@@ -31,10 +35,10 @@ BCO 授权对照依据：`account-transactions-mapping.js` 中 USER 用 UAT_N_CA
 
 ## 部署顺序
 
-1. 打包部署新增 `common/mtb`、更新的 common audit、HTH module 和 approval module，不能仅复制旧文件漏掉新类。
-2. 使用有权限的账号运行 `1_HTH_MTB_849.sql`。首次创建表及索引；已存在时验证结构；配置只在不存在时插入。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
+1. 同批打包部署 common（仅接口/DTO及移除旧审计回调）、SMS、HTH module 和 approval module。重新打包时清理旧 common/mtb 实现 class，避免残留。
+2. 使用有权限的账号运行 `1_HTH_MTB_849.sql`。首次创建表及索引；已存在时验证结构；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
 3. 确认 NONXA datasource 对 HTH_BEA 新表拥有 SELECT/INSERT 权限；脚本不假设环境的实际 datasource 用户，不授予 PUBLIC。
-4. 保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
+4. 注册 SQL 与新包就绪后重启应用：AdapterFactoryConfigurator 在初始化时缓存 Factory，新注册不能假设热更新生效。保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
 5. 运行 `2_HTH_MTB_849_verify.sql`，按时间和业务引用对照数据。回退只需关闭开关，保留表和记录。
 
 ## 事务边界及明确限制
@@ -54,6 +58,6 @@ JAVA_HOME=<JDK21> H2_JAR=<local-h2.jar> python3 devtools/backend-compile/tests/v
 JAVA_HOME=<JDK21> python3 devtools/backend-compile/tests/verify_hth_audit_runtime.py
 ```
 
-已跑：Java 8 定向编译；49 项映射/事务/SQL参数行为检查；真实 H2 插入、去重约束、独立提交/回滚、表不存在时业务仍能提交；原 791 回归；普通 BCO 审批不读 HTH 配置的测试。
+已跑：Java 8 定向编译；49 项映射/事务/SQL参数行为检查；真实 H2 插入、去重约束、独立提交/回滚、表不存在时业务仍能提交；原 791 回归；普通 BCO 审批不读 HTH 配置的测试；新增 Adapter 边界、数据库渠道补充、审计独立性和 Adapter 异常隔离测试；密码 setup/reset 的既有 EclipseLink/H2 事务回归。
 
-H2 测试用代理适配 Session 到 JDBC，Oracle 时间表达式改成 CURRENT_TIMESTAMP；不等同于真实 Oracle/WebLogic。尚未跑真实 UAT CM/BM 操作、Oracle 重跑脚本和性能测试。开关启用前至少验证：公司启停/编辑、用户创建/修改、Related/Associated 授权、Code 生成及审批激活、Setup/Reset、多级审批/拒绝、故意写库失败，以及普通 BCO 回归。
+MTB H2 测试用代理适配 Session 到 JDBC，Oracle 时间表达式改成 CURRENT_TIMESTAMP；Adapter 配置加载使用测试替身，Factory/实现为生产类。密码回归的解密、DSP 和通知为替身。不等同于真实 Oracle/WebLogic 或 DSP 联调。尚未跑真实 UAT CM/BM 操作、Oracle 重跑脚本和性能测试。开关启用前至少验证：公司启停/编辑、用户创建/修改、Related/Associated 授权、Code 生成及审批激活、Setup/Reset、多级审批/拒绝、故意写库失败，以及普通 BCO 回归。

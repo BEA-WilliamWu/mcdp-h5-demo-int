@@ -4,7 +4,6 @@ import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[3];projects=root/'consulting/middleware/projects'
 cp=os.pathsep.join([str(root/'devtools/backend-compile/build/classes/java/main')]+[str(p) for p in (root/'consulting/middleware/lib').rglob('*.jar')])
 sources=[next(projects.rglob('HthOnboardingAudit.java')),next(projects.rglob('HthUserAccessAudit.java')),Path(__file__).with_name('HthOnboardingAuditTest.java'),Path(__file__).with_name('HthUserAccessAuditTest.java')]
-sources += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
 jdk=Path(os.environ['JAVA_HOME'])/'bin'
 with tempfile.TemporaryDirectory(prefix='hth-audit-test-') as work:
     config=Path(work)/'ConfigurationFactory.java'

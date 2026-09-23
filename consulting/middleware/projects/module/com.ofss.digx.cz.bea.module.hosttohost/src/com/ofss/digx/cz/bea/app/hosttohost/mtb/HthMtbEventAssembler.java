@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.common.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.mtb;
 
 import java.util.*;
 import java.time.*;

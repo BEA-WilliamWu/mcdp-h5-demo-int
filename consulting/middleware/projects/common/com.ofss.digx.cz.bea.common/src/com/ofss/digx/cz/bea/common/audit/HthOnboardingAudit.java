@@ -128,7 +128,6 @@ public final class HthOnboardingAudit {
             Map<String,Object> envelope=new LinkedHashMap<String,Object>();
             envelope.put("hthOnboarding", safe(values)); detail.setRequest(envelope);
             stack(true).push(detail);
-            com.ofss.digx.cz.bea.common.mtb.HthMtbCollector.collect(service, values);
         }
     }
     public static Entry begin(SessionContext context, String service, String operation) {

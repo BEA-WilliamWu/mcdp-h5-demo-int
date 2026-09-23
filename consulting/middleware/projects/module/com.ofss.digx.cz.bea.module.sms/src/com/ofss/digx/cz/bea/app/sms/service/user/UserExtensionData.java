@@ -549,9 +549,14 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 	public TransactionStatus update(SessionContext sessionContext, UserExtensionDataDTO requestDTO) throws Exception {
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "UPDATE",
         requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
-        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId())) {
+        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId());
+         HthUserMtbScope mtb = new HthUserMtbScope(sessionContext, "UserExtensionData.update", "UPDATE")
+             .put("targetUserId", requestDTO == null ? null : HthUserMtbScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
+             .put("partyId", requestDTO == null ? null : requestDTO.getCdcNo())
+             .channel(null, requestDTO == null ? null : requestDTO.getUserChannelType())) {
     try {
       audit.result("NO_CHANGE").put("effectiveChange", false);
+      mtb.result("NO_CHANGE").put("effectiveChange", false);
 
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Entered into update() : requestDTO = %s in class %s ",
@@ -631,8 +636,11 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			domain = domain.read(key);
             HthProfileApproverNotification.loadStoredChannel(sessionContext, domain);
             audit.channel(domain == null ? null : domain.getUserChannelType(), requestDTO.getUserChannelType());
+            mtb.channel(domain == null ? null : domain.getUserChannelType(), requestDTO.getUserChannelType());
             if (domain != null) {
                 audit.put("targetUserId", HthOnboardingAudit.fullUser(domain.getUserID(), domain.getCdcNo()))
+                    .put("partyId", domain.getCdcNo());
+                mtb.put("targetUserId", HthUserMtbScope.fullUser(domain.getUserID(), domain.getCdcNo()))
                     .put("partyId", domain.getCdcNo());
             }
             Boolean hthPinResetChanged = HthProfileApproverNotification.loginPinResetChanged(
@@ -963,6 +971,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				
 				domain.update(domain);
                 audit.result("SUCCESS").put("effectiveChange", true);
+                mtb.result("SUCCESS").put("effectiveChange", true);
 				BeaSystemOut.println("##############Executing domain update success end");
 
 				// BCOH2H-787: a regeneration submitted through the original update flow
@@ -1123,11 +1132,13 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 						
 		} catch (Exception e) {
 			audit.failure(e);
+			mtb.failure(e);
 			fillTransactionStatus(transactionStatus, e);
 			logger.log(Level.SEVERE, formatter.formatMessage("Exception from update() for requestDTO '%s' in class %s",
 					requestDTO, THIS_COMPONENT_NAME), e);
 		} catch (RuntimeException rte) {
 			audit.failure(rte);
+			mtb.failure(rte);
 			fillTransactionStatus(transactionStatus, rte);
 			logger.log(Level.SEVERE,
 					formatter.formatMessage("RuntimeException from update() for requestDTO '%s' in class %s",
@@ -1142,9 +1153,11 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 					formatter.formatMessage("Exiting from update() : transactionStatus = %s", transactionStatus));
 		}
     audit.response(transactionStatus);
+    mtb.response(transactionStatus);
 		return transactionStatus;
 	    } catch (java.lang.Exception auditFailure) {
       audit.failure(auditFailure);
+      mtb.failure(auditFailure);
       throw auditFailure;
     }
     }
@@ -1353,9 +1366,14 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			throws Exception {
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "CREATE",
         requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
-        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId())) {
+        requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId());
+         HthUserMtbScope mtb = new HthUserMtbScope(sessionContext, "UserExtensionData.create", "CREATE")
+             .put("targetUserId", requestDTO == null ? null : HthUserMtbScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
+             .put("partyId", requestDTO == null ? null : requestDTO.getCdcNo())
+             .channel(null, requestDTO == null ? null : requestDTO.getUserChannelType())) {
     try {
       audit.result("NO_CHANGE").put("effectiveChange", false);
+      mtb.result("NO_CHANGE").put("effectiveChange", false);
 
 		if (logger.isLoggable(Level.FINE)) {
 			logger.log(Level.FINE, formatter.formatMessage("Entered into create() : requestDTO = %s in class %s ",
@@ -1549,6 +1567,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 					domain.setSecurityQuestionsBypass("N");
 					domain.create(domain);
                     audit.result("SUCCESS").put("effectiveChange", true);
+                    mtb.result("SUCCESS").put("effectiveChange", true);
 
 					// calling alert method
 					userCreateWelcomeAlert(sessionContext, requestDTO);
@@ -1566,11 +1585,13 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			extensionExecutor.postCreate(sessionContext, requestDTO, response);
 		} catch (Exception e) {
 			audit.failure(e);
+			mtb.failure(e);
 			fillTransactionStatus(transactionStatus, e);
 			logger.log(Level.SEVERE, formatter.formatMessage("Exception from create() for requestDTO '%s' in class %s",
 					requestDTO, THIS_COMPONENT_NAME), e);
 		} catch (RuntimeException rte) {
 			audit.failure(rte);
+			mtb.failure(rte);
 			fillTransactionStatus(transactionStatus, rte);
 			logger.log(Level.SEVERE,
 					formatter.formatMessage("RuntimeException from create() for requestDTO '%s' in class %s",
@@ -1584,9 +1605,11 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			logger.log(Level.FINE, formatter.formatMessage("Exiting from create() : response = %s", response));
 		}
     audit.response(response.getUserResponseDTO()).response(response);
+    mtb.response(response.getUserResponseDTO()).response(response);
 		return response;
 	    } catch (java.lang.Exception auditFailure) {
       audit.failure(auditFailure);
+      mtb.failure(auditFailure);
       throw auditFailure;
     }
     }

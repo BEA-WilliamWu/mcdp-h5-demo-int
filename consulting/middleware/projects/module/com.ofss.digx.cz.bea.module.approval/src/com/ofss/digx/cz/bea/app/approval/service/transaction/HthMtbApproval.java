@@ -5,7 +5,8 @@ import com.ofss.fc.app.context.SessionContext;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostManagementDTO;
-import com.ofss.digx.cz.bea.common.mtb.HthMtbCollector;
+import com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter;
+import com.ofss.digx.cz.bea.common.mtb.HthMtbSnapshot;
 
 /** Whitelist only. BCO snapshots return before configuration, transaction or database access. */
 final class HthMtbApproval {
@@ -49,7 +50,10 @@ final class HthMtbApproval {
             values.put("actorUserId",context==null?null:context.getUserId());
             values.put("approvalReference",transaction.getKey().getId());
             values.put("occurredAt",java.time.Instant.now().toString());
-            HthMtbCollector.collect(service,values);
+            com.ofss.digx.app.adapter.IAdapterFactory factory = com.ofss.digx.app.adapter.AdapterFactoryConfigurator
+                .getInstance().getAdapterFactory(IHthMtbAdapter.FACTORY);
+            IHthMtbAdapter adapter = (IHthMtbAdapter) factory.getAdapter(IHthMtbAdapter.ADAPTER);
+            adapter.collect(new HthMtbSnapshot(service, values));
         } catch(java.lang.Exception failure) {
             java.util.logging.Logger.getLogger(HthMtbApproval.class.getName()).log(java.util.logging.Level.WARNING,
                 "HTH_MTB stage=APPROVAL_CAPTURE_FAILED, exceptionType={0}",failure.getClass().getName());

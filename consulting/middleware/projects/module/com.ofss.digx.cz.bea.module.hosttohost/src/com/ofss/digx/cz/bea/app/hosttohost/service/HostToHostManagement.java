@@ -295,8 +295,8 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
 
     private HostToHostManagementResponseDTO save(SessionContext sessionContext,
                                                  HostToHostManagementDTO requestDTO, String serviceId, String actionType) throws Exception {
-        try (com.ofss.digx.cz.bea.common.mtb.HthMtbScope mtb =
-                new com.ofss.digx.cz.bea.common.mtb.HthMtbScope(sessionContext, serviceId, "COMPANY_" + actionType)) {
+        try (com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope mtb =
+                new com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope(sessionContext, serviceId, "COMPANY_" + actionType)) {
             mtb.put("partyId", requestDTO == null ? null : requestDTO.getPartyId())
                 .put("mtbPhase", isApprovedExecution() ? "APPLY" : "SUBMIT");
             try {

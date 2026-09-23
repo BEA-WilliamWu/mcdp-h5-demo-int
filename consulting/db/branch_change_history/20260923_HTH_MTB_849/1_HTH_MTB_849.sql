@@ -135,6 +135,15 @@ BEGIN
   IF n<>1 THEN RAISE_APPLICATION_ERROR(-20849,'849 incompatible index order IX_HTH_MTB_SOURCE'); END IF;
 END;
 /
+-- Cross-module Adapter; only this HTH factory key is inserted/updated.
+MERGE INTO DIGX_FW_CONFIG_ALL_O t
+USING (SELECT 'AdapterFactories' preference_name, 'HTH_MTB_ADAPTER_FACTORY' prop_id,
+ 'com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbAdapterFactory' prop_value, 'N' determinant_value FROM dual) s
+ON (t.PREFERENCE_NAME=s.preference_name AND t.PROP_ID=s.prop_id AND t.DETERMINANT_VALUE=s.determinant_value)
+WHEN MATCHED THEN UPDATE SET t.PROP_VALUE=s.prop_value, t.LAST_UPDATED_BY='ofssuser', t.LAST_UPDATED_DATE=SYSDATE
+ WHERE t.PROP_VALUE<>s.prop_value OR t.PROP_VALUE IS NULL
+WHEN NOT MATCHED THEN INSERT (PREFERENCE_NAME,PROP_ID,PROP_VALUE,DETERMINANT_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE)
+VALUES (s.preference_name,s.prop_id,s.prop_value,s.determinant_value,'ofssuser',SYSDATE,'ofssuser',SYSDATE);
 -- Preserve existing enabled flag and all operator mappings on re-run. No invented external codes.
 MERGE INTO DIGX_FW_CONFIG_ALL_O t
 USING (SELECT 'HTHMtbConfiguration' preference_name, 'ENABLED' prop_id, 'N' prop_value, 'N' determinant_value FROM dual) s

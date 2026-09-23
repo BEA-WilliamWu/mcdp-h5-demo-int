@@ -15,6 +15,7 @@ for name in ('UserExtensionData.java', 'CZUserExtensionDataExt.java'):
     files.extend(p for p in (projects / 'module').rglob(name)
                  if name != 'UserExtensionData.java' or '/app/sms/service/user/' in str(p))
 files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
+files += list(projects.rglob('HthUserMtbScope.java'))
 with tempfile.TemporaryDirectory(prefix='hth-contact-compile-') as output:
     code = subprocess.run([str(java), '-proc:none', '--release', '8', '-cp', cp, '-d', output,
                            *map(str, files)], check=False).returncode

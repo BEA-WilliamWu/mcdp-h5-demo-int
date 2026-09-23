@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.*;
 import com.ofss.fc.app.context.SessionContext;
@@ -20,7 +20,7 @@ final class HthCRMApprovalAsserter {
             String operation;
             if(snapshot instanceof UserExtensionDataDTO) {
                 UserExtensionDataDTO user=(UserExtensionDataDTO)snapshot;
-                if(!com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChannel(user.getUserChannelType()))return;
+                if(!com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChannel(user.getUserChannelType()))return;
                 if(service.endsWith(".create"))operation="CREATE";
                 else if(service.endsWith(".update"))operation="UPDATE";
                 else return;
@@ -44,14 +44,14 @@ final class HthCRMApprovalAsserter {
             } else return;
             values.put("operation",operation);values.put("businessOutcome","SUCCESS");
             // Approval action success is not a claim that the underlying business has applied.
-            values.put("mtbPhase","APPROVAL_"+("APPROVE".equals(action)?"APPROVE":("REJECT".equals(action)?"REJECT":"ACTION")));
+            values.put("crmPhase","APPROVAL_"+("APPROVE".equals(action)?"APPROVE":("REJECT".equals(action)?"REJECT":"ACTION")));
             values.put("actorUserId",context==null?null:context.getUserId());
             values.put("approvalReference",transaction.getKey().getId());
             values.put("occurredAt",java.time.Instant.now().toString());
             HthCRMAsserter.collect(service,values);
         } catch(java.lang.Exception failure) {
             java.util.logging.Logger.getLogger(HthCRMApprovalAsserter.class.getName()).log(java.util.logging.Level.WARNING,
-                "HTH_MTB stage=APPROVAL_CAPTURE_FAILED, exceptionType={0}",failure.getClass().getName());
+                "HTH_CRM stage=APPROVAL_CAPTURE_FAILED, exceptionType={0}",failure.getClass().getName());
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
-import com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -323,13 +323,13 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   private HostToHostUserAccessResponseDTO saveResponse(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, serviceId, "ACCESS_" + actionType);
-         HthMtbScope mtb = new HthMtbScope(sessionContext, serviceId, "ACCESS_" + actionType)) {
+         HthCRMScope crm = new HthCRMScope(sessionContext, serviceId, "ACCESS_" + actionType)) {
     try {
       if (requestDTO != null) {
         audit.put("partyId", requestDTO.getPartyId())
             .put("targetUserId", HthOnboardingAudit.fullUser(requestDTO.getCloseId(), requestDTO.getPartyId()))
             .put("accessPartyId", requestDTO.getAccessPartyId()).put("linkageType", requestDTO.getLinkageType());
-        mtb.put("partyId", requestDTO.getPartyId())
+        crm.put("partyId", requestDTO.getPartyId())
             .put("targetUserId", HthOnboardingAudit.fullUser(requestDTO.getCloseId(), requestDTO.getPartyId()))
             .put("accessPartyId", requestDTO.getAccessPartyId()).put("linkageType", requestDTO.getLinkageType());
       }
@@ -348,7 +348,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
 
     audit.put("approvalReference", referenceNumber);
-    mtb.put("approvalReference", referenceNumber);
+    crm.put("approvalReference", referenceNumber);
     Interaction.begin(sessionContext);
     try {
       validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
@@ -360,7 +360,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
             sessionContext, requestDTO, serviceId, referenceNumber);
       }
       audit.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
-      mtb.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
+      crm.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
       requestDTO.setReferenceNumber(referenceNumber);
       response.setAccess(requestDTO);
       /*
@@ -371,7 +371,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
        */
     } catch (Exception e) {
       audit.failure(e);
-      mtb.failure(e);
+      crm.failure(e);
       fillTransactionStatus(transactionStatus, e);
       response.setStatus(buildStatus(transactionStatus));
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
@@ -379,7 +379,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
           actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
     } catch (RuntimeException e) {
       audit.failure(e);
-      mtb.failure(e);
+      crm.failure(e);
       fillTransactionStatus(transactionStatus, e);
       response.setStatus(buildStatus(transactionStatus));
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
@@ -391,11 +391,11 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
     super.checkResponsePolicy(sessionContext, response);
     audit.response(response);
-    mtb.response(response);
+    crm.response(response);
     return response;
     } catch (java.lang.Exception failure) {
       audit.failure(failure);
-      mtb.failure(failure);
+      crm.failure(failure);
       throw failure;
     }
     }
@@ -412,13 +412,13 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
   private TransactionStatus saveStatus(SessionContext sessionContext,
       HostToHostUserAccessDTO requestDTO, String serviceId, String actionType) throws Exception {
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, serviceId, "ACCESS_" + actionType);
-         HthMtbScope mtb = new HthMtbScope(sessionContext, serviceId, "ACCESS_" + actionType)) {
+         HthCRMScope crm = new HthCRMScope(sessionContext, serviceId, "ACCESS_" + actionType)) {
     try {
       if (requestDTO != null) {
         audit.put("partyId", requestDTO.getPartyId())
             .put("targetUserId", HthOnboardingAudit.fullUser(requestDTO.getCloseId(), requestDTO.getPartyId()))
             .put("accessPartyId", requestDTO.getAccessPartyId()).put("linkageType", requestDTO.getLinkageType());
-        mtb.put("partyId", requestDTO.getPartyId())
+        crm.put("partyId", requestDTO.getPartyId())
             .put("targetUserId", HthOnboardingAudit.fullUser(requestDTO.getCloseId(), requestDTO.getPartyId()))
             .put("accessPartyId", requestDTO.getAccessPartyId()).put("linkageType", requestDTO.getLinkageType());
       }
@@ -433,7 +433,7 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
     }
 
     audit.put("approvalReference", referenceNumber);
-    mtb.put("approvalReference", referenceNumber);
+    crm.put("approvalReference", referenceNumber);
     Interaction.begin(sessionContext);
     try {
       validateWriteRequest(sessionContext, requestDTO, actionType, approvedExecution);
@@ -445,18 +445,18 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
             sessionContext, requestDTO, serviceId, referenceNumber);
       }
       audit.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
-      mtb.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
+      crm.result(approvedExecution ? "SUCCESS" : "PENDING_APPROVAL");
       requestDTO.setReferenceNumber(referenceNumber);
     } catch (Exception e) {
       audit.failure(e);
-      mtb.failure(e);
+      crm.failure(e);
       fillTransactionStatus(transactionStatus, e);
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while processing HTH user access action '%s' for party '%s'",
           actionType, requestDTO == null ? null : requestDTO.getPartyId()), e);
     } catch (RuntimeException e) {
       audit.failure(e);
-      mtb.failure(e);
+      crm.failure(e);
       fillTransactionStatus(transactionStatus, e);
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Runtime exception while processing HTH user access action '%s' for party '%s'",
@@ -467,11 +467,11 @@ public class HostToHostUserAccess extends AbstractApplication implements IHostTo
 
     super.checkResponsePolicy(sessionContext, transactionStatus);
     audit.response(transactionStatus);
-    mtb.response(transactionStatus);
+    crm.response(transactionStatus);
     return transactionStatus;
     } catch (java.lang.Exception failure) {
       audit.failure(failure);
-      mtb.failure(failure);
+      crm.failure(failure);
       throw failure;
     }
     }

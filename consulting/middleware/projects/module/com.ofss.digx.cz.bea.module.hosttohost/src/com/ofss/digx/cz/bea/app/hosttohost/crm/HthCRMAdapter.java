@@ -1,9 +1,9 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
-import com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter;
-import com.ofss.digx.cz.bea.common.mtb.HthCRMInputData;
+import com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter;
+import com.ofss.digx.cz.bea.common.hth.HthCRMInputData;
 
-public final class HthMtbAdapter implements IHthMtbAdapter {
+public final class HthCRMAdapter implements IHthCRMAdapter {
     public void collect(HthCRMInputData snapshot) {
         if (snapshot != null) HthCRMAsserter.collect(snapshot);
     }

@@ -1,4 +1,4 @@
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
 import com.ofss.digx.infra.audit.dto.*;
 import com.ofss.digx.enumeration.audit.*;
 import com.ofss.digx.datatype.complex.AuditMap;

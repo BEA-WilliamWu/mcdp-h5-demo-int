@@ -1,6 +1,6 @@
 # BCOH2H-849 — HTH CM / BM MTB 数据保存技术设计
 
-> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/mtb 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
+> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/hth 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
 
 日期：2026-09-23。实施设计基线；本次只出设计，尚未修改生产代码、执行 SQL 或完成 UAT 验证。
 
@@ -55,11 +55,11 @@ checkResponsePolicy / failure policy
 ```text
 HTH 操作的响应 / 失败 / 审批动作
  → HTH 范围识别、活动及阶段判定
- → HthMtbCollector 提取白名单字段
+ → HthCRMCollector 提取白名单字段
  → HTH 业务 Mapper
- → HthMtbEventDTO
- → HthMtbEventAssembler
- → HthMtbEvent Entity / Repository / LocalAdapter
+ → HthCRMEventDTO
+ → HthCRMEventAssembler
+ → HthCRMEvent Entity / Repository / LocalAdapter
  → HTH_MTB_EVENT_DETAILS
 ```
 
@@ -129,7 +129,7 @@ BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解�
 
 ## 7. 同步事务和失败策略
 
-同步与共用事务是两件事。HthMtbEventWriter 必须使用独立持久化边界，不能 commit/rollback 调用方业务事务。优先使用项目已有受支持的独立事务机制；实施时验证平台事务挂起/恢复能力，不假设仅 openSession 就是独立事务，不靠改 NONXA 来掩盖问题。
+同步与共用事务是两件事。HthCRMEventWriter 必须使用独立持久化边界，不能 commit/rollback 调用方业务事务。优先使用项目已有受支持的独立事务机制；实施时验证平台事务挂起/恢复能力，不假设仅 openSession 就是独立事务，不靠改 NONXA 来掩盖问题。
 
 成功生效记录必须在业务提交结果已确定后写入。优先使用平台已有完成回调；在同一执行线程同步执行写入。平台若没有可用回调，应在拥有 commit 结果的 HTH 执行层接入，不能在 checkResponsePolicy 前后猜测 commit 已完成。前置采集只保存白名单快照，不保留 Session/HTTP request。
 
@@ -143,9 +143,9 @@ BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解�
 
 | 位置 | 内容 | BCO 影响 |
 |---|---|---|
-| HTH 模块 | HthMtbCollector / HthMtbActivityResolver | 新增采集、活动与阶段解析 |
+| HTH 模块 | HthCRMCollector / HthCRMActivityResolver | 新增采集、活动与阶段解析 |
 | HTH 模块 | 用户、公司管理、授权、密码四类 Mapper | 新增白名单转换；不改旧 evaluator 的语义 |
-| HTH DTO 模块 | HthMtbEventDTO | 新增专用 DTO |
+| HTH DTO 模块 | HthCRMEventDTO | 新增专用 DTO |
 | HTH domain/repository | Entity、Key、Assembler、Repository、LocalAdapter、Writer | 新增存储分层及独立事务边界 |
 | HTH 服务 | Management、UserAccess、ApiPassword 的受控采集入口 | 不改原业务判断、审批、通知结果 |
 | 共享 UserExtensionData / 必要审批扩展点 | HTH 门控及最小调用 | 唯一可能的公共 Java 差异，评审单独列出；普通 BCO 分支保持原样 |
@@ -214,4 +214,10 @@ BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解�
 公共判断统一使用 `HthChannelSupport`：渠道 HTH/H2H；用户更新判断旧、新渠道；审批按精确 HTH 服务白名单及用户渠道判断。工具只比较值，不查数据库、不读配置、不加载 HTH Adapter。
 SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToHost DTO 或维护 HTH 字段映射；这些处理移至 hosttohost 的 `HthCRMApprovalAsserter`。普通 BCO 不查找 HTH 实现；HTH Adapter 查找/调用异常及类加载链接错误捕获后只记阶段和异常类型。
 
-这减少共用模块对 HTH 实现的依赖，但公共接口/数据对象仍需随应用正确打包，不能保证任意混用新旧包。Factory 配置键与类名不变，本轮无需额外 SQL；新增实现类仍需重新完整打包。HTH 包缺失时，HTH MTB 可能漏记且不会补录，应检查诊断日志。
+这减少共用模块对 HTH 实现的依赖，但公共接口/数据对象仍需随应用正确打包，不能保证任意混用新旧包。Factory 配置键保留，注册类名已改变，需重跑注册 SQL 并完整打包。HTH 包缺失时，HTH MTB 可能漏记且不会补录，应检查诊断日志。
+
+### CRM 命名与 common/hth 目录整理
+
+849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
+
+诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需重新执行 1_HTH_MTB_849.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。

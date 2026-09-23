@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;

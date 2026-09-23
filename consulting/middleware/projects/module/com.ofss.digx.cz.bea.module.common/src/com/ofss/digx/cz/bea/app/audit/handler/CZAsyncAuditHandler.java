@@ -3,7 +3,7 @@
  *******************************************************************************/
 package com.ofss.digx.cz.bea.app.audit.handler;
 
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;

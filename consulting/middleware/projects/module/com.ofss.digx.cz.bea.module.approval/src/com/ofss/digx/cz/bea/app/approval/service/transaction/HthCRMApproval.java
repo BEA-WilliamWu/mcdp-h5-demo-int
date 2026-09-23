@@ -1,13 +1,13 @@
 package com.ofss.digx.cz.bea.app.approval.service.transaction;
 
-import com.ofss.digx.cz.bea.common.mtb.HthChannelSupport;
-import com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter;
+import com.ofss.digx.cz.bea.common.hth.HthChannelSupport;
+import com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter;
 import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataDTO;
 import com.ofss.fc.app.context.SessionContext;
 
 /** Shared approval boundary: check HTH first, then dispatch through the interface only. */
-final class HthMtbApproval {
-    private HthMtbApproval() { }
+final class HthCRMApproval {
+    private HthCRMApproval() { }
     static void committed(SessionContext context, com.ofss.digx.framework.domain.transaction.Transaction transaction,
             String action) {
         if (transaction == null) return;
@@ -17,11 +17,11 @@ final class HthMtbApproval {
         if (!HthChannelSupport.isHthApproval(transaction.getServiceId(), channel)) return;
         try {
             com.ofss.digx.app.adapter.IAdapterFactory factory = com.ofss.digx.app.adapter.AdapterFactoryConfigurator
-                .getInstance().getAdapterFactory(IHthMtbAdapter.FACTORY);
-            ((IHthMtbAdapter) factory.getAdapter(IHthMtbAdapter.ADAPTER)).collectApproval(context, transaction, action);
+                .getInstance().getAdapterFactory(IHthCRMAdapter.FACTORY);
+            ((IHthCRMAdapter) factory.getAdapter(IHthCRMAdapter.ADAPTER)).collectApproval(context, transaction, action);
         } catch (java.lang.Exception | LinkageError failure) {
-            java.util.logging.Logger.getLogger(HthMtbApproval.class.getName()).log(java.util.logging.Level.WARNING,
-                "HTH_MTB stage=APPROVAL_CAPTURE_FAILED, exceptionType={0}", failure.getClass().getName());
+            java.util.logging.Logger.getLogger(HthCRMApproval.class.getName()).log(java.util.logging.Level.WARNING,
+                "HTH_CRM stage=APPROVAL_CAPTURE_FAILED, exceptionType={0}", failure.getClass().getName());
         }
     }
 }

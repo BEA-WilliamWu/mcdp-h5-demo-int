@@ -1,6 +1,6 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostUserAccessDTO;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccount;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserAccessAccountApi;

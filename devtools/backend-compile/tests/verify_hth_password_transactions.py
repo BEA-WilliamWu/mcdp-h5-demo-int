@@ -85,8 +85,8 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
 import com.ofss.digx.infra.exceptions.Exception;
 import com.ofss.fc.infra.das.orm.*;
 import com.ofss.fc.infra.jdbc.ConnectionUtil;
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
-import com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
 import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
 import com.ofss.fc.infra.config.ConfigurationFactory;
@@ -341,9 +341,9 @@ public class DataAccessManager {
 <property name="javax.persistence.jdbc.url" value="jdbc:h2:mem:hth;MODE=Oracle;DB_CLOSE_DELAY=-1"/>
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="OFF"/>
 </properties></persistence-unit></persistence>""")
-    sources += [str(p) for p in (BASE / "app/hosttohost/mtb").glob("*.java")
-                if p.name not in ("HthCRMApprovalAsserter.java", "HthMtbAdapter.java", "HthMtbAdapterFactory.java")]
-    sources += [str(p) for p in (ROOT / "consulting/middleware/projects/common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb").glob("*.java")]
+    sources += [str(p) for p in (BASE / "app/hosttohost/crm").glob("*.java")
+                if p.name not in ("HthCRMApprovalAsserter.java", "HthCRMAdapter.java", "HthCRMAdapterFactory.java")]
+    sources += [str(p) for p in (ROOT / "consulting/middleware/projects/common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/hth").glob("*.java")]
     common = ROOT / "consulting/middleware/projects/common"
     sources += [str(next((ROOT / "consulting/middleware/projects").rglob("HthOnboardingAudit.java")))]
     sources += [str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordPolicyDTO.java"),

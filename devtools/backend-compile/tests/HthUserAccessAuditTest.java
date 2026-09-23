@@ -1,5 +1,5 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.digx.infra.audit.dto.AuditDetailsDTO;
 import java.util.*;

@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.*;
 import java.lang.reflect.*;
@@ -7,7 +7,7 @@ import com.ofss.fc.infra.das.orm.Session;
 import com.ofss.fc.infra.das.orm.Query;
 
 /** Runtime contract tests. ORM/JTA proxies model failures; not an Oracle/WebLogic integration test. */
-public class HthMtbTest {
+public class HthCRMTest {
     private static int checks;
     private static void check(boolean value) { checks++; if(!value)throw new AssertionError("check "+checks); }
     static Map<String,Object> data(String operation) {
@@ -67,7 +67,7 @@ public class HthMtbTest {
         saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);callback[0].afterCompletion(Status.STATUS_UNKNOWN);check(saved.isEmpty());
         for(String failure:Arrays.asList("NONE","INSERT","COMMIT","CLOSE","ROLLBACK")) {
             Resources resources=new Resources(failure);
-            HthMtbWriter.write(reset,resources);
+            HthCRMWriter.write(reset,resources);
             check(resources.opens==1 && resources.closes==1);
             check(resources.inserts==1); // no retry even if commit outcome is uncertain
             check(resources.bindings.size()==LocalHthCRMRepositoryAdapter.COLUMNS.length);
@@ -76,10 +76,10 @@ public class HthMtbTest {
             else check(resources.rollbacks==1);
         }
         Resources active=new Resources("NONE");active.status=Status.STATUS_ACTIVE;
-        HthMtbWriter.write(reset,active);check(active.opens==0 && active.closes==0);
+        HthCRMWriter.write(reset,active);check(active.opens==0 && active.closes==0);
         System.out.println("PASS HTH MTB: "+checks+" mapping, secret exclusion, commit/rollback, isolation and SQL binding checks");
     }
-    static class Resources implements HthMtbWriter.Resources {
+    static class Resources implements HthCRMWriter.Resources {
         int status=Status.STATUS_NO_TRANSACTION,opens,closes,inserts,commits,rollbacks;
         boolean active;String failure,sql;Map<Integer,Object>bindings=new HashMap<Integer,Object>();
         Resources(String failure){this.failure=failure;}

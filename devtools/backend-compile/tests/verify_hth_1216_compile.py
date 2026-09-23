@@ -8,8 +8,8 @@ files=[]
 for name in ('HostToHostUserAccess.java','HthUserAccessNotification.java','UserManagementActivityLogDTO.java',
              'HthOnboardingAudit.java','HthUserAccessAudit.java'):
     files.extend(p for p in projects.rglob(name) if '/appx/' not in str(p))
-files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
-files += list((projects/'module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/mtb').glob('*.java')) + list(projects.rglob('LocalHthCRMRepositoryAdapter.java')) + list(projects.rglob('HthUserMtbScope.java'))
+files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/hth').glob('*.java'))
+files += list((projects/'module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/crm').glob('*.java')) + list(projects.rglob('LocalHthCRMRepositoryAdapter.java')) + list(projects.rglob('HthUserCRMScope.java'))
 with tempfile.TemporaryDirectory(prefix='hth1216-compile-') as output:
     result = subprocess.run([str(Path(os.environ['JAVA_HOME'])/'bin/javac'),'-proc:none','--release','8','-cp',cp,'-d',output,*map(str,files)],check=False)
     if result.returncode:

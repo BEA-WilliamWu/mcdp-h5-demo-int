@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import com.ofss.fc.infra.das.orm.Session;
 

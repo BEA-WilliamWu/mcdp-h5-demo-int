@@ -295,10 +295,10 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
 
     private HostToHostManagementResponseDTO save(SessionContext sessionContext,
                                                  HostToHostManagementDTO requestDTO, String serviceId, String actionType) throws Exception {
-        try (com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope mtb =
-                new com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope(sessionContext, serviceId, "COMPANY_" + actionType)) {
-            mtb.put("partyId", requestDTO == null ? null : requestDTO.getPartyId())
-                .put("mtbPhase", isApprovedExecution() ? "APPLY" : "SUBMIT");
+        try (com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope crm =
+                new com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope(sessionContext, serviceId, "COMPANY_" + actionType)) {
+            crm.put("partyId", requestDTO == null ? null : requestDTO.getPartyId())
+                .put("crmPhase", isApprovedExecution() ? "APPLY" : "SUBMIT");
             try {
         if (logger.isLoggable(Level.FINE)) {
             logger.log(Level.FINE, formatter.formatMessage("Entered into save() : action = %s, requestDTO = %s",
@@ -336,11 +336,11 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
         }
         super.checkResponsePolicy(sessionContext, response);
         restoreExternalReferenceNumber(saveCompleted, referenceNumber);
-        mtb.result(saveCompleted ? (approvedExecution ? "SUCCESS" : "PENDING_APPROVAL") : "FAILURE")
+        crm.result(saveCompleted ? (approvedExecution ? "SUCCESS" : "PENDING_APPROVAL") : "FAILURE")
             .put("approvalReference", referenceNumber).response(transactionStatus);
         return response;
             } catch (java.lang.Exception failure) {
-                mtb.failure(failure);
+                crm.failure(failure);
                 throw failure;
             }
         }

@@ -138,7 +138,7 @@ END;
 -- Cross-module Adapter; only this HTH factory key is inserted/updated.
 MERGE INTO DIGX_FW_CONFIG_ALL_O t
 USING (SELECT 'AdapterFactories' preference_name, 'HTH_MTB_ADAPTER_FACTORY' prop_id,
- 'com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbAdapterFactory' prop_value, 'N' determinant_value FROM dual) s
+ 'com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory' prop_value, 'N' determinant_value FROM dual) s
 ON (t.PREFERENCE_NAME=s.preference_name AND t.PROP_ID=s.prop_id AND t.DETERMINANT_VALUE=s.determinant_value)
 WHEN MATCHED THEN UPDATE SET t.PROP_VALUE=s.prop_value, t.LAST_UPDATED_BY='ofssuser', t.LAST_UPDATED_DATE=SYSDATE
  WHERE t.PROP_VALUE<>s.prop_value OR t.PROP_VALUE IS NULL

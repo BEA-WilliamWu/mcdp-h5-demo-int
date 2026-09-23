@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.*;
 import java.time.*;
@@ -18,7 +18,7 @@ public final class HthCRMRequestAssembler {
                 && !hth(text(source,"oldUserChannelType"))) return null;
         String outcome = text(source,"businessOutcome");
         boolean pending = "PENDING_APPROVAL".equals(outcome);
-        String phase = text(source,"mtbPhase");
+        String phase = text(source,"crmPhase");
         if (phase == null) phase = pending ? "SUBMIT" :
             (activity.startsWith("PASSWORD_") ? "EXECUTE" :
             ("CODE_GENERATE".equals(activity) ? "GENERATE" :
@@ -42,15 +42,15 @@ public final class HthCRMRequestAssembler {
         fields.put("ACCT_NBR", text(source,"partyId"));
         fields.put("RELATIONSHIP_TYPE", text(source,"linkageType"));
         fields.put("SERVICE_ID", service);
-        fields.put("TASK_CODE", text(source,"mtbTask"));
+        fields.put("TASK_CODE", text(source,"crmTask"));
         String reference = text(source,"approvalReference");
         if (reference == null) reference = text(source,"referenceNumber");
         fields.put("SOURCE_TRX_REF_NBR", reference);
-        fields.put("SOURCE_ACTION_ID", text(source,"mtbActionId"));
+        fields.put("SOURCE_ACTION_ID", text(source,"crmActionId"));
         fields.put("REQUEST_ID", text(source,"requestId"));
-        fields.put("IP_ADDRESS", text(source,"mtbIp"));
+        fields.put("IP_ADDRESS", text(source,"crmIp"));
         fields.put("ERROR_CODE", text(source,"errorCode"));
-        String stable = text(source,"mtbActionId");
+        String stable = text(source,"crmActionId");
         if (stable == null && activity.startsWith("PASSWORD_") && "SUCCESS".equals(outcome))
             stable = text(source,"requestId");
         // A transaction can have multiple approval actions; transactionId alone is never a key.
@@ -81,7 +81,7 @@ public final class HthCRMRequestAssembler {
         }
         return null; // Inquiries/reveal/notifications keep existing BCO rules; no new HTH event.
     }
-    private static boolean hth(String value) { return com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChannel(value); }
+    private static boolean hth(String value) { return com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChannel(value); }
     static String text(Map<String,Object> data, String key) {
         Object value=data.get(key);
         return value instanceof String && !((String)value).trim().isEmpty() ? (String)value : null;

@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.*;
 import java.util.logging.*;
@@ -12,9 +12,9 @@ public final class HthCRMAsserter {
     private static final Logger LOG=Logger.getLogger(HthCRMAsserter.class.getName());
     private HthCRMAsserter() { }
     public static void collect(String service, Map<String,Object> source) {
-        collect(new com.ofss.digx.cz.bea.common.mtb.HthCRMInputData(service, source));
+        collect(new com.ofss.digx.cz.bea.common.hth.HthCRMInputData(service, source));
     }
-    public static void collect(com.ofss.digx.cz.bea.common.mtb.HthCRMInputData input) {
+    public static void collect(com.ofss.digx.cz.bea.common.hth.HthCRMInputData input) {
         if (input == null) return;
         String service = input.getService();
         Map<String,Object> source = input.getValues();
@@ -26,8 +26,8 @@ public final class HthCRMAsserter {
             Map<String,Object> snapshot=new LinkedHashMap<String,Object>(source);
             Object task=com.ofss.digx.infra.thread.ThreadAttribute.get(com.ofss.fc.infra.thread.ThreadAttribute.CURRENT_TASK);
             Object ip=com.ofss.digx.infra.thread.ThreadAttribute.get("FMO_IP_ADDRESS");
-            if(task instanceof String)snapshot.put("mtbTask",task);
-            if(ip instanceof String)snapshot.put("mtbIp",ip);
+            if(task instanceof String)snapshot.put("crmTask",task);
+            if(ip instanceof String)snapshot.put("crmIp",ip);
             final HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble(service,snapshot,config.get("ACTIVITY_"+activity,null));
             if(event==null)return;
             TransactionManager manager=TransactionHelper.getTransactionHelper().getTransactionManager();
@@ -35,7 +35,7 @@ public final class HthCRMAsserter {
                 && DataAccessManager.getManager().fetchCurrentSession().fetchCurrentTransaction()!=null
                 && DataAccessManager.getManager().fetchCurrentSession().fetchCurrentTransaction().isActive();
             schedule(event,manager.getTransaction(),localActive,new Sink() {
-                public void write(HthCRMEvent3DomainDTO value) { HthMtbWriter.write(value); }
+                public void write(HthCRMEvent3DomainDTO value) { HthCRMWriter.write(value); }
             });
         } catch (java.lang.Exception failure) { log("COLLECT_FAILED",null,failure); }
     }
@@ -61,7 +61,7 @@ public final class HthCRMAsserter {
     }
     static void log(String stage,HthCRMEvent3DomainDTO event,Throwable failure) {
         LOG.log(failure==null ? Level.INFO : Level.WARNING,
-            "HTH_MTB stage={0}, eventId={1}, activity={2}, phase={3}, exceptionType={4}",
+            "HTH_CRM stage={0}, eventId={1}, activity={2}, phase={3}, exceptionType={4}",
             new Object[]{stage,event==null?null:event.get("EVENT_ID"),event==null?null:event.get("ACTIVITY_KEY"),
                 event==null?null:event.get("PHASE"),failure==null?null:failure.getClass().getName()});
     }

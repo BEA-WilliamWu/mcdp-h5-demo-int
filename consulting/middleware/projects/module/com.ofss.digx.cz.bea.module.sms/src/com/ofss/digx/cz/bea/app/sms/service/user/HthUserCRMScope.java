@@ -1,21 +1,21 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.sms.service.user;
 
 import java.util.*;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.service.response.TransactionStatus;
 
-/** Independent HTH operation scope. Does not add audit entries or change response objects. */
-public final class HthMtbScope implements AutoCloseable {
+/** SMS-local HTH capture context. BCO returns before Adapter lookup. Does not add audit entries or change response objects. */
+public final class HthUserCRMScope implements AutoCloseable {
     private final Map<String,Object> values=new LinkedHashMap<String,Object>();
     private final String service;
     private boolean closed;
-    public HthMtbScope(SessionContext context,String service,String activity) {
+    public HthUserCRMScope(SessionContext context,String service,String activity) {
         this.service=service; put("operation",activity); put("businessOutcome","FAILURE");
         put("actorUserId",context==null?null:context.getUserId());
     }
-    public HthMtbScope put(String key,Object value) { if(value!=null)values.put(key,value);return this; }
-    public HthMtbScope result(String result) { return put("businessOutcome",result); }
-    public HthMtbScope failure(Throwable failure) {
+    public HthUserCRMScope put(String key,Object value) { if(value!=null)values.put(key,value);return this; }
+    public HthUserCRMScope result(String result) { return put("businessOutcome",result); }
+    public HthUserCRMScope failure(Throwable failure) {
         result("FAILURE");
         for (int depth = 0; failure != null && depth < 8; depth++, failure = failure.getCause()) {
             if (failure instanceof com.ofss.digx.app.approval.exceptions.ApprovalRequiredException)
@@ -28,7 +28,7 @@ public final class HthMtbScope implements AutoCloseable {
         }
         return this;
     }
-    public HthMtbScope response(Object response) {
+    public HthUserCRMScope response(Object response) {
         if (response instanceof TransactionStatus) {
             TransactionStatus status = (TransactionStatus) response;
             put("referenceNumber", status.getExternalReferenceNo() == null
@@ -53,12 +53,26 @@ public final class HthMtbScope implements AutoCloseable {
         }
         return this;
     }
+    public HthUserCRMScope channel(String oldChannel, String newChannel) {
+        return put("oldUserChannelType", oldChannel).put("newUserChannelType", newChannel);
+    }
     public static String fullUser(String user, String party) {
         return user == null || user.contains("@") || party == null ? user : user + "@" + party;
     }
     public void close() {
         if(closed)return;closed=true;
         put("occurredAt",java.time.Instant.now().toString());
-        HthCRMAsserter.collect(service,values);
+        if (!com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChange(
+                values.get("oldUserChannelType"), values.get("newUserChannelType"))) return;
+        try {
+            com.ofss.digx.app.adapter.IAdapterFactory factory = com.ofss.digx.app.adapter.AdapterFactoryConfigurator
+                .getInstance().getAdapterFactory(com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter.FACTORY);
+            com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter adapter =
+                (com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter) factory.getAdapter(com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter.ADAPTER);
+            adapter.collect(new com.ofss.digx.cz.bea.common.hth.HthCRMInputData(service, values));
+        } catch (java.lang.Exception | LinkageError failure) {
+            java.util.logging.Logger.getLogger(HthUserCRMScope.class.getName()).log(java.util.logging.Level.WARNING,
+                "HTH_CRM stage=USER_CAPTURE_FAILED, exceptionType={0}", failure.getClass().getName());
+        }
     }
 }

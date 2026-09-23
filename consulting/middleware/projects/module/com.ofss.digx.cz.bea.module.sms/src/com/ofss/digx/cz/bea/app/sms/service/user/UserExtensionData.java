@@ -1,6 +1,6 @@
 package com.ofss.digx.cz.bea.app.sms.service.user;
 
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -550,8 +550,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "UPDATE",
         requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
         requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId());
-         HthUserMtbScope mtb = new HthUserMtbScope(sessionContext, "UserExtensionData.update", "UPDATE")
-             .put("targetUserId", requestDTO == null ? null : HthUserMtbScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
+         HthUserCRMScope mtb = new HthUserCRMScope(sessionContext, "UserExtensionData.update", "UPDATE")
+             .put("targetUserId", requestDTO == null ? null : HthUserCRMScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
              .put("partyId", requestDTO == null ? null : requestDTO.getCdcNo())
              .channel(null, requestDTO == null ? null : requestDTO.getUserChannelType())) {
     try {
@@ -640,7 +640,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
             if (domain != null) {
                 audit.put("targetUserId", HthOnboardingAudit.fullUser(domain.getUserID(), domain.getCdcNo()))
                     .put("partyId", domain.getCdcNo());
-                mtb.put("targetUserId", HthUserMtbScope.fullUser(domain.getUserID(), domain.getCdcNo()))
+                mtb.put("targetUserId", HthUserCRMScope.fullUser(domain.getUserID(), domain.getCdcNo()))
                     .put("partyId", domain.getCdcNo());
             }
             Boolean hthPinResetChanged = HthProfileApproverNotification.loginPinResetChanged(
@@ -1367,8 +1367,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "CREATE",
         requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
         requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId());
-         HthUserMtbScope mtb = new HthUserMtbScope(sessionContext, "UserExtensionData.create", "CREATE")
-             .put("targetUserId", requestDTO == null ? null : HthUserMtbScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
+         HthUserCRMScope mtb = new HthUserCRMScope(sessionContext, "UserExtensionData.create", "CREATE")
+             .put("targetUserId", requestDTO == null ? null : HthUserCRMScope.fullUser(requestDTO.getUserID(), requestDTO.getCdcNo()))
              .put("partyId", requestDTO == null ? null : requestDTO.getCdcNo())
              .channel(null, requestDTO == null ? null : requestDTO.getUserChannelType())) {
     try {

@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.common.mtb;
+package com.ofss.digx.cz.bea.common.hth;
 
 /** Pure channel/service checks. No HTH module, configuration, Adapter or database access. */
 public final class HthChannelSupport {

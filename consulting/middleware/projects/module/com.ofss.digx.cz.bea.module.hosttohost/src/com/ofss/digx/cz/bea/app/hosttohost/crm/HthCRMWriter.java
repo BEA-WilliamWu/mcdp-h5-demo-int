@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import javax.transaction.TransactionManager;
 import javax.transaction.Status;
@@ -7,7 +7,7 @@ import com.ofss.fc.infra.das.orm.DataAccessManager;
 import com.ofss.fc.infra.das.orm.Session;
 
 /** Runs only outside an active JTA transaction. Never suspends, resumes or commits the caller. */
-final class HthMtbWriter {
+final class HthCRMWriter {
     interface Resources {
         int transactionStatus() throws java.lang.Exception;
         Session open() throws java.lang.Exception;

@@ -1,16 +1,16 @@
 package com.ofss.digx.cz.bea.app.sms.service.user;
 import com.ofss.digx.app.adapter.AdapterFactoryConfigurator;
-import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
-import com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbScope;
+import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope;
 
-public class HthMtbBoundaryTest {
+public class HthCRMBoundaryTest {
  public static void main(String[] args) {
   AdapterFactoryConfigurator.lookups=0;
-  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.update","UPDATE")) {
+  try(HthUserCRMScope scope=new HthUserCRMScope(null,"UserExtensionData.update","UPDATE")) {
    scope.channel("BCO","BCO").result("SUCCESS");
   }
   check(AdapterFactoryConfigurator.lookups==0,"BCO must not resolve HTH Adapter");
-  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.update","UPDATE")) {
+  try(HthUserCRMScope scope=new HthUserCRMScope(null,"UserExtensionData.update","UPDATE")) {
    scope.channel("HTH",null).put("targetUserId","USER@PARTY").result("SUCCESS");
   }
   check(AdapterFactoryConfigurator.lookups==1,"stored HTH channel must work without request channel or audit scope");
@@ -20,19 +20,19 @@ public class HthMtbBoundaryTest {
    audit.result("SUCCESS");
   }
   check(reads==Integer.parseInt(System.getProperty("hth849.configReads","0")),"audit close must not capture MTB");
-  try(HthMtbScope scope=new HthMtbScope(null,"HostToHostApiPassword.setup","SETUP")) {scope.result("SUCCESS");}
+  try(HthCRMScope scope=new HthCRMScope(null,"HostToHostApiPassword.setup","SETUP")) {scope.result("SUCCESS");}
   check(reads+1==Integer.parseInt(System.getProperty("hth849.configReads","0")),"host scope independent of audit");
   AdapterFactoryConfigurator.fail=true;
-  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
+  try(HthUserCRMScope scope=new HthUserCRMScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
   AdapterFactoryConfigurator.fail=false;
   AdapterFactoryConfigurator.missingImplementation=true;
-  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
+  try(HthUserCRMScope scope=new HthUserCRMScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
   AdapterFactoryConfigurator.missingImplementation=false;
-  check(com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChange("h2h",null),"H2H alias");
-  check(!com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChange(null,"BCO"),"non HTH channel");
+  check(com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChange("h2h",null),"H2H alias");
+  check(!com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChange(null,"BCO"),"non HTH channel");
   com.ofss.fc.service.response.TransactionStatus status=new com.ofss.fc.service.response.TransactionStatus();
   status.setErrorCode("DIGX_APPROVAL_REQUIRED");
-  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {
+  try(HthUserCRMScope scope=new HthUserCRMScope(null,"UserExtensionData.create","CREATE")) {
    scope.channel(null,"HTH").result("SUCCESS").response(status);
   }
   check("PENDING_APPROVAL".equals(AdapterFactoryConfigurator.last.getValues().get("businessOutcome")),"pending must not become success");

@@ -1,7 +1,7 @@
-package com.ofss.digx.cz.bea.common.mtb;
+package com.ofss.digx.cz.bea.common.hth;
 
 /** Cross-module contract only; implementation is owned by hosttohost. */
-public interface IHthMtbAdapter {
+public interface IHthCRMAdapter {
     String FACTORY = "HTH_MTB_ADAPTER_FACTORY";
     String ADAPTER = "HTH_MTB_ADAPTER";
     void collect(HthCRMInputData snapshot);

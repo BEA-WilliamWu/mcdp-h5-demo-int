@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.app.hosttohost.mtb;
+package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.sql.*;
 import java.util.*;
@@ -8,8 +8,8 @@ import com.ofss.fc.infra.das.orm.Session;
 import com.ofss.fc.infra.das.orm.Query;
 
 /** Real H2 transactions with Session API proxies; Oracle timestamp syntax is the only SQL rewrite. */
-public class HthMtbJdbcTest {
-    static final String URL="jdbc:h2:mem:mtb;MODE=Oracle;DB_CLOSE_DELAY=-1";
+public class HthCRMJdbcTest {
+    static final String URL="jdbc:h2:mem:crm;MODE=Oracle;DB_CLOSE_DELAY=-1";
     static int closes;
     static void check(boolean b){if(!b)throw new AssertionError();}
     static int count(Connection c,String table)throws Exception {
@@ -23,24 +23,24 @@ public class HthMtbJdbcTest {
             business.createStatement().execute("CREATE UNIQUE INDEX DEDUP ON HTH_BEA.HTH_MTB_EVENT_DETAILS(DEDUP_KEY)");
             business.createStatement().execute("CREATE TABLE BCO_BUSINESS(ID INT PRIMARY KEY)");
             business.setAutoCommit(false);business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(1)");
-            Map<String,Object> source=HthMtbTest.data("RESET");source.put("requestId","same-request");
+            Map<String,Object> source=HthCRMTest.data("RESET");source.put("requestId","same-request");
             HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null);
-            HthMtbWriter.write(event,new DbResources());
+            HthCRMWriter.write(event,new DbResources());
             check(count(observer,"BCO_BUSINESS")==0); // HTH commit did not commit caller
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1);
             business.rollback();check(count(observer,"BCO_BUSINESS")==0);
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // caller rollback did not rollback HTH
-            HthMtbWriter.write(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null),new DbResources());
+            HthCRMWriter.write(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null),new DbResources());
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // DB unique constraint prevents replay
             business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(2)");
             observer.createStatement().execute("DROP TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS");
-            HthMtbWriter.write(event,new DbResources()); // a real database failure must not escape
+            HthCRMWriter.write(event,new DbResources()); // a real database failure must not escape
             business.commit();check(count(observer,"BCO_BUSINESS")==1);
             check(closes==3);
         }
         System.out.println("PASS: real H2 inserts, unique replay rejection, independent commit/rollback, table failure and caller completion");
     }
-    static class DbResources implements HthMtbWriter.Resources {
+    static class DbResources implements HthCRMWriter.Resources {
         Connection connection;boolean active;
         public int transactionStatus(){return javax.transaction.Status.STATUS_NO_TRANSACTION;}
         public Session open()throws Exception {

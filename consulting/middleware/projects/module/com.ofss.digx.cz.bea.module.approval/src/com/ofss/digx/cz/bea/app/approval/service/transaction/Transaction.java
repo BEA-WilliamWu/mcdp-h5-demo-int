@@ -3613,7 +3613,7 @@ public class Transaction extends AbstractApplication implements ICZTransaction {
 			session.beginTransaction();
 			session.update(transactionDomain);
 			session.fetchCurrentTransaction().commit();
-            HthMtbApproval.committed(sessionContext, transactionDomain, String.valueOf(transactionActionDTO.getAction()));
+            HthCRMApproval.committed(sessionContext, transactionDomain, String.valueOf(transactionActionDTO.getAction()));
 			if (transactionDomain.getProcessingDetails().getCurrentStep().equals(ProcessingStep.EXECUTION)) {
 				removeFromGracePeriodExpiryAlert(transactionDomain.getKey().getId());
 			}
@@ -5109,7 +5109,7 @@ public class Transaction extends AbstractApplication implements ICZTransaction {
 			session.beginTransaction();
 			session.update(transactionDomain);
 			session.fetchCurrentTransaction().commit();
-            HthMtbApproval.committed(sessionContext, transactionDomain, String.valueOf(transactionActionDTO.getAction()));
+            HthCRMApproval.committed(sessionContext, transactionDomain, String.valueOf(transactionActionDTO.getAction()));
 			if (transactionDomain.getProcessingDetails().getCurrentStep().equals(ProcessingStep.EXECUTION)) {
 				this.removeFromGracePeriodExpiryAlert(transactionDomain.getKey().getId());
 			}

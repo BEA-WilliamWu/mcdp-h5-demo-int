@@ -4,7 +4,7 @@
 
 HTH 独立同步采集，写 `HTH_BEA.HTH_MTB_EVENT_DETAILS`。不写原 BCO CRM 表，不修改 batch、前端、通知模板或 CRMAsserter。普通 BCO 的原 CRM 记录继续原流程。
 
-实现位于 hosttohost 模块的 `com.ofss.digx.cz.bea.app.hosttohost.mtb`：Collector、Assembler、Event、Scope、Writer、Repository、LocalAdapter，以及跨模块 Adapter 实现与 Factory。common 的 `common/mtb` 仅保留 `IHthMtbAdapter` 接口和 `HthMtbSnapshot` 数据对象，不含事务、配置读取或数据库实现。
+实现位于 hosttohost 模块的 `com.ofss.digx.cz.bea.app.hosttohost.mtb`：HthCRMAsserter、HthCRMRequestAssembler、HthCRMEvent3DomainDTO、HthCRMLocalRepository 及 Scope、Writer、LocalAdapter，以及跨模块 Adapter 实现与 Factory。common 的 `common/mtb` 保留 `IHthMtbAdapter` 接口、`HthCRMInputData` 数据对象和 `HthChannelSupport` 纯判断工具，不含事务、配置读取或数据库实现。
 
 SMS 的 `HthUserMtbScope` 只负责收集调用结果及 HTH 渠道门控，再通过现有 AdapterFactoryConfigurator 调用 HTH 实现；审批 helper 同样走 Adapter。两者不直接依赖 HTH MTB 实现类。普通 BCO 在查找 Adapter 前返回。
 
@@ -17,7 +17,7 @@ SMS 的 `HthUserMtbScope` 只负责收集调用结果及 HTH 渠道门控，再�
 - `HostToHostManagement`：专用 MTB scope 记录 Enable/Edit/Disable；不增加公司 Audit Log 事件。
 - `HostToHostApiPassword`：Code 实际激活成功时采集 APPLY；Setup/Reset/生成操作由独立 MTB scope 采集。
 
-分层为 Collector / Assembler / immutable Event / Repository / LocalAdapter。持久化使用现有 ORM Session 的参数化 SQL，参考 HTH Password repository 的方式；没有额外注册 Entity ORM，也不修改共享 persistence 映射。此为最终实现对设计中拟新增 ORM Entity 的收敛。
+分层为 HthCRMAsserter / HthCRMRequestAssembler / HthCRMEvent3DomainDTO / HthCRMLocalRepository / LocalHthCRMRepositoryAdapter。持久化使用现有 ORM Session 的参数化 SQL，参考 HTH Password repository 的方式；没有额外注册 Entity ORM，也不修改共享 persistence 映射。此为最终实现对设计中拟新增 ORM Entity 的收敛。
 
 ## 数据含义
 
@@ -35,7 +35,7 @@ BCO 授权对照依据：`account-transactions-mapping.js` 中 USER 用 UAT_N_CA
 
 ## 部署顺序
 
-1. 同批打包部署 common（仅接口/DTO及移除旧审计回调）、SMS、HTH module 和 approval module。重新打包时清理旧 common/mtb 实现 class，避免残留。
+1. 同批打包部署 common（接口/DTO、纯判断工具及移除旧审计回调）、SMS、HTH module 和 approval module。重新打包时清理旧 common/mtb 实现 class，避免残留。
 2. 使用有权限的账号运行 `1_HTH_MTB_849.sql`。首次创建表及索引；已存在时验证结构；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
 3. 确认 NONXA datasource 对 HTH_BEA 新表拥有 SELECT/INSERT 权限；脚本不假设环境的实际 datasource 用户，不授予 PUBLIC。
 4. 注册 SQL 与新包就绪后重启应用：AdapterFactoryConfigurator 在初始化时缓存 Factory，新注册不能假设热更新生效。保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
@@ -61,3 +61,13 @@ JAVA_HOME=<JDK21> python3 devtools/backend-compile/tests/verify_hth_audit_runtim
 已跑：Java 8 定向编译；49 项映射/事务/SQL参数行为检查；真实 H2 插入、去重约束、独立提交/回滚、表不存在时业务仍能提交；原 791 回归；普通 BCO 审批不读 HTH 配置的测试；新增 Adapter 边界、数据库渠道补充、审计独立性和 Adapter 异常隔离测试；密码 setup/reset 的既有 EclipseLink/H2 事务回归。
 
 MTB H2 测试用代理适配 Session 到 JDBC，Oracle 时间表达式改成 CURRENT_TIMESTAMP；Adapter 配置加载使用测试替身，Factory/实现为生产类。密码回归的解密、DSP 和通知为替身。不等同于真实 Oracle/WebLogic 或 DSP 联调。尚未跑真实 UAT CM/BM 操作、Oracle 重跑脚本和性能测试。开关启用前至少验证：公司启停/编辑、用户创建/修改、Related/Associated 授权、Code 生成及审批激活、Setup/Reset、多级审批/拒绝、故意写库失败，以及普通 BCO 回归。
+
+### 2026-09-23：按 BCO CRM 链路命名及入口隔离
+
+对照链路：`HthCRMAsserter → HthCRMInputData → HthCRMRequestAssembler → HthCRMEvent3DomainDTO → HthCRMLocalRepository`。
+`HthCRMInputData` 是跨模块传入的操作数据，Asserter 使用它调用 Assembler 生成 Domain DTO，再通过既有独立事务 Writer/Repository 保存。这里对齐名称和分层职责，不继承 BCO CRMAsserter，也不修改 BCO 表、batch 或事务。
+
+公共判断统一使用 `HthChannelSupport`：渠道 HTH/H2H；用户更新判断旧、新渠道；审批按精确 HTH 服务白名单及用户渠道判断。工具只比较值，不查数据库、不读配置、不加载 HTH Adapter。
+SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToHost DTO 或维护 HTH 字段映射；这些处理移至 hosttohost 的 `HthCRMApprovalAsserter`。普通 BCO 不查找 HTH 实现；HTH Adapter 查找/调用异常及类加载链接错误捕获后只记阶段和异常类型。
+
+这减少共用模块对 HTH 实现的依赖，但公共接口/数据对象仍需随应用正确打包，不能保证任意混用新旧包。Factory 配置键与类名不变，本轮无需额外 SQL；新增实现类仍需重新完整打包。HTH 包缺失时，HTH MTB 可能漏记且不会补录，应检查诊断日志。

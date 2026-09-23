@@ -1,6 +1,6 @@
 # BCOH2H-849 — HTH CM / BM MTB 数据保存技术设计
 
-> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/mtb 只保留接口和简单 DTO。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
+> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/mtb 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
 
 日期：2026-09-23。实施设计基线；本次只出设计，尚未修改生产代码、执行 SQL 或完成 UAT 验证。
 
@@ -205,3 +205,13 @@ BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解�
 - 原 BCO CRMAsserter、UserManagementCRMEvaluator、UserAccountAccessCRMEvaluator、CRMRequestAssembler、CRMLocalRepository 和 ORM 路径见对照文档。
 
 同步、CM/BM 范围、区分 HTH、三个密码活动、BCO 授权参照及失败不补录已确定，不再重复提问。平台事务 API、正式外部活动码、UAT 配置属于实施核验项，不能伪装成已经验证；如发现不能满足隔离要求，需提出具体技术差异后调整，而不是扩大公共代码修改。
+
+### 2026-09-23：按 BCO CRM 链路命名及入口隔离
+
+对照链路：`HthCRMAsserter → HthCRMInputData → HthCRMRequestAssembler → HthCRMEvent3DomainDTO → HthCRMLocalRepository`。
+`HthCRMInputData` 是跨模块传入的操作数据，Asserter 使用它调用 Assembler 生成 Domain DTO，再通过既有独立事务 Writer/Repository 保存。这里对齐名称和分层职责，不继承 BCO CRMAsserter，也不修改 BCO 表、batch 或事务。
+
+公共判断统一使用 `HthChannelSupport`：渠道 HTH/H2H；用户更新判断旧、新渠道；审批按精确 HTH 服务白名单及用户渠道判断。工具只比较值，不查数据库、不读配置、不加载 HTH Adapter。
+SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToHost DTO 或维护 HTH 字段映射；这些处理移至 hosttohost 的 `HthCRMApprovalAsserter`。普通 BCO 不查找 HTH 实现；HTH Adapter 查找/调用异常及类加载链接错误捕获后只记阶段和异常类型。
+
+这减少共用模块对 HTH 实现的依赖，但公共接口/数据对象仍需随应用正确打包，不能保证任意混用新旧包。Factory 配置键与类名不变，本轮无需额外 SQL；新增实现类仍需重新完整打包。HTH 包缺失时，HTH MTB 可能漏记且不会补录，应检查诊断日志。

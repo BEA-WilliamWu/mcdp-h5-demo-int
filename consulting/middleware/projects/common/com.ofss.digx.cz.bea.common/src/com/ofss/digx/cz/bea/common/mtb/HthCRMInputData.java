@@ -3,10 +3,10 @@ package com.ofss.digx.cz.bea.common.mtb;
 import java.util.*;
 
 /** Immutable scalar operation metadata. Never supply passwords, Codes or request bodies. */
-public final class HthMtbSnapshot {
+public final class HthCRMInputData {
     private final String service;
     private final Map<String,Object> values;
-    public HthMtbSnapshot(String service, Map<String,Object> source) {
+    public HthCRMInputData(String service, Map<String,Object> source) {
         this.service = service;
         Map<String,Object> copy = new LinkedHashMap<String,Object>();
         for (Map.Entry<String,Object> entry : source.entrySet()) {

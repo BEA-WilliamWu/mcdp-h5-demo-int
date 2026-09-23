@@ -59,6 +59,6 @@ public final class HthMtbScope implements AutoCloseable {
     public void close() {
         if(closed)return;closed=true;
         put("occurredAt",java.time.Instant.now().toString());
-        HthMtbCollector.collect(service,values);
+        HthCRMAsserter.collect(service,values);
     }
 }

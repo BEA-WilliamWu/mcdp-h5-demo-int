@@ -25,6 +25,11 @@ public class HthMtbBoundaryTest {
   AdapterFactoryConfigurator.fail=true;
   try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
   AdapterFactoryConfigurator.fail=false;
+  AdapterFactoryConfigurator.missingImplementation=true;
+  try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {scope.channel(null,"HTH").result("SUCCESS");}
+  AdapterFactoryConfigurator.missingImplementation=false;
+  check(com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChange("h2h",null),"H2H alias");
+  check(!com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChange(null,"BCO"),"non HTH channel");
   com.ofss.fc.service.response.TransactionStatus status=new com.ofss.fc.service.response.TransactionStatus();
   status.setErrorCode("DIGX_APPROVAL_REQUIRED");
   try(HthUserMtbScope scope=new HthUserMtbScope(null,"UserExtensionData.create","CREATE")) {

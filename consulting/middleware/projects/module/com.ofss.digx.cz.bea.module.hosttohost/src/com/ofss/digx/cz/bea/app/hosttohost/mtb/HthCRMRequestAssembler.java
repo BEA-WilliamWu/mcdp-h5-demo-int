@@ -7,9 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 /** BCO-style operation-level mapping, not one row per account or API grant. */
-public final class HthMtbEventAssembler {
-    private HthMtbEventAssembler() { }
-    public static HthMtbEvent assemble(String service, Map<String,Object> source, String externalCode) {
+public final class HthCRMRequestAssembler {
+    private HthCRMRequestAssembler() { }
+    public static HthCRMEvent3DomainDTO assemble(String service, Map<String,Object> source, String externalCode) {
         String operation = text(source, "operation");
         String activity = activity(service, operation);
         if (activity == null || "NO_CHANGE".equals(text(source,"businessOutcome"))
@@ -58,7 +58,7 @@ public final class HthMtbEventAssembler {
             fields.put("DEDUP_KEY", digest(Arrays.asList(activity, phase, reference, stable,
                 text(source,"partyId"), text(source,"targetUserId")).toString()));
         }
-        return new HthMtbEvent(fields);
+        return new HthCRMEvent3DomainDTO(fields);
     }
     public static String activity(String service, String operation) {
         if (service == null || operation == null) return null;
@@ -81,7 +81,7 @@ public final class HthMtbEventAssembler {
         }
         return null; // Inquiries/reveal/notifications keep existing BCO rules; no new HTH event.
     }
-    private static boolean hth(String value) { return "HTH".equalsIgnoreCase(value) || "H2H".equalsIgnoreCase(value); }
+    private static boolean hth(String value) { return com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChannel(value); }
     static String text(Map<String,Object> data, String key) {
         Object value=data.get(key);
         return value instanceof String && !((String)value).trim().isEmpty() ? (String)value : null;

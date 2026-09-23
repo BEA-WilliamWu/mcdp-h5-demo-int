@@ -24,13 +24,13 @@ public class HthMtbJdbcTest {
             business.createStatement().execute("CREATE TABLE BCO_BUSINESS(ID INT PRIMARY KEY)");
             business.setAutoCommit(false);business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(1)");
             Map<String,Object> source=HthMtbTest.data("RESET");source.put("requestId","same-request");
-            HthMtbEvent event=HthMtbEventAssembler.assemble("x.HostToHostApiPassword.reset",source,null);
+            HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null);
             HthMtbWriter.write(event,new DbResources());
             check(count(observer,"BCO_BUSINESS")==0); // HTH commit did not commit caller
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1);
             business.rollback();check(count(observer,"BCO_BUSINESS")==0);
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // caller rollback did not rollback HTH
-            HthMtbWriter.write(HthMtbEventAssembler.assemble("x.HostToHostApiPassword.reset",source,null),new DbResources());
+            HthMtbWriter.write(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null),new DbResources());
             check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // DB unique constraint prevents replay
             business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(2)");
             observer.createStatement().execute("DROP TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS");

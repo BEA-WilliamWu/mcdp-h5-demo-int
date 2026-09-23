@@ -341,7 +341,8 @@ public class DataAccessManager {
 <property name="javax.persistence.jdbc.url" value="jdbc:h2:mem:hth;MODE=Oracle;DB_CLOSE_DELAY=-1"/>
 <property name="eclipselink.weaving" value="false"/><property name="eclipselink.logging.level" value="OFF"/>
 </properties></persistence-unit></persistence>""")
-    sources += [str(p) for p in (BASE / "app/hosttohost/mtb").glob("*.java")]
+    sources += [str(p) for p in (BASE / "app/hosttohost/mtb").glob("*.java")
+                if p.name not in ("HthCRMApprovalAsserter.java", "HthMtbAdapter.java", "HthMtbAdapterFactory.java")]
     sources += [str(p) for p in (ROOT / "consulting/middleware/projects/common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb").glob("*.java")]
     common = ROOT / "consulting/middleware/projects/common"
     sources += [str(next((ROOT / "consulting/middleware/projects").rglob("HthOnboardingAudit.java")))]

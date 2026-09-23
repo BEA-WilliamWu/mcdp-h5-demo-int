@@ -963,7 +963,7 @@ public class HostToHostApiPassword extends AbstractApplication
       mtb.put("actorUserId", operator); mtb.put("partyId", partyId);
       mtb.put("targetUserId", HthMtbScope.fullUser(userName, partyId));
       mtb.put("approvalReference", transactionId); mtb.put("occurredAt", java.time.Instant.now().toString());
-      com.ofss.digx.cz.bea.app.hosttohost.mtb.HthMtbCollector.collect(GENERATE_SERVICE_ID, mtb);
+      com.ofss.digx.cz.bea.app.hosttohost.mtb.HthCRMAsserter.collect(GENERATE_SERVICE_ID, mtb);
     }
   }
 

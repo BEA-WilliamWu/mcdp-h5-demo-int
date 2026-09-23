@@ -56,23 +56,21 @@ public final class HthUserMtbScope implements AutoCloseable {
     public HthUserMtbScope channel(String oldChannel, String newChannel) {
         return put("oldUserChannelType", oldChannel).put("newUserChannelType", newChannel);
     }
-    private static boolean hth(Object value) {
-        return "HTH".equalsIgnoreCase(String.valueOf(value)) || "H2H".equalsIgnoreCase(String.valueOf(value));
-    }
     public static String fullUser(String user, String party) {
         return user == null || user.contains("@") || party == null ? user : user + "@" + party;
     }
     public void close() {
         if(closed)return;closed=true;
         put("occurredAt",java.time.Instant.now().toString());
-        if (!hth(values.get("oldUserChannelType")) && !hth(values.get("newUserChannelType"))) return;
+        if (!com.ofss.digx.cz.bea.common.mtb.HthChannelSupport.isHthChange(
+                values.get("oldUserChannelType"), values.get("newUserChannelType"))) return;
         try {
             com.ofss.digx.app.adapter.IAdapterFactory factory = com.ofss.digx.app.adapter.AdapterFactoryConfigurator
                 .getInstance().getAdapterFactory(com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter.FACTORY);
             com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter adapter =
                 (com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter) factory.getAdapter(com.ofss.digx.cz.bea.common.mtb.IHthMtbAdapter.ADAPTER);
-            adapter.collect(new com.ofss.digx.cz.bea.common.mtb.HthMtbSnapshot(service, values));
-        } catch (java.lang.Exception failure) {
+            adapter.collect(new com.ofss.digx.cz.bea.common.mtb.HthCRMInputData(service, values));
+        } catch (java.lang.Exception | LinkageError failure) {
             java.util.logging.Logger.getLogger(HthUserMtbScope.class.getName()).log(java.util.logging.Level.WARNING,
                 "HTH_MTB stage=USER_CAPTURE_FAILED, exceptionType={0}", failure.getClass().getName());
         }

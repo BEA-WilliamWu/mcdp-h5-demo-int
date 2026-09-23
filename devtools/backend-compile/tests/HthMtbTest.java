@@ -16,61 +16,61 @@ public class HthMtbTest {
         value.put("occurredAt","2026-09-22T16:01:02Z");value.put("actorUserId","AP@PARTY");
         value.put("partyId","001");value.put("targetUserId","USER@PARTY");return value;
     }
-    static HthMtbEvent event(String op) {
-        return HthMtbEventAssembler.assemble("x.HostToHostApiPassword.setup",data(op),null);
+    static HthCRMEvent3DomainDTO event(String op) {
+        return HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.setup",data(op),null);
     }
     public static void main(String[] args) throws Exception {
         Map<String,Object> user=data("CREATE");user.put("newUserChannelType","BCO");
-        check(HthMtbEventAssembler.assemble("UserExtensionData.create",user,null)==null);
+        check(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null)==null);
         user.put("newUserChannelType","HTH");
-        HthMtbEvent created=HthMtbEventAssembler.assemble("UserExtensionData.create",user,null);
+        HthCRMEvent3DomainDTO created=HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null);
         check("USER_CREATE".equals(created.get("ACTIVITY_KEY")));
         check("20260923".equals(created.get("EVENT_DTE")) && "000102".equals(created.get("EVENT_TIME")));
         check("AP@PARTY".equals(created.get("USER_ID")) && "USER@PARTY".equals(created.get("TARGET_USER_ID")));
         user.put("businessOutcome","PENDING_APPROVAL");
-        check("SUBMIT".equals(HthMtbEventAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
+        check("SUBMIT".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
         user.put("businessOutcome","SUCCESS");user.put("effectiveChange",true);
-        check("APPLY".equals(HthMtbEventAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
+        check("APPLY".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
         check(!event("SETUP").get("ACTIVITY_KEY").equals(event("RESET").get("ACTIVITY_KEY")));
         check("CODE_GENERATE".equals(event("GENERATE").get("ACTIVITY_KEY")));
         check(event("REVEAL")==null);
         Map<String,Object> secret=data("RESET");secret.put("password","DO_NOT_STORE");secret.put("code","123456");
         secret.put("encryptedCredentials","SECRET");secret.put("requestId","request");
-        HthMtbEvent reset=HthMtbEventAssembler.assemble("x.HostToHostApiPassword.reset",secret,null);
+        HthCRMEvent3DomainDTO reset=HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",secret,null);
         check(!reset.fields().toString().contains("DO_NOT_STORE") && !reset.fields().toString().contains("123456"));
         check(reset.get("DEDUP_KEY")!=null);
         secret.put("idempotentReplay",true);
-        check(HthMtbEventAssembler.assemble("x.HostToHostApiPassword.reset",secret,null)==null);
+        check(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",secret,null)==null);
         Map<String,Object> access=data("ACCESS_EDIT");access.put("linkageType","ASSOCIATED");
-        HthMtbEvent grant=HthMtbEventAssembler.assemble("x.HostToHostUserAccess.edit",access,null);
+        HthCRMEvent3DomainDTO grant=HthCRMRequestAssembler.assemble("x.HostToHostUserAccess.edit",access,null);
         check("ACCESS_EDIT".equals(grant.get("ACTIVITY_KEY")) && "ASSOCIATED".equals(grant.get("RELATIONSHIP_TYPE")));
         check(grant.get("DEDUP_KEY")==null); // no accidental collapse of different approval actions
         for(String action:Arrays.asList("ENABLE","EDIT","DISABLE")) {
             String method="ENABLE".equals(action)?"submit":action.toLowerCase(Locale.ROOT);
-            HthMtbEvent company=HthMtbEventAssembler.assemble("x.HostToHostManagement."+method,data("COMPANY_"+action),null);
+            HthCRMEvent3DomainDTO company=HthCRMRequestAssembler.assemble("x.HostToHostManagement."+method,data("COMPANY_"+action),null);
             check("BM".equals(company.get("CHANNEL_TYPE")));
         }
-        List<HthMtbEvent> saved=new ArrayList<HthMtbEvent>();
+        List<HthCRMEvent3DomainDTO> saved=new ArrayList<HthCRMEvent3DomainDTO>();
         final Synchronization[] callback={null};
         Transaction tx=(Transaction)Proxy.newProxyInstance(Transaction.class.getClassLoader(),new Class[]{Transaction.class},(p,m,a)->{
             if(m.getName().equals("getStatus"))return Status.STATUS_ACTIVE;
             if(m.getName().equals("registerSynchronization")){callback[0]=(Synchronization)a[0];return null;}
             throw new AssertionError("Unexpected caller transaction operation: "+m.getName());
         });
-        HthMtbCollector.schedule(reset,tx,true,saved::add);check(saved.isEmpty());
+        HthCRMAsserter.schedule(reset,tx,true,saved::add);check(saved.isEmpty());
         callback[0].afterCompletion(Status.STATUS_COMMITTED);check(saved.size()==1 && saved.get(0)==reset);
-        saved.clear();HthMtbCollector.schedule(reset,tx,true,saved::add);
+        saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);
         callback[0].afterCompletion(Status.STATUS_ROLLEDBACK);
         check(saved.size()==1 && "R".equals(saved.get(0).get("EVENT_STATUS_CODE")) && saved.get(0).get("DEDUP_KEY")==null);
-        saved.clear();HthMtbCollector.schedule(reset,null,true,saved::add);check(saved.isEmpty());
-        HthMtbCollector.schedule(reset,null,false,saved::add);check(saved.size()==1);
-        saved.clear();HthMtbCollector.schedule(reset,tx,true,saved::add);callback[0].afterCompletion(Status.STATUS_UNKNOWN);check(saved.isEmpty());
+        saved.clear();HthCRMAsserter.schedule(reset,null,true,saved::add);check(saved.isEmpty());
+        HthCRMAsserter.schedule(reset,null,false,saved::add);check(saved.size()==1);
+        saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);callback[0].afterCompletion(Status.STATUS_UNKNOWN);check(saved.isEmpty());
         for(String failure:Arrays.asList("NONE","INSERT","COMMIT","CLOSE","ROLLBACK")) {
             Resources resources=new Resources(failure);
             HthMtbWriter.write(reset,resources);
             check(resources.opens==1 && resources.closes==1);
             check(resources.inserts==1); // no retry even if commit outcome is uncertain
-            check(resources.bindings.size()==LocalHthMtbRepositoryAdapter.COLUMNS.length);
+            check(resources.bindings.size()==LocalHthCRMRepositoryAdapter.COLUMNS.length);
             check(!resources.sql.contains("DIGX_CZ_CRM_EVENT3_DETAILS") && !resources.sql.contains("USER@PARTY"));
             if("NONE".equals(failure)||"CLOSE".equals(failure))check(resources.commits==1 && resources.rollbacks==0);
             else check(resources.rollbacks==1);

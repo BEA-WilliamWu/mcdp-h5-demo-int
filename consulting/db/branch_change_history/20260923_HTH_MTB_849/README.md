@@ -1,0 +1,59 @@
+# BCOH2H-849 部署和验证
+
+## 修改范围
+
+HTH 独立同步采集，写 `HTH_BEA.HTH_MTB_EVENT_DETAILS`。不写原 BCO CRM 表，不修改 batch、前端、通知模板或 CRMAsserter。普通 BCO 的原 CRM 记录继续原流程。
+
+新代码位于 `common/mtb` 专用包，原因是现有 HTH 用户快照位于 common，SMS、审批和 HTH 模块都需使用，不能让 common 反向依赖 HTH 模块。这里没有改变通用配置类或通用持久化类。
+
+既有生产文件仅增加以下采集调用：
+
+- `HthOnboardingAudit.Entry.close`：HTH scope 已启用时，将已有白名单数据交给独立 MTB sink；不等待审计消息消费，不改变审计 DTO 内容。普通 BCO scope 原来就直接返回。
+- 审批 `Transaction`：两个单笔/worker 执行路径在最终事务更新 commit 后调用 HthMtbApproval。该 helper 对普通 BCO snapshot 在读配置/访问数据库前返回；不修改审批结果或状态。
+- `HostToHostManagement`：专用 MTB scope 记录 Enable/Edit/Disable；不增加公司 Audit Log 事件。
+- `HostToHostApiPassword`：Code 实际激活成功时采集 APPLY；Setup/Reset/生成操作由已有 HTH scope 采集。
+
+分层为 Collector / Assembler / immutable Event / Repository / LocalAdapter。持久化使用现有 ORM Session 的参数化 SQL，参考 HTH Password repository 的方式；没有额外注册 Entity ORM，也不修改共享 persistence 映射。此为最终实现对设计中拟新增 ORM Entity 的收敛。
+
+## 数据含义
+
+- `SOURCE_SYSTEM=HTH`；`CHANNEL_TYPE` 区分 CM/BM；`ACTIVITY_KEY` 区分业务。
+- User ID 是当前操作人，TARGET_USER_ID 是目标，ACCT_NBR 按 BCO 维护业务保存公司标识。
+- 授权保留 Related/Associated；一次操作一条，不按账户/API 数量拆行。
+- `PHASE=SUBMIT` 只代表提交；`APPROVAL_APPROVE/APPROVAL_REJECT/APPROVAL_ACTION` 是审批动作；`APPLY` 是有效变更；`GENERATE` 是 Code 生成（不代表激活）；`EXECUTE` 是 Setup/Reset 执行。
+- `EVENT_STATUS_CODE=A/R` 是该阶段操作结果。审批拒绝动作成功可为 A；不能把它解释成业务获批。业务事务回滚则改 R，并写 BUSINESS_ROLLBACK。
+- Code Generate/再生成沿用同一个内部 CODE_GENERATE 活动，Setup/Reset 分开。
+- REVEAL、查询和通知没有新增 HTH 活动；保留已有 BCO 处理。
+- 只有可靠动作标识才生成 DEDUP_KEY。Setup/Reset 成功用 requestId，Code 激活用 codeId 与业务引用；审批 transactionId 本身不作去重键。
+- 外部正式活动码配置键是 `ACTIVITY_<ACTIVITY_KEY>`，分组 `HTHMtbConfiguration`。未给定正式码时列为空，不能声称已满足下游正式编码映射；不会编造 CDC 编码。
+
+BCO 授权对照依据：`account-transactions-mapping.js` 中 USER 用 UAT_N_CA/UA，USERLINKAGE 用 LAT_N_CA/UA；历史 CRM SQL 为 LAT_N_CA/UA/DA 指向 UserAccountAccessCRMEvaluator。该 evaluator 输出公司和当前操作人，不按账户明细生成多条。实际 UAT 对应配置仍用只读脚本核对。
+
+## 部署顺序
+
+1. 打包部署新增 `common/mtb`、更新的 common audit、HTH module 和 approval module，不能仅复制旧文件漏掉新类。
+2. 使用有权限的账号运行 `1_HTH_MTB_849.sql`。首次创建表及索引；已存在时验证结构；配置只在不存在时插入。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
+3. 确认 NONXA datasource 对 HTH_BEA 新表拥有 SELECT/INSERT 权限；脚本不假设环境的实际 datasource 用户，不授予 PUBLIC。
+4. 保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
+5. 运行 `2_HTH_MTB_849_verify.sql`，按时间和业务引用对照数据。回退只需关闭开关，保留表和记录。
+
+## 事务边界及明确限制
+
+在 JTA transaction 存在时注册完成回调，在提交/回滚后立即尝试保存，不新增线程或队列。无活动事务时直接同步保存。Writer 只打开独立 NONXA session；不 suspend/resume、commit 或 rollback 调用方事务。
+
+项目的 resource-local Transaction 接口没有完成回调。若收集时仍存在这种活动事务，当前实现**跳过并记录 LOCAL_TX_PENDING**，避免保存尚未提交的成功。若 UAT 出现此日志，不能算该路径已完成验收；需在该具体事务拥有者的完成位置补接入，而不是放宽判断。部分多审批 worker 的实际事务模式也必须实测。
+
+Oracle/WebLogic afterCompletion、配置缓存、NONXA session 是否保持外层 Session、权限及超时效果均未在本机实测。同步回调不承诺运行于与请求相同的物理线程，取决于事务管理器；没有应用自行异步派发。
+
+SQL 查询超时设为 5 秒，但连接获取/commit 的超时仍取决于数据源。失败记录异常类型，不输出请求、密码、Code、密文、Hash 或异常消息。不重试、不补录。
+
+## 本地验证
+
+```sh
+JAVA_HOME=<JDK21> H2_JAR=<local-h2.jar> python3 devtools/backend-compile/tests/verify_hth_849.py
+JAVA_HOME=<JDK21> python3 devtools/backend-compile/tests/verify_hth_audit_runtime.py
+```
+
+已跑：Java 8 定向编译；49 项映射/事务/SQL参数行为检查；真实 H2 插入、去重约束、独立提交/回滚、表不存在时业务仍能提交；原 791 回归；普通 BCO 审批不读 HTH 配置的测试。
+
+H2 测试用代理适配 Session 到 JDBC，Oracle 时间表达式改成 CURRENT_TIMESTAMP；不等同于真实 Oracle/WebLogic。尚未跑真实 UAT CM/BM 操作、Oracle 重跑脚本和性能测试。开关启用前至少验证：公司启停/编辑、用户创建/修改、Related/Associated 授权、Code 生成及审批激活、Setup/Reset、多级审批/拒绝、故意写库失败，以及普通 BCO 回归。

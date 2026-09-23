@@ -295,6 +295,11 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
 
     private HostToHostManagementResponseDTO save(SessionContext sessionContext,
                                                  HostToHostManagementDTO requestDTO, String serviceId, String actionType) throws Exception {
+        try (com.ofss.digx.cz.bea.common.mtb.HthMtbScope mtb =
+                new com.ofss.digx.cz.bea.common.mtb.HthMtbScope(sessionContext, serviceId, "COMPANY_" + actionType)) {
+            mtb.put("partyId", requestDTO == null ? null : requestDTO.getPartyId())
+                .put("mtbPhase", isApprovedExecution() ? "APPLY" : "SUBMIT");
+            try {
         if (logger.isLoggable(Level.FINE)) {
             logger.log(Level.FINE, formatter.formatMessage("Entered into save() : action = %s, requestDTO = %s",
                     actionType, requestDTO));
@@ -331,7 +336,14 @@ public class HostToHostManagement extends AbstractApplication implements IHostTo
         }
         super.checkResponsePolicy(sessionContext, response);
         restoreExternalReferenceNumber(saveCompleted, referenceNumber);
+        mtb.result(saveCompleted ? (approvedExecution ? "SUCCESS" : "PENDING_APPROVAL") : "FAILURE")
+            .put("approvalReference", referenceNumber).response(transactionStatus);
         return response;
+            } catch (java.lang.Exception failure) {
+                mtb.failure(failure);
+                throw failure;
+            }
+        }
     }
 
     private String getActivityId(String actionType) {

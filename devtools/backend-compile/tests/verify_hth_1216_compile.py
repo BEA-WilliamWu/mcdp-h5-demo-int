@@ -8,6 +8,7 @@ files=[]
 for name in ('HostToHostUserAccess.java','HthUserAccessNotification.java','UserManagementActivityLogDTO.java',
              'HthOnboardingAudit.java','HthUserAccessAudit.java'):
     files.extend(p for p in projects.rglob(name) if '/appx/' not in str(p))
+files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
 with tempfile.TemporaryDirectory(prefix='hth1216-compile-') as output:
     result = subprocess.run([str(Path(os.environ['JAVA_HOME'])/'bin/javac'),'-proc:none','--release','8','-cp',cp,'-d',output,*map(str,files)],check=False)
     if result.returncode:

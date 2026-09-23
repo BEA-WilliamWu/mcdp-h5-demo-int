@@ -11,6 +11,7 @@ files += [p for p in projects.rglob('UserExtensionData.java') if '/app/sms/servi
 files += list(projects.rglob('HthApiCredentialWriteException.java')) + list(projects.rglob('IHthApiPassword*.java')) + list(projects.rglob('LocalHthApiPassword*.java'))
 files += list(projects.rglob('HthApiPassword*.java')) + list(projects.rglob('HthUserAccessActivityLogDTO.java')) + list(projects.rglob('HostToHostApiPassword*DTO.java'))
 files += list(projects.rglob('Hth*Notification*.java')) + list(projects.rglob('Hth*Contact*.java'))
+files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
 with tempfile.TemporaryDirectory(prefix='hth-audit-compile-') as output:
     result = subprocess.run([str(Path(os.environ['JAVA_HOME'])/'bin/javac'),'-proc:none','--release','8','-cp',cp,'-d',output,*map(str,dict.fromkeys(files))],check=False)
     if result.returncode: raise SystemExit(result.returncode)

@@ -942,6 +942,13 @@ public class HostToHostApiPassword extends AbstractApplication
           System.currentTimeMillis() + EXPIRY_HOURS * MILLIS_PER_HOUR)));
       row.setTransactionId(transactionId);
       notifyHthApiPasswordApproved(row, operator);
+      java.util.Map<String,Object> mtb = new java.util.LinkedHashMap<String,Object>();
+      mtb.put("operation", "CODE_ACTIVATE"); mtb.put("businessOutcome", "SUCCESS");
+      mtb.put("mtbPhase", "APPLY"); mtb.put("mtbActionId", codeId);
+      mtb.put("actorUserId", operator); mtb.put("partyId", partyId);
+      mtb.put("targetUserId", HthOnboardingAudit.fullUser(userName, partyId));
+      mtb.put("approvalReference", transactionId); mtb.put("occurredAt", java.time.Instant.now().toString());
+      com.ofss.digx.cz.bea.common.mtb.HthMtbCollector.collect(GENERATE_SERVICE_ID, mtb);
     }
   }
 

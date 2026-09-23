@@ -10,6 +10,7 @@ cp = os.pathsep.join([str(root / 'devtools/backend-compile/build/classes/java/ma
                      [str(p) for p in (root / 'consulting/middleware/lib').rglob('*.jar')])
 files = [p for name in ('HostToHostManagement.java', 'EligibleAccountDTO.java')
          for p in projects.rglob(name) if '/appx/' not in str(p)]
+files += list((projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common/mtb').glob('*.java'))
 with tempfile.TemporaryDirectory(prefix='hth1288-compile-') as output:
     result = subprocess.run([str(Path(os.environ['JAVA_HOME']) / 'bin/javac'),
                              '-proc:none', '--release', '8', '-cp', cp, '-d', output, *map(str, files)])

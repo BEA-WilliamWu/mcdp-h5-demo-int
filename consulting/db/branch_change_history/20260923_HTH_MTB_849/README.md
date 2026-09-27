@@ -36,7 +36,7 @@ BCO 授权对照依据：`account-transactions-mapping.js` 中 USER 用 UAT_N_CA
 ## 部署顺序
 
 1. 同批打包部署 common（接口/DTO、纯判断工具及移除旧审计回调）、SMS、HTH module 和 approval module。重新打包时清理旧 common/mtb、common/audit/HthOnboardingAudit 和 hosttohost/mtb 的 class，避免残留。
-2. 先用 HTH_BEA 连接运行 `1_HTH_CRM_849_Schema.sql`，再切换 DIGX 配置连接运行 `2_HTH_CRM_849_DIGX_Config.sql`。首次创建表及索引；已存在时验证结构；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
+2. 先用 HTH_BEA 连接运行 `1_HTH_CRM_849_Schema.sql`，再切换 DIGX 配置连接运行 `2_HTH_CRM_849_DIGX_Config.sql`。首次创建表及索引；已存在时先检查、再增量补列/扩容；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
 3. 确认 NONXA datasource 对 HTH_BEA 新表拥有 SELECT/INSERT 权限；脚本不假设环境的实际 datasource 用户，不授予 PUBLIC。
 4. 注册 SQL 与新包就绪后重启应用：AdapterFactoryConfigurator 在初始化时缓存 Factory，新注册不能假设热更新生效。保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
 5. 分别用 HTH_BEA 连接运行 `3_HTH_CRM_849_HTH_Verify.sql`、DIGX 配置连接运行 `4_HTH_CRM_849_DIGX_Verify.sql`，按时间和业务引用对照数据。回退只需关闭开关，保留表和记录。
@@ -91,8 +91,31 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 
 1、2 各自选中完整 `DECLARE ... END;` 块，作为一条语句执行；不包含 SET、独立 `/` 或必填参数。3、4 各 SELECT 分别执行。两个 schema 连接可以分别执行对应文件，不要求任一部署账号同时拥有两边权限。不要仅切换客户端显示的 schema 而继续使用没有权限的登录账号。
 
-重复执行保留现有记录、ENABLED 和活动码，仅更新 HTH Factory 注册值。结构不兼容或配置键重复会明确报错；不会删除或重建已有表。HTH DDL 自动提交，已完成步骤不能回滚；DIGX 配置失败回滚至本文件的 savepoint。两个文件不是一个跨 schema 原子事务，任一步失败应先修复再重跑。
+重复执行保留现有记录、ENABLED 和活动码，仅更新 HTH Factory 注册值。现有结构中可安全补齐的差异自动处理；类型冲突、约束冲突或配置键重复会明确报错；不会删除或重建已有表。HTH DDL 自动提交，已完成步骤不能回滚；DIGX 配置失败回滚至本文件的 savepoint。两个文件不是一个跨 schema 原子事务，任一步失败应先修复再重跑。
 
 应用运行账号若不是 HTH_BEA，仍须由 DBA 根据实际 NONXA datasource 账号授予该表 SELECT/INSERT 权限；这与部署账号分开执行是两件事。脚本不猜测账号、不授予 PUBLIC。
 
 脚本格式及 schema 引用隔离已静态核对；Java/H2 回归不等于 Oracle PL/SQL 执行，仍须在 UAT 验证权限和已有表结构。
+
+## 旧表兼容与重复执行（2026-09-28）
+
+直接执行原文件 `1_HTH_CRM_849_Schema.sql`，无需另选一个迁移脚本。它按实际元数据处理：
+
+- 没有表：创建原定的 24 列表及索引。
+- 已有表：保留全部数据及 BATCH_PROCESSED_DATE、RECORD_TYPE、FILLER_01 等额外字段；补齐当前 Repository 写入需要的缺列。
+- 已有 VARCHAR2 字段：CHAR 长度足够则保留，更短则扩大；BYTE 改为 CHAR 时目标字符长度至少等于原字节容量，不缩短原容量。原有 DEFAULT 和约束不改。
+- 历史表新增列允许 NULL，保留历史记录“未知”的状态；不虚构 ACTIVITY_KEY、PHASE、SERVICE_ID 或 CREATED_AT。当前应用为新增记录提供这些值。原已有 NOT NULL 约束不撤销；新建表仍使用原定 NOT NULL 约束。
+- 已有同列、同唯一性的正常有效索引，即使名字不同也复用；已有 EVENT_ID 单列主键必须启用并验证；旧表没有主键时，先确认 EVENT_ID 无空值、无重复，再补主键。
+- 重跑：已补列、已扩容及已建索引直接跳过，正常第二次输出 `DDL statements applied=0`。
+
+先完成预检查，再执行 ALTER/CREATE INDEX。无法写入的字段类型、已有可空字段却被设为 NOT NULL、应用未提供值的额外 NOT NULL 列（即使有 DEFAULT 也保守要求明确核对）、生成列、分区键扩容、主键/索引冲突或重复 DEDUP_KEY 会停止，并列出原因。完整列表见客户端 DBMS Output。不会擅自删除数据、改业务约束或为历史行填猜测值。
+
+Oracle DDL 自动提交，索引键长度上限、空间和锁等运行时错误仍可能发生，已完成的 DDL 不会整体回滚；错误包含当前语句，修复环境原因后可继续重跑。新增字段的历史行没有 CREATED_AT，因此最近 24 小时查询不包含这些行，验证脚本另提供全表数量/元数据数量对照。
+
+扩容和 BYTE/CHAR 变更依据 [Oracle ALTER TABLE 文档](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/ALTER-TABLE.html)。迁移只操作 HTH_BEA 表；DIGX 配置仍用第二份文件单独执行，未修改 BCO Java、表或 batch。
+
+### 本次实际 Oracle 验证
+
+在隔离的本地 Oracle Free 容器中，使用合成数据执行了当前完整 PL/SQL（不是 H2 语法模拟）：新建并重跑、BCO 风格旧宽表补列扩容并重跑、保留历史行及额外列、按当前 Repository 的 24 列 INSERT、同定义不同名索引复用、额外必填列/错误类型在任何 ALTER 前停止、无主键且 ID 唯一时补主键、空/重复 ID 拦截、更宽 VARCHAR2(512 CHAR) 保持不缩短。五种重复执行均为 `DDL statements applied=0`，检查全部通过。
+
+测试旧表的字段顺序参考用户截图，长度和约束为合成测试数据，不声称复原了 UAT 完整 DDL。本地 Oracle 版本与 UAT 可能不同；该结果不替代 UAT 空间、索引限制、权限和真实约束验证。Java/H2 的 849/791 回归也已通过。

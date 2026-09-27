@@ -221,3 +221,7 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
 
 诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需在 DIGX 配置连接重新执行 2_HTH_CRM_849_DIGX_Config.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
+
+### 部署已有表时的兼容处理
+
+建表文件 `1_HTH_CRM_849_Schema.sql` 同时承载增量升级：保留旧列及数据，只补缺列、扩大 VARCHAR2 容量，不收缩或重建表。旧表新加的业务元数据列允许历史值为空，避免给旧记录伪造采集时间和活动类型；新建表保留原 NOT NULL 设计，应用仍为新记录提供这些字段。旧约束不放宽，无法安全兼容的差异在 ALTER 前集中报出。HTH 建表与 DIGX 配置继续分 schema 执行。

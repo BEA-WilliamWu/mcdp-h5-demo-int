@@ -89,7 +89,7 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 | 3 | `3_HTH_CRM_849_HTH_Verify.sql` | HTH_BEA | 查表结构、最近 24 小时数据和重复键 |
 | 4 | `4_HTH_CRM_849_DIGX_Verify.sql` | DIGX 配置 schema | 查开关、Factory 和只读 BCO 参考配置 |
 
-1、2 各自选中完整 `DECLARE ... END;` 块，作为一条语句执行；不包含 SET、独立 `/` 或必填参数。3、4 各 SELECT 分别执行。两个 schema 连接可以分别执行对应文件，不要求任一部署账号同时拥有两边权限。不要仅切换客户端显示的 schema 而继续使用没有权限的登录账号。
+1、2 各自使用对应的 Oracle 连接，打开整个文件，使用 **Execute SQL Script / Alt+X**；也可选中完整 `DECLARE ... END;`，使用 **Execute SQL Statement / Ctrl+Enter**。交付文件不包含独立 `/`，不要另加。不要只选内部循环或在内部 `END;` 处执行片段。3、4 各 SELECT 分别执行。两个 schema 连接可以分别执行对应文件，不要求任一部署账号同时拥有两边权限。不要仅切换客户端显示的 schema 而继续使用没有权限的登录账号。
 
 重复执行保留现有记录、ENABLED 和活动码，仅更新 HTH Factory 注册值。现有结构中可安全补齐的差异自动处理；类型冲突、约束冲突或配置键重复会明确报错；不会删除或重建已有表。HTH DDL 自动提交，已完成步骤不能回滚；DIGX 配置失败回滚至本文件的 savepoint。两个文件不是一个跨 schema 原子事务，任一步失败应先修复再重跑。
 
@@ -119,3 +119,21 @@ Oracle DDL 自动提交，索引键长度上限、空间和锁等运行时错误
 在隔离的本地 Oracle Free 容器中，使用合成数据执行了当前完整 PL/SQL（不是 H2 语法模拟）：新建并重跑、BCO 风格旧宽表补列扩容并重跑、保留历史行及额外列、按当前 Repository 的 24 列 INSERT、同定义不同名索引复用、额外必填列/错误类型在任何 ALTER 前停止、无主键且 ID 唯一时补主键、空/重复 ID 拦截、更宽 VARCHAR2(512 CHAR) 保持不缩短。五种重复执行均为 `DDL statements applied=0`，检查全部通过。
 
 测试旧表的字段顺序参考用户截图，长度和约束为合成测试数据，不声称复原了 UAT 完整 DDL。本地 Oracle 版本与 UAT 可能不同；该结果不替代 UAT 空间、索引限制、权限和真实约束验证。Java/H2 的 849/791 回归也已通过。
+
+### DBeaver 执行脚本的分段修复
+
+旧版迁移脚本在 `DECLARE` 中定义局部 procedure。DBeaver 的脚本分段器可能将 `check_column` 的 `END;` 当成整条语句结束，主 `BEGIN` 还没有发送，因而出现 `PLS-00103: end-of-file`，预期 `begin function pragma procedure`。此前直接向 Oracle 提交完整块的验证没有覆盖此客户端分段问题。
+
+建表脚本现已改成单一 `DECLARE ... BEGIN ... END;`，字段和索引检查使用循环，不再嵌套定义 procedure/function。保留既有预检查、补列、扩容、索引复用和数据保护规则。修复的核心是移除会被错误分段的局部子程序，并非补一个 `/`；DBeaver 的部分执行路径会把独立 `/` 当成另一条 SQL，造成 `ORA-00900`，因此交付文件继续不附加 `/`。
+
+DBeaver 的 [SQL 执行说明](https://dbeaver.com/docs/dbeaver/SQL-Execution/) 区分整块语句执行与脚本分段执行。本次使用官方 DBeaver Community 26.2.1 的原始解析器和 Oracle 方言做了验证：旧文件拆成 6 条，第一条精确结束于第 101 行；新版识别为一条完整语句。三种空行分段模式与 Ignore native delimiter 开/关的六种组合均通过。测试仅模拟无连接的应用服务和驱动元数据，不替换解析器逻辑，也不是手写 SQL 分段模拟。
+
+随后将解析器输出的 `SQLQuery.getText()` 原文通过 JDBC `Statement.execute(sql)` 送到隔离的本地 Oracle，未裁剪、包裹或补分隔符。15 步验证通过：首次建表、重复执行 0 DDL、旧表升级、历史行/主键保留、当前应用 24 列 INSERT，以及 DIGX 配置首次注册与重跑保留开关/映射。迁移逻辑另通过原有 32 步回归及多项冲突集中报错且零变更测试。Oracle 为 26ai Free 23.26.3，JDBC 驱动为项目现有 19.8；全部使用合成数据，没有连接 UAT。
+
+分段回归已加入仓库，可在项目根目录运行；使用已有的官方 DBeaver 26.2.1 安装包，不下载依赖、不连接数据库：
+
+```sh
+JAVA_HOME=<JDK21> DBEAVER_HOME=<DBeaver26.2.1安装目录> python3 devtools/backend-compile/tests/verify_hth_849_sql_script.py
+```
+
+可加 `--output <临时目录>` 导出解析器实际生成的语句，供独立 JDBC 测试使用。解析测试与 Oracle 执行测试分开，不能用解析通过代替数据库执行通过。

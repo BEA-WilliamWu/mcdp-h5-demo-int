@@ -36,10 +36,10 @@ BCO 授权对照依据：`account-transactions-mapping.js` 中 USER 用 UAT_N_CA
 ## 部署顺序
 
 1. 同批打包部署 common（接口/DTO、纯判断工具及移除旧审计回调）、SMS、HTH module 和 approval module。重新打包时清理旧 common/mtb、common/audit/HthOnboardingAudit 和 hosttohost/mtb 的 class，避免残留。
-2. 使用有权限的账号运行 `1_HTH_MTB_849.sql`。首次创建表及索引；已存在时验证结构；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
+2. 先用 HTH_BEA 连接运行 `1_HTH_CRM_849_Schema.sql`，再切换 DIGX 配置连接运行 `2_HTH_CRM_849_DIGX_Config.sql`。首次创建表及索引；已存在时验证结构；ENABLED 配置只在不存在时插入；HTH Adapter 注册按 HTH 专用 key 幂等更新。重跑不会清空数据或覆盖开关。Oracle DDL 自动提交。
 3. 确认 NONXA datasource 对 HTH_BEA 新表拥有 SELECT/INSERT 权限；脚本不假设环境的实际 datasource 用户，不授予 PUBLIC。
 4. 注册 SQL 与新包就绪后重启应用：AdapterFactoryConfigurator 在初始化时缓存 Factory，新注册不能假设热更新生效。保持默认 `ENABLED=N` 完成部署检查。显式改为 Y、按环境配置缓存机制刷新后再进行 UAT 验证。
-5. 运行 `2_HTH_MTB_849_verify.sql`，按时间和业务引用对照数据。回退只需关闭开关，保留表和记录。
+5. 分别用 HTH_BEA 连接运行 `3_HTH_CRM_849_HTH_Verify.sql`、DIGX 配置连接运行 `4_HTH_CRM_849_DIGX_Verify.sql`，按时间和业务引用对照数据。回退只需关闭开关，保留表和记录。
 
 ## 事务边界及明确限制
 
@@ -76,16 +76,23 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 
 849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
 
-诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需重新执行 1_HTH_MTB_849.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
+诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需在 DIGX 配置连接重新执行 2_HTH_CRM_849_DIGX_Config.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
 
-## SQL 执行格式（2026-09-28）
+## 按 schema 分开执行（2026-09-28）
 
-与 791/1216/API Password 一致：`1_HTH_MTB_849.sql` 是一个完整的外层 `DECLARE ... BEGIN ... END;` 块，不包含 `SET`、独立 `/` 或必填替换参数。在 Oracle 编辑器选中整份块，作为一条语句执行；不能只运行光标所在的一行，也不能按每个分号拆分。
+旧版把 HTH DDL 和 DIGX 配置放在一个块，导致 HTH 账号没有 DIGX 配置表访问权限时整个块编译失败。现已移除旧的两个混合脚本，改为以下四份；不要再执行旧副本。
 
-使用 OBDX 配置库的独立连接，该账号须有创建/检查 HTH_BEA 表和索引的权限。脚本先创建/检查表和索引，再注册 Factory；原有数据、ENABLED 和活动码保留。新环境开关仍默认 N。已有目标配置键重复时明确报错，避免更新多个不明确的配置行。
+| 顺序 | 文件 | 执行连接 | 内容 |
+| --- | --- | --- | --- |
+| 1 | `1_HTH_CRM_849_Schema.sql` | HTH_BEA | 创建/检查 HTH 表和索引，无 DIGX 表引用 |
+| 2 | `2_HTH_CRM_849_DIGX_Config.sql` | DIGX 配置 schema（与此前 story 一致） | HTH Factory 注册、默认关闭开关，无 HTH 表访问 |
+| 3 | `3_HTH_CRM_849_HTH_Verify.sql` | HTH_BEA | 查表结构、最近 24 小时数据和重复键 |
+| 4 | `4_HTH_CRM_849_DIGX_Verify.sql` | DIGX 配置 schema | 查开关、Factory 和只读 BCO 参考配置 |
 
-失败信息包含 `849 stage=TABLE_CREATE/TABLE_VALIDATE/DEDUP_INDEX/DATE_ACTIVITY_INDEX/SOURCE_REFERENCE_INDEX/CONFIG_VALIDATE/CONFIG_REGISTER` 和原始 Oracle 错误。DDL 自动提交，不能整份回滚；配置部分失败会回滚本次配置 DML。修复失败原因后可重跑，不能把“可重跑”理解成自动修复不同版本的表结构。
+1、2 各自选中完整 `DECLARE ... END;` 块，作为一条语句执行；不包含 SET、独立 `/` 或必填参数。3、4 各 SELECT 分别执行。两个 schema 连接可以分别执行对应文件，不要求任一部署账号同时拥有两边权限。不要仅切换客户端显示的 schema 而继续使用没有权限的登录账号。
 
-`2_HTH_MTB_849_verify.sql` 是只读查询集合，各 SELECT 分别执行；时间默认最近 24 小时（香港时间），不再要求绑定 from_time/to_time。需要指定时间时用 TIMESTAMP 字面量替换两个时间条件。
+重复执行保留现有记录、ENABLED 和活动码，仅更新 HTH Factory 注册值。结构不兼容或配置键重复会明确报错；不会删除或重建已有表。HTH DDL 自动提交，已完成步骤不能回滚；DIGX 配置失败回滚至本文件的 savepoint。两个文件不是一个跨 schema 原子事务，任一步失败应先修复再重跑。
 
-本次核对了脚本格式、DDL 保持一致、配置写入范围及 Java/H2 回归；未连接 UAT Oracle 执行，实际权限和已有结构仍需在环境确认。
+应用运行账号若不是 HTH_BEA，仍须由 DBA 根据实际 NONXA datasource 账号授予该表 SELECT/INSERT 权限；这与部署账号分开执行是两件事。脚本不猜测账号、不授予 PUBLIC。
+
+脚本格式及 schema 引用隔离已静态核对；Java/H2 回归不等于 Oracle PL/SQL 执行，仍须在 UAT 验证权限和已有表结构。

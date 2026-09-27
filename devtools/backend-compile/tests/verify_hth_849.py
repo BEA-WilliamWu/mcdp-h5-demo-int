@@ -67,7 +67,7 @@ public class AdapterFactoryConfigurator {
     for main in ('com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMTest','HthOnboardingAuditTest','com.ofss.digx.cz.bea.app.sms.service.user.HthCRMBoundaryTest','com.ofss.digx.cz.bea.app.approval.service.transaction.HthCRMApprovalTest'):
         subprocess.run([str(jdk/'java'),'-Djava.util.prefs.userRoot='+out+'/prefs','-cp',out+os.pathsep+cp,main],check=False).check_returncode()
     if os.environ.get('H2_JAR'):
-        schema=(root/'consulting/db/branch_change_history/20260923_HTH_MTB_849/1_HTH_MTB_849.sql').read_text().split("q'~",1)[1].split("~'",1)[0]
+        schema=(root/'consulting/db/branch_change_history/20260923_HTH_MTB_849/1_HTH_CRM_849_Schema.sql').read_text().split("q'~",1)[1].split("~'",1)[0]
         schema=re.sub(r'VARCHAR2\((\d+) CHAR\)',r'VARCHAR(\1)',schema)
         ddl=Path(out)/'schema.sql';ddl.write_text(schema)
         subprocess.run([str(jdk/'java'),'-cp',out+os.pathsep+cp+os.pathsep+os.environ['H2_JAR'],

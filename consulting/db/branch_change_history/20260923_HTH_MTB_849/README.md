@@ -137,3 +137,33 @@ JAVA_HOME=<JDK21> DBEAVER_HOME=<DBeaver26.2.1安装目录> python3 devtools/back
 ```
 
 可加 `--output <临时目录>` 导出解析器实际生成的语句，供独立 JDBC 测试使用。解析测试与 Oracle 执行测试分开，不能用解析通过代替数据库执行通过。
+
+## 表注释、既有数据和无新增记录的排查
+
+`1_HTH_CRM_849_Schema.sql` 为表和当前应用使用的 24 个字段补齐英文 `COMMENT ON`。只有注释缺失或不同时执行对应 DDL；重复执行为 0 DDL。额外旧列的注释保留。注释是 Oracle 数据字典说明，与业务表中的 description/desc 数据是两回事。
+
+当前 849 安装脚本不插入 `HTH_MTB_EVENT_DETAILS` 明细，也不创建或读取 `HTH_MTB_API_CONFIG`。活动映射读取 DIGX 配置表 `DIGX_FW_CONFIG_ALL_O` 的 `HTHMtbConfiguration` 分组，键为 `ACTIVITY_<ACTIVITY_KEY>`。不能仅凭另一张表的名字判断其用途、创建者或数据来源，也不能将新加元数据字段为空的历史记录判为假数据。`3_HTH_CRM_849_HTH_Verify.sql` 已增加表/列说明、对象创建时间、依赖、触发器、包含旧记录的最近明细查询；这些查询用于核对来源，不自动翻译、更新或删除未知业务配置。
+
+当前应用写入的明细带 UUID 格式的 EVENT_ID、SOURCE_SYSTEM=HTH、ACTIVITY_KEY、PHASE 和 CREATED_AT；这些只是核对线索，不是“真/假数据”的判断标准。本地回归的样例写入隔离 Oracle 容器或 H2 内存库，测试数据没有包含在部署 SQL 中。没有访问或修改 UAT 数据。
+
+### User Access submit/approve 没有新增记录
+
+1. 用 DIGX 配置连接执行 `4_HTH_CRM_849_DIGX_Verify.sql` 第一条查询。新安装默认 `ENABLED=N`，缺值也默认关闭；重跑安装 SQL 保留既有值，不会自动开启。数据库值为 Y 时，仍须确认应用已刷新配置缓存；Factory 初次注册需重启。
+2. 核对同批部署的 hosttohost、common、approval/SMS 包与当前版本一致。User Access 写入服务已有 HthCRMScope；审批两条路径已有 commit 后调用。确认服务方法与部署的 Factory 类路径正确。
+3. 在操作时间附近搜索 `HTH_CRM`，按下表判断停在哪一步。新增的三个阶段日志需要部署本次 hosttohost 修改后才有；所有日志仅含阶段、内部活动名、随机事件 ID 和异常类型，不输出请求或密码等内容。
+4. 用 HTH_BEA 连接执行 `3_HTH_CRM_849_HTH_Verify.sql` 的 ACCESS_CREATE/EDIT/DELETE 查询，结合 `SOURCE_TRX_REF_NBR` 对照业务交易号。提交的 SUBMIT、业务生效的 APPLY、审批动作的 APPROVAL_APPROVE 含义不同；多级审批按实际阶段核对，不强制假定固定条数。
+
+| 日志阶段 | 含义与下一步 |
+| --- | --- |
+| `DISABLED`（新增） | 应用读到的 ENABLED 非 Y；不会尝试写库。检查开关及缓存。 |
+| `COLLECT`（新增） | 已生成 HTH 事件，接下来检查事务状态。 |
+| `WAITING_FOR_JTA`（新增） | 已注册事务完成回调，继续找同一 eventId 的 WRITE/失败日志。 |
+| `LOCAL_TX_PENDING` | 仍有活动 resource-local 事务且没有 JTA 回调，本次跳过。需确认具体调用时点，不能认定采集成功。 |
+| `TX_OUTCOME_UNKNOWN` / `WRITE_TX_ACTIVE` | 事务状态不允许可靠保存，本次未写库。 |
+| `WRITE` | CRM 独立事务已提交；按 eventId 查表。如当前库查不到，应核对 NONXA 数据源指向的库及 schema。 |
+| `COLLECT_FAILED` / `APPROVAL_CAPTURE_FAILED` | 采集或 Adapter 路径异常；核对包、Factory 配置及异常类型。 |
+| `WRITE_FAILED` | 写库失败；核对 NONXA 用户的 SELECT/INSERT 权限、表结构与约束。 |
+
+未取得本次 UAT 的开关值及运行日志前，不能将“不落库”归因为某一个条件或宣称已解决。本次补充诊断，不改变默认开关、事务处理或失败不补录规则，普通 BCO 仍在 HTH 配置/数据库访问前返回。
+
+本次本地验证：DBeaver 原解析器六组设置通过；Oracle 注释首次写入、25 项英文注释核对、重复执行 0 DDL、旧行/额外列注释保留、只修复缺失或错误的注释、冲突零变更和脚本 3/4 只读查询共 36 步通过。新建表记录数为 0。Java/H2 回归包含 67 项 CRM 检查及既有 791/审批/BCO 隔离用例；新增日志门控用例确认关闭时不会触达事务或数据库。

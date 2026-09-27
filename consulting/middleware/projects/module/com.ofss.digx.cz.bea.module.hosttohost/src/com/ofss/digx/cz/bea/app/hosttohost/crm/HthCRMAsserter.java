@@ -21,8 +21,14 @@ public final class HthCRMAsserter {
         try {
             String activity=HthCRMRequestAssembler.activity(service,HthCRMRequestAssembler.text(source,"operation"));
             if (activity==null) return;
+            if (activity.startsWith("USER_") && !com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChange(
+                    HthCRMRequestAssembler.text(source,"oldUserChannelType"),
+                    HthCRMRequestAssembler.text(source,"newUserChannelType"))) return;
             java.util.prefs.Preferences config=ConfigurationFactory.getInstance().getConfigurations("HTHMtbConfiguration");
-            if (!"Y".equalsIgnoreCase(config.get("ENABLED","N"))) return;
+            if (!"Y".equalsIgnoreCase(config.get("ENABLED","N"))) {
+                LOG.log(Level.INFO,"HTH_CRM stage=DISABLED, activity={0}",activity);
+                return;
+            }
             Map<String,Object> snapshot=new LinkedHashMap<String,Object>(source);
             Object task=com.ofss.digx.infra.thread.ThreadAttribute.get(com.ofss.fc.infra.thread.ThreadAttribute.CURRENT_TASK);
             Object ip=com.ofss.digx.infra.thread.ThreadAttribute.get("FMO_IP_ADDRESS");
@@ -30,6 +36,7 @@ public final class HthCRMAsserter {
             if(ip instanceof String)snapshot.put("crmIp",ip);
             final HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble(service,snapshot,config.get("ACTIVITY_"+activity,null));
             if(event==null)return;
+            log("COLLECT",event,null);
             TransactionManager manager=TransactionHelper.getTransactionHelper().getTransactionManager();
             boolean localActive=DataAccessManager.getManager().isSessionOpen()
                 && DataAccessManager.getManager().fetchCurrentSession().fetchCurrentTransaction()!=null
@@ -51,7 +58,7 @@ public final class HthCRMAsserter {
                     else log("TX_OUTCOME_UNKNOWN",event,null);
                 }
             });
-
+            log("WAITING_FOR_JTA",event,null);
         } else if(transaction!=null && transaction.getStatus()!=Status.STATUS_NO_TRANSACTION) {
             log("TX_OUTCOME_UNKNOWN",event,null);
         } else if(localActive) {

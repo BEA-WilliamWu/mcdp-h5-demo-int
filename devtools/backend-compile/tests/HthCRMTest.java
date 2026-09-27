@@ -2,6 +2,9 @@ package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
 import java.util.*;
 import java.lang.reflect.*;
+import java.text.MessageFormat;
+import java.util.logging.*;
+import java.util.prefs.Preferences;
 import javax.transaction.*;
 import com.ofss.fc.infra.das.orm.Session;
 import com.ofss.fc.infra.das.orm.Query;
@@ -20,6 +23,7 @@ public class HthCRMTest {
         return HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.setup",data(op),null);
     }
     public static void main(String[] args) throws Exception {
+        disabledGateDiagnostics();
         Map<String,Object> user=data("CREATE");user.put("newUserChannelType","BCO");
         check(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null)==null);
         user.put("newUserChannelType","HTH");
@@ -57,7 +61,10 @@ public class HthCRMTest {
             if(m.getName().equals("registerSynchronization")){callback[0]=(Synchronization)a[0];return null;}
             throw new AssertionError("Unexpected caller transaction operation: "+m.getName());
         });
+        CapturedLogs schedulingLogs=new CapturedLogs();
+        schedulingLogs.start();
         HthCRMAsserter.schedule(reset,tx,true,saved::add);check(saved.isEmpty());
+        check(schedulingLogs.has("WAITING_FOR_JTA", "PASSWORD_RESET"));
         callback[0].afterCompletion(Status.STATUS_COMMITTED);check(saved.size()==1 && saved.get(0)==reset);
         saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);
         callback[0].afterCompletion(Status.STATUS_ROLLEDBACK);
@@ -65,6 +72,9 @@ public class HthCRMTest {
         saved.clear();HthCRMAsserter.schedule(reset,null,true,saved::add);check(saved.isEmpty());
         HthCRMAsserter.schedule(reset,null,false,saved::add);check(saved.size()==1);
         saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);callback[0].afterCompletion(Status.STATUS_UNKNOWN);check(saved.isEmpty());
+        check(schedulingLogs.has("LOCAL_TX_PENDING", "PASSWORD_RESET"));
+        check(schedulingLogs.has("TX_OUTCOME_UNKNOWN", "PASSWORD_RESET"));
+        schedulingLogs.stop();
         for(String failure:Arrays.asList("NONE","INSERT","COMMIT","CLOSE","ROLLBACK")) {
             Resources resources=new Resources(failure);
             HthCRMWriter.write(reset,resources);
@@ -78,6 +88,63 @@ public class HthCRMTest {
         Resources active=new Resources("NONE");active.status=Status.STATUS_ACTIVE;
         HthCRMWriter.write(reset,active);check(active.opens==0 && active.closes==0);
         System.out.println("PASS HTH MTB: "+checks+" mapping, secret exclusion, commit/rollback, isolation and SQL binding checks");
+    }
+    private static void disabledGateDiagnostics() {
+        Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHMtbConfiguration");
+        String previous=config.get("ENABLED",null);
+        final int[] transactionLookups={0};
+        weblogic.transaction.TransactionHelper.pushTransactionHelper(new weblogic.transaction.TransactionHelper() {
+            public UserTransaction getUserTransaction() { throw new AssertionError("Disabled CRM requested user transaction"); }
+            public weblogic.transaction.ClientTransactionManager getTransactionManager() {
+                transactionLookups[0]++;
+                throw new AssertionError("Disabled CRM reached transaction/database path");
+            }
+        });
+        CapturedLogs logs=new CapturedLogs();
+        logs.start();
+        try {
+            Map<String,Object> access=data("ACCESS_CREATE");
+            access.put("password","DO_NOT_LOG_PASSWORD");
+            access.put("crmActionId","DO_NOT_LOG_ACTION");
+            for (String flag:Arrays.asList(null,"N","invalid")) {
+                if(flag==null)config.remove("ENABLED");else config.put("ENABLED",flag);
+                logs.records.clear();
+                HthCRMAsserter.collect("com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess.submit",access);
+                check(logs.records.size()==1 && logs.records.get(0).getLevel()==Level.INFO);
+                check(logs.has("DISABLED","ACCESS_CREATE"));
+                check(!logs.text().contains("DO_NOT_LOG") && !logs.text().contains("USER@PARTY")
+                    && !logs.text().contains("AP@PARTY") && !logs.text().contains("partyId"));
+                check(!logs.has("COLLECT",null) && !logs.has("WRITE",null));
+            }
+            logs.records.clear();
+            int configReads=Integer.parseInt(System.getProperty("hth849.configReads","0"));
+            Map<String,Object> bco=data("UPDATE");bco.put("newUserChannelType","BCO");
+            HthCRMAsserter.collect("UserExtensionData.update",bco);
+            HthCRMAsserter.collect("AccountAccess.update",access);
+            check(logs.records.isEmpty());
+            check(configReads==Integer.parseInt(System.getProperty("hth849.configReads","0")));
+            check(transactionLookups[0]==0);
+        } finally {
+            logs.stop();
+            weblogic.transaction.TransactionHelper.popTransactionHelper();
+            if(previous==null)config.remove("ENABLED");else config.put("ENABLED",previous);
+        }
+    }
+    static class CapturedLogs extends Handler {
+        final List<LogRecord> records=new ArrayList<LogRecord>();
+        final Logger logger=Logger.getLogger(HthCRMAsserter.class.getName());
+        Level previous;
+        void start(){previous=logger.getLevel();logger.setLevel(Level.ALL);logger.addHandler(this);}
+        void stop(){logger.removeHandler(this);logger.setLevel(previous);}
+        public void publish(LogRecord record){records.add(record);}
+        public void flush(){}
+        public void close(){}
+        String text(){StringBuilder result=new StringBuilder();for(LogRecord record:records)
+            result.append(MessageFormat.format(record.getMessage(),record.getParameters())).append('\n');return result.toString();}
+        boolean has(String stage,String activity){for(LogRecord record:records){
+            String message=MessageFormat.format(record.getMessage(),record.getParameters());
+            if(message.contains("stage="+stage) && (activity==null || message.contains("activity="+activity)))return true;
+        }return false;}
     }
     static class Resources implements HthCRMWriter.Resources {
         int status=Status.STATUS_NO_TRANSACTION,opens,closes,inserts,commits,rollbacks;

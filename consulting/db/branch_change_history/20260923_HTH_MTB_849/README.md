@@ -77,3 +77,15 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
 
 诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需重新执行 1_HTH_MTB_849.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
+
+## SQL 执行格式（2026-09-28）
+
+与 791/1216/API Password 一致：`1_HTH_MTB_849.sql` 是一个完整的外层 `DECLARE ... BEGIN ... END;` 块，不包含 `SET`、独立 `/` 或必填替换参数。在 Oracle 编辑器选中整份块，作为一条语句执行；不能只运行光标所在的一行，也不能按每个分号拆分。
+
+使用 OBDX 配置库的独立连接，该账号须有创建/检查 HTH_BEA 表和索引的权限。脚本先创建/检查表和索引，再注册 Factory；原有数据、ENABLED 和活动码保留。新环境开关仍默认 N。已有目标配置键重复时明确报错，避免更新多个不明确的配置行。
+
+失败信息包含 `849 stage=TABLE_CREATE/TABLE_VALIDATE/DEDUP_INDEX/DATE_ACTIVITY_INDEX/SOURCE_REFERENCE_INDEX/CONFIG_VALIDATE/CONFIG_REGISTER` 和原始 Oracle 错误。DDL 自动提交，不能整份回滚；配置部分失败会回滚本次配置 DML。修复失败原因后可重跑，不能把“可重跑”理解成自动修复不同版本的表结构。
+
+`2_HTH_MTB_849_verify.sql` 是只读查询集合，各 SELECT 分别执行；时间默认最近 24 小时（香港时间），不再要求绑定 from_time/to_time。需要指定时间时用 TIMESTAMP 字面量替换两个时间条件。
+
+本次核对了脚本格式、DDL 保持一致、配置写入范围及 Java/H2 回归；未连接 UAT Oracle 执行，实际权限和已有结构仍需在环境确认。

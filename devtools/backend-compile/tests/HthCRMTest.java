@@ -7,7 +7,9 @@ import java.util.logging.*;
 import java.util.prefs.Preferences;
 import javax.transaction.*;
 import com.ofss.fc.infra.das.orm.Session;
-import com.ofss.fc.infra.das.orm.Query;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainDTO;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainKey;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.repository.assembler.HthCRMRequestAssembler;
 
 /** Runtime contract tests. ORM/JTA proxies model failures; not an Oracle/WebLogic integration test. */
 public class HthCRMTest {
@@ -28,31 +30,34 @@ public class HthCRMTest {
         check(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null)==null);
         user.put("newUserChannelType","HTH");
         HthCRMEvent3DomainDTO created=HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null);
-        check("USER_CREATE".equals(created.get("ACTIVITY_KEY")));
-        check("20260923".equals(created.get("EVENT_DTE")) && "000102".equals(created.get("EVENT_TIME")));
-        check("AP@PARTY".equals(created.get("USER_ID")) && "USER@PARTY".equals(created.get("TARGET_USER_ID")));
+        check("USER_CREATE".equals(created.getActivityKey()));
+        check("20260923".equals(created.getEventDte()) && "000102".equals(created.getEventTime()));
+        check("AP@PARTY".equals(created.getUserId()) && "USER@PARTY".equals(created.getTargetUserId()));
         user.put("businessOutcome","PENDING_APPROVAL");
-        check("SUBMIT".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
+        check("SUBMIT".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).getPhase()));
         user.put("businessOutcome","SUCCESS");user.put("effectiveChange",true);
-        check("APPLY".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).get("PHASE")));
-        check(!event("SETUP").get("ACTIVITY_KEY").equals(event("RESET").get("ACTIVITY_KEY")));
-        check("CODE_GENERATE".equals(event("GENERATE").get("ACTIVITY_KEY")));
+        check("APPLY".equals(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null).getPhase()));
+        check(!event("SETUP").getActivityKey().equals(event("RESET").getActivityKey()));
+        check("CODE_GENERATE".equals(event("GENERATE").getActivityKey()));
         check(event("REVEAL")==null);
         Map<String,Object> secret=data("RESET");secret.put("password","DO_NOT_STORE");secret.put("code","123456");
         secret.put("encryptedCredentials","SECRET");secret.put("requestId","request");
         HthCRMEvent3DomainDTO reset=HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",secret,null);
-        check(!reset.fields().toString().contains("DO_NOT_STORE") && !reset.fields().toString().contains("123456"));
-        check(reset.get("DEDUP_KEY")!=null);
+        String persistedValues=beanProperties(reset).toString();
+        check(persistedValues.contains("AP@PARTY") && persistedValues.contains("request")
+            && !persistedValues.contains("DO_NOT_STORE") && !persistedValues.contains("123456")
+            && !persistedValues.contains("SECRET"));
+        check(reset.getDedupKey()!=null);
         secret.put("idempotentReplay",true);
         check(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",secret,null)==null);
         Map<String,Object> access=data("ACCESS_EDIT");access.put("linkageType","ASSOCIATED");
         HthCRMEvent3DomainDTO grant=HthCRMRequestAssembler.assemble("x.HostToHostUserAccess.edit",access,null);
-        check("ACCESS_EDIT".equals(grant.get("ACTIVITY_KEY")) && "ASSOCIATED".equals(grant.get("RELATIONSHIP_TYPE")));
-        check(grant.get("DEDUP_KEY")==null); // no accidental collapse of different approval actions
+        check("ACCESS_EDIT".equals(grant.getActivityKey()) && "ASSOCIATED".equals(grant.getRelationshipType()));
+        check(grant.getDedupKey()==null); // no accidental collapse of different approval actions
         for(String action:Arrays.asList("ENABLE","EDIT","DISABLE")) {
             String method="ENABLE".equals(action)?"submit":action.toLowerCase(Locale.ROOT);
             HthCRMEvent3DomainDTO company=HthCRMRequestAssembler.assemble("x.HostToHostManagement."+method,data("COMPANY_"+action),null);
-            check("BM".equals(company.get("CHANNEL_TYPE")));
+            check("BM".equals(company.getChannelType()));
         }
         List<HthCRMEvent3DomainDTO> saved=new ArrayList<HthCRMEvent3DomainDTO>();
         final Synchronization[] callback={null};
@@ -68,26 +73,42 @@ public class HthCRMTest {
         callback[0].afterCompletion(Status.STATUS_COMMITTED);check(saved.size()==1 && saved.get(0)==reset);
         saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);
         callback[0].afterCompletion(Status.STATUS_ROLLEDBACK);
-        check(saved.size()==1 && "R".equals(saved.get(0).get("EVENT_STATUS_CODE")) && saved.get(0).get("DEDUP_KEY")==null);
+        check(saved.size()==1 && "R".equals(saved.get(0).getEventStatusCode()) && saved.get(0).getDedupKey()==null);
+        check(saved.get(0)!=reset && "A".equals(reset.getEventStatusCode()) && reset.getDedupKey()!=null);
+        check("BUSINESS_ROLLBACK".equals(saved.get(0).getErrorCode())
+            && reset.getKey().getEventId().equals(saved.get(0).getKey().getEventId())
+            && reset.getRequestId().equals(saved.get(0).getRequestId()));
         saved.clear();HthCRMAsserter.schedule(reset,null,true,saved::add);check(saved.isEmpty());
         HthCRMAsserter.schedule(reset,null,false,saved::add);check(saved.size()==1);
         saved.clear();HthCRMAsserter.schedule(reset,tx,true,saved::add);callback[0].afterCompletion(Status.STATUS_UNKNOWN);check(saved.isEmpty());
         check(schedulingLogs.has("LOCAL_TX_PENDING", "PASSWORD_RESET"));
         check(schedulingLogs.has("TX_OUTCOME_UNKNOWN", "PASSWORD_RESET"));
         schedulingLogs.stop();
-        for(String failure:Arrays.asList("NONE","INSERT","COMMIT","CLOSE","ROLLBACK")) {
+        for(String failure:Arrays.asList("NONE","SAVE","COMMIT","CLOSE","ROLLBACK")) {
             Resources resources=new Resources(failure);
             HthCRMWriter.write(reset,resources);
             check(resources.opens==1 && resources.closes==1);
-            check(resources.inserts==1); // no retry even if commit outcome is uncertain
-            check(resources.bindings.size()==LocalHthCRMRepositoryAdapter.COLUMNS.length);
-            check(!resources.sql.contains("DIGX_CZ_CRM_EVENT3_DETAILS") && !resources.sql.contains("USER@PARTY"));
+            check(resources.lookups==1 && resources.lookupKey==reset.getKey());
+            check(resources.saves==1); // no retry even if commit outcome is uncertain
+            check(resources.saved==reset);
             if("NONE".equals(failure)||"CLOSE".equals(failure))check(resources.commits==1 && resources.rollbacks==0);
             else check(resources.rollbacks==1);
         }
         Resources active=new Resources("NONE");active.status=Status.STATUS_ACTIVE;
         HthCRMWriter.write(reset,active);check(active.opens==0 && active.closes==0);
-        System.out.println("PASS HTH MTB: "+checks+" mapping, secret exclusion, commit/rollback, isolation and SQL binding checks");
+        System.out.println("PASS HTH MTB: "+checks+" mapping, secret exclusion, commit/rollback, isolation and ORM save checks");
+    }
+    /** Inspect actual bean values, including the key, without relying on redacted DTO logging. */
+    private static Map<String,Object> beanProperties(Object bean) throws ReflectiveOperationException {
+        Map<String,Object> values=new TreeMap<String,Object>();
+        for(Method getter:bean.getClass().getDeclaredMethods()) {
+            if(Modifier.isPublic(getter.getModifiers()) && getter.getName().startsWith("get")
+                    && getter.getParameterTypes().length==0 && getter.getReturnType()!=Void.TYPE) {
+                Object value=getter.invoke(bean);
+                values.put(getter.getName(),value instanceof HthCRMEvent3DomainKey?beanProperties(value):value);
+            }
+        }
+        return values;
     }
     private static void disabledGateDiagnostics() {
         Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHMtbConfiguration");
@@ -147,8 +168,8 @@ public class HthCRMTest {
         }return false;}
     }
     static class Resources implements HthCRMWriter.Resources {
-        int status=Status.STATUS_NO_TRANSACTION,opens,closes,inserts,commits,rollbacks;
-        boolean active;String failure,sql;Map<Integer,Object>bindings=new HashMap<Integer,Object>();
+        int status=Status.STATUS_NO_TRANSACTION,opens,closes,lookups,saves,commits,rollbacks;
+        boolean active;String failure;HthCRMEvent3DomainDTO saved;HthCRMEvent3DomainKey lookupKey;
         Resources(String failure){this.failure=failure;}
         public int transactionStatus(){return status;}
         public Session open(){opens++;
@@ -159,16 +180,24 @@ public class HthCRMTest {
                 if(m.getName().equals("rollback")){rollbacks++;active=false;if(failure.equals("ROLLBACK"))throw new IllegalStateException();return null;}
                 return null;
             });
-            Query query=(Query)Proxy.newProxyInstance(Session.class.getClassLoader(),new Class[]{Query.class},(p,m,a)->{
-                if(m.getName().equals("setParameter")){bindings.put((Integer)a[0],a[1]);return p;}
-                if(m.getName().equals("setTimeout"))return p;
-                if(m.getName().equals("executeUpdate")){inserts++;if(failure.equals("INSERT")||failure.equals("ROLLBACK"))throw new IllegalStateException();return 1;}
-                throw new AssertionError(m.getName());
-            });
             return (Session)Proxy.newProxyInstance(Session.class.getClassLoader(),new Class[]{Session.class},(p,m,a)->{
                 if(m.getName().equals("beginTransaction")){active=true;return transaction;}
                 if(m.getName().equals("fetchCurrentTransaction"))return transaction;
-                if(m.getName().equals("createSQLQuery")){sql=(String)a[0];return query;}
+                if(m.getName().equals("get")){
+                    if(a.length!=2 || !"HthCRMEvent3DomainDTO".equals(a[0]) || !(a[1] instanceof HthCRMEvent3DomainKey))
+                        throw new AssertionError("Expected an HTH CRM entity alias/key lookup");
+                    lookups++;lookupKey=(HthCRMEvent3DomainKey)a[1];
+                    return null;
+                }
+                if(m.getName().equals("saveOrUpdate")){
+                    if(a.length!=1 || !(a[0] instanceof HthCRMEvent3DomainDTO))
+                        throw new AssertionError("Expected Session.saveOrUpdate with the HTH CRM entity");
+                    saves++;saved=(HthCRMEvent3DomainDTO)a[0];
+                    if(failure.equals("SAVE")||failure.equals("ROLLBACK"))throw new IllegalStateException();
+                    return null;
+                }
+                if(m.getName().equals("save"))throw new AssertionError("Independent CRM writes must avoid Session.save current-session lookup");
+                if(m.getName().equals("createSQLQuery"))throw new AssertionError("CRM must use mapped entity persistence, not native SQL");
                 throw new AssertionError(m.getName());
             });
         }

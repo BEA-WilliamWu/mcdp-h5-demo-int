@@ -302,3 +302,12 @@ BCO 源码存在登录/登出、忘记密码/Signer PIN、用户维护、账户�
 HTH 当前只可确定：spike 提及 CM create/reset/change password；sample 示范 Account Balance Inquiry。API Password setup/reset 是 CM 路径需优先核对的候选，但尚不能确认它与 spike 的 password 指同一业务。用户创建/修改、账户服务授权、Code 生成、证书、公司启停等不可因已有 audit/notification 就自动纳入 MTB；最终按 HTH_CRM_MAPPING_BCO 及 HTH mapping 确认。
 
 按用户偏好优先参考 BCO 直接保存，不把新增 JMS 作为已决定实现。第 4 节属于满足异步/可靠性的备选设计，是否实施须结合 AC2 的确认结果。
+
+
+### 2026-09-28 实施落点：HTH 独立 ORM
+
+HTH 沿用 BCO 的 Entity + embedded Key + XML ORM + Assembler/Repository/Adapter 分层，映射 `HTH_BEA.HTH_CRM_EVENT_DETAILS`，不修改 `DIGX_CZ_CRM_EVENT3_DETAILS` 的实体、映射或 BCO Repository。HTH 的 Entity、Key 及存储分层在 `domain.hosttohost.entity.crm`；跨模块入口与独立事务 Writer 保留既有职责。
+
+框架调用存在需要保留的差异：BCO `super.create()` 使用线程业务 Session，HTH 则由 Writer 明确传入独立 NONXA Session。已检查本项目框架实现，`save()` 还会读取线程 Session 缓存；HTH 使用“拒绝已有 EVENT_ID 后 saveOrUpdate(entity)”路径，在该独立 Session 的 EntityManager 中执行 ORM persist，避免绑定或提交原业务 Session。DEDUP_KEY 仍由数据库唯一约束控制。
+
+本次只有 HTH cfg 增加映射注册；不修改共用 persistence / module-cfg、公共 Java、BCO CRM 或 batch。发布需要 hosttohost 包与 HTH ORM 配置一起更新。验证和部署限制以 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md) 为准。

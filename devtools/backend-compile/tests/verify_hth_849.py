@@ -1,6 +1,15 @@
-"""Compile production 849 paths and run behavioral contracts; Oracle/WebLogic remain UAT checks."""
+"""Compile production 849 paths and exercise real EclipseLink/OBDX entity persistence.
+
+Configuration, DataAccessManager bootstrap and the JTA boundary are fixtures. The
+actual entity XML, EntityManager, Session, persister and transaction wrappers run
+unchanged. H2 checks do not replace Oracle/WebLogic deployment verification.
+"""
 from pathlib import Path
-import os,subprocess,tempfile,re
+import os,subprocess,tempfile,re,shutil,xml.etree.ElementTree as ET
+def run(command):
+    result=subprocess.run(command,check=False)
+    if result.returncode: raise SystemExit(result.returncode)
+
 root=Path(__file__).resolve().parents[3];projects=root/'consulting/middleware/projects'
 # Architecture contract: audit has no MTB callback; common exposes data and interface only.
 common=projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common'
@@ -11,9 +20,13 @@ for path in (common/'hth').glob('*.java'):
     assert all(token not in path.read_text() for token in ('weblogic.', 'das.orm', 'ConfigurationFactory', 'import com.ofss.digx.cz.bea.app.hosttohost'))
 for name in ('HthCRMApproval.java','HthUserCRMScope.java'):
     assert 'app.hosttohost.crm' not in next(projects.rglob(name)).read_text()
-cp=os.pathsep.join([str(root/'devtools/backend-compile/build/classes/java/main')]+[str(p) for p in (root/'consulting/middleware/lib').rglob('*.jar')])
+lib=root/'consulting/middleware/lib'
+eclipselink=lib/'OBDX_FW_LIB/eclipselink2.5.2.jar'
+assert eclipselink.is_file(), 'The production EclipseLink 2.5.2 library is required'
+cp=os.pathsep.join(map(str,[eclipselink,root/'devtools/backend-compile/build/classes/java/main',*sorted(lib.rglob('*.jar'))]))
 jdk=Path(os.environ['JAVA_HOME'])/'bin'
-files=list(projects.rglob('HthCRM*.java'))+list(projects.rglob('HthChannelSupport.java'))+list(projects.rglob('IHthCRMAdapter.java'))+list(projects.rglob('HthUserCRMScope.java'))+list(projects.rglob('HthCRM*.java'))+list(projects.rglob('LocalHthCRMRepositoryAdapter.java'))
+files=list(projects.rglob('HthCRM*.java'))+list(projects.rglob('HthChannelSupport.java'))+list(projects.rglob('IHthCRMAdapter.java'))+list(projects.rglob('HthUserCRMScope.java'))+list(projects.rglob('LocalHthCRMRepositoryAdapter.java'))
+files+=list(projects.rglob('CRMEvent3DomainDTO.java'))+list(projects.rglob('CRMEvent3DomainKey.java'))
 for name in ['HthUserAccessAudit.java','HthUserAccessNotification.java','UserManagementActivityLogDTO.java','HthOnboardingAudit.java','HostToHostUserAccess.java','HostToHostManagement.java','HostToHostApiPassword.java','EligibleAccountDTO.java',
              'HthApiPasswordTransport.java','HthApiPasswordStorage.java','HthApiCredentialWriteException.java',
              'HostToHostApiPasswordRequestDTO.java','HthApiPasswordOperationRepository.java','HthApiPasswordCodeRepository.java',
@@ -21,8 +34,89 @@ for name in ['HthUserAccessAudit.java','HthUserAccessNotification.java','UserMan
              'IHthApiPasswordCodeRepositoryAdapter.java','IHthApiPasswordOperationRepositoryAdapter.java','CZApprovalWorker.java']:
     files += [p for p in projects.rglob(name) if '/appx/' not in str(p)]
 files += [projects/'module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/Transaction.java']
-files += [Path(__file__).with_name('HthCRMApprovalTest.java'),Path(__file__).with_name('HthCRMJdbcTest.java'),Path(__file__).with_name('HthCRMTest.java'),Path(__file__).with_name('HthOnboardingAuditTest.java')]
+files += [Path(__file__).with_name('HthCRMApprovalTest.java'),Path(__file__).with_name('HthCRMOrmTest.java'),Path(__file__).with_name('HthCRMTest.java'),Path(__file__).with_name('HthOnboardingAuditTest.java')]
 with tempfile.TemporaryDirectory(prefix='hth849-test-') as out:
+    config_root=root/'consulting/config'
+    cfg=config_root/'orm/eclipselink/cfg'
+    module_cfg=(cfg/'module-cfg.properties').read_text().splitlines()
+    assert 'cz-hosttohost.cfg.xml' in module_cfg and 'cz-crm-mapping.cfg.xml' in module_cfg
+    hth_mappings=[element.attrib['resource'] for element in ET.parse(cfg/'cz-hosttohost.cfg.xml').iter('mapping')]
+    bco_mappings=[element.attrib['resource'] for element in ET.parse(cfg/'cz-crm-mapping.cfg.xml').iter('mapping')]
+    hth_mapping='orm/eclipselink/mappings/cz/hosttohost/crm/HthCRMEvent3DomainDTO.orm.xml'
+    bco_mapping='orm/eclipselink/mappings/cz/crm/CustomerRelationshipManagement_Event3.orm.xml'
+    assert hth_mappings.count(hth_mapping)==1 and bco_mappings.count(bco_mapping)==1
+    # Load the exact deployed mappings together, including the unchanged BCO entity.
+    for resource in (hth_mapping,bco_mapping):
+        target=Path(out)/resource;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(config_root/resource,target)
+    # The real SDK exception translator formats database errors using these bundles.
+    for resource in ('InfoMessages_en.properties','ErrorMessages_en.properties'):
+        target=Path(out)/'resources'/resource;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(root/'consulting/config_core/resources'/resource,target)
+    persistence=Path(out)/'META-INF/persistence.xml';persistence.parent.mkdir(parents=True)
+    persistence.write_text('''<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="http://java.sun.com/xml/ns/persistence" version="2.0">
+ <persistence-unit name="NONXA" transaction-type="RESOURCE_LOCAL">
+  <provider>org.eclipse.persistence.jpa.PersistenceProvider</provider>
+  <mapping-file>'''+hth_mapping+'''</mapping-file>
+  <mapping-file>'''+bco_mapping+'''</mapping-file>
+  <exclude-unlisted-classes>true</exclude-unlisted-classes>
+  <properties>
+   <property name="javax.persistence.jdbc.driver" value="org.h2.Driver"/>
+   <property name="javax.persistence.jdbc.url" value="jdbc:h2:mem:crm;MODE=Oracle;DB_CLOSE_DELAY=-1"/>
+   <property name="eclipselink.weaving" value="false"/>
+   <property name="eclipselink.logging.level" value="OFF"/>
+  </properties>
+ </persistence-unit>
+</persistence>''')
+    bridge=Path(out)/'TestOrmAccess.java'
+    bridge.write_text('''package com.ofss.fc.infra.das.orm.eclipselink;
+import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
+import com.ofss.fc.infra.das.orm.Session;
+import com.ofss.fc.infra.das.orm.SessionPersister;
+public final class TestOrmAccess {
+ public static Session wrap(EntityManager entityManager) {
+  entityManager.setFlushMode(FlushModeType.COMMIT);
+  return new EclipseLinkEntityManagerWrapper(entityManager);
+ }
+ public static SessionPersister persister(){return EclipseLinkSessionPersister.getInstance();}
+}''')
+    manager=Path(out)/'DataAccessManager.java'
+    manager.write_text('''package com.ofss.fc.infra.das.orm;
+import javax.persistence.EntityManagerFactory;
+import com.ofss.fc.infra.das.exception.PersistenceException;
+import com.ofss.fc.infra.das.orm.eclipselink.TestOrmAccess;
+/** Bootstrap only. Mirrors openNewSession not binding a thread session; uses the actual SDK persister. */
+public class DataAccessManager {
+ private static final DataAccessManager INSTANCE=new DataAccessManager();
+ private static final ThreadLocal<Session> CURRENT=new ThreadLocal<Session>();
+ public static EntityManagerFactory factory;
+ public static int opens,closes,currentLookups;
+ public static DataAccessManager getManager(){return INSTANCE;}
+ public static DataAccessManager getManager(String name){return INSTANCE;}
+ public static void bind(Session session){if(session==null)CURRENT.remove();else CURRENT.set(session);}
+ public static Session current(){return CURRENT.get();}
+ public boolean isSessionOpen(){return CURRENT.get()!=null;}
+ public Session openSession(){return openSession("NONXA");}
+ public Session openSession(String name) {
+  if(CURRENT.get()!=null)throw new AssertionError("Session already found in thread local!");
+  Session session=openNewSession(name);bind(session);return session;
+ }
+ public SessionPersister getSessionPersister(){return TestOrmAccess.persister();}
+ public Session fetchCurrentSession() throws PersistenceException {
+  currentLookups++;
+  if(CURRENT.get()==null)throw new PersistenceException("2130",new String[]{"Failed to obtain current session"});
+  return CURRENT.get();
+ }
+ public Session openNewSession(String name) {
+  if(!"NONXA".equals(name))throw new AssertionError("Expected independent NONXA unit");
+  opens++;return TestOrmAccess.wrap(factory.createEntityManager());
+ }
+ public Session openNewSession(){return openNewSession("NONXA");}
+ public void closeSession(Session session){closes++;try{session.close();}catch(PersistenceException error){throw new IllegalStateException(error);}}
+}''')
+    files += [bridge,manager]
     config=Path(out)/'ConfigurationFactory.java'
     config.write_text('''package com.ofss.fc.infra.config;
 public class ConfigurationFactory {
@@ -63,15 +157,16 @@ public class AdapterFactoryConfigurator {
  }
 }''')
     files += [factory, Path(__file__).with_name('HthCRMBoundaryTest.java')]
-    subprocess.run([str(jdk/'javac'),'--release','8','-proc:none','-cp',cp,'-d',out,*map(str,dict.fromkeys(files))],check=False).check_returncode()
+    run([str(jdk/'javac'),'--release','8','-proc:none','-cp',cp,'-d',out,*map(str,dict.fromkeys(files))])
     for main in ('com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMTest','HthOnboardingAuditTest','com.ofss.digx.cz.bea.app.sms.service.user.HthCRMBoundaryTest','com.ofss.digx.cz.bea.app.approval.service.transaction.HthCRMApprovalTest'):
-        subprocess.run([str(jdk/'java'),'-Djava.util.prefs.userRoot='+out+'/prefs','-cp',out+os.pathsep+cp,main],check=False).check_returncode()
+        run([str(jdk/'java'),'-Djava.util.prefs.userRoot='+out+'/prefs','-cp',out+os.pathsep+cp,main])
     if os.environ.get('H2_JAR'):
         schema=(root/'consulting/db/branch_change_history/20260923_HTH_MTB_849/1_HTH_CRM_849_Schema.sql').read_text().split("q'~",1)[1].split("~'",1)[0]
         schema=re.sub(r'VARCHAR2\((\d+) CHAR\)',r'VARCHAR(\1)',schema)
         ddl=Path(out)/'schema.sql';ddl.write_text(schema)
-        subprocess.run([str(jdk/'java'),'-cp',out+os.pathsep+cp+os.pathsep+os.environ['H2_JAR'],
-            'com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMJdbcTest',str(ddl)],check=False).check_returncode()
+        h2=Path(os.environ['H2_JAR']);assert h2.is_file(), 'H2_JAR must reference a local H2 driver (tested with 1.4.200)'
+        run([str(jdk/'java'),'-Duser.timezone=UTC','-Djava.util.prefs.userRoot='+out+'/prefs','-cp',out+os.pathsep+str(h2)+os.pathsep+cp,
+            'com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMOrmTest',str(ddl)])
     else:
         print('SKIP real database tests: set H2_JAR (Oracle/WebLogic require UAT regardless).')
 print('PASS: production compilation and 849 / existing 791 regression tests')

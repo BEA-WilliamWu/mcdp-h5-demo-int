@@ -1,5 +1,7 @@
 package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainDTO;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.repository.assembler.HthCRMRequestAssembler;
 import java.util.*;
 import java.util.logging.*;
 import javax.transaction.*;
@@ -54,7 +56,7 @@ public final class HthCRMAsserter {
                 public void beforeCompletion() { }
                 public void afterCompletion(int status) {
                     if(status==Status.STATUS_COMMITTED)sink.write(event);
-                    else if(status==Status.STATUS_ROLLEDBACK)sink.write(event.rolledBack());
+                    else if(status==Status.STATUS_ROLLEDBACK)sink.write(HthCRMRequestAssembler.rolledBack(event));
                     else log("TX_OUTCOME_UNKNOWN",event,null);
                 }
             });
@@ -69,7 +71,7 @@ public final class HthCRMAsserter {
     static void log(String stage,HthCRMEvent3DomainDTO event,Throwable failure) {
         LOG.log(failure==null ? Level.INFO : Level.WARNING,
             "HTH_CRM stage={0}, eventId={1}, activity={2}, phase={3}, exceptionType={4}",
-            new Object[]{stage,event==null?null:event.get("EVENT_ID"),event==null?null:event.get("ACTIVITY_KEY"),
-                event==null?null:event.get("PHASE"),failure==null?null:failure.getClass().getName()});
+            new Object[]{stage,event==null?null:event.getKey().getEventId(),event==null?null:event.getActivityKey(),
+                event==null?null:event.getPhase(),failure==null?null:failure.getClass().getName()});
     }
 }

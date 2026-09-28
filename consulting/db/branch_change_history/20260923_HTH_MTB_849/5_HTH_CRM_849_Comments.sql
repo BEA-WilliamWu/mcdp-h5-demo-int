@@ -32,7 +32,7 @@ COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.REQUEST_ID IS 'Request identifie
 COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.IP_ADDRESS IS 'Client IP address supplied by the platform operation context, when available.';
 COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.ERROR_CODE IS 'Sanitized application error code; BUSINESS_ROLLBACK denotes a rolled-back business transaction.';
 COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.DEDUP_KEY IS 'SHA-256 event deduplication key when a reliable action identifier is available; otherwise null.';
-COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.CREATED_AT IS 'Database insert time in Asia/Hong_Kong time; null for legacy rows without this metadata.';
+COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.CREATED_AT IS 'Record write time in Asia/Hong_Kong time; null for legacy rows without this metadata.';
 
 -- Confirm the database and login used for this execution.
 SELECT SYS_CONTEXT('USERENV','DB_NAME') AS DATABASE_NAME,

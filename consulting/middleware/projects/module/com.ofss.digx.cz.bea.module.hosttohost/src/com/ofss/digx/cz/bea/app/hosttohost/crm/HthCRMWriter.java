@@ -1,5 +1,10 @@
 package com.ofss.digx.cz.bea.app.hosttohost.crm;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainDTO;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.repository.HthCRMLocalRepository;
 import javax.transaction.TransactionManager;
 import javax.transaction.Status;
 import weblogic.transaction.TransactionHelper;
@@ -37,6 +42,7 @@ final class HthCRMWriter {
             }
             session=resources.open();
             session.beginTransaction();
+            event.setCreatedAt(Timestamp.valueOf(LocalDateTime.now(ZoneId.of("Asia/Hong_Kong"))));
             new HthCRMLocalRepository().create(session,event);
             session.fetchCurrentTransaction().commit();
             HthCRMAsserter.log("WRITE",event,null);

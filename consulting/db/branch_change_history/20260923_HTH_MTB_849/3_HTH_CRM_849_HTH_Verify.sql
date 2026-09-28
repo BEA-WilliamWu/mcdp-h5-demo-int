@@ -37,7 +37,7 @@ WITH expected_columns AS (
   UNION ALL SELECT 'IP_ADDRESS', 64, 'Y', 'Client IP address supplied by the platform operation context, when available.' FROM DUAL
   UNION ALL SELECT 'ERROR_CODE', 100, 'Y', 'Sanitized application error code; BUSINESS_ROLLBACK denotes a rolled-back business transaction.' FROM DUAL
   UNION ALL SELECT 'DEDUP_KEY', 64, 'Y', 'SHA-256 event deduplication key when a reliable action identifier is available; otherwise null.' FROM DUAL
-  UNION ALL SELECT 'CREATED_AT', NULL, 'N', 'Database insert time in Asia/Hong_Kong time; null for legacy rows without this metadata.' FROM DUAL
+  UNION ALL SELECT 'CREATED_AT', NULL, 'N', 'Record write time in Asia/Hong_Kong time; null for legacy rows without this metadata.' FROM DUAL
 )
 SELECT s.column_name, c.DATA_TYPE, c.CHAR_LENGTH, c.CHAR_USED, c.NULLABLE,
        CASE WHEN c.COLUMN_NAME IS NULL THEN 'FAIL: missing column'

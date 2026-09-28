@@ -1,4 +1,7 @@
-package com.ofss.digx.cz.bea.app.hosttohost.crm;
+package com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.repository.assembler;
+
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainDTO;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.crm.HthCRMEvent3DomainKey;
 
 import java.util.*;
 import java.time.*;
@@ -25,40 +28,72 @@ public final class HthCRMRequestAssembler {
             (Boolean.TRUE.equals(source.get("effectiveChange")) ||
                 (activity.startsWith("ACCESS_") && "SUCCESS".equals(outcome)) ? "APPLY" : "EXECUTE")));
         ZonedDateTime time = Instant.parse(text(source,"occurredAt")).atZone(ZoneId.of("Asia/Hong_Kong"));
-        Map<String,String> fields = new LinkedHashMap<String,String>();
-        fields.put("EVENT_ID", UUID.randomUUID().toString());
-        fields.put("EVENT_DTE", time.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
-        fields.put("EVENT_TIME", time.format(DateTimeFormatter.ofPattern("HHmmss")));
-        fields.put("SOURCE_SYSTEM", "HTH");
-        fields.put("CHANNEL_TYPE", activity.startsWith("COMPANY_") ? "BM" : "CM");
-        fields.put("TARGET_USER_CHANNEL", activity.startsWith("COMPANY_") ? null : "HTH");
-        fields.put("ACTIVITY_KEY", activity);
-        fields.put("EVENT_ACTV_TYPE_CODE", externalCode);
-        fields.put("EVENT_STATUS_CODE", "SUCCESS".equals(outcome) || pending ? "A" : "R");
-        fields.put("PHASE", phase);
-        fields.put("FIN_IND", "N");
-        fields.put("USER_ID", text(source,"actorUserId"));
-        fields.put("TARGET_USER_ID", text(source,"targetUserId"));
-        fields.put("ACCT_NBR", text(source,"partyId"));
-        fields.put("RELATIONSHIP_TYPE", text(source,"linkageType"));
-        fields.put("SERVICE_ID", service);
-        fields.put("TASK_CODE", text(source,"crmTask"));
+        HthCRMEvent3DomainDTO event = new HthCRMEvent3DomainDTO();
+        HthCRMEvent3DomainKey key = new HthCRMEvent3DomainKey();
+        key.setEventId(UUID.randomUUID().toString());
+        event.setKey(key);
+        event.setEventDte(time.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+        event.setEventTime(time.format(DateTimeFormatter.ofPattern("HHmmss")));
+        event.setSourceSystem("HTH");
+        event.setChannelType(activity.startsWith("COMPANY_") ? "BM" : "CM");
+        event.setTargetUserChannel(activity.startsWith("COMPANY_") ? null : "HTH");
+        event.setActivityKey(activity);
+        event.setEventActvTypeCode(externalCode);
+        event.setEventStatusCode("SUCCESS".equals(outcome) || pending ? "A" : "R");
+        event.setPhase(phase);
+        event.setFinInd("N");
+        event.setUserId(text(source,"actorUserId"));
+        event.setTargetUserId(text(source,"targetUserId"));
+        event.setAcctNbr(text(source,"partyId"));
+        event.setRelationshipType(text(source,"linkageType"));
+        event.setServiceId(service);
+        event.setTaskCode(text(source,"crmTask"));
         String reference = text(source,"approvalReference");
         if (reference == null) reference = text(source,"referenceNumber");
-        fields.put("SOURCE_TRX_REF_NBR", reference);
-        fields.put("SOURCE_ACTION_ID", text(source,"crmActionId"));
-        fields.put("REQUEST_ID", text(source,"requestId"));
-        fields.put("IP_ADDRESS", text(source,"crmIp"));
-        fields.put("ERROR_CODE", text(source,"errorCode"));
+        event.setSourceTrxRefNbr(reference);
+        event.setSourceActionId(text(source,"crmActionId"));
+        event.setRequestId(text(source,"requestId"));
+        event.setIpAddress(text(source,"crmIp"));
+        event.setErrorCode(text(source,"errorCode"));
         String stable = text(source,"crmActionId");
         if (stable == null && activity.startsWith("PASSWORD_") && "SUCCESS".equals(outcome))
             stable = text(source,"requestId");
         // A transaction can have multiple approval actions; transactionId alone is never a key.
         if (stable != null && "SUCCESS".equals(outcome)) {
-            fields.put("DEDUP_KEY", digest(Arrays.asList(activity, phase, reference, stable,
+            event.setDedupKey(digest(Arrays.asList(activity, phase, reference, stable,
                 text(source,"partyId"), text(source,"targetUserId")).toString()));
         }
-        return new HthCRMEvent3DomainDTO(fields);
+        return event;
+    }
+    /** Copy the approved projection so a rollback callback never mutates its input event. */
+    public static HthCRMEvent3DomainDTO rolledBack(HthCRMEvent3DomainDTO source) {
+        HthCRMEvent3DomainDTO copy = new HthCRMEvent3DomainDTO();
+        HthCRMEvent3DomainKey key = new HthCRMEvent3DomainKey();
+        key.setEventId(source.getKey().getEventId());
+        copy.setKey(key);
+        copy.setEventDte(source.getEventDte());
+        copy.setEventTime(source.getEventTime());
+        copy.setSourceSystem(source.getSourceSystem());
+        copy.setChannelType(source.getChannelType());
+        copy.setTargetUserChannel(source.getTargetUserChannel());
+        copy.setActivityKey(source.getActivityKey());
+        copy.setEventActvTypeCode(source.getEventActvTypeCode());
+        copy.setPhase(source.getPhase());
+        copy.setFinInd(source.getFinInd());
+        copy.setUserId(source.getUserId());
+        copy.setTargetUserId(source.getTargetUserId());
+        copy.setAcctNbr(source.getAcctNbr());
+        copy.setRelationshipType(source.getRelationshipType());
+        copy.setServiceId(source.getServiceId());
+        copy.setTaskCode(source.getTaskCode());
+        copy.setSourceTrxRefNbr(source.getSourceTrxRefNbr());
+        copy.setSourceActionId(source.getSourceActionId());
+        copy.setRequestId(source.getRequestId());
+        copy.setIpAddress(source.getIpAddress());
+        copy.setEventStatusCode("R");
+        copy.setErrorCode("BUSINESS_ROLLBACK");
+        copy.setDedupKey(null);
+        return copy;
     }
     public static String activity(String service, String operation) {
         if (service == null || operation == null) return null;
@@ -82,7 +117,7 @@ public final class HthCRMRequestAssembler {
         return null; // Inquiries/reveal/notifications keep existing BCO rules; no new HTH event.
     }
     private static boolean hth(String value) { return com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChannel(value); }
-    static String text(Map<String,Object> data, String key) {
+    public static String text(Map<String,Object> data, String key) {
         Object value=data.get(key);
         return value instanceof String && !((String)value).trim().isEmpty() ? (String)value : null;
     }

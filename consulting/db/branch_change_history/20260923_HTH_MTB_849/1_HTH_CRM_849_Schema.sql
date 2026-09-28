@@ -275,7 +275,7 @@ BEGIN
     UNION ALL SELECT 'IP_ADDRESS', 'Client IP address supplied by the platform operation context, when available.' FROM DUAL
     UNION ALL SELECT 'ERROR_CODE', 'Sanitized application error code; BUSINESS_ROLLBACK denotes a rolled-back business transaction.' FROM DUAL
     UNION ALL SELECT 'DEDUP_KEY', 'SHA-256 event deduplication key when a reliable action identifier is available; otherwise null.' FROM DUAL
-    UNION ALL SELECT 'CREATED_AT', 'Database insert time in Asia/Hong_Kong time; null for legacy rows without this metadata.' FROM DUAL
+    UNION ALL SELECT 'CREATED_AT', 'Record write time in Asia/Hong_Kong time; null for legacy rows without this metadata.' FROM DUAL
   ) LOOP
     IF spec.column_name IS NULL THEN
       SELECT MAX(COMMENTS) INTO v_comment FROM ALL_TAB_COMMENTS

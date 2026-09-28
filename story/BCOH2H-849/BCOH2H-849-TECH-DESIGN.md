@@ -1,8 +1,8 @@
 # BCOH2H-849 — HTH CM / BM MTB 数据保存技术设计
 
-> 2026-09-23 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/hth 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Repository/Adapter 使用 ORM 参数化 SQL，未新增共享 ORM 注册。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
+> 2026-09-28 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/hth 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Entity/Key/Repository/Adapter 使用独立 HTH ORM 映射，注册只追加到 cz-hosttohost.cfg.xml；BCO 映射和代码保持原样。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
 
-日期：2026-09-23。实施设计基线；本次只出设计，尚未修改生产代码、执行 SQL 或完成 UAT 验证。
+设计基线：2026-09-23；按后续实现更新。UAT 是否完成以真实部署与操作结果为准。
 
 ## 1. 已确定的方向
 
@@ -233,3 +233,14 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 这是新建并切换写入目标，不对旧表执行 RENAME、ALTER、DROP、TRUNCATE、数据复制或补录。新建表初始没有记录，应用新版本部署后产生的事件才写入。旧版应用仍写旧表，因此先建新表并配置 NONXA 实际账号权限，再部署 hosttohost 新包；不能只执行 SQL 就认定应用已切换。开关、Adapter key、BCO 实现和 batch 不变。
 
 `3_HTH_CRM_849_HTH_Verify.sql` 只核对本期 CRM 表及其24列、主键、索引、注释和数据。`4_HTH_CRM_849_DIGX_Verify.sql` 单独核对配置，不把 `HTH_MTB_API_CONFIG` 当成依赖。Verify 的结构 PASS 不等于业务已落库；UAT 应按真实操作时间/业务引用核对 ACCESS_CREATE/ACCESS_EDIT 及对应 PHASE，并结合 `HTH_CRM stage=WRITE` 日志。
+
+
+### 2026-09-28：HTH 持久化对齐 BCO ORM
+
+- Entity/Key 使用 BCO 相同的领域基类，Assembler 通过明确的 setter 填充白名单字段，替代原 Map 型 Domain DTO。存储分层位于 `domain.hosttohost.entity.crm`；不修改 BCO 的同名职责类。
+- XML `orm/eclipselink/mappings/cz/hosttohost/crm/HthCRMEvent3DomainDTO.orm.xml` 映射独立 HTH 表的 24 列。现有 `cz-hosttohost.cfg.xml` 只追加一条 mapping；原 BCO CRM mapping、共用 module-cfg / persistence 配置不变。
+- Adapter 不再拼接 INSERT。保留显式独立 Session 参数：项目框架 `save()`/BCO `super.create()` 会读取线程业务 Session，而 `saveOrUpdate()` 使用传入 Session 自身的 EntityManager。Adapter 先拒绝已有 EVENT_ID，再使用该公开 ORM API 创建新事件；业务去重继续由 DEDUP_KEY 唯一索引约束。所有 basic 列另设 updatable=false、实体缓存设 ISOLATED，防止并发同 ID 时 merge 覆盖原记录；该竞态可能正常结束但不新增，不保证总是抛重复异常。不会为了复刻 BCO 调用形式改动当前业务会话。
+- `HthCRMDescriptorCustomizer` 仅设置本 HTH 实体的 5 秒 ORM 超时；不修改公共 customizer 或 BCO 超时。
+- Writer 的 JTA 门控、完成回调、NONXA 独立提交/回滚、失败不重试保持原样。CREATED_AT 改为保存前取应用的香港时间；EVENT_DTE/EVENT_TIME 仍取业务发生时间。表结构、索引及既有数据无需变更；SQL 1/3/5 同步 CREATED_AT 英文注释，可用脚本 5 单独更新。
+- 发布必须同时包含干净编译的 hosttohost 包、新 ORM XML 和更新后的 HTH cfg，并重启加载映射。BCO 代码没改不代表可以任意混用新旧包与配置；共用应用启动时仍需正确加载新增 HTH 映射。
+- 验证使用真实 EclipseLink + 项目 Session wrapper + H2，包含无当前 Session、有原业务 Session、重复主键、重复业务键、缺表失败、原业务提交/回滚和 HTH/BCO 两套映射同时加载；部署步骤与最终验证结果见 849 README。

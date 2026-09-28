@@ -15,30 +15,53 @@ public class HthCRMJdbcTest {
     static int count(Connection c,String table)throws Exception {
         try(ResultSet rs=c.createStatement().executeQuery("SELECT COUNT(*) FROM "+table)){rs.next();return rs.getInt(1);}
     }
+    static List<List<Object>> legacyRows(Connection c)throws Exception {
+        List<List<Object>> rows=new ArrayList<List<Object>>();
+        try(Statement statement=c.createStatement();ResultSet rs=statement.executeQuery(
+                "SELECT * FROM HTH_BEA.HTH_MTB_EVENT_DETAILS ORDER BY EVENT_ID")) {
+            while(rs.next()) {
+                List<Object> row=new ArrayList<Object>();
+                for(int i=1;i<=rs.getMetaData().getColumnCount();i++)row.add(rs.getObject(i));
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
     public static void main(String[] args)throws Exception {
         Class.forName("org.h2.Driver");
         try(Connection business=DriverManager.getConnection(URL);Connection observer=DriverManager.getConnection(URL)) {
             business.createStatement().execute("CREATE SCHEMA HTH_BEA");
             business.createStatement().execute(new String(Files.readAllBytes(Paths.get(args[0])),"UTF-8"));
-            business.createStatement().execute("CREATE UNIQUE INDEX DEDUP ON HTH_BEA.HTH_MTB_EVENT_DETAILS(DEDUP_KEY)");
+            business.createStatement().execute("CREATE UNIQUE INDEX DEDUP ON HTH_BEA.HTH_CRM_EVENT_DETAILS(DEDUP_KEY)");
+            business.createStatement().execute("CREATE TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS AS SELECT * FROM HTH_BEA.HTH_CRM_EVENT_DETAILS WHERE 1=0");
+            business.createStatement().execute("ALTER TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS ADD LEGACY_ORIGIN VARCHAR(80)");
+            business.createStatement().executeUpdate("INSERT INTO HTH_BEA.HTH_MTB_EVENT_DETAILS "
+                + "(EVENT_ID,EVENT_DTE,EVENT_TIME,SOURCE_SYSTEM,CHANNEL_TYPE,ACTIVITY_KEY,EVENT_STATUS_CODE,PHASE,FIN_IND,SERVICE_ID,CREATED_AT,LEGACY_ORIGIN) "
+                + "VALUES ('legacy-marker','20000101','000000','LEGACY','CM','LEGACY','A','LEGACY','N','legacy.service',CURRENT_TIMESTAMP,'existing-table-marker')");
+            List<List<Object>> legacy=legacyRows(observer);
+            check(legacy.size()==1 && legacy.get(0).contains("existing-table-marker"));
             business.createStatement().execute("CREATE TABLE BCO_BUSINESS(ID INT PRIMARY KEY)");
             business.setAutoCommit(false);business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(1)");
             Map<String,Object> source=HthCRMTest.data("RESET");source.put("requestId","same-request");
             HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null);
             HthCRMWriter.write(event,new DbResources());
             check(count(observer,"BCO_BUSINESS")==0); // HTH commit did not commit caller
-            check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1);
+            check(count(observer,"HTH_BEA.HTH_CRM_EVENT_DETAILS")==1);
+            check(legacy.equals(legacyRows(observer))); // the existing table and marker are untouched
             business.rollback();check(count(observer,"BCO_BUSINESS")==0);
-            check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // caller rollback did not rollback HTH
+            check(count(observer,"HTH_BEA.HTH_CRM_EVENT_DETAILS")==1); // caller rollback did not rollback HTH
             HthCRMWriter.write(HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.reset",source,null),new DbResources());
-            check(count(observer,"HTH_BEA.HTH_MTB_EVENT_DETAILS")==1); // DB unique constraint prevents replay
+            check(count(observer,"HTH_BEA.HTH_CRM_EVENT_DETAILS")==1); // DB unique constraint prevents replay
+            check(legacy.equals(legacyRows(observer)));
             business.createStatement().executeUpdate("INSERT INTO BCO_BUSINESS VALUES(2)");
-            observer.createStatement().execute("DROP TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS");
+            observer.createStatement().execute("DROP TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS");
             HthCRMWriter.write(event,new DbResources()); // a real database failure must not escape
+            check(legacy.equals(legacyRows(observer))); // no fallback into the still-writable old table
             business.commit();check(count(observer,"BCO_BUSINESS")==1);
+            check(legacy.equals(legacyRows(observer)));
             check(closes==3);
         }
-        System.out.println("PASS: real H2 inserts, unique replay rejection, independent commit/rollback, table failure and caller completion");
+        System.out.println("PASS: real H2 writes only to HTH_CRM_EVENT_DETAILS, legacy table unchanged, no missing-table fallback, unique replay rejection and caller transaction isolation");
     }
     static class DbResources implements HthCRMWriter.Resources {
         Connection connection;boolean active;

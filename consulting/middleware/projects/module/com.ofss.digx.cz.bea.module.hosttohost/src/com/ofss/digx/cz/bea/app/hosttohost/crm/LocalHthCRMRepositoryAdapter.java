@@ -11,7 +11,7 @@ final class LocalHthCRMRepositoryAdapter {
         "RELATIONSHIP_TYPE","SERVICE_ID","TASK_CODE","SOURCE_TRX_REF_NBR","SOURCE_ACTION_ID",
         "REQUEST_ID","IP_ADDRESS","ERROR_CODE","DEDUP_KEY"};
     void create(Session session, HthCRMEvent3DomainDTO event) throws java.lang.Exception {
-        StringBuilder sql = new StringBuilder("INSERT INTO HTH_BEA.HTH_MTB_EVENT_DETAILS (");
+        StringBuilder sql = new StringBuilder("INSERT INTO HTH_BEA.HTH_CRM_EVENT_DETAILS (");
         StringBuilder values = new StringBuilder();
         for (int i=0;i<COLUMNS.length;i++) {
             if (i>0) { sql.append(','); values.append(','); }

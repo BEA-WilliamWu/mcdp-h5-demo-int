@@ -77,7 +77,7 @@ BCO 其他功能存在异步参考：`CZApprovalExecutorService` 用固定线程
 
 ## 3. HTH 数据表建议（待 mapping 定稿）
 
-HTH API 路径拟用 `HTH_MTB_EVENT_DETAILS`（建议名称，不是已建表）。按最终映射设计显式列，不把原始请求/响应 JSON 当成唯一数据存储。
+HTH API 路径最终使用 `HTH_CRM_EVENT_DETAILS`（2026-09-28 调整；原建议名 HTH_MTB_EVENT_DETAILS 不再使用，已有旧表保持不动）。按最终映射设计显式列，不把原始请求/响应 JSON 当成唯一数据存储。
 
 - 通用业务列：复用 BCO 同名字段及相同业务语义，实际类型/长度先核对 DDL。
 - HTH 扩展列：sample 中的 API_URL、MESSAGE_ID、NO_FINANCIAL_TRANSACTIONS、TRANSACTION_STATUS、REPORT_TYPE。语义、必填、枚举、长度仍须 mapping 确认；NO_FINANCIAL_TRANSACTIONS 看似数量但不能凭名称定值规则。

@@ -60,7 +60,7 @@ HTH 操作的响应 / 失败 / 审批动作
  → HthCRMEventDTO
  → HthCRMEventAssembler
  → HthCRMEvent Entity / Repository / LocalAdapter
- → HTH_MTB_EVENT_DETAILS
+ → HTH_CRM_EVENT_DETAILS
 ```
 
 设计选择：新建 HTH 专用表及持久化实现。目的是让本期 HTH 数据不会被原 BCO batch 自动抽取；这是本设计的隔离方案，不是声称 AC 已指定表名。现有 BCO CRM 表、公共 CRMAsserter、已有 evaluator 和 batch 不重写。
@@ -92,7 +92,7 @@ BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解�
 
 ## 6. 数据设计
 
-表建议名 `HTH_MTB_EVENT_DETAILS`，按 BCO 事件明细模型设计显式列。本期是 CM/BM 非金融事件，金额、支付、文件头尾及 sample 独有字段不强行加入。后续若扩展金融交易另做迁移。
+最终表名 `HTH_BEA.HTH_CRM_EVENT_DETAILS`，按 BCO 事件明细模型设计显式列。本期是 CM/BM 非金融事件，金额、支付、文件头尾及 sample 独有字段不强行加入。后续若扩展金融交易另做迁移。
 
 以下为本设计的新表类型建议，并非推断 BCO 实际 DDL。上线脚本按应用实际 ID 长度作预检，禁止静默截断。
 
@@ -220,8 +220,16 @@ SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToH
 
 849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
 
-诊断关键字改为 `HTH_CRM stage=`。数据库表 `HTH_MTB_EVENT_DETAILS`、配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 暂保留既有标识，避免因整理 Java 名称切断既有数据和配置。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需在 DIGX 配置连接重新执行 2_HTH_CRM_849_DIGX_Config.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
+诊断关键字改为 `HTH_CRM stage=`。数据库使用独立表 `HTH_CRM_EVENT_DETAILS`；配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 保留既有配置标识，避免重置开关及活动映射。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需在 DIGX 配置连接重新执行 2_HTH_CRM_849_DIGX_Config.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
 
 ### 部署已有表时的兼容处理
 
 建表文件 `1_HTH_CRM_849_Schema.sql` 同时承载增量升级：保留旧列及数据，只补缺列、扩大 VARCHAR2 容量，不收缩或重建表。旧表新加的业务元数据列允许历史值为空，避免给旧记录伪造采集时间和活动类型；新建表保留原 NOT NULL 设计，应用仍为新记录提供这些字段。旧约束不放宽，无法安全兼容的差异在 ALTER 前集中报出。HTH 建表与 DIGX 配置继续分 schema 执行。
+
+### 2026-09-28：使用独立 CRM 表
+
+为避免与可能由其他功能创建的 `HTH_MTB_EVENT_DETAILS` 混用，849 的建表、写库、注释和验证统一改为 `HTH_BEA.HTH_CRM_EVENT_DETAILS`。主键及索引为 `PK_HTH_CRM_EVENT`、`UX_HTH_CRM_DEDUP`、`IX_HTH_CRM_DATE_ACT`、`IX_HTH_CRM_SOURCE`，与旧表对象名隔离。
+
+这是新建并切换写入目标，不对旧表执行 RENAME、ALTER、DROP、TRUNCATE、数据复制或补录。新建表初始没有记录，应用新版本部署后产生的事件才写入。旧版应用仍写旧表，因此先建新表并配置 NONXA 实际账号权限，再部署 hosttohost 新包；不能只执行 SQL 就认定应用已切换。开关、Adapter key、BCO 实现和 batch 不变。
+
+`3_HTH_CRM_849_HTH_Verify.sql` 只核对本期 CRM 表及其24列、主键、索引、注释和数据。`4_HTH_CRM_849_DIGX_Verify.sql` 单独核对配置，不把 `HTH_MTB_API_CONFIG` 当成依赖。Verify 的结构 PASS 不等于业务已落库；UAT 应按真实操作时间/业务引用核对 ACCESS_CREATE/ACCESS_EDIT 及对应 PHASE，并结合 `HTH_CRM stage=WRITE` 日志。

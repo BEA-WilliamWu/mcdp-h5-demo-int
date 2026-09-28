@@ -2,7 +2,9 @@
 -- DBeaver (Oracle connection): Execute SQL Script (Alt+X); no standalone slash.
 -- Execute SQL Statement: select the complete DECLARE ... END; block.
 -- One anonymous block, without local routines: avoid premature client-side splitting.
--- Fresh install creates the canonical table. Existing tables are upgraded in place.
+-- Uses only HTH_BEA.HTH_CRM_EVENT_DETAILS, with CRM-prefixed constraint/index names.
+-- Never rename, migrate, copy from or modify HTH_MTB_EVENT_DETAILS / HTH_MTB_API_CONFIG.
+-- Fresh install creates the canonical CRM table. Existing CRM tables are upgraded in place.
 -- Preserve all rows/extra columns/constraints. Never shrink, drop, truncate or backfill data.
 -- Missing columns on an existing table are nullable: historical values are unknown.
 -- Existing BYTE columns are expanded to CHAR semantics without reducing their byte capacity.
@@ -28,10 +30,10 @@ DECLARE
   v_comment VARCHAR2(4000);
 BEGIN
   SELECT COUNT(*) INTO v_count FROM ALL_TABLES
-   WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS';
+   WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS';
   IF v_count=0 THEN
     v_stage := 'TABLE_CREATE';
-    EXECUTE IMMEDIATE q'~CREATE TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS (
+    EXECUTE IMMEDIATE q'~CREATE TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS (
       EVENT_ID VARCHAR2(36 CHAR) NOT NULL,
       EVENT_DTE VARCHAR2(8 CHAR) NOT NULL,
       EVENT_TIME VARCHAR2(6 CHAR) NOT NULL,
@@ -56,7 +58,7 @@ BEGIN
       ERROR_CODE VARCHAR2(100 CHAR),
       DEDUP_KEY VARCHAR2(64 CHAR),
       CREATED_AT TIMESTAMP(6) NOT NULL,
-      CONSTRAINT PK_HTH_MTB_EVENT PRIMARY KEY (EVENT_ID)
+      CONSTRAINT PK_HTH_CRM_EVENT PRIMARY KEY (EVENT_ID)
     )~';
   END IF;
 
@@ -95,18 +97,18 @@ BEGIN
       v_definition := 'VARCHAR2(' || TO_CHAR(spec.column_length,'FM99990') || ' CHAR)';
     END IF;
     SELECT COUNT(*) INTO n FROM ALL_TAB_COLS
-     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'
        AND COLUMN_NAME=spec.column_name;
     IF n=0 THEN
       IF spec.column_name='EVENT_ID' THEN
         v_issues(v_issues.COUNT+1) := 'EVENT_ID missing; cannot invent historical IDs';
       ELSE
-        v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS ADD (' || spec.column_name || ' ' || v_definition || ')';
+        v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS ADD (' || spec.column_name || ' ' || v_definition || ')';
       END IF;
       CONTINUE;
     END IF;
     SELECT * INTO v_col FROM ALL_TAB_COLS
-     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'
        AND COLUMN_NAME=spec.column_name;
     v_actual := spec.column_name || '=' || v_col.DATA_TYPE || ', bytes=' || v_col.DATA_LENGTH
       || ', chars=' || v_col.CHAR_LENGTH || ', semantics=' || v_col.CHAR_USED || ', nullable=' || v_col.NULLABLE;
@@ -139,22 +141,22 @@ BEGIN
     IF v_change THEN
       SELECT COUNT(*) INTO n FROM (
         SELECT COLUMN_NAME FROM ALL_PART_KEY_COLUMNS
-         WHERE OWNER='HTH_BEA' AND NAME='HTH_MTB_EVENT_DETAILS' AND OBJECT_TYPE='TABLE'
+         WHERE OWNER='HTH_BEA' AND NAME='HTH_CRM_EVENT_DETAILS' AND OBJECT_TYPE='TABLE'
         UNION ALL
         SELECT COLUMN_NAME FROM ALL_SUBPART_KEY_COLUMNS
-         WHERE OWNER='HTH_BEA' AND NAME='HTH_MTB_EVENT_DETAILS' AND OBJECT_TYPE='TABLE'
+         WHERE OWNER='HTH_BEA' AND NAME='HTH_CRM_EVENT_DETAILS' AND OBJECT_TYPE='TABLE'
       ) WHERE COLUMN_NAME=spec.column_name;
       IF n>0 THEN
         v_issues(v_issues.COUNT+1) := v_actual || ': partition key requires a separate migration';
       ELSE
-        v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS MODIFY (' || spec.column_name || ' ' || v_definition || ')';
+        v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS MODIFY (' || spec.column_name || ' ' || v_definition || ')';
       END IF;
     END IF;
   END LOOP;
 
   -- Extra legacy fields stay intact. Do not guess values or relax required constraints.
   FOR c IN (SELECT COLUMN_NAME FROM ALL_TAB_COLS
-             WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+             WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'
                AND USER_GENERATED='YES' AND NULLABLE='N'
                AND VIRTUAL_COLUMN='NO' AND IDENTITY_COLUMN='NO') LOOP
     IF NOT v_expected.EXISTS(c.COLUMN_NAME) THEN
@@ -163,7 +165,7 @@ BEGIN
   END LOOP;
 
   SELECT COUNT(*) INTO v_pk FROM ALL_CONSTRAINTS c
-   WHERE c.OWNER='HTH_BEA' AND c.TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+   WHERE c.OWNER='HTH_BEA' AND c.TABLE_NAME='HTH_CRM_EVENT_DETAILS'
      AND c.CONSTRAINT_TYPE='P' AND c.STATUS='ENABLED' AND c.VALIDATED='VALIDATED'
      AND 1=(SELECT COUNT(*) FROM ALL_CONS_COLUMNS x
              WHERE x.OWNER=c.OWNER AND x.CONSTRAINT_NAME=c.CONSTRAINT_NAME)
@@ -172,24 +174,24 @@ BEGIN
                     AND x.COLUMN_NAME='EVENT_ID');
   IF v_pk<>1 THEN
     SELECT COUNT(*) INTO v_count FROM ALL_CONSTRAINTS
-     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS' AND CONSTRAINT_TYPE='P';
+     WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS' AND CONSTRAINT_TYPE='P';
     IF v_count>0 THEN
       v_issues(v_issues.COUNT+1) := 'Existing primary key must be enabled, validated and on EVENT_ID only; constraint preserved';
     ELSE
       SELECT COUNT(*) INTO v_count FROM ALL_TAB_COLUMNS
-       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'
          AND COLUMN_NAME='EVENT_ID' AND DATA_TYPE='VARCHAR2';
       IF v_count=1 THEN
-        EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM (SELECT EVENT_ID FROM HTH_BEA.HTH_MTB_EVENT_DETAILS GROUP BY EVENT_ID HAVING EVENT_ID IS NULL OR COUNT(*)>1)' INTO v_count;
+        EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM (SELECT EVENT_ID FROM HTH_BEA.HTH_CRM_EVENT_DETAILS GROUP BY EVENT_ID HAVING EVENT_ID IS NULL OR COUNT(*)>1)' INTO v_count;
         IF v_count>0 THEN
           v_issues(v_issues.COUNT+1) := 'EVENT_ID has null/duplicate values; cannot add primary key without changing data';
         ELSE
           SELECT COUNT(*) INTO v_count FROM ALL_CONSTRAINTS
-           WHERE OWNER='HTH_BEA' AND CONSTRAINT_NAME='PK_HTH_MTB_EVENT';
+           WHERE OWNER='HTH_BEA' AND CONSTRAINT_NAME='PK_HTH_CRM_EVENT';
           IF v_count>0 THEN
-            v_issues(v_issues.COUNT+1) := 'PK_HTH_MTB_EVENT name already used; existing constraint preserved';
+            v_issues(v_issues.COUNT+1) := 'PK_HTH_CRM_EVENT name already used; existing constraint preserved';
           ELSE
-            v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS ADD CONSTRAINT PK_HTH_MTB_EVENT PRIMARY KEY (EVENT_ID)';
+            v_plan(v_plan.COUNT+1) := 'ALTER TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS ADD CONSTRAINT PK_HTH_CRM_EVENT PRIMARY KEY (EVENT_ID)';
           END IF;
         END IF;
       END IF;
@@ -197,17 +199,17 @@ BEGIN
   END IF;
 
   SELECT COUNT(*) INTO v_count FROM ALL_TAB_COLUMNS
-   WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+   WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'
      AND COLUMN_NAME='DEDUP_KEY' AND DATA_TYPE='VARCHAR2';
   IF v_count=1 THEN
-    EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM (SELECT DEDUP_KEY FROM HTH_BEA.HTH_MTB_EVENT_DETAILS WHERE DEDUP_KEY IS NOT NULL GROUP BY DEDUP_KEY HAVING COUNT(*)>1)' INTO v_count;
+    EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM (SELECT DEDUP_KEY FROM HTH_BEA.HTH_CRM_EVENT_DETAILS WHERE DEDUP_KEY IS NOT NULL GROUP BY DEDUP_KEY HAVING COUNT(*)>1)' INTO v_count;
     IF v_count>0 THEN v_issues(v_issues.COUNT+1) := 'DEDUP_KEY has duplicate non-null values; no records deleted'; END IF;
   END IF;
 
   FOR spec IN (
-    SELECT 'UX_HTH_MTB_DEDUP' index_name, 'DEDUP_KEY' column_names, 'UNIQUE' index_uniqueness FROM DUAL
-    UNION ALL SELECT 'IX_HTH_MTB_DATE_ACT', 'EVENT_DTE,ACTIVITY_KEY', 'NONUNIQUE' FROM DUAL
-    UNION ALL SELECT 'IX_HTH_MTB_SOURCE', 'SOURCE_TRX_REF_NBR', 'NONUNIQUE' FROM DUAL
+    SELECT 'UX_HTH_CRM_DEDUP' index_name, 'DEDUP_KEY' column_names, 'UNIQUE' index_uniqueness FROM DUAL
+    UNION ALL SELECT 'IX_HTH_CRM_DATE_ACT', 'EVENT_DTE,ACTIVITY_KEY', 'NONUNIQUE' FROM DUAL
+    UNION ALL SELECT 'IX_HTH_CRM_SOURCE', 'SOURCE_TRX_REF_NBR', 'NONUNIQUE' FROM DUAL
   ) LOOP
     v_found := FALSE;
     -- The expected name cannot already belong to another object/table.
@@ -216,11 +218,11 @@ BEGIN
     IF n>0 THEN v_issues(v_issues.COUNT+1) := spec.index_name || ': name belongs to another object'; END IF;
     FOR i IN (SELECT INDEX_NAME,TABLE_OWNER,TABLE_NAME,UNIQUENESS,STATUS,INDEX_TYPE
                 FROM ALL_INDEXES WHERE OWNER='HTH_BEA'
-                  AND (INDEX_NAME=spec.index_name OR (TABLE_OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS'))) LOOP
+                  AND (INDEX_NAME=spec.index_name OR (TABLE_OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS'))) LOOP
       SELECT LISTAGG(COLUMN_NAME,',') WITHIN GROUP (ORDER BY COLUMN_POSITION)
         INTO v_columns FROM ALL_IND_COLUMNS
        WHERE INDEX_OWNER='HTH_BEA' AND INDEX_NAME=i.INDEX_NAME;
-      IF i.TABLE_OWNER='HTH_BEA' AND i.TABLE_NAME='HTH_MTB_EVENT_DETAILS'
+      IF i.TABLE_OWNER='HTH_BEA' AND i.TABLE_NAME='HTH_CRM_EVENT_DETAILS'
           AND v_columns=spec.column_names AND i.UNIQUENESS=spec.index_uniqueness AND i.STATUS='VALID'
           AND i.INDEX_TYPE='NORMAL' THEN
         v_found := TRUE;
@@ -230,7 +232,7 @@ BEGIN
     END LOOP;
     IF NOT v_found THEN
       v_plan(v_plan.COUNT+1) := 'CREATE ' || CASE WHEN spec.index_uniqueness='UNIQUE' THEN 'UNIQUE ' ELSE '' END
-        || 'INDEX HTH_BEA.' || spec.index_name || ' ON HTH_BEA.HTH_MTB_EVENT_DETAILS (' || spec.column_names || ')';
+        || 'INDEX HTH_BEA.' || spec.index_name || ' ON HTH_BEA.HTH_CRM_EVENT_DETAILS (' || spec.column_names || ')';
     END IF;
   END LOOP;
   FOR j IN 1..v_issues.COUNT LOOP
@@ -277,17 +279,17 @@ BEGIN
   ) LOOP
     IF spec.column_name IS NULL THEN
       SELECT MAX(COMMENTS) INTO v_comment FROM ALL_TAB_COMMENTS
-       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS';
+       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS';
     ELSE
       SELECT MAX(COMMENTS) INTO v_comment FROM ALL_COL_COMMENTS
-       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_MTB_EVENT_DETAILS' AND COLUMN_NAME=spec.column_name;
+       WHERE OWNER='HTH_BEA' AND TABLE_NAME='HTH_CRM_EVENT_DETAILS' AND COLUMN_NAME=spec.column_name;
     END IF;
     IF v_comment IS NULL OR v_comment<>spec.description THEN
       IF spec.column_name IS NULL THEN
-        v_plan(v_plan.COUNT+1) := 'COMMENT ON TABLE HTH_BEA.HTH_MTB_EVENT_DETAILS IS '
+        v_plan(v_plan.COUNT+1) := 'COMMENT ON TABLE HTH_BEA.HTH_CRM_EVENT_DETAILS IS '
           || CHR(39) || REPLACE(spec.description,CHR(39),CHR(39)||CHR(39)) || CHR(39);
       ELSE
-        v_plan(v_plan.COUNT+1) := 'COMMENT ON COLUMN HTH_BEA.HTH_MTB_EVENT_DETAILS.' || spec.column_name || ' IS '
+        v_plan(v_plan.COUNT+1) := 'COMMENT ON COLUMN HTH_BEA.HTH_CRM_EVENT_DETAILS.' || spec.column_name || ' IS '
           || CHR(39) || REPLACE(spec.description,CHR(39),CHR(39)||CHR(39)) || CHR(39);
       END IF;
     END IF;

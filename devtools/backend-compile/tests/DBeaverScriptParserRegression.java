@@ -118,11 +118,33 @@ public class DBeaverScriptParserRegression {
                         Files.writeString(payload, exact); // SQLQuery.getText() bytes: no trim, wrap or delimiter changes.
                     }
                 }
+                Path sqlDir = Path.of(args[0]).getParent();
+                for (String name : List.of("3_HTH_CRM_849_HTH_Verify.sql", "4_HTH_CRM_849_DIGX_Verify.sql", "5_HTH_CRM_849_Comments.sql")) {
+                    String related = Files.readString(sqlDir.resolve(name));
+                    List<SQLScriptElement> queries = SQLScriptParser.parseScript(dataSource, dialect, prefs, related);
+                    List<String> commentLines = related.lines().filter(line -> line.startsWith("COMMENT ON "))
+                        .map(line -> line.substring(0, line.length() - 1)).toList();
+                    int expectedCount = name.startsWith("3") ? 13 : name.startsWith("4") ? 6 : 117;
+                    require(queries.size() == expectedCount, setting + ": " + name + " split into "
+                        + queries.size() + " queries; expected " + expectedCount);
+                    if (name.startsWith("5")) require(commentLines.size() == 114, "Expected one table and 113 column comments");
+                    Path folder = output == null ? null : output.resolve(name + "_" + mode + "_native" + ignoreNative);
+                    if (folder != null) Files.createDirectories(folder);
+                    for (int j = 0; j < queries.size(); j++) {
+                        String exact = queries.get(j).getText();
+                        String query = exact.replaceAll("(?m)^\\s*--[^\\r\\n]*(?:\\r?\\n|$)", "").strip();
+                        require(queries.get(j).getClass().getSimpleName().equals("SQLQuery"), setting + ": unexpected script command");
+                        if (j < commentLines.size()) require(query.equals(commentLines.get(j)), setting + ": incomplete COMMENT " + j);
+                        else require((query.startsWith("SELECT ") || query.startsWith("WITH ")) && !query.endsWith(";"),
+                            setting + ": incomplete read-only query " + name + " #" + j);
+                        if (folder != null) Files.writeString(folder.resolve(String.format("%03d.sql", j)), exact);
+                    }
+                }
                 System.out.println("PASS " + setting + ": both delivery files are single complete statements; "
                     + "prior helper fixture reproduces the failure, and slash does not repair it");
             }
         }
-        System.out.println("No database connections or SQL execution performed.");
+        System.out.println("All schema/configuration/verification/comment scripts checked. No database connections or SQL execution performed.");
     }
     private static <T> T stub(Class<T> api, Map<String,Object> values) {
         return api.cast(Proxy.newProxyInstance(DBeaverScriptParserRegression.class.getClassLoader(),

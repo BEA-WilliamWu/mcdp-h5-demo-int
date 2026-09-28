@@ -47,6 +47,14 @@ final class HthCRMApprovalAsserter {
             values.put("crmPhase","APPROVAL_"+("APPROVE".equals(action)?"APPROVE":("REJECT".equals(action)?"REJECT":"ACTION")));
             values.put("actorUserId",context==null?null:context.getUserId());
             values.put("approvalReference",transaction.getKey().getId());
+            // BCO prioritizes the first approval-processing error over the TFA error.
+            // Use the public domain getter; do not serialize the error object or its message.
+            if (transaction.getErrors()!=null && !transaction.getErrors().isEmpty()
+                    && transaction.getErrors().get(0)!=null) {
+                String code=transaction.getErrors().get(0).getErrorCode();
+                if(code!=null && code.matches("[A-Za-z0-9_.:-]{1,100}"))
+                    values.put("crmApprovalErrorCode",code);
+            }
             values.put("occurredAt",java.time.Instant.now().toString());
             HthCRMAsserter.collect(service,values);
         } catch(java.lang.Exception failure) {

@@ -32,10 +32,7 @@ public final class HthCRMAsserter {
                 return;
             }
             Map<String,Object> snapshot=new LinkedHashMap<String,Object>(source);
-            Object task=com.ofss.digx.infra.thread.ThreadAttribute.get(com.ofss.fc.infra.thread.ThreadAttribute.CURRENT_TASK);
-            Object ip=com.ofss.digx.infra.thread.ThreadAttribute.get("FMO_IP_ADDRESS");
-            if(task instanceof String)snapshot.put("crmTask",task);
-            if(ip instanceof String)snapshot.put("crmIp",ip);
+            HthCRMContext.capture(snapshot);
             final HthCRMEvent3DomainDTO event=HthCRMRequestAssembler.assemble(service,snapshot,config.get("ACTIVITY_"+activity,null));
             if(event==null)return;
             log("COLLECT",event,null);

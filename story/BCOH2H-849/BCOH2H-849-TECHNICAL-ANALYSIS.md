@@ -1,5 +1,7 @@
 # BCOH2H-849 MTB - CM：代码分析与技术设计建议
 
+> 本文保留早期 spike 分析（含未采用的异步建议）。当前已确认方案为同步保存、独立 HTH ORM、BCO 99 列模型加 HTH 14 列；以 [最终技术设计](BCOH2H-849-TECH-DESIGN.md) 及 [113 列字段对照](HTH-CRM-FIELD-MAPPING.md) 为准。
+
 > 2026-09-23：用户已确认本期同步保存。实施以 [最终技术设计](BCOH2H-849-TECH-DESIGN.md) 为准；下文早期异步建议及待确认状态仅保留作历史分析。
 
 > 2026-09-22 更新：范围及业务确认以 [MVP1 对照中的用户确认结果](BCOH2H-849-MVP1-BCO-COMPARISON.md#用户确认结果2026-09-22-更新) 为准。本文早期问题不代表仍需逐项询问 BA；同步/异步尚待确认。
@@ -311,3 +313,8 @@ HTH 沿用 BCO 的 Entity + embedded Key + XML ORM + Assembler/Repository/Adapte
 框架调用存在需要保留的差异：BCO `super.create()` 使用线程业务 Session，HTH 则由 Writer 明确传入独立 NONXA Session。已检查本项目框架实现，`save()` 还会读取线程 Session 缓存；HTH 使用“拒绝已有 EVENT_ID 后 saveOrUpdate(entity)”路径，在该独立 Session 的 EntityManager 中执行 ORM persist，避免绑定或提交原业务 Session。DEDUP_KEY 仍由数据库唯一约束控制。
 
 本次只有 HTH cfg 增加映射注册；不修改共用 persistence / module-cfg、公共 Java、BCO CRM 或 batch。发布需要 hosttohost 包与 HTH ORM 配置一起更新。验证和部署限制以 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md) 为准。
+
+
+### 2026-09-28：HTH 字段模型对齐 BCO
+
+已从原 24 列扩为 113 列：完整包含当前 BCO ORM 的 99 列及对应 String/BigDecimal 类型，加既有 14 列 HTH 信息。新增 HthCRMContext 在 HTH 门控后读取 BCO 相同配置和线程元数据，由 HTH Assembler 明确填入适用列；不调用或改动 BCO collector。20 个新增通用列有明确取值逻辑，其余 69 列为本期不适用/保留列，尤其不填认证 token。完整取值、历史表增量升级和发布顺序见最终设计。

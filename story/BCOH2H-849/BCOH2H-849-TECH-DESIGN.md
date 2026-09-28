@@ -1,246 +1,128 @@
-# BCOH2H-849 — HTH CM / BM MTB 数据保存技术设计
+# BCOH2H-849 — HTH CM / BM CRM 数据保存技术设计
 
-> 2026-09-28 实现补充：HTH 采集、映射、事务、Repository/Adapter 实现放在 hosttohost 模块；common/hth 保留接口、简单 DTO 和纯 HTH 判断工具。SMS/审批通过平台 Adapter 调用，普通 BCO 先返回；移除 audit.close 的 MTB 回调，业务入口独立采集，Entity/Key/Repository/Adapter 使用独立 HTH ORM 映射，注册只追加到 cz-hosttohost.cfg.xml；BCO 映射和代码保持原样。JTA 完成回调立即保存；活动 resource-local 事务无完成回调时跳过并诊断，不能声称该路径已验收。部署、测试及限制见 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md)。
+更新：2026-09-28。按已确认的 MVP1 范围和同步保存方案实现；本次将字段模型进一步对齐 BCO。
 
-设计基线：2026-09-23；按后续实现更新。UAT 是否完成以真实部署与操作结果为准。
+## 1. 本次调整
 
-## 1. 已确定的方向
+以仓库中 BCO `CustomerRelationshipManagement_Event3.orm.xml` 的 **99 个不同字段**为基线，建立独立 HTH Entity 和 ORM，保留 HTH 已有 14 个专用字段，共 **113 列**。已有 HTH 表为 24 列，本次增补 89 列。表名保持 `HTH_BEA.HTH_CRM_EVENT_DETAILS`，已有数据不删除、不重新造数。
 
-按 `HTH_BCO_CM&BM_MVP1.docx` 范围实现 CM 和 BM 数据采集，参考 BCO CRM 的业务规则及分层方式，新增 HTH 专用实现。MTB 数据必须能够区分 HTH 与 BCO 用户操作。
+字段名称及 Java 类型对照 BCO；新增列容量是明确的 HTH 存储定义。仓库没有完整 BCO 物理表 DDL，因此不能将此称为部署环境 BCO 表的逐字复制。金额/汇率的 `BigDecimal` 映射为 Oracle `NUMBER`，不擅自假定精度和小数位。
 
-本期采用**同步保存**：在当前业务执行线程中完成保存尝试，不增加线程池、JMS、outbox、重试或补录。保存失败只留诊断日志，不主动将已经完成的业务改成失败。同步会增加一次数据库调用耗时，不承诺零延迟或任意故障下不丢记录。
+**本次只修改 HTH 采集、映射、实体、HTH ORM、SQL、测试及文档。BCO 表、Entity、ORM、CRMAsserter、evaluator、batch、公共 Java 和现有审批接入点保持原样。** HTH 只读复用 `CRMConfiguration` 和现有设备/语言工具，不写 BCO 配置。
 
-用户已确认暂按同步实施。因此原 AC2 的“异步保存”不属于本期实现，应在 Jira 中记录这一调整；本文件不能代替 Jira 的变更，也不宣称同步满足原文异步 AC。
+完整逐字段定义见 [HTH CRM 字段对照](HTH-CRM-FIELD-MAPPING.md)。
 
-CSV、XLSX 文件生成、Control-M、SFTP、DSP 交易 API 数据采集不在本期实现。sample 和 spike 只作技术参考，不据此加入余额查询、支付或额外文件字段。
+## 2. 业务范围保持不变
 
-## 2. 范围及活动矩阵
-
-下列名称是应用内活动标识，不冒用 MTB 正式外部活动编码。外部编码通过配置映射，不能随意编造 CDC 编码。
-
-| 业务 | 应用内活动 | 实现方向 |
+| 业务 | 内部活动 | 保存粒度 |
 |---|---|---|
-| BM 公司 HTH 管理 | COMPANY_ENABLE / COMPANY_EDIT / COMPANY_DISABLE | 从 HostToHostManagement 真实操作提取公司及审批上下文；不能仅凭 submit 方法名认定为 Enable |
-| CM HTH 用户创建/修改 | USER_CREATE / USER_EDIT | 共享 UserExtensionData 路径增加 HTH 分支，普通 BCO 保持原逻辑 |
-| HTH 账户及服务授权 | ACCESS_CREATE / ACCESS_EDIT；实际开放的删除沿用对应 BCO 规则 | 参考 BCO function 授权动作和保存粒度，转换 HostToHostUserAccessDTO；Related/Associated 作为关系类型保留 |
-| HTH API Password Code 生成 | CODE_GENERATE | 与用户维护分开记录，不保存 Code 内容；审批阶段和实际激活阶段分清 |
-| 首次设置 API Password | PASSWORD_SETUP | 直接执行操作，按真实业务结果记录 |
-| 重设 API Password | PASSWORD_RESET | 与 Setup 分开记录，按真实业务结果记录 |
-| 查询、通知、提醒等 | 仅沿用对应 BCO 已有规则 | 不新增 HTH 特例统计；不能把“无例外”理解为全部删除查询记录，也不因有通知/audit 就额外产生 CRM 活动 |
+| BM 公司 HTH 管理 | COMPANY_ENABLE / COMPANY_EDIT / COMPANY_DISABLE | 每次操作阶段一条，保留公司、操作人、业务引用 |
+| CM HTH 用户维护 | USER_CREATE / USER_EDIT | 只采集权威旧/新渠道符合 HTH 的维护 |
+| HTH 账户及服务授权 | ACCESS_CREATE / ACCESS_EDIT / ACCESS_DELETE | 沿用 BCO 授权 evaluator 的操作级粒度，不按账户/API 数量拆行 |
+| API Password Code 生成/再生成/激活 | CODE_GENERATE | 与用户维护分开，用阶段区分生成及激活 |
+| API Password 首次设置 / 重设 | PASSWORD_SETUP / PASSWORD_RESET | 按真实业务结果分别记录 EXECUTE |
+| 查询、通知、提醒、Reveal | 无新增 HTH 特例 | 原 BCO 规则继续执行，不因增加字段而扩大范围 |
 
-用户渠道显示列、历史用户类型迁移不因本设计自动产生新的维护事件。再生成、Reveal 不因已有 Audit Log 活动就自动新增独立 MTB 活动；若在实际 BCO 对应规则中有记录，按对应规则处理。
+SUBMIT 代表已受理等待审批；APPROVAL_APPROVE / APPROVAL_REJECT / APPROVAL_ACTION 分别是批准、拒绝及其他审批动作；APPLY 是实际生效执行；EXECUTE 是直接执行。不是每笔固定产生四条。已有审批捕获逻辑不因字段扩展改变，不能用 HTTP 200 或 `result=SUCCESSFUL` 单独判成功。
 
-## 3. BCO 能直接参考什么
+CSV/XLSX 抽取、Control-M、SFTP、DSP 交易采集、其他 sample 金融业务均不在本次范围。BCO batch 使用但未在 BCO ORM 中映射的文件/地理等字段，本次不根据猜测新增。
 
-BCO 当前链路：
+## 3. BCO 与 HTH 的分层
+
+BCO 原链路：
 
 ```text
-checkResponsePolicy / failure policy
- → CRMAsserter
- → CRM_GLOBAL_FLAG / CRM_ALLOWED_TASK_CODES
- → fetchCommonInfo
- → CRM_EVALUATOR_<task> 业务转换
- → CRMRequestAssembler → Domain → Repository → LocalAdapter → ORM
- → DIGX_CZ_CRM_EVENT3_DETAILS
+CRMAsserter → CRMInputData → CRMRequestAssembler
+ → CRMEvent3DomainDTO → CRMLocalRepository → BCO ORM / BCO 表
 ```
 
-本地框架 JAR 的调用是同步方法调用。业务运行于审批 worker，不等于 CRM 又独立异步执行。
-
-已检查的 BCO 用户维护 evaluator 识别 UserExtensionDataDTO，但没有把 userChannelType 转成 HTH 标识。UserAccountAccessCRMEvaluator 识别 BCO 授权 DTO，并填写公司及当前操作用户；不识别 HostToHostUserAccessDTO，也没有在该 evaluator 中逐个账户拆行。因此不能只配置旧 evaluator 就宣布 HTH 已支持。
-
-“BCO function 授权”要按页面实际服务 → task → evaluator → 活动配置核对，不能凭 UserAccountAccess 类名代替该核对。实施时先输出这条准确映射和对应行数作为测试基准；若本地配置不足，部署前以 UAT 只读配置核对补齐。这是开发检查项，不再次让 BA 定义已存在的 BCO 规则。
-
-## 4. HTH 保存链路与隔离
+HTH 独立链路：
 
 ```text
-HTH 操作的响应 / 失败 / 审批动作
- → HTH 范围识别、活动及阶段判定
- → HthCRMCollector 提取白名单字段
- → HTH 业务 Mapper
- → HthCRMEventDTO
- → HthCRMEventAssembler
- → HthCRMEvent Entity / Repository / LocalAdapter
- → HTH_CRM_EVENT_DETAILS
+既有 HTH 范围门控与业务/审批入口
+ → HthCRMInputData（已有白名单操作快照）
+ → HthCRMAsserter
+    → HthCRMContext（请求线程中采集适用的 BCO 通用信息）
+    → HthCRMRequestAssembler
+ → HthCRMEvent3DomainDTO / HthCRMEvent3DomainKey
+ → HthCRMWriter → HthCRMLocalRepository → LocalHthCRMRepositoryAdapter
+ → HTH ORM → HTH_BEA.HTH_CRM_EVENT_DETAILS
 ```
 
-设计选择：新建 HTH 专用表及持久化实现。目的是让本期 HTH 数据不会被原 BCO batch 自动抽取；这是本设计的隔离方案，不是声称 AC 已指定表名。现有 BCO CRM 表、公共 CRMAsserter、已有 evaluator 和 batch 不重写。
+实现位于 `hosttohost` 的 `app.hosttohost.crm` 和 `domain.hosttohost.entity.crm`。common/hth 的既有接口、输入 DTO、渠道工具不扩展；共享服务仍先判断 HTH，再通过平台 Adapter 调用。普通 BCO 不进入新增 HTH 元数据采集。
 
-对于已有 BCO CRM 的共享用户路径，原 BCO 记录仍按现状保留，HTH 表补充可区分的 HTH 记录；这两个存储用途要明确。未来文件抽取必须选择唯一来源，不得直接把两表 union 当成两笔业务。本期不修改 BCO 既有输出规则。
+## 4. 哪些字段实际取值
 
-HTH 独立操作不要同时从 endpoint、service、通知和审计各保存一次。每个操作阶段选一个拥有真实结果的入口。优先沿用平台现有策略扩展点；若扩展点不能可靠取得 HTH DTO 或结果，在 HTH service 加受控调用。共享入口只增加渠道判断和调用，转换/持久化放在 HTH 新类。
-
-HTH 判定使用目标业务对象/用户资料中的权威渠道字段及现有渠道常量；不能只看登录者渠道，因为 BCO AP 可以维护 HTH 用户。无可靠识别信息时不猜测，记录跳过原因；普通 BCO 不进入新增保存链路。
-
-## 5. 记录时点和审批
-
-BCO CRMAsserter 可从普通响应进入，也可在 PA_APT 审批动作中解析 transaction snapshot 和原业务 service/task。不能据此断言所有活动只在最终审批后产生。
-
-本设计沿用对应 BCO 操作阶段，并显式保存 PHASE：
-
-| 场景 | 记录方式 |
+| 字段 | HTH 取值与 BCO 对照 |
 |---|---|
-| Maker 提交、等待审批 | 对应 BCO 有记录时保存 SUBMIT；只代表提交结果，不能标作已生效 |
-| Approver 动作 | 对应 BCO 有记录时保存 APPROVAL_ACTION，关联相同业务 transactionId，保留当前操作人和结果 |
-| 最终审批执行并成功 | 标识实际 APPLY 阶段/已生效结果；不能把“批准已接受、执行尚未完成”当作完成 |
-| Code 生成与审批激活 | CODE_GENERATE 独立于 USER_CREATE/EDIT；草稿生成不等于 Code 已激活。用真实激活执行结果识别生效记录 |
-| Setup / Reset | 在直接执行结果确定后记录 EXECUTE；HTTP 200 或 result=SUCCESSFUL 不足以判断成功，必须检查业务 ERROR/异常 |
-| 驳回、业务失败 | 参考相同 BCO 行为记录阶段及失败结果；不能与 MTB 写库失败混为一谈 |
+| RECORD_TYPE、FILLER_01、FEE_CHRG_CODE、EVENT_COUNTRY_CODE | 读取 BCO `CRMConfiguration` 相同配置键；未配置留空，不编造默认编码 |
+| CHNL_ID | 与 BCO 一样，Login-Channel=BCM 时为 ELE-BCM，其余取 CRM_CHNL-ID_INTERNET |
+| CHNL_TYPE_CODE | 取 CRM_CHNL-TYPE-CODE_INTERNET；不能用 CM/BM 代替 |
+| SELF_SRV_IND | 与 BCO 一样，isAdmin=true 为 N，false 为 Y；缺失时留空，不猜测 |
+| EVENT_ID | 保留 HTH UUID；不使用 BCO sequence |
+| EVENT_DTE / EVENT_TIME | 原业务发生时间转香港日期/时间；CREATED_AT 是独立保存时刻 |
+| EVENT_STATUS_CODE、FIN_IND | A/R 为本阶段结果，FIN_IND=N；业务事务回滚则 R |
+| USER_ID | 保留既有 HTH 完整操作人 ID。BCO 通用采集会去 @ 后缀，但其授权 evaluator 又使用完整 session userId；HTH 为审批追踪保留完整标识，不新增截断行为 |
+| ACCT_NBR | 取业务快照 partyId；缺失时取 SessionContext 的 transactingPartyCode，含义为公司编号，不是某个被授权银行账户 |
+| EVENT_REM | 先取审批引用、业务 referenceNumber，再取 FC/DIGX TRANS_REF；与 BCO assembler 一样最多 40 字符 |
+| SOURCE_TRX_REF_NBR | 保留 HTH 已有完整业务/审批引用，供关联和去重；不改成 BCO common 中的空默认值 |
+| IP_ADDRESS | FMO_IP_ADDRESS；缺失留空 |
+| MOBILE_BRAND / DEVICE_MODEL / DEVICE_OS_VERSION | 复用 BCO BeaParser：分别为操作系统、浏览器名称、浏览器版本；不按字段名称误填硬件型号 |
+| USER_ROLE / BIO_TYPE / REG_METHOD / AUTH_METHOD / APP_VERSION | 读取 BCO 同名线程属性，只取这些分类/版本值，不复制整套 headers |
+| LANG | 复用 BCO locale 判断，简体 sc、繁体 tc，其余 en |
+| ERR_CODE | 优先取审批 Transaction 首条 ProcessingError 的安全错误代码，其次 TFA_ERR_CODE，保留最后 20 字符；与 HTH ERROR_CODE（业务快照错误码）分开 |
+| OMB_FLAG | 仅 CM 用户/授权活动采集平台已形成的 One-Man-Bank 肯定上下文（IS_OMB_ENABLED=true 且非银行操作人）为 Y；平台 false 也可能是尚未评估的默认值，未知留 NULL。BM/直接密码操作留空，不为采集重新调用审批/host 查询 |
+| TT_AUTO_ROUTE | 沿用 BCO common 默认 N |
+| 金额、币种、FPS、EDDA、付款、商户、司库、资金归集等 | 保留 BCO 字段与类型；MVP1 维护活动没有对应业务数据，明确留 NULL，不写假金额/假编号 |
+| TOKEN_ID / AR_TOKEN | 仅保留模型兼容字段；HTH 不采集、不填入认证凭据 |
 
-这里定义阶段含义，不意味着强制每笔产生四条记录。实际保留哪些阶段、每阶段几条，以对应 BCO function/用户维护规则为基准。新 HTH 直接生效动作默认每次执行结果一条；不按账户/API 数量自行展开。
+OMB 的值表示已观察到的审批上下文，不声称复制 BCO CRM_OMB_GLOBAL_FLAG + task/aspect + 规则重查询的完整门控。审批错误直接读取现有 domain Transaction.getErrors() 的第一条 getErrorCode()；这是 BCO TransactionActionResponse 的同一来源，使用公开 API，无须修改共享审批接口。只接收错误标识，不读取错误正文；业务结果/阶段判定不变。
 
-同一业务事务不同审批动作是不同事件；同一个回调的重复调用不是新事件。有稳定 transactionId + actionId/executionId 时，以活动、阶段、动作标识及明细序号去重。没有稳定动作 ID 时只做单次调用内防重复，不声称跨重试恰好一次，也不把所有相同 requestId 的不同审批阶段合并。
+本次新增 20 个有明确取值来源的通用字段，其余 69 个新增字段作为不适用/保留列为空。既有 24 列继续按已有业务逻辑赋值。选填上下文不可取得时允许留空；配置、语言或设备解析异常只记录阶段及异常类型，不丢弃其他已采集信息。
 
-## 6. 数据设计
+不将修改用户的 Email/Mobile 填到 `ELECT_ADD/PHONE_NBR`：这些 BCO 字段还涉及代理登记及结果语义，当前 BCO 用户维护 evaluator 也未这样映射。不能为了填满列而混用含义。
 
-最终表名 `HTH_BEA.HTH_CRM_EVENT_DETAILS`，按 BCO 事件明细模型设计显式列。本期是 CM/BM 非金融事件，金额、支付、文件头尾及 sample 独有字段不强行加入。后续若扩展金融交易另做迁移。
+## 5. HTH 专用字段
 
-以下为本设计的新表类型建议，并非推断 BCO 实际 DDL。上线脚本按应用实际 ID 长度作预检，禁止静默截断。
-
-| 字段 | 类型建议 | 来源 / 含义 |
-|---|---|---|
-| EVENT_ID | VARCHAR2(36 CHAR), PK | 应用生成 UUID；不使用或改变 BCO crm_sequence |
-| EVENT_DTE / EVENT_TIME | VARCHAR2(8 CHAR) / VARCHAR2(6 CHAR) | 事件发生时刻，香港时区 yyyyMMdd / HHmmss；不是重试时间 |
-| CREATED_AT | TIMESTAMP(6) | 实际保存时间，约定香港时区 |
-| SOURCE_SYSTEM | VARCHAR2(16 CHAR) | 固定 HTH；区分存储来源 |
-| CHANNEL_TYPE | VARCHAR2(16 CHAR) | CM / BM 入口 |
-| TARGET_USER_CHANNEL | VARCHAR2(16 CHAR) | 权威目标用户渠道；公司管理无目标用户时允许空 |
-| ACTIVITY_KEY | VARCHAR2(64 CHAR) | 上述内部业务活动标识 |
-| EVENT_ACTV_TYPE_CODE | VARCHAR2(64 CHAR), nullable | 正式 MTB 活动编码，来自配置；未配置时保留内部活动并记诊断，不伪造编码 |
-| EVENT_STATUS_CODE | VARCHAR2(16 CHAR) | 沿用 BCO 对应状态映射；不能脱离 PHASE 解释为业务已生效 |
-| PHASE | VARCHAR2(32 CHAR) | SUBMIT / APPROVAL_ACTION / APPLY / EXECUTE 等明确阶段 |
-| FIN_IND | VARCHAR2(1 CHAR) | 按 BCO 非金融业务配置，不存金额 |
-| USER_ID | VARCHAR2(256 CHAR) | 当前操作人；不能用目标用户覆盖审批人 |
-| TARGET_USER_ID | VARCHAR2(256 CHAR), nullable | 被维护用户，保留完整标识 |
-| ACCT_NBR | VARCHAR2(64 CHAR) | 对应 BCO 维护业务的公司/Party 标识，不误当银行账户 |
-| RELATIONSHIP_TYPE | VARCHAR2(32 CHAR), nullable | Related / Associated，对应真实 DTO |
-| SERVICE_ID / TASK_CODE | VARCHAR2(256 CHAR) / VARCHAR2(100 CHAR) | 实际服务与 task，方便追溯配置 |
-| SOURCE_TRX_REF_NBR | VARCHAR2(128 CHAR), nullable | 业务/审批 transactionId |
-| SOURCE_ACTION_ID | VARCHAR2(128 CHAR), nullable | 独立审批动作或执行 ID；不是简单取最后审批人 |
-| REQUEST_ID | VARCHAR2(128 CHAR), nullable | 已有可信请求关联标识 |
-| IP_ADDRESS | VARCHAR2(64 CHAR), nullable | 原调用上下文；无 IP 不伪造，记录可诊断原因 |
-| ERROR_CODE | VARCHAR2(100 CHAR), nullable | 业务错误代码，不保存原始异常消息或请求内容 |
-| DEDUP_KEY | VARCHAR2(64 CHAR), nullable, UNIQUE | 有稳定来源动作标识时生成摘要；无稳定来源时留空 |
-
-授权账户及 function 明细：先按 BCO function 映射确认是否实际保存。BCO 未保存的细项不擅自变成 HTH 新需求；需要的同义列在最终建表 SQL 中显式列出。不以原始 JSON 代替字段设计，不保存整个用户资料快照。
-
-密码、Code、密文、密码 hash、RSA 私钥、Token、认证 header 不入表、不入日志。正常金额/敏感字段之外的数据也按白名单采集。
-
-索引：主键、DEDUP_KEY 唯一索引、事件日期+活动索引、SOURCE_TRX_REF_NBR 索引。按实际查询验证，避免为每列建索引。本期不增加 batch 状态或清理 job，不修改 BCO 保留策略。
-
-## 7. 同步事务和失败策略
-
-同步与共用事务是两件事。HthCRMEventWriter 必须使用独立持久化边界，不能 commit/rollback 调用方业务事务。优先使用项目已有受支持的独立事务机制；实施时验证平台事务挂起/恢复能力，不假设仅 openSession 就是独立事务，不靠改 NONXA 来掩盖问题。
-
-成功生效记录必须在业务提交结果已确定后写入。优先使用平台已有完成回调；在同一执行线程同步执行写入。平台若没有可用回调，应在拥有 commit 结果的 HTH 执行层接入，不能在 checkResponsePolicy 前后猜测 commit 已完成。前置采集只保存白名单快照，不保留 Session/HTTP request。
-
-写库失败：回滚 HTH 写入、关闭它拥有的资源、恢复调用上下文，写安全日志；不重试、不补录。提交结果不明也不主动重试，避免重复。不吞掉原业务异常、不改变原业务返回。事务隔离实测未通过之前不可部署，不能把 catch 当作“不影响主业务”的证据。
-
-同一配置/映射错误应明确记录原因；本期允许保存失败导致数据缺失，不能承诺完整性保障或事后恢复。
-
-## 8. 拟新增及修改代码
-
-类名为设计名，实施时按项目包约定落位，不为复用而引入模块循环依赖。
-
-| 位置 | 内容 | BCO 影响 |
-|---|---|---|
-| HTH 模块 | HthCRMCollector / HthCRMActivityResolver | 新增采集、活动与阶段解析 |
-| HTH 模块 | 用户、公司管理、授权、密码四类 Mapper | 新增白名单转换；不改旧 evaluator 的语义 |
-| HTH DTO 模块 | HthCRMEventDTO | 新增专用 DTO |
-| HTH domain/repository | Entity、Key、Assembler、Repository、LocalAdapter、Writer | 新增存储分层及独立事务边界 |
-| HTH 服务 | Management、UserAccess、ApiPassword 的受控采集入口 | 不改原业务判断、审批、通知结果 |
-| 共享 UserExtensionData / 必要审批扩展点 | HTH 门控及最小调用 | 唯一可能的公共 Java 差异，评审单独列出；普通 BCO 分支保持原样 |
-| ORM 注册及映射 | 新 HTH entity 映射，按项目发布方式同步 dist | 只追加新映射 |
-| HTH 配置 SQL | 功能开关、活动映射、表/索引 | 不覆盖 CRMConfiguration 原允许列表，不复写 BCO 编码 |
-| batch、前端、通知、Audit Log | 不修改 | 不借本 story 扩展既有功能 |
-
-若 HTH 模块依赖方向不允许共享用户服务直接引用 collector，复用已有 adapter factory/接口扩展机制；不能通过反射调用私有方法。
-
-## 9. 配置和 SQL 交付
-
-新增 HTH 专用配置组及 `ENABLED` 开关，默认关闭，完成配置验证后显式开启。活动内部标识与正式 MTB 编码分离。编码没有定稿不阻止采集内部记录，但不得宣称下游映射已完成。
-
-最终交付一份安装/增量脚本和一份只读验证脚本：
-
-- 表不存在才创建；存在则逐项检查类型、长度、主键和索引，不 DROP、不 TRUNCATE。
-- 配置按精确键 MERGE；重跑不重置管理员设置的开关，不删除其他配置。
-- 不复制整串 BCO CRM_ALLOWED_TASK_CODES，不占用 BCO 事件编号 sequence。
-- Oracle DDL 自动提交，不能声称整份脚本可以靠 rollback 全撤回；结构差异时报明确错误。
-- 验证表结构、活动映射、开关和重复事件查询；只读检查不打印密码相关字段。
-
-停用回退：关闭 HTH 开关，恢复新增入口/配置版本；保留已采集数据，BCO 表与 batch 不变。
-
-## 10. 日志
-
-统一前缀 `HTH_MTB`。阶段为 COLLECT / MAP / WRITE / SKIP / ERROR，包含内部 eventId、activity、phase、task、耗时、结果及异常类型。禁止打印整个 DTO、SQL 参数、密码、Code、密钥、联系方式。业务关联标识按现有日志脱敏标准处理。
-
-常见定位：NOT_HTH、DISABLED、MISSING_SOURCE_ID、MAPPING_NOT_FOUND、DUPLICATE、WRITE_FAILED。外部编码未配置与持久化失败分别记录。
-
-## 11. 实施顺序及验收
-
-1. 固化 BCO function 授权服务/task/evaluator/活动/条数对照，核对 UAT 配置和审批执行边界；这是代码实现前的首个开发步骤。
-2. 新增 HTH DTO、实体、ORM、SQL 和同步 Writer；先证明独立事务不会提交/回滚调用方事务。
-3. 依次接入公司管理、用户维护、授权和三个密码活动；接入一类就验证成功、失败、审批及重复调用。
-4. 运行 BCO 回归；确认普通 BCO 没有新增 HTH 数据，原 CRM 行数/字段/通知不变。
-5. UAT 开启开关，提交真实操作，按 transactionId 对照记录，检查时点、身份、活动及字段。
-
-| 验证场景 | 必须看到的结果 |
+| 字段 | 用途 |
 |---|---|
-| CM / BM 每个纳入活动 | 正确活动标识、入口、目标及操作人；HTH 与 BCO 可区分 |
-| BCO AP 维护 HTH 用户 | 正确识别目标 HTH，不因操作者是 BCO 而漏记 |
-| 普通 BCO 用户操作 | 保持原 CRM 记录和界面，新 HTH 分支不执行 |
-| BCO function 授权对照 | 动作、条数和字段语义一致；HTH DTO 转换正确 |
-| 多级审批、驳回、执行失败 | 阶段清晰，不把待审批标作已生效，不重复记录相同回调 |
-| Code Generate / Setup / Reset | 三个独立活动；不采集输入及安全材料 |
-| 主事务回滚 / 提交失败 | 无错误的已生效成功记录；业务失败按 BCO 对应规则处理 |
-| HTH 表不可写 / 超时 | 原业务结果不被修改；HTH 写入资源释放，有安全日志，无重试 |
-| SQL 重复执行 | 不丢数据、不覆盖 BCO 配置、不重置开关 |
-| 同步性能 | 对比开关前后的提交延迟及数据库连接使用，记录额外耗时 |
+| SOURCE_SYSTEM、CHANNEL_TYPE、TARGET_USER_CHANNEL | 来源 HTH、入口 CM/BM、目标用户渠道；与 BCO CHNL_ID 分开 |
+| ACTIVITY_KEY、PHASE | 内部活动和提交/审批/生效阶段；外部正式代码仍由 HTH 配置给 EVENT_ACTV_TYPE_CODE |
+| TARGET_USER_ID、RELATIONSHIP_TYPE | 被维护用户及 Related/Associated 关系 |
+| SERVICE_ID、TASK_CODE | 追溯业务服务与 task |
+| SOURCE_ACTION_ID、REQUEST_ID | 单次审批动作或直接请求关联 |
+| ERROR_CODE | 业务错误码或 BUSINESS_ROLLBACK，不保存异常文本 |
+| DEDUP_KEY | 稳定动作标识存在时生成摘要，数据库唯一约束去重；缺少时为空 |
+| CREATED_AT | 独立落库时刻，香港时区；不伪造历史缺失值 |
 
-编译和单元测试不能代替这些真实事务及 UAT 测试。实现交付必须分别列出已通过测试、未执行测试和运行环境限制。
+## 6. 事务与 BCO 隔离
 
-## 12. 参考及设计边界
+暂按已确认方案同步保存，不增加线程池、JMS、outbox、重试或补录。原 AC2 的异步文字需在 Jira 记录调整，不能声称同步等于异步。
 
-- [MVP1 全量对照与用户确认](BCOH2H-849-MVP1-BCO-COMPARISON.md)
-- [原代码分析（历史参考，冲突以本设计为准）](BCOH2H-849-TECHNICAL-ANALYSIS.md)
-- 原 BCO CRMAsserter、UserManagementCRMEvaluator、UserAccountAccessCRMEvaluator、CRMRequestAssembler、CRMLocalRepository 和 ORM 路径见对照文档。
+保留原独立事务边界：JTA 完成后在回调中保存，事务回滚则复制完整事件并修改状态/错误/去重信息；活动 resource-local 事务没有可用完成回调时记录 LOCAL_TX_PENDING 并跳过，不能宣称这条路径已在 UAT 验收。新增元数据在注册回调前快照，回调不再读取原请求线程信息。
 
-同步、CM/BM 范围、区分 HTH、三个密码活动、BCO 授权参照及失败不补录已确定，不再重复提问。平台事务 API、正式外部活动码、UAT 配置属于实施核验项，不能伪装成已经验证；如发现不能满足隔离要求，需提出具体技术差异后调整，而不是扩大公共代码修改。
+Writer 使用显式独立 NONXA Session，不能提交/回滚调用方 Session。框架 `super.create()`/`save()` 会依赖线程 Session；HTH 保留已测试的“按实体别名检查已有 EVENT_ID 后 saveOrUpdate”调用。Entity 所有 basic 列 `updatable=false`、缓存 `ISOLATED`，防止并发同 ID merge 覆盖已有记录。此竞态可能正常结束但不新增，不保证总抛重复异常。
 
-### 2026-09-23：按 BCO CRM 链路命名及入口隔离
+Entity 的复制方法复制全部字段，并独立复制 Key/Timestamp，确保回滚转换不丢新增元数据、不修改原事件。DEDUP_KEY 冲突仅回滚 HTH 写入；5 秒查询/DML 超时仅设置在 HTH descriptor。失败只记日志，不补录，不承诺零耗时或绝不丢记录。
 
-对照链路：`HthCRMAsserter → HthCRMInputData → HthCRMRequestAssembler → HthCRMEvent3DomainDTO → HthCRMLocalRepository`。
-`HthCRMInputData` 是跨模块传入的操作数据，Asserter 使用它调用 Assembler 生成 Domain DTO，再通过既有独立事务 Writer/Repository 保存。这里对齐名称和分层职责，不继承 BCO CRMAsserter，也不修改 BCO 表、batch 或事务。
+## 7. SQL 与发布
 
-公共判断统一使用 `HthChannelSupport`：渠道 HTH/H2H；用户更新判断旧、新渠道；审批按精确 HTH 服务白名单及用户渠道判断。工具只比较值，不查数据库、不读配置、不加载 HTH Adapter。
-SMS/Approval 先判断，再动态查找 Adapter。Approval 不再引用 HostToHost DTO 或维护 HTH 字段映射；这些处理移至 hosttohost 的 `HthCRMApprovalAsserter`。普通 BCO 不查找 HTH 实现；HTH Adapter 查找/调用异常及类加载链接错误捕获后只记阶段和异常类型。
+部署目录：`consulting/db/branch_change_history/20260923_HTH_MTB_849`。
 
-这减少共用模块对 HTH 实现的依赖，但公共接口/数据对象仍需随应用正确打包，不能保证任意混用新旧包。Factory 配置键保留，注册类名已改变，需重跑注册 SQL 并完整打包。HTH 包缺失时，HTH MTB 可能漏记且不会补录，应检查诊断日志。
+1. 在 **HTH_BEA** 执行 `1_HTH_CRM_849_Schema.sql`：新库建 113 列；已有 24 列补 89 个 nullable 列；缺失列补齐、兼容容量保留、必要时安全扩大 VARCHAR2。保留已有行、不回填猜测值、不 DROP/TRUNCATE。
+2. 在同一 HTH 连接执行 `3_HTH_CRM_849_HTH_Verify.sql`，核对 113 列、类型/容量、英文 comments、主键、索引及数据。
+3. 已部署 849 且配置正确时，无需为本次字段扩展修改 DIGX 配置；首次部署仍在 **DIGX** 连接执行 `2_HTH_CRM_849_DIGX_Config.sql`，再运行 `4_HTH_CRM_849_DIGX_Verify.sql`。重跑不重置已有开关/编码。
+4. `5_HTH_CRM_849_Comments.sql` 仅作可选的 comments 修复；脚本 1 已包含全部注释，不需重复执行 5。
+5. **先升级表，再部署匹配的 hosttohost 包及 HTH ORM XML**，按应用发布流程重启/重新部署加载映射。新实体遇到未升级旧表会写入失败，不能混版本验证。
 
-### CRM 命名与 common/hth 目录整理
+Oracle DDL 会隐式提交，不能承诺整份脚本事务回滚。对不安全类型/约束差异明确报错。安装脚本可重复执行，不修改 `HTH_MTB_EVENT_DETAILS`、`HTH_MTB_API_CONFIG` 或 BCO 对象；关闭 HTH ENABLED 即停用新增写入，保留已采集数据。
 
-849 代码包为 `app.hosttohost.crm`；Adapter、Factory、Scope、Writer、审批入口和测试类统一使用 HthCRM 命名。common 中的 HTH 接口、InputData、渠道判断及 HthOnboardingAudit 统一位于 `com.ofss.digx.cz.bea.common.hth`，原引用同步更新。原 BCO 公共类不移动。
+## 8. 验证与排查
 
-诊断关键字改为 `HTH_CRM stage=`。数据库使用独立表 `HTH_CRM_EVENT_DETAILS`；配置分组 `HTHMtbConfiguration` 及 `HTH_MTB_ADAPTER_FACTORY`/`HTH_MTB_ADAPTER` 保留既有配置标识，避免重置开关及活动映射。注册值更新为 `com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAdapterFactory`：需在 DIGX 配置连接重新执行 2_HTH_CRM_849_DIGX_Config.sql（保留数据/开关）并重启。同批干净打包 common、SMS、approval、hosttohost 及引用 HthOnboardingAudit 的模块，避免残留旧 class。
+- 模型：逐列验证 HTH 包含 BCO ORM 的 99 列及相同 Java 类型，另有 14 列 HTH 信息。
+- 取值：配置渠道、银行/客户身份、语种、设备、角色、错误码、交易引用、空上下文、隐私白名单及回滚快照。
+- 持久化：真实 EclipseLink + 项目 Session/persister + H2，测试所有字段与 BigDecimal/NULL 的往返、独立事务、重复键、并发 merge 不覆盖、BCO/HTH mapping 同时加载。
+- SQL：真实 DBeaver 解析；隔离 Oracle 测新建、旧 24 列带数据升级、重复执行、注释及类型/索引异常检查。结果见部署 README；这些不等同已完成 UAT 业务验证。
+- UAT：真实提交/审批后按时间、SOURCE_TRX_REF_NBR、ACTIVITY_KEY、PHASE 对照新记录。查询未采到的新元数据，要同时看实际线程上下文与 CRMConfiguration 是否提供值，不用假数据补齐。
 
-### 部署已有表时的兼容处理
-
-建表文件 `1_HTH_CRM_849_Schema.sql` 同时承载增量升级：保留旧列及数据，只补缺列、扩大 VARCHAR2 容量，不收缩或重建表。旧表新加的业务元数据列允许历史值为空，避免给旧记录伪造采集时间和活动类型；新建表保留原 NOT NULL 设计，应用仍为新记录提供这些字段。旧约束不放宽，无法安全兼容的差异在 ALTER 前集中报出。HTH 建表与 DIGX 配置继续分 schema 执行。
-
-### 2026-09-28：使用独立 CRM 表
-
-为避免与可能由其他功能创建的 `HTH_MTB_EVENT_DETAILS` 混用，849 的建表、写库、注释和验证统一改为 `HTH_BEA.HTH_CRM_EVENT_DETAILS`。主键及索引为 `PK_HTH_CRM_EVENT`、`UX_HTH_CRM_DEDUP`、`IX_HTH_CRM_DATE_ACT`、`IX_HTH_CRM_SOURCE`，与旧表对象名隔离。
-
-这是新建并切换写入目标，不对旧表执行 RENAME、ALTER、DROP、TRUNCATE、数据复制或补录。新建表初始没有记录，应用新版本部署后产生的事件才写入。旧版应用仍写旧表，因此先建新表并配置 NONXA 实际账号权限，再部署 hosttohost 新包；不能只执行 SQL 就认定应用已切换。开关、Adapter key、BCO 实现和 batch 不变。
-
-`3_HTH_CRM_849_HTH_Verify.sql` 只核对本期 CRM 表及其24列、主键、索引、注释和数据。`4_HTH_CRM_849_DIGX_Verify.sql` 单独核对配置，不把 `HTH_MTB_API_CONFIG` 当成依赖。Verify 的结构 PASS 不等于业务已落库；UAT 应按真实操作时间/业务引用核对 ACCESS_CREATE/ACCESS_EDIT 及对应 PHASE，并结合 `HTH_CRM stage=WRITE` 日志。
-
-
-### 2026-09-28：HTH 持久化对齐 BCO ORM
-
-- Entity/Key 使用 BCO 相同的领域基类，Assembler 通过明确的 setter 填充白名单字段，替代原 Map 型 Domain DTO。存储分层位于 `domain.hosttohost.entity.crm`；不修改 BCO 的同名职责类。
-- XML `orm/eclipselink/mappings/cz/hosttohost/crm/HthCRMEvent3DomainDTO.orm.xml` 映射独立 HTH 表的 24 列。现有 `cz-hosttohost.cfg.xml` 只追加一条 mapping；原 BCO CRM mapping、共用 module-cfg / persistence 配置不变。
-- Adapter 不再拼接 INSERT。保留显式独立 Session 参数：项目框架 `save()`/BCO `super.create()` 会读取线程业务 Session，而 `saveOrUpdate()` 使用传入 Session 自身的 EntityManager。Adapter 先拒绝已有 EVENT_ID，再使用该公开 ORM API 创建新事件；业务去重继续由 DEDUP_KEY 唯一索引约束。所有 basic 列另设 updatable=false、实体缓存设 ISOLATED，防止并发同 ID 时 merge 覆盖原记录；该竞态可能正常结束但不新增，不保证总是抛重复异常。不会为了复刻 BCO 调用形式改动当前业务会话。
-- `HthCRMDescriptorCustomizer` 仅设置本 HTH 实体的 5 秒 ORM 超时；不修改公共 customizer 或 BCO 超时。
-- Writer 的 JTA 门控、完成回调、NONXA 独立提交/回滚、失败不重试保持原样。CREATED_AT 改为保存前取应用的香港时间；EVENT_DTE/EVENT_TIME 仍取业务发生时间。表结构、索引及既有数据无需变更；SQL 1/3/5 同步 CREATED_AT 英文注释，可用脚本 5 单独更新。
-- 发布必须同时包含干净编译的 hosttohost 包、新 ORM XML 和更新后的 HTH cfg，并重启加载映射。BCO 代码没改不代表可以任意混用新旧包与配置；共用应用启动时仍需正确加载新增 HTH 映射。
-- 验证使用真实 EclipseLink + 项目 Session wrapper + H2，包含无当前 Session、有原业务 Session、重复主键、重复业务键、缺表失败、原业务提交/回滚和 HTH/BCO 两套映射同时加载；部署步骤与最终验证结果见 849 README。
+日志关键字为 `HTH_CRM stage=`。常用阶段 COLLECT、WAITING_FOR_JTA、WRITE、WRITE_FAILED、DISABLED、LOCAL_TX_PENDING、TX_OUTCOME_UNKNOWN；新增 CONTEXT_CONFIG_FAILED、CONTEXT_LOCALE_FAILED、CONTEXT_DEVICE_FAILED 只记录异常类型。密码、Code、密文、hash、密钥、Token、整套 headers 和原始请求不写表、不写日志。

@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BCO Notification Bounce-back Handling — 初步调查</title>
+<style>
+:root { color-scheme: light; --ink:#1e293b; --muted:#64748b; --line:#dbe3ec; --blue:#1957a6; }
+* { box-sizing:border-box; }
+body { margin:0; background:#f1f5f9; color:var(--ink); font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+main { max-width:1180px; margin:32px auto 64px; padding:44px 48px 60px; background:#fff; border:1px solid var(--line); border-radius:10px; }
+h1 { font-size:30px; line-height:1.35; color:#153453; margin:0 0 10px; }
+h1 + p { color:var(--muted); font-size:14px; margin-top:0; }
+h2 { margin:38px 0 16px; padding-top:24px; border-top:1px solid var(--line); font-size:23px; color:#153453; }
+h3 { margin:26px 0 12px; font-size:18px; color:#264767; }
+p { margin:12px 0; }
+a { color:var(--blue); text-decoration:none; }
+a:hover { text-decoration:underline; }
+strong { color:#173856; }
+table { width:100%; border-collapse:collapse; margin:18px 0 22px; font-size:14px; table-layout:fixed; }
+th,td { padding:12px 14px; border:1px solid var(--line); vertical-align:top; text-align:left; overflow-wrap:anywhere; }
+th { background:#edf3fa; color:#193d65; font-weight:600; }
+tbody tr:nth-child(even) { background:#fafbfd; }
+code { font:0.9em/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#eef2f6; padding:2px 4px; border-radius:3px; overflow-wrap:anywhere; }
+pre { margin:16px 0 20px; padding:18px 20px; background:#f5f7fa; border:1px solid var(--line); border-left:3px solid #7195bb; border-radius:5px; overflow:auto; }
+pre code { display:block; white-space:pre; background:none; padding:0; overflow-wrap:normal; font-size:12px; line-height:1.7; }
+ul,ol { padding-left:24px; }
+li { margin:7px 0; overflow-wrap:anywhere; }
+p:has(> code:only-child) { color:var(--muted); }
+@media(max-width:760px) { main { margin:0; padding:24px 18px; border:0; border-radius:0; } h1 { font-size:25px; } table { font-size:12px; } th,td { padding:8px; } pre { padding:12px; } }
+@media print { body { background:#fff; } main { max-width:none; margin:0; padding:0; border:0; } h2,h3 { break-after:avoid; } tr { break-inside:avoid; } pre { white-space:pre-wrap; } pre code { white-space:pre-wrap; overflow-wrap:anywhere; } }
+</style>
+</head>
+<body><main><h1>BCO Notification Bounce-back Handling</h1>
+<p>初步调查 · 2026-09-29</p>
+<p>本次调查关注：BCO 发出的 Email / SMS 失败后，系统怎样记录、能不能重试、会不会换渠道通知，以及去哪里排查。依据为本地 <code>cdc-application/consulting</code> 的源码、数据库映射、批次脚本和附带的框架 JAR；尚未连接运行数据库或核对生产部署版本。下文主要描述普通 MNG 通知链路，SMTP 特例在第 4 节单列。</p>
+<h2>1. 初步结论</h2>
+<p>BCO 有两条不同的失败处理链路。第一条是发送时通知平台接口直接报错：系统记录发送失败，底层框架具备按配置重试的能力。第二条是接口调用已经完成，通知平台后来报告邮件或短信无法送达：BCO 导入 bounce report，再为符合条件的通知安排备用渠道和联系方式更新提醒。</p>
+<p><strong>Bounce-back 的主要目的，是让客户知道“银行联系不到你，请更新联系方式”。它通常不会把原来那封交易通知或 PIN 通知原样重新发一遍。</strong></p>
+<table>
+<thead>
+<tr>
+<th>遇到什么情况</th>
+<th>BCO 怎么处理</th>
+<th>客户可能看到什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>调用 Email / SMS 发送接口就失败</td>
+<td>记录 <code>Failed</code>；通知动作失败后，可以由框架按该事件的重试配置再次执行</td>
+<td>不能保证马上有另一条提醒；要分别查重试结果和后续失败回报</td>
+</tr>
+<tr>
+<td>用户 Email 后来被退回</td>
+<td>收到失败文件后，检查事件名单、用户当前联系方式及最近 30 天处理记录；符合条件时发备用 SMS</td>
+<td>提醒更新登记的 Email，并可在下次登录时提示</td>
+</tr>
+<tr>
+<td>用户 SMS 后来报告投递失败</td>
+<td>同样先经过筛选；符合条件时发备用 Email</td>
+<td>提醒更新登记的手机号码，并可在下次登录时提示</td>
+</tr>
+<tr>
+<td>用户没有可用的另一种联系方式，或另一渠道已有失败历史</td>
+<td>代码有站内信、登录提醒、公司 Email 的分支，但有历史抑制条件，部分分支还有需核对的问题</td>
+<td>可能收到站内信或登录提醒；不能保证“两个渠道都失败就一定有站内信”</td>
+</tr>
+<tr>
+<td>公司 office Email 被退回</td>
+<td>按公司退信规则，可以发 AP Email、同公司 System Admin 站内信和登录提醒</td>
+<td>提醒更新公司 Email；不同通知的收件人集合并不完全相同</td>
+</tr>
+<tr>
+<td>失败通知不在指定事件名单，或找不到原发送记录</td>
+<td>不能进入这里看到的普通 BCO 备用通知主流程</td>
+<td>不应预期每一次失败都自动换渠道通知</td>
+</tr>
+</tbody></table>
+<p>这里的 <strong>Webmail 是 BCO 内部站内信</strong>，客户登录后查看，不是发到外部邮箱。Email / SMS 中的 <code>Success</code> 也只是本次发送接口调用的结果，不能据此认定客户已收到。</p>
+<h2>2. 一条通知失败后，具体经过哪些步骤</h2>
+<pre><code class="language-text">原业务产生通知事件
+  ↓
+EmailDispatcher / SMSDispatcher 调用 MNG 通知平台
+  ├─ 当场报错 → 记录 Failed → 框架按事件配置决定是否重试
+  └─ 未返回错误 → 记录 Success（还不是最终送达）
+                         ↓ 后来发生投递失败
+              MNG 输出 Email / SMS bounce CSV
+                         ↓
+              loadMNGmsg.sh 导入失败明细
+                         ↓
+              ValidateAndSendBounceNotify.sh
+              关联原通知、筛选事件、检查历史、选备用收件人
+                  ├─ 写站内信 / 设置登录提醒
+                  └─ 写备用通知任务表
+                         ↓
+              BatchExecutionScheduler → alertBounceBack
+              注册备用 Email / SMS 事件 → 再走通知发送框架
+</code></pre>
+<p>**这条 bounce 链路是批次处理，不是发送失败后立刻弹出或实时切换渠道。**多久后客户能看到提醒，取决于 MNG 何时提供文件、导入批次什么时候执行、备用通知 job 什么时候运行。目前不能从这些源码确定生产环境每隔几分钟或每天几点执行。</p>
+<p>三个主要阶段的数据可以这样理解：</p>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>存的是什么</th>
+<th>关键关联 / 字段</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DIGX_CZ_EMAIL_MNG</code></td>
+<td>BCO 原发送记录，Email 和 SMS 都使用它</td>
+<td><code>REFNUMBER</code>、<code>EVENTID</code>、<code>RECIPIENTID</code>、<code>RESPONSE_STATUS</code>、<code>COD_ACT_DATA_ID</code></td>
+</tr>
+<tr>
+<td><code>DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL</code></td>
+<td>MNG 返回的 Email 失败明细</td>
+<td><code>SRC_SYS_REF_NUM</code>、<code>EMAIL_RECI_ADDR</code>、<code>BOUNCE_BACK_MSG</code></td>
+</tr>
+<tr>
+<td><code>DIGX_CZ_BATCH_BOUNCE_BACK_CCBSMS</code></td>
+<td>MNG 返回的 SMS 失败明细</td>
+<td><code>SRC_SYS_REF_NUM</code>、<code>SMS_RECI_MOB_NUM</code>、<code>DELIVERY_MSG</code>、<code>SEND_DTTM</code></td>
+</tr>
+<tr>
+<td><code>DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST</code></td>
+<td>哪些原通知事件进入备用通知处理</td>
+<td><code>EVENTID</code></td>
+</tr>
+<tr>
+<td><code>DIGX_CZ_BATCH_VALIDATE_AND_SEND_BOUNCE</code></td>
+<td>为这次失败选好的备用渠道、收件人和处理记录</td>
+<td><code>REFNUMBER</code>、<code>ALT_SMS</code>、<code>ALT_EMAIL</code>、<code>ALT_OFFICE_EMAIL</code>、<code>ISPROCESSED</code></td>
+</tr>
+<tr>
+<td><code>DIGX_EP_ACN_LOG_B</code></td>
+<td>通知框架实际执行发送动作的记录</td>
+<td><code>FLG_PROCESS_STAT</code>、<code>TXT_DEST_ADDR</code>、<code>NUM_RETRY_CNT</code>、<code>TXT_COMMENTS</code></td>
+</tr>
+</tbody></table>
+<p>最重要的关联是 <code>DIGX_CZ_EMAIL_MNG.REFNUMBER = 失败明细.SRC_SYS_REF_NUM</code>。这里的 <code>REFNUMBER</code> 是通知发送参考号；<code>ORG_REF_NO</code> 才是另存的原业务参考号，排查时不要混用。</p>
+<p>依据：<a href="#c1">C1</a>、<a href="#c2">C2</a>、<a href="#c3">C3</a>、<a href="#c5">C5</a>。</p>
+<h2>3. 备用通知发给谁</h2>
+<h3>3.1 用户自己的 Email / SMS 失败</h3>
+<p>例如，用户 A 的 Email 通知被退回。批次找到原记录中的用户 A，再检查当前 profile 的 Email 是否仍然等于原来发送失败的地址；匹配后才取该用户的手机作为备用渠道。若用户已换过 Email，不能直接假定仍会按旧通知找到备用手机。</p>
+<p>SMS 失败时，初次查询会用用户当前的 <code>MOBILE_CODE || MOBILENO</code> 和原失败手机比对，再取用户 Email。不过后续分支还会重新使用当前用户 Email，而且存在空值判断问题，因此不能把这个比对理解成已经严格执行的发送限制。</p>
+<table>
+<thead>
+<tr>
+<th>用途</th>
+<th>收件人 / 数据来源</th>
+<th>主要条件</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Email 失败后的备用 SMS</td>
+<td><code>DIGX_UM_USERPROFILE.MOBILENO</code>；手机区号来自 <code>DIGX_CZ_UM_EXTENSIONDATA.MOBILE_CODE</code></td>
+<td>要匹配原收件人与当前 profile，并通过历史检查</td>
+</tr>
+<tr>
+<td>SMS 失败后的备用 Email</td>
+<td><code>DIGX_UM_USERPROFILE.EMAIL</code></td>
+<td>初次查询比对当前完整手机号；后续还受历史检查和重新赋值逻辑影响，见下方说明</td>
+</tr>
+<tr>
+<td>部分兜底分支的公司 Email</td>
+<td><code>DIGX_PI_PARTY_PREFERENCES.OFFICE_EMAIL</code></td>
+<td>按原通知 <code>PARTYID</code> 查询；分支会检查是否与个人 Email 相同及历史记录</td>
+</tr>
+<tr>
+<td>用户站内信</td>
+<td>原通知关联的用户，在 BCO 站内收件箱查看</td>
+<td>在对应兜底分支写入 mailbox 表</td>
+</tr>
+<tr>
+<td>用户登录提醒</td>
+<td><code>DIGX_CZ_UM_EXTENSIONDATA.BOUNCE_BACK_REMINDER=&#39;USER&#39;</code></td>
+<td>提醒联系 Authorised Person / Administrator 更新手机或 Email</td>
+</tr>
+</tbody></table>
+<p>**30 天是历史检查窗口，不是“30 天后再重试一次”。**代码根据最近 30 天备用通知处理表的渠道、时间等字段判断是否已经处理过，以决定是否继续通知或换渠道。它没有在这条主流程中建立按 SMTP hard bounce / soft bounce 分类的统一重试策略。</p>
+<p>同一次批次还按用户 / party 抑制重复通知，因此同一个用户的多条退信不一定对应同样多条备用通知。</p>
+<p>具体来说，SMS 初次查询没有匹配到手机时，备用 Email 可能是 <code>null</code>。但后续使用 <code>getAlt_email() != &quot;&quot;</code> 判断，<code>null</code> 也会进入该分支；没有相应历史记录时，代码又把它赋成当前用户 Email。所以，“用户已经换了手机，就一定不会发备用 Email”也不是这份代码能够保证的行为。</p>
+<p>依据：<a href="#c2">C2</a>、<a href="#c4">C4</a>、<a href="#c6">C6</a>。</p>
+<h3>3.2 公司 office Email 失败</h3>
+<p>这里要特别区分两组人，不能只看 <code>AP</code>、<code>SYSADMIN</code> 这些变量名称。</p>
+<table>
+<thead>
+<tr>
+<th>通知形式</th>
+<th>代码实际选谁</th>
+<th>怎么查</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>发给 AP 的外部 Email</td>
+<td>同一 party 下 <code>IS_AP=&#39;1&#39;</code> 的用户，取其个人 Email</td>
+<td>user profile + extension data + user-party relation</td>
+</tr>
+<tr>
+<td>System Admin 站内信</td>
+<td>同一 party 下，<code>DIGX_UM_USER_PRINCIPAL.PRINCIPAL like &#39;%SYSADM%&#39;</code> 的用户</td>
+<td>user principal + user-party relation</td>
+</tr>
+<tr>
+<td>公司 Email 退信的登录提醒</td>
+<td>上述 SYSADM 查询选出的用户，写入标志 <code>&#39;AP&#39;</code></td>
+<td><code>BOUNCE_BACK_REMINDER=&#39;AP&#39;</code></td>
+</tr>
+</tbody></table>
+<p>也就是说，**登录标志叫 <code>AP</code>，实际设置对象却是按 SYSADM principal 查出来的；备用 Email 则按 <code>IS_AP=&#39;1&#39;</code> 查。**两者在某些公司可能是同一批人，但代码没有保证完全相同。</p>
+<p>登录提示文案也不同：个人联系方式失败时提示找 AP / Administrator 更新；公司 Email 失败时提示到分行更新公司 Email。用户可选择下次登录继续提醒，或关闭后续提醒；关闭时调用接口把当前用户的标志改为 <code>N</code>。</p>
+<p>依据：<a href="#c5">C5</a>、<a href="#c6">C6</a>。</p>
+<h2>4. 会不会重试、重发，如何判断成功</h2>
+<h3>4.1 发送动作失败：框架具备重试能力</h3>
+<p>自定义 Email / SMS Dispatcher 本身没有“立即连续重试三次”这样的循环。但附带的底层框架 <code>FailedEventProcessorService</code> 包含失败动作重试逻辑，检查以下条件：</p>
+<pre><code class="language-text">动作状态是 FAILED
+并且该动作允许重试（FLG_RETRY_ALLOWED = Y）
+并且已重试次数 &lt; 配置的最大次数（NUM_RETRY_CNT）
+→ 执行失败动作重试
+</code></pre>
+<p>这是根据附带 JAR 的字节码整理的条件说明，不是 Java 源码摘录。实际启用情况还要看具体事件的数据库配置及失败事件处理器是否在运行，不能将“框架支持重试”理解成“每一条通知都已配置重试”。MNG / 电信运营商 / 邮件服务本身是否另有重试，需要查这些外部系统；BCO 仓库不能回答其具体次数。</p>
+<p>这里存在一个实际边界：如果发送动作已经被记为 <code>SUCCESS</code>，后来 MNG 才回报 bounce，不能指望上述只针对 <code>FAILED</code> 动作的重试逻辑自动接手；后续要追的是 bounce 批次及其新生成的备用通知。</p>
+<h3>4.2 后续 bounce：主要是另外产生一条提醒</h3>
+<p>普通备用事件包括：</p>
+<ul>
+<li><code>BOUNCE_BACK_EMAIL_ADDRESS_UPDATE_SMS</code>：Email 失败后，提醒更新 Email。</li>
+<li><code>BOUNCE_BACK_MOBILE_NUMBER_UPDATE_EMAIL</code>：SMS 失败后，提醒更新手机号。</li>
+<li><code>BOUNCE_BACK_COMPANY_ALT_SYSADMIN</code>：公司 Email 相关备用提醒。</li>
+<li>e-statement 等场景有另选模板的分支，以及语言版本。</li>
+</ul>
+<p><code>BOUNCE_BACK_ESTMT_EVENT_LIST</code> 决定部分 Email 退信使用哪类备用 SMS 模板，<strong>不是整个 bounce 功能的总开关</strong>。</p>
+<p>注意：公司 Email 的部分发送分支虽然指定的是 <code>DestinationType.EMAIL</code>，注册的事件名仍以 <code>_SMS</code> 结尾。因此查真实渠道要结合 <code>NotificationDetail.destination</code>、recipient 配置和动作日志，不能只按事件名后缀判断。</p>
+<h3>4.3 几种“成功 / 已处理”不能混在一起</h3>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>实际含义</th>
+<th>不代表什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DIGX_CZ_EMAIL_MNG.RESPONSE_STATUS=&#39;Success&#39;</code></td>
+<td>此次 MNG 调用按 BCO 的判断规则成功；当前代码以 <code>errorCode == null</code> 判断</td>
+<td>不代表手机 / 邮箱已收到</td>
+</tr>
+<tr>
+<td><code>DIGX_EP_ACN_LOG_B.FLG_PROCESS_STAT=&#39;SUCCESS&#39;</code></td>
+<td>框架把发送动作判为成功</td>
+<td>不代表最终投递成功，也不代表客户已读</td>
+</tr>
+<tr>
+<td>失败明细 <code>IS_VALSENDBOUNCENOTIF_PROCESSED=&#39;Y&#39;</code></td>
+<td>导入后的记录被验证批次标记为处理过</td>
+<td>不保证产生了备用任务；代码存在整批标记行为</td>
+</tr>
+<tr>
+<td>备用任务 <code>ISPROCESSED=&#39;Y&#39;</code></td>
+<td>相应分支已登记备用通知事件 / 更新处理状态</td>
+<td>不代表备用通知已送达</td>
+</tr>
+<tr>
+<td>mailbox 已有记录</td>
+<td>站内信已经创建</td>
+<td>不代表用户登录并看过</td>
+</tr>
+</tbody></table>
+<p>因此，“PIN reset 成功”和“PIN reset 成功通知发不出去”可以同时发生。需要分别看业务结果和通知结果，不能从退信反推 PIN 操作失败。</p>
+<h3>4.4 发送前失败、模拟发送和 SMTP 特例</h3>
+<p>SMS 长度超限、Email 地址未找到等问题可能在调用 MNG 之前就失败，因此没有对应 MNG 记录。测试环境还要核对 <code>DispatchDetails.isDispatchMocked</code>；短信模拟发送分支会返回成功，但不会真实发送。</p>
+<p><code>TT_DISCREPANCY_REPORT_ATTACHMENT</code> 在当前 Email Dispatcher 中走直接 SMTP 发送，该路径没有在当前方法内创建 <code>EmailMNG</code> 记录。因此，不能承诺“所有 BCO 邮件都能通过 MNG bounce CSV 查到”。此类附件邮件需另外查看 SMTP 调用日志和邮件平台的退信处理。这里只确认这个例外，没有据此推断 SMTP 后端的退信和重试策略。</p>
+<p>依据：<a href="#c1">C1</a>、<a href="#c3">C3</a>、<a href="#c5">C5</a>、<a href="#c7">C7</a>。</p>
+<h2>5. 实际排查：按这个顺序查</h2>
+<p>以下为只读 Oracle SQL，<code>:ref_no</code>、<code>:user_id</code>、<code>:party_id</code>、<code>:event_id</code> 等是绑定变量。时间参数使用 DATE / TIMESTAMP。表和列名已对照源码或 ORM；不同环境可能不在当前 schema，先确认 owner。这里没有连接运行库执行这些 SQL。</p>
+<h3>5.1 找原发送记录</h3>
+<p>如果知道通知参考号：</p>
+<pre><code class="language-sql">select refnumber, org_ref_no, customerid, partyid,
+       eventid, activityid, actionid, alert_type,
+       recipientid, response_status, cod_act_data_id,
+       last_updated_date
+from DIGX_CZ_EMAIL_MNG
+where refnumber = :ref_no;
+</code></pre>
+<p>不知道参考号，可以先按用户和时间查；公司类通知也可改用 <code>partyid = :party_id</code>：</p>
+<pre><code class="language-sql">select refnumber, org_ref_no, customerid, partyid,
+       eventid, alert_type, recipientid, response_status,
+       cod_act_data_id, last_updated_date
+from DIGX_CZ_EMAIL_MNG
+where customerid = :user_id
+  and last_updated_date &gt;= :from_date
+  and last_updated_date &lt; :to_date
+order by last_updated_date desc;
+</code></pre>
+<p>有 <code>Failed</code>，继续查动作日志；有 <code>Success</code> 但客户没收到，继续查失败回报。没有记录也不能立即判定业务没有产生通知：还可能是 recipient / template 解析失败、记录写入失败，或通知尚未执行到 Dispatcher。</p>
+<h3>5.2 查 MNG 后续失败原因</h3>
+<pre><code class="language-sql">select src_sys_ref_num, msg_id, email_reci_addr,
+       bounce_back_msg, batch_file_name, record_last_updated,
+       is_valsendbouncenotif_processed
+from DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL
+where src_sys_ref_num = :ref_no;
+
+select src_sys_ref_num, msg_id, sms_reci_mob_num,
+       delivery_msg, send_dttm, batch_file_name,
+       record_last_updated, is_valsendbouncenotif_processed
+from DIGX_CZ_BATCH_BOUNCE_BACK_CCBSMS
+where src_sys_ref_num = :ref_no;
+</code></pre>
+<p>Email 原因看 <code>BOUNCE_BACK_MSG</code>，SMS 原因看 <code>DELIVERY_MSG</code>。查不到失败行，只能说明当前库里没查到相应回报，不能据此证明送达；还要查文件是否收到、批次是否成功导入。</p>
+<h3>5.3 查这个事件有没有进入备用通知范围</h3>
+<pre><code class="language-sql">select eventid
+from DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST
+where eventid = :event_id;
+</code></pre>
+<p>针对前一个 Login PIN spike，可以一次检查这些事件：</p>
+<pre><code class="language-sql">with wanted(eventid) as (
+  select &#39;PIN_ACTIVATION_SUCCESS&#39; from dual union all
+  select &#39;PIN_ACTIVATION_FAILURE_TEMPORARY_LOCKED&#39; from dual union all
+  select &#39;PIN_ACTIVATION_FAILURE_LOCKED&#39; from dual union all
+  select &#39;PIN_RESET_SUCCESS&#39; from dual union all
+  select &#39;PIN_RESET_FAILURE_TEMPORARY_LOCKED&#39; from dual union all
+  select &#39;PIN_RESET_FAILURE_LOCKED&#39; from dual union all
+  select &#39;RESET_PASSWORD_USING_SECURITY_QUESTION&#39; from dual
+)
+select w.eventid,
+       case when exists (
+         select 1 from DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST h
+         where h.eventid = w.eventid
+       ) then &#39;Y&#39; else &#39;N&#39; end as in_bounce_event_list
+from wanted w;
+</code></pre>
+<p>在名单里只是必要条件之一，还要关联到原通知、符合用户 / party 条件，且通过历史检查。普通 BCO 查询中还存在 <code>M.PARTYID = 用户关联 party 子查询（rownum=1）</code> 的限制；多 party 数据需特别核对。</p>
+<h3>5.4 查有没有生成备用任务、选了什么地址</h3>
+<pre><code class="language-sql">select refnumber, org_ref_no, userid, party_id, eventid,
+       bounced_mode, alt_sms, alt_email, alt_office_email,
+       alt_sys_adm, alt_acc_holder_ap, alt_acc_holder_ap_email,
+       alt_webmail, reminder_afterlogin, isprocessed,
+       processedchannelslist, record_last_updated,
+       alt_process_datetime
+from DIGX_CZ_BATCH_VALIDATE_AND_SEND_BOUNCE
+where refnumber = :ref_no;
+
+-- 最近 30 天是否已有相关处理；用于解释为什么没有再次通知。
+select refnumber, eventid, bounced_mode,
+       alt_sms, alt_email, alt_webmail, alt_office_email,
+       isprocessed, record_last_updated, alt_process_datetime
+from DIGX_CZ_BATCH_VALIDATE_AND_SEND_BOUNCE
+where userid = :user_id
+  and (record_last_updated &gt;= sysdate - 30
+       or alt_process_datetime &gt;= sysdate - 30)
+order by record_last_updated desc;
+</code></pre>
+<p>第二条是方便排查的时间范围查询，代码内的具体日期转换和分支判断请对照 <a href="#c4">C4</a>，不要把它当作逐字复现业务筛选。</p>
+<h3>5.5 查联系方式、AP 和 System Admin</h3>
+<pre><code class="language-sql">select p.u_name, p.email, x.mobile_code, p.mobileno,
+       x.is_ap, x.bounce_back_reminder
+from DIGX_UM_USERPROFILE p
+left join DIGX_CZ_UM_EXTENSIONDATA x on x.user_id = p.u_name
+where p.u_name = :user_id;
+
+select partyid, office_email
+from DIGX_PI_PARTY_PREFERENCES
+where partyid = :party_id;
+
+-- 公司备用 Email 的 AP 集合
+select distinct p.u_name, p.email
+from DIGX_UM_USERPROFILE p
+join DIGX_CZ_UM_EXTENSIONDATA x on x.user_id = p.u_name
+join DIGX_UM_USERPARTY_RELATION r on r.user_id = p.u_name
+where r.party_id = :party_id
+  and x.is_ap = &#39;1&#39;;
+
+-- 公司站内信 / AP 登录标志采用的 SYSADM 集合
+select distinct u.username, u.principal
+from DIGX_UM_USER_PRINCIPAL u
+join DIGX_UM_USERPARTY_RELATION r on r.user_id = u.username
+where r.party_id = :party_id
+  and u.principal like &#39;%SYSADM%&#39;;
+
+-- 站内信是否已经创建
+select id, message_id, user_id, subject, msg_status, received_date
+from DIGX_CO_MAILBOX_MAILER_USER
+where user_id = :user_id
+  and received_date &gt;= :from_date
+  and received_date &lt; :to_date
+order by received_date desc;
+</code></pre>
+<h3>5.6 查实际发送动作与重试配置</h3>
+<pre><code class="language-sql">-- 用原 MNG 记录中的 COD_ACT_DATA_ID 查询，避免仅凭 event ID 串错通知。
+select cod_act_log_id, cod_act_data_id, cod_act_id,
+       cod_event_id, cod_action_id, txt_dest_typ, txt_dest_addr,
+       flg_process_stat, num_retry_cnt, max_retry_count,
+       dat_execution, txt_comments
+from DIGX_EP_ACN_LOG_B
+where cod_act_data_id = :act_data_id
+order by dat_execution desc;
+
+-- 具体事件的重试开关和最大次数
+select cod_act_id, cod_event_id, cod_action_id,
+       flg_retry_allowed, num_retry_cnt,
+       alert_type, alert_dispatch_type, object_status
+from DIGX_EP_ACT_EVT_ACN_B
+where cod_act_id = :activity_id
+  and cod_event_id = :event_id
+  and cod_action_id = :action_id;
+
+-- 备用通知是新事件；按收件地址与时间查其新发送动作。
+select cod_act_log_id, cod_act_data_id, cod_event_id,
+       txt_dest_typ, txt_dest_addr, flg_process_stat,
+       num_retry_cnt, dat_execution, txt_comments
+from DIGX_EP_ACN_LOG_B
+where cod_act_id =
+  &#39;com.ofss.digx.cz.bea.domain.scheduler.service.BatchAlertGeneric.alertBounceBack&#39;
+  and txt_dest_addr = :alternate_recipient
+  and dat_execution &gt;= :from_date
+  and dat_execution &lt; :to_date
+order by dat_execution desc;
+</code></pre>
+<p>备用通知的 <code>COD_ACT_DATA_ID</code> 不应直接假定等于原通知的 ID。同一收件人、同一时间段若有多条结果，还要结合事件和日志逐笔核对。</p>
+<p>同名事件可以属于不同 activity / action，所以查询具体重试配置时应使用上面三个字段。日志表的 <code>NUM_RETRY_CNT</code> 是已经使用的次数；配置表同名字段则是最大次数。</p>
+<h3>5.7 查模板、渠道配置及表结构</h3>
+<pre><code class="language-sql">-- 发送框架轮询、失败重试间隔及模拟发送配置。
+-- 查出来后结合运行环境 / entity 判断实际生效行。
+select category_id, prop_id, prop_value
+from DIGX_FW_CONFIG_ALL_B
+where category_id = &#39;AlertPollerPool&#39;
+   or (category_id = &#39;DispatchDetails&#39;
+       and prop_id in (&#39;isDispatchMocked&#39;, &#39;email.message.to.mocked&#39;))
+order by category_id, prop_id;
+
+select prop_id, preference_name, prop_value, determinant_value
+from DIGX_CZ_FW_CONFIG_ALL_O
+where preference_name = &#39;DayOneConfig&#39;
+  and prop_id in (
+    &#39;BOUNCE_BACK_ESTMT_EVENT_LIST&#39;,
+    &#39;SMS_DISPATCHER_ALERT_EVENTID_LIST&#39;
+  );
+
+select *
+from DIGX_EP_ACT_EVT_ACN_B
+where cod_act_id =
+  &#39;com.ofss.digx.cz.bea.domain.scheduler.service.BatchAlertGeneric.alertBounceBack&#39;;
+
+select *
+from DIGX_EP_EVT_REC_B
+where cod_act_id =
+  &#39;com.ofss.digx.cz.bea.domain.scheduler.service.BatchAlertGeneric.alertBounceBack&#39;;
+
+select t.*
+from DIGX_EP_MSG_TMPL_B t
+where t.cod_tmpl_id in (
+  select r.cod_msg_tmpl_id
+  from DIGX_EP_EVT_REC_B r
+  where r.cod_act_id =
+    &#39;com.ofss.digx.cz.bea.domain.scheduler.service.BatchAlertGeneric.alertBounceBack&#39;
+);
+
+-- 如果表不存在或列名有差异，先定位运行库实际结构。
+select owner, table_name, column_name, data_type
+from all_tab_columns
+where table_name in (
+  &#39;DIGX_CZ_EMAIL_MNG&#39;,
+  &#39;DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL&#39;,
+  &#39;DIGX_CZ_BATCH_BOUNCE_BACK_CCBSMS&#39;,
+  &#39;DIGX_CZ_BATCH_VALIDATE_AND_SEND_BOUNCE&#39;,
+  &#39;DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST&#39;,
+  &#39;DIGX_EP_ACN_LOG_B&#39;,
+  &#39;DIGX_EP_ACT_EVT_ACN_B&#39;
+)
+order by owner, table_name, column_id;
+</code></pre>
+<p><code>AlertPollerPool</code> 中值得核对的配置名包括 <code>EventPollerInterval</code>、<code>ep.record.failure.retry.interval</code>、<code>PollerFetchSize</code>、<code>ep.poller.processing.loop.count</code> 和 <code>SMSLength</code>。它们属于发送框架，不等于 bounce 文件导入批次的调度周期；本次没有把未验证的数值或单位写成环境事实。</p>
+<h2>6. 批次、日志和后台报表去哪找</h2>
+<h3>6.1 文件与任务</h3>
+<p>普通 BCO / CDC 文件在脚本中命名为 <code>MNG_CDC_Bounce_Report_20${Rundate}_EMAIL.csv</code>、<code>MNG_CDC_Bounce_Report_20${Rundate}_SMS.csv</code>，从 <code>$Inputfile/bounceback/</code> 读取。库表仍保留 <code>CCBEMAIL</code> / <code>CCBSMS</code> 名称，不要因为名称不同就以为找错表。</p>
+<table>
+<thead>
+<tr>
+<th>检查对象</th>
+<th>入口</th>
+<th>要确认什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>失败文件导入</td>
+<td><code>loadMNGmsg.sh</code> → <code>LoadMNGmsgCCBEMAIL</code> / <code>LoadMNGmsgCCBSMS</code></td>
+<td>文件有没有到、文件日期是否正确、导入是否报错、Processed / Error 目录</td>
+</tr>
+<tr>
+<td>备用方案计算</td>
+<td><code>ValidateAndSendBounceNotify.sh</code> → <code>ValidateAndSendBounceNotify</code></td>
+<td>有没有匹配原通知、事件名单是否满足、有没有生成备用任务</td>
+</tr>
+<tr>
+<td>备用 Email / SMS 事件生成</td>
+<td>Quartz <code>BatchExecutionScheduler</code> → <code>BatchAlertGeneric.alertBounceBack</code></td>
+<td>job 是否运行、有没有捞到 <code>ISPROCESSED=&#39;N&#39;</code>、是否发生异常</td>
+</tr>
+<tr>
+<td>PIN 通知发送异常报表</td>
+<td><code>mngExceptionReport.sh</code> → <code>MNGExceptionProcessor</code></td>
+<td>昨日 PIN activation / reset 动作是否为 <code>FAILED</code></td>
+</tr>
+</tbody></table>
+<p>脚本会 source <code>/CDCBatch/sh/Env.sh</code>，实际路径以部署环境该文件为准。仓库样例包括 <code>LogFilePath=/project/CDC/log</code>、<code>Outputfile=/project/CDC/ftp/snd</code>；它们只能用于定位配置，不应直接当成生产路径。</p>
+<p>批次数据库连接配置由 <code>$batchConfigPath/batch_config.properties</code> 读取；仓库 PRD 样例把 <code>batchConfigPath</code> 设为 <code>/CDCBatch/config</code>。排查时确认连接的是哪套库即可，无需将账号密码复制到 spike。输入、归档、异常目录分别查看 <code>Inputfile</code>、<code>Processed</code>、<code>Error</code>。导入器里的归档调用有被注释的情况，重跑前应核对实际调度的文件归档和数据库去重，不能假定每次重跑都不会重复入库。</p>
+<p><code>MNGExceptionProcessor</code> 是另一份发送异常报表，不是 bounce 导入器，也不是自动重发器。它为 PIN activation / reset 相关事件查询昨日动作失败记录，生成 <code>mngErrorReport</code> CSV。报表中 <code>Complete / Locked / Temporary Locked</code> 描述的是 PIN 业务结果；<code>Fail to send Email / SMS</code> 描述通知失败，两者不矛盾。</p>
+<h3>6.2 后台报表</h3>
+<p>本地后台 report-generation 配置有：</p>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>报表</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>A220</code></td>
+<td>Daily Summary Report Of Bounce Back Notification</td>
+<td>查原通知的 bounce-back 情况</td>
+</tr>
+<tr>
+<td><code>A221</code></td>
+<td>Alternative Notification Generation For Bounce Back Customer</td>
+<td>查备用通知处理情况</td>
+</tr>
+</tbody></table>
+<p>报表是否可见还受 department 映射和实际部署影响。后台用户看不到时，可先查：</p>
+<pre><code class="language-sql">select dep_id, report_id
+from DIGX_RP_DEP_REPORT_MAP
+where report_id in (&#39;A220&#39;, &#39;A221&#39;)
+order by dep_id, report_id;
+</code></pre>
+<p>随后核对对应 BI Publisher 模板是否部署。报表里的“处理状态”也不应直接当成送达证明；本地 <code>CDC469</code> 数据模型的 SMS <code>delivery_status</code> 实际取备用表的 <code>ISPROCESSED</code>，并不是 MNG 手机送达状态。</p>
+<p>依据：<a href="#c8">C8</a>、<a href="#c9">C9</a>。</p>
+<h2>7. 需要优先验证的几个问题</h2>
+<p>以下是源码中看到的边界或问题，尚未通过生产数据复现，也未修改实现。</p>
+<table>
+<thead>
+<tr>
+<th>发现</th>
+<th>可能造成什么影响</th>
+<th>建议怎么验证</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>原始失败明细存在整批 <code>N → Y</code> 更新，范围没有限定为已成功产生备用任务的记录</td>
+<td>“已处理”可能包含没匹配到原通知、没进名单或没有产生备用通知的记录</td>
+<td>对照失败行、事件名单、备用任务逐笔查；不要只看处理标志</td>
+</tr>
+<tr>
+<td>Email 兜底中，外层允许 <code>smsbounced == true</code>，内层却要求 <code>smsbounced == false</code></td>
+<td>手机已有失败历史时，这个站内信分支不会执行；不能承诺双渠道失败必有站内信</td>
+<td>测试“个人 Email 退回 + 30 天内已有 SMS 失败历史”</td>
+</tr>
+<tr>
+<td>部分空字符串判断使用 Java <code>== &quot;&quot;</code> / <code>!= &quot;&quot;</code></td>
+<td>判断的是对象引用，空值和空串场景可能不符合预期</td>
+<td>测试手机 / Email 为 null、空串、资料已修改等情况</td>
+</tr>
+<tr>
+<td>SMS 返回结果的说明文字被统一设成 <code>SMS Sent Successfully</code></td>
+<td>仅看日志文案可能误判；失败布尔值 / 数据库状态仍需单独看</td>
+<td>同时核对 <code>isDispatchSuccessfull</code>、<code>RESPONSE_STATUS</code>、action status</td>
+</tr>
+<tr>
+<td>登记备用事件后立即置 <code>ISPROCESSED=&#39;Y&#39;</code></td>
+<td>后续发送失败不会仅凭这张任务表自动变回未处理</td>
+<td>查备用事件 action log 和它自身的 retry 配置</td>
+</tr>
+<tr>
+<td>根目录与 <code>batchJobs/PRD</code> 的公司 Email 规则并不完全相同</td>
+<td>用错版本可能解释错“为什么发给这个人”</td>
+<td>比较实际部署 JAR / class 与两个源码目录；不能只凭 <code>PRD</code> 文件夹名称认定正在运行</td>
+</tr>
+</tbody></table>
+<p>PRD 与根目录的一个具体差异：对“失败公司地址与当前 office Email 不同”的情况，根目录部分分支选择当前 office Email；PRD 对相关历史组合改为 SYSADM 站内信与登录提醒，并新增兜底逻辑。<a href="#c4">C4</a> 列出了两个版本的位置。</p>
+<p>建议第一轮运行验证只选四类样本：发送接口直接失败、个人 Email 退信、个人 SMS 失败、公司 Email 退信。每类从原发送参考号追到失败文件、备用任务、备用动作和登录标志；这样可以把代码机制与实际启用配置对上。</p>
+<h2>8. 代码依据与摘录</h2>
+<p>路径均从 <code>cdc-application</code> 开始。行号对应本次本地副本；升级版本后可能变化。</p>
+<p><a id="c1"></a></p>
+<h3>C1. Dispatcher 对成功 / 失败的判断</h3>
+<p><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.domain.service.dispatch/src/com/ofss/digx/cz/bea/domain/service/dispatch/EmailDispatcher.java:515–527, 541–558</code></p>
+<pre><code class="language-java">// 515–527：调用后记录状态，异常也记录 Failed。
+dispatchResult = convertToDispatchResult(adapter.createAlert(request), messageBody);
+// ...
+if (dispatchResult.getIsDispatchSuccessfull()) {
+    emailMNG.setResponseStatus(&quot;Success&quot;);
+} else {
+    emailMNG.setResponseStatus(&quot;Failed&quot;);
+}
+// catch 分支：
+dispatchResult.setIsDispatchSuccessfull(false);
+emailMNG.setResponseStatus(&quot;Failed&quot;);
+
+// 549–557：成功依据是 errorCode 为 null。
+if (null == mead.getErrorCode()) {
+    dispatchResult.setIsDispatchSuccessfull(true);
+    // ...
+} else {
+    dispatchResult.setIsDispatchSuccessfull(false);
+    dispatchResult.setMessage(&quot;Failed with error &quot; + mead.getErrorCode());
+}
+</code></pre>
+<p>以上为省略日志后的关键语句摘录。SMS 对应 <code>SMSDispatcher.java:557–595, 745–765</code>；同文件 <code>192–194</code> 还会无条件设置说明文字：</p>
+<pre><code class="language-java">DispatchResultDTO result = dispatchMNGSms(alertRequestDTO, data, dispatchMessage);
+dispatchResult = new DispatchResult(result);
+dispatchResult.setMessage(&quot;SMS Sent Successfully&quot;);
+</code></pre>
+<p>发送记录映射：<code>cdc-application/consulting/config/orm/eclipselink/mappings/cz/mng/EmailMNG.xml:3–53</code>。</p>
+<p>同目录 <code>SMSDispatcher.java:153–165, 207–215</code>：模拟发送、长度限制和不安全内容分支。<code>EmailDispatcher.java:1391–1396, 1442–1449</code>：SMTP 特例和发送前校验；SMTP 调用及异常处理在 <code>297–327</code>。MNG 请求的 <code>sourceSysRefNumber</code> 分别在 Email <code>593</code>、SMS <code>653</code> 赋值。</p>
+<p><a id="c2"></a></p>
+<h3>C2. 哪些失败会进入普通 BCO 备用处理</h3>
+<p><code>cdc-application/consulting/middleware/batchJobs/inboundbatchprocessor/ValidateAndSendBounceNotify.java:105–120, 251–266</code></p>
+<pre><code class="language-java">+ &quot;  FROM DIGX_CZ_EMAIL_MNG M, DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL C\r\n&quot; + &quot; WHERE M.eventid in\r\n&quot;
++ &quot;       (SELECT DISTINCT EVENTID FROM DIGX_CZ_BATCH_HIGH_ALERT_EVENT_LIST)\r\n&quot;
++ &quot;   AND M.REFNUMBER = C.SRC_SYS_REF_NUM\r\n&quot;
++ &quot;   AND M.PARTYID=(select party_id from digx_um_userparty_relation  where user_id=M.CUSTOMERID and rownum=1) \r\n&quot;
++ &quot;   AND C.IS_VALSENDBOUNCENOTIF_PROCESSED = &#39;N&#39;&quot;;
+</code></pre>
+<p>这是拼接 SQL 的原代码片段，Email / SMS 都有相应查询。按用户 / party 抑制同批重复的分支在同文件 <code>164–180</code>。</p>
+<p><a id="c3"></a></p>
+<h3>C3. 原失败记录的处理标志</h3>
+<p>同文件 <code>235–237</code>：</p>
+<pre><code class="language-java">query = &quot;Update DIGX_CZ_BATCH_BOUNCE_BACK_CCBEMAIL set IS_VALSENDBOUNCENOTIF_PROCESSED=&#39;Y&#39; where IS_VALSENDBOUNCENOTIF_PROCESSED =&#39;N&#39;&quot;;
+// System.out.println(query);
+updatedRowsCount = stmt.executeUpdate(query);
+</code></pre>
+<p>它更新所有未处理 Email 失败记录，不能据这个 <code>Y</code> 单独证明每条都产生了备用通知。</p>
+<p><a id="c4"></a></p>
+<h3>C4. 用户备用渠道与 30 天历史</h3>
+<p>同文件 <code>1291–1404</code> 为个人 Email；<code>1488–1585</code> 为个人 SMS。Email 分支的关键片段在 <code>1386–1399</code>：</p>
+<pre><code class="language-java">if (record.getAlt_sms() != &quot;&quot;) {
+    // checking user email and sms bounce back
+    if (userEmailbounced == false &amp;&amp; smsbounced == false) {
+        record.setAlt_Sms_Eligible(true);
+        // ...
+        setBounce_Back_ReminderUSER(conn, record, margs);
+    } else {
+        record.setAlt_Sms_Eligible(false);
+        record.setAlt_sms(&quot;&quot;);
+    }
+}
+</code></pre>
+<p>省略了日志和局部变量声明；原始 <code>!= &quot;&quot;</code> 写法按源码保留。站内信分支 <code>1370–1384</code> 的外层与内层条件分别是：</p>
+<pre><code class="language-java">if (record.getAlt_sms() == &quot;&quot; || smsbounced == true) {
+    // ...
+    if (smsbounced == false) {
+        // 设置 USER 登录提醒、写站内信、检查公司 Email
+    }
+}
+</code></pre>
+<p>公司 Email 分支：根目录同文件 <code>938–1096</code>；PRD 对应 <code>cdc-application/consulting/middleware/batchJobs/PRD/inboundbatchprocessor/ValidateAndSendBounceNotify.java:1028–1202</code>。个人分支的上述边界在 PRD <code>1510–1539</code> 仍可见。</p>
+<p><a id="c5"></a></p>
+<h3>C5. 备用事件生成与 AP Email 查询</h3>
+<p><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.domain.service.dispatch/src/com/ofss/digx/cz/bea/domain/scheduler/service/BatchAlertGeneric.java:4070–4080</code></p>
+<pre><code class="language-java">super.registerActivityAndGenerateEvent(sessionContext,
+        THIS_COMPONENT_NAME + &quot;.alertBounceBack&quot;,
+        BatchAlertGenericConstants.BOUNCE_BACK_MOBILE_NUMBER_UPDATE_EMAIL,
+        new Date(), activityLog);
+// ...
+bounceBack.setIsProcessed(&quot;Y&quot;);
+bounceBack.setAltProcessDateTime(new Date());
+domain.update(bounceBack);
+</code></pre>
+<p>Email → SMS 分支在同文件 <code>3816–3976</code>；office Email 分支在 <code>3980–4008, 4085–4114</code>；AP Email 在 <code>4158–4260</code>。Webmail 部分在该 service 中已注释，由前面的批次插入。</p>
+<p><code>cdc-application/consulting/config/orm/eclipselink/mappings/cz/scheduler/bounceback/BounceBack-Query.orm.xml:6–9</code></p>
+<pre><code class="language-sql">select distinct prf.email
+from DIGX_UM_USERPROFILE prf, digx_cz_um_extensiondata ext
+where ext.user_id = prf.u_name
+  and ext.is_ap = &#39;1&#39;
+  and ext.user_id in (
+    select distinct user_id
+    from DIGX_UM_USERPARTY_RELATION
+    where party_id = #partyId
+  )
+</code></pre>
+<p>上面只是重新排版，<code>#partyId</code> 是原 ORM 参数写法。任务表映射在同目录 <code>BounceBack.orm.xml:7–75</code>；待处理筛选在 <code>BounceBack-Query.orm.xml:3–4</code> 及 <code>LocalBounceBackRepositoryAdapter.java:47–53</code>。</p>
+<p><a id="c6"></a></p>
+<h3>C6. SYSADM、站内信与登录提醒</h3>
+<p><code>cdc-application/consulting/middleware/batchJobs/inboundbatchprocessor/ValidateAndSendBounceNotify.java:1225–1288</code></p>
+<pre><code class="language-java">// 1229–1230：公司提醒对象按 SYSADM principal + party 查询。
+String query = &quot;select distinct username from digx_um_user_principal where principal like &#39;%SYSADM%&#39; and username in (select user_id from Digx_UM_userparty_relation where party_id = &#39;&quot;
+        + record.getPartyid() + &quot;&#39;) &quot;;
+
+// 1243：查询出的用户写 AP 标志。
+innerQuery = &quot;Update digx_cz_um_extensiondata set Bounce_Back_Reminder=&#39;AP&#39; where user_id=?&quot;;
+
+// 1273：用户个人联系方式提醒。
+String query = &quot;Update digx_cz_um_extensiondata set Bounce_Back_Reminder=&#39;USER&#39; where user_id=?&quot;;
+</code></pre>
+<p>这些是不同方法 / 位置的独立摘录，不是一段可直接编译的代码。PRD 公司站内信选人及写入在 <code>cdc-application/consulting/middleware/batchJobs/PRD/inboundbatchprocessor/ValidateAndSendBounceNotify.java:885–895, 950–976</code>，涉及 <code>DIGX_CO_MAILBOX_MAILER_USER</code>、<code>DIGX_CO_MAILBOX_MAILER</code>、<code>DIGX_CO_MAILBOX_MESSAGE</code>。</p>
+<p>前端提示与关闭逻辑：</p>
+<ul>
+<li><code>cdc-application/consulting/channel/extensions/resources/nls/dashboard.js:62–66</code>：个人 / 公司提醒文案。</li>
+<li><code>cdc-application/consulting/channel/framework/elements/core/dashboard/dashboard.js:931–954, 966–988</code>：CORP / CORPADMIN 读取提醒标志，选择不再提醒时传 <code>N</code>。</li>
+<li><code>cdc-application/consulting/channel/framework/elements/core/dashboard/dashboard.html:315–334</code>：弹窗与 Yes / No。</li>
+<li><code>cdc-application/consulting/channel/framework/elements/core/dashboard/model.js:46–48</code>：<code>userExtensionData/bounceBackReminder?flag={flag}</code>。</li>
+<li><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.sms/src/com/ofss/digx/cz/bea/app/sms/service/user/UserExtensionData.java:3081–3102</code>：更新当前用户标志。</li>
+</ul>
+<p><a id="c7"></a></p>
+<h3>C7. 框架重试配置与日志</h3>
+<p><code>cdc-application/consulting/config_core/orm/eclipselink/mappings/alert/maintenance/ActivityEventAction.orm.xml:24–29</code></p>
+<pre><code class="language-xml">&lt;basic attribute-type=&quot;int&quot; name=&quot;maxRetryCount&quot;&gt;
+  &lt;column name=&quot;NUM_RETRY_CNT&quot;/&gt;
+&lt;/basic&gt;
+&lt;basic attribute-type=&quot;java.lang.Boolean&quot; name=&quot;isRetryAllowed&quot;&gt;
+  &lt;column name=&quot;FLG_RETRY_ALLOWED&quot;/&gt;
+  &lt;convert&gt;yesno&lt;/convert&gt;
+&lt;/basic&gt;
+</code></pre>
+<p>动作日志映射：<code>cdc-application/consulting/config_core/orm/eclipselink/mappings/alert/eventGeneration/ep.ActionLog.orm.xml:5–60</code>。</p>
+<p>失败重试实现依据为 <code>cdc-application/consulting/middleware/lib/OBDX_FW_LIB/com.ofss.fc.module.ep-2.4-SNAPSHOT.jar</code> 中 <code>com.ofss.fc.domain.ep.service.event.FailedEventProcessorService</code> 的字节码，核对方法包括 <code>processIncompleteActivty</code>、<code>processFailedAction</code>；调用入口为 <code>com.ofss.fc.app.ep.service.event.EventPoller</code>。JAR 没有在此处可引用的 Java 源文件行号。可用以下只读命令复查：</p>
+<pre><code class="language-sh">javap -c -p -classpath cdc-application/consulting/middleware/lib/OBDX_FW_LIB/com.ofss.fc.module.ep-2.4-SNAPSHOT.jar com.ofss.fc.domain.ep.service.event.FailedEventProcessorService
+</code></pre>
+<p>命令假设源码根目录实际名为 <code>cdc-application</code>；本地副本若是 <code>cdc-application.zip</code> 目录，替换这一段路径即可。<code>AlertPollerPool</code> / <code>DispatchDetails</code> 的数据库来源见 <code>cdc-application/consulting/config/Preferences.xml:76, 121–122</code>；重试次数、是否启用及处理周期以运行配置为准。</p>
+<p><a id="c8"></a></p>
+<h3>C8. 批次和定时入口</h3>
+<ul>
+<li><code>cdc-application/consulting/middleware/batchJobs/Deployables/sh/loadMNGmsg.sh:47–61</code>：CDC / EPH bounce 文件路径。</li>
+<li><code>cdc-application/consulting/middleware/batchJobs/Deployables/sh/ValidateAndSendBounceNotify.sh:1–16</code>：环境加载与 Java 入口。</li>
+<li><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.scheduler.impl/src/com/ofss/digx/cz/bea/scheduler/generic/BatchExecutionScheduler.java:22–23, 55–63</code>：Quartz job 调用。</li>
+<li><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.domain.service.dispatch/src/com/ofss/digx/cz/bea/domain/scheduler/service/BatchAlertGeneric.java:195–200, 3659–3660</code>：bounce 调用与 e-statement 配置。</li>
+<li><code>cdc-application/consulting/middleware/batchJobs/inboundbatchprocessor/MNGExceptionProcessor.java:38–62, 100–148, 169–191</code>：PIN 发送异常报表。</li>
+<li><code>cdc-application/consulting/middleware/batchJobs/Deployables/sh/mngExceptionReport.sh:1–24</code>：报表运行脚本。</li>
+<li><code>cdc-application/consulting/middleware/batchJobs/PRD/inboundbatchprocessor/GenericInBoundProcessor.java:328–344</code>：批次数据库配置文件读取。</li>
+<li><code>cdc-application/consulting/middleware/batchJobs/PRD/Deployables/sh/Env.sh:2–11</code>：JAR、配置、输入输出目录的仓库样例。</li>
+</ul>
+<p><a id="c9"></a></p>
+<h3>C9. 后台报表及配置</h3>
+<ul>
+<li><code>cdc-application/consulting/channel/extensions/components/reports/report-generation/paramsComponent_admin.json:137–143</code>：A220 / A221 入口。</li>
+<li><code>cdc-application/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/domain/report/entity/repository/adapter/LocalReportDefinitionRepositoryAdapter.java:98–123</code>：按 department 筛选。</li>
+<li><code>cdc-application/consulting/config/orm/eclipselink/mappings/cz/sms/user/UserIDMaintenance-Query.orm.xml:19–20</code>：department-report 映射查询。</li>
+<li><code>cdc-application/consulting/config/resources/report/obi/CDC469_DAILY_REPORT_BOUNCEBACK.xdmz</code>：其中 <code>_datamodel.xdm:77–80</code> 的 SMS <code>delivery_status</code> 来自 <code>max(ISPROCESSED)</code>，且子查询未关联当前外层 SMS 行；要与运行版报表核对。</li>
+<li><code>cdc-application/consulting/config/resources/report/obi/CDC468_ALTERNATIVE_NOTIFICATION_BOUNCEBACK_REPORT.xdmz</code>：备用通知报表数据模型。</li>
+<li><code>cdc-application/consulting/config/resources/report/db/vw_alternate_notification_bounceback.sql:28–30, 60–62</code>：Webmail 报表来源及 <code>ALT_WEBMAIL=&#39;Done&#39;</code> 条件。</li>
+</ul>
+<p>报表压缩文件内的模型可用 <code>unzip -p 文件.xdmz _datamodel.xdm | nl -ba</code> 查看。上述行号是解压后 XML 的行号。</p>
+</main></body>
+</html>

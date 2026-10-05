@@ -20,7 +20,7 @@
 | EVENT_STATUS_CODE | VARCHAR2(16 CHAR) | 原有 | 本阶段 SUCCESS/PENDING_APPROVAL→A，其余→R；事务回滚→R |
 | CR_DR_IND | VARCHAR2(1 CHAR) | 新增保留 | NULL；当前 CM/BM 维护场景无对应取值。Credit or debit indicator from the BCO model |
 | FEE_CHRG_CODE | VARCHAR2(32 CHAR) | 新增适用 | CRMConfiguration.CRM_FEE_CHARGE_CODE |
-| EVENT_ACTV_TYPE_CODE | VARCHAR2(64 CHAR) | 原有 | HTHCrmConfiguration 的 ACTIVITY_<内部活动>；未配置为 NULL |
+| EVENT_ACTV_TYPE_CODE | VARCHAR2(64 CHAR) | 原有 | HTHCRMConfiguration 的 ACTIVITY_<内部活动>；未配置为 NULL |
 | FIN_IND | VARCHAR2(1 CHAR) | 原有 | 非金融维护活动固定 N |
 | SELF_SRV_IND | VARCHAR2(1 CHAR) | 新增适用 | isAdmin=true→N、false→Y，缺失→NULL |
 | USER_ID | VARCHAR2(256 CHAR) | 原有 | 快照 actorUserId；缺失回退 FMO_USER_ID / SessionContext.userId；保留完整 ID |

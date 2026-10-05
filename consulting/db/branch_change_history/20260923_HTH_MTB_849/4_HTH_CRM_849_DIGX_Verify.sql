@@ -1,6 +1,6 @@
 -- Run on the DIGX configuration connection. Read-only; execute each SELECT separately.
 -- Missing/blank/N ENABLED keeps collection disabled. Installation preserves this flag.
--- SQL 2 renames legacy MTB configuration and factory keys; it does not enable collection.
+-- SQL 2 renames both legacy configuration groups and MTB factory keys; it does not enable collection.
 -- Deploy matching Java + Preferences.xml; database Y alone does not prove runtime loading.
 SELECT SYS_CONTEXT('USERENV','DB_NAME') AS DATABASE_NAME,
        SYS_CONTEXT('USERENV','SERVICE_NAME') AS SERVICE_NAME,
@@ -11,12 +11,12 @@ SELECT CASE WHEN COUNT(*)=0 THEN 'MISSING: defaults to disabled'
             WHEN MAX(UPPER(PROP_VALUE))='Y' THEN 'ENABLED in database: confirm application cache'
             ELSE 'DISABLED: no HTH CRM events will be collected' END AS COLLECTION_GATE
 FROM DIGX_FW_CONFIG_ALL_O
-WHERE PREFERENCE_NAME='HTHCrmConfiguration' AND PROP_ID='ENABLED' AND DETERMINANT_VALUE='N';
+WHERE PREFERENCE_NAME='HTHCRMConfiguration' AND PROP_ID='ENABLED' AND DETERMINANT_VALUE='N';
 SELECT PROP_ID, PROP_VALUE, DETERMINANT_VALUE FROM DIGX_FW_CONFIG_ALL_O
-WHERE PREFERENCE_NAME='HTHCrmConfiguration' ORDER BY DETERMINANT_VALUE, PROP_ID;
+WHERE PREFERENCE_NAME='HTHCRMConfiguration' ORDER BY DETERMINANT_VALUE, PROP_ID;
 SELECT CASE WHEN COUNT(*)=0 THEN 'PASS' ELSE 'FAIL: NULL HTH configuration key/determinant' END AS KEY_CHECK
 FROM DIGX_FW_CONFIG_ALL_O
-WHERE (PREFERENCE_NAME='HTHCrmConfiguration'
+WHERE (PREFERENCE_NAME='HTHCRMConfiguration'
     OR (PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride') AND PROP_ID='HTH_CRM_ADAPTER_FACTORY'))
   AND (PROP_ID IS NULL OR DETERMINANT_VALUE IS NULL);
 -- Existing BCO reference configuration, do not update:
@@ -58,7 +58,7 @@ ORDER BY PREFERENCE_NAME, DETERMINANT_VALUE;
 -- Must PASS after SQL 2; zero legacy keys should remain in any determinant.
 SELECT CASE WHEN COUNT(*)=0 THEN 'PASS' ELSE 'FAIL: legacy HTH configuration remains' END AS RENAME_CHECK
 FROM DIGX_FW_CONFIG_ALL_O
-WHERE PREFERENCE_NAME='HTHMtbConfiguration'
+WHERE PREFERENCE_NAME IN ('HTHMtbConfiguration', 'HTHCrmConfiguration')
    OR (PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride') AND PROP_ID='HTH_MTB_ADAPTER_FACTORY');
 SELECT CASE WHEN COUNT(*)=0 THEN 'PASS' ELSE 'FAIL: legacy HTH base factory remains' END AS BASE_RENAME_CHECK
 FROM DIGX_FW_CONFIG_ALL_B
@@ -68,7 +68,7 @@ SELECT CASE WHEN COUNT(*)=0 THEN 'PASS' ELSE 'FAIL: duplicate HTH configuration 
 FROM (
   SELECT PREFERENCE_NAME, PROP_ID, DETERMINANT_VALUE
   FROM DIGX_FW_CONFIG_ALL_O
-  WHERE PREFERENCE_NAME='HTHCrmConfiguration'
+  WHERE PREFERENCE_NAME='HTHCRMConfiguration'
      OR (PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride') AND PROP_ID='HTH_CRM_ADAPTER_FACTORY')
   GROUP BY PREFERENCE_NAME, PROP_ID, DETERMINANT_VALUE
   HAVING COUNT(*)>1

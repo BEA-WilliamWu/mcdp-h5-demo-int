@@ -2,7 +2,8 @@
 -- This is the account used for prior stories' DIGX_FW_CONFIG_ALL_O configuration SQL.
 -- Select the entire DECLARE ... END; block and execute as ONE statement (no slash).
 -- No HTH table access or cross-schema DDL privileges required.
--- Migrates HTHMtbConfiguration -> HTHCrmConfiguration and HTH_MTB_ADAPTER_FACTORY
+-- Migrates HTHMtbConfiguration / HTHCrmConfiguration -> HTHCRMConfiguration
+-- and HTH_MTB_ADAPTER_FACTORY
 -- -> HTH_CRM_ADAPTER_FACTORY, for every determinant. Preserve ENABLED and all mappings.
 -- Deploy matching HTH Java + Preferences.xml and restart all application instances.
 -- Identical legacy/new keys coalesce; conflicting values or duplicate keys stop safely.
@@ -23,7 +24,7 @@ BEGIN
   v_config_started := TRUE;
   SELECT COUNT(*) INTO v_invalid_keys
   FROM DIGX_FW_CONFIG_ALL_O
-  WHERE (PREFERENCE_NAME IN ('HTHMtbConfiguration', 'HTHCrmConfiguration')
+  WHERE (PREFERENCE_NAME IN ('HTHMtbConfiguration', 'HTHCrmConfiguration', 'HTHCRMConfiguration')
       OR (PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride')
           AND PROP_ID IN ('HTH_MTB_ADAPTER_FACTORY', 'HTH_CRM_ADAPTER_FACTORY')))
     AND (PROP_ID IS NULL OR DETERMINANT_VALUE IS NULL);
@@ -33,7 +34,7 @@ BEGIN
   SELECT COUNT(*) INTO v_duplicates FROM (
     SELECT PREFERENCE_NAME, PROP_ID, DETERMINANT_VALUE
     FROM DIGX_FW_CONFIG_ALL_O
-    WHERE PREFERENCE_NAME IN ('HTHMtbConfiguration', 'HTHCrmConfiguration')
+    WHERE PREFERENCE_NAME IN ('HTHMtbConfiguration', 'HTHCrmConfiguration', 'HTHCRMConfiguration')
        OR (PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride')
            AND PROP_ID IN ('HTH_MTB_ADAPTER_FACTORY', 'HTH_CRM_ADAPTER_FACTORY'))
     GROUP BY PREFERENCE_NAME, PROP_ID, DETERMINANT_VALUE
@@ -42,13 +43,16 @@ BEGIN
   IF v_duplicates > 0 THEN
     RAISE_APPLICATION_ERROR(-20849, '849 duplicate HTH configuration keys; inspect before rerun');
   END IF;
-  -- DECODE deliberately treats two NULL values as equal; keys were validated above.
+  -- Validate all three group pairs before any DML, including both legacy groups
+  -- when the canonical group is absent. DECODE treats two NULL values as equal.
   SELECT COUNT(*) INTO v_conflicts
   FROM DIGX_FW_CONFIG_ALL_O legacy
   JOIN DIGX_FW_CONFIG_ALL_O current_config
     ON DECODE(legacy.DETERMINANT_VALUE, current_config.DETERMINANT_VALUE, 1, 0)=1
-   AND ((legacy.PREFERENCE_NAME='HTHMtbConfiguration'
-         AND current_config.PREFERENCE_NAME='HTHCrmConfiguration'
+   AND ((((legacy.PREFERENCE_NAME='HTHMtbConfiguration'
+           AND current_config.PREFERENCE_NAME IN ('HTHCrmConfiguration', 'HTHCRMConfiguration'))
+          OR (legacy.PREFERENCE_NAME='HTHCrmConfiguration'
+              AND current_config.PREFERENCE_NAME='HTHCRMConfiguration'))
          AND DECODE(legacy.PROP_ID, current_config.PROP_ID, 1, 0)=1)
      OR (legacy.PREFERENCE_NAME IN ('AdapterFactories', 'AdapterFactoriesOverride')
          AND legacy.PROP_ID='HTH_MTB_ADAPTER_FACTORY'
@@ -86,19 +90,33 @@ BEGIN
   END IF;
 
   v_stage := 'CONFIG_RENAME';
-  -- Keep the canonical row when both names contain an identical value. Otherwise
-  -- rename in place, retaining CREATED_BY/CREATION_DATE and every existing value.
+  -- Coalesce in priority order: HTHCRMConfiguration, HTHCrmConfiguration, then
+  -- HTHMtbConfiguration. Delete matching legacy rows before renaming, so the
+  -- unique key remains valid. Preserve CREATED_BY/CREATION_DATE and all values.
   DELETE FROM DIGX_FW_CONFIG_ALL_O legacy
-  WHERE legacy.PREFERENCE_NAME='HTHMtbConfiguration'
+  WHERE legacy.PREFERENCE_NAME='HTHCrmConfiguration'
     AND EXISTS (
       SELECT 1 FROM DIGX_FW_CONFIG_ALL_O current_config
-      WHERE current_config.PREFERENCE_NAME='HTHCrmConfiguration'
+      WHERE current_config.PREFERENCE_NAME='HTHCRMConfiguration'
         AND DECODE(legacy.PROP_ID, current_config.PROP_ID, 1, 0)=1
         AND DECODE(legacy.DETERMINANT_VALUE, current_config.DETERMINANT_VALUE, 1, 0)=1
         AND DECODE(legacy.PROP_VALUE, current_config.PROP_VALUE, 1, 0)=1
     );
   UPDATE DIGX_FW_CONFIG_ALL_O
-  SET PREFERENCE_NAME='HTHCrmConfiguration', LAST_UPDATED_BY='ofssuser', LAST_UPDATED_DATE=SYSDATE
+  SET PREFERENCE_NAME='HTHCRMConfiguration', LAST_UPDATED_BY='ofssuser', LAST_UPDATED_DATE=SYSDATE
+  WHERE PREFERENCE_NAME='HTHCrmConfiguration';
+
+  DELETE FROM DIGX_FW_CONFIG_ALL_O legacy
+  WHERE legacy.PREFERENCE_NAME='HTHMtbConfiguration'
+    AND EXISTS (
+      SELECT 1 FROM DIGX_FW_CONFIG_ALL_O current_config
+      WHERE current_config.PREFERENCE_NAME='HTHCRMConfiguration'
+        AND DECODE(legacy.PROP_ID, current_config.PROP_ID, 1, 0)=1
+        AND DECODE(legacy.DETERMINANT_VALUE, current_config.DETERMINANT_VALUE, 1, 0)=1
+        AND DECODE(legacy.PROP_VALUE, current_config.PROP_VALUE, 1, 0)=1
+    );
+  UPDATE DIGX_FW_CONFIG_ALL_O
+  SET PREFERENCE_NAME='HTHCRMConfiguration', LAST_UPDATED_BY='ofssuser', LAST_UPDATED_DATE=SYSDATE
   WHERE PREFERENCE_NAME='HTHMtbConfiguration';
 
   DELETE FROM DIGX_FW_CONFIG_ALL_O legacy
@@ -171,7 +189,7 @@ WHEN NOT MATCHED THEN INSERT (PREFERENCE_NAME,PROP_ID,PROP_VALUE,DETERMINANT_VAL
 VALUES (s.preference_name,s.prop_id,s.prop_value,s.determinant_value,'ofssuser',SYSDATE,'ofssuser',SYSDATE);
 -- Preserve existing enabled flag and all operator mappings on re-run. No invented external codes.
 MERGE INTO DIGX_FW_CONFIG_ALL_O t
-USING (SELECT 'HTHCrmConfiguration' preference_name, 'ENABLED' prop_id, 'N' prop_value, 'N' determinant_value FROM dual) s
+USING (SELECT 'HTHCRMConfiguration' preference_name, 'ENABLED' prop_id, 'N' prop_value, 'N' determinant_value FROM dual) s
 ON (t.PREFERENCE_NAME=s.preference_name AND t.PROP_ID=s.prop_id AND t.DETERMINANT_VALUE=s.determinant_value)
 WHEN NOT MATCHED THEN INSERT (PREFERENCE_NAME,PROP_ID,PROP_VALUE,DETERMINANT_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE)
 VALUES (s.preference_name,s.prop_id,s.prop_value,s.determinant_value,'ofssuser',SYSDATE,'ofssuser',SYSDATE);
@@ -185,4 +203,4 @@ EXCEPTION
       '849 stage=' || v_stage || ': ' || SUBSTR(SQLERRM, 1, 400), TRUE);
 END;
 -- Enable explicitly only after runtime transaction and permission tests:
--- UPDATE DIGX_FW_CONFIG_ALL_O SET PROP_VALUE='Y' WHERE PREFERENCE_NAME='HTHCrmConfiguration' AND PROP_ID='ENABLED' AND DETERMINANT_VALUE='N';
+-- UPDATE DIGX_FW_CONFIG_ALL_O SET PROP_VALUE='Y' WHERE PREFERENCE_NAME='HTHCRMConfiguration' AND PROP_ID='ENABLED' AND DETERMINANT_VALUE='N';

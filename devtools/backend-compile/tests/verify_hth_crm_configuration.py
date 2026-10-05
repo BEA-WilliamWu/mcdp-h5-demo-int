@@ -24,11 +24,11 @@ h2 = Path(os.environ["H2_JAR"])
 assert h2.is_file(), "H2_JAR must be set to an existing isolated-test driver"
 preferences = root / "consulting/config/Preferences.xml"
 nodes = ET.parse(preferences).getroot().find("Nodes")
-registered = [node for node in nodes if node.get("name") == "HTHCrmConfiguration"]
-assert len(registered) == 1, "Production Preferences.xml must register HTHCrmConfiguration exactly once"
+registered = [node for node in nodes if node.get("name") == "HTHCRMConfiguration"]
+assert len(registered) == 1, "Production Preferences.xml must register HTHCRMConfiguration exactly once"
 assert registered[0].get("parent") == "jdbcpreference"
 assert registered[0].get("PreferencesProvider") == "com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider"
-assert not any(node.get("name") == "HTHMtbConfiguration" for node in nodes), "Obsolete configuration must not remain registered"
+assert not any(node.get("name") in ("HTHMtbConfiguration", "HTHCrmConfiguration") for node in nodes), "Obsolete configurations must not remain registered"
 cp = os.pathsep.join(map(str, [h2, *sorted(lib.rglob("*.jar"))]))
 with tempfile.TemporaryDirectory(prefix="hthcrm-real-config-") as directory:
     out = Path(directory)
@@ -55,7 +55,7 @@ public final class ConnectionUtil {
             broken = ET.parse(preferences)
             broken_nodes = broken.getroot().find("Nodes")
             for node in list(broken_nodes):
-                if node.get("name") == "HTHCrmConfiguration":
+                if node.get("name") == "HTHCRMConfiguration":
                     broken_nodes.remove(node)
             broken.write(out / "Preferences.xml", encoding="UTF-8", xml_declaration=True)
         else:

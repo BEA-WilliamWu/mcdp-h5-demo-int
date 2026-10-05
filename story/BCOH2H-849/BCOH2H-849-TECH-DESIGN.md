@@ -111,9 +111,9 @@ Entity 的复制方法复制全部字段，并独立复制 Key/Timestamp，确�
 
 1. 在 **HTH_BEA** 执行 `1_HTH_CRM_849_Schema.sql`：新库建 113 列；已有 24 列补 89 个 nullable 列；缺失列补齐、兼容容量保留、必要时安全扩大 VARCHAR2。保留已有行、不回填猜测值、不 DROP/TRUNCATE。
 2. 在同一 HTH 连接执行 `3_HTH_CRM_849_HTH_Verify.sql`，核对 113 列、类型/容量、英文 comments、主键、索引及数据。
-3. 在 **DIGX** 连接执行最新版 `2_HTH_CRM_849_DIGX_Config.sql`，再运行 `4_HTH_CRM_849_DIGX_Verify.sql`。2026-10-05 修复将旧 HTHMtbConfiguration / HTH_MTB_ADAPTER_FACTORY 迁移为 HTHCrmConfiguration / HTH_CRM_ADAPTER_FACTORY，并补 Factory 基础注册。已部署旧版也须迁移；保留开关/活动码，冲突回滚。
+3. 在 **DIGX** 连接执行最新版 `2_HTH_CRM_849_DIGX_Config.sql`，再运行 `4_HTH_CRM_849_DIGX_Verify.sql`。2026-10-05 修复将旧 HTHMtbConfiguration、HTHCrmConfiguration 两种配置组迁移为 HTHCRMConfiguration；旧 HTH_MTB_ADAPTER_FACTORY 迁移为 HTH_CRM_ADAPTER_FACTORY，并补 Factory 基础注册。已部署旧版也须迁移；保留开关/活动码，冲突回滚。
 4. `5_HTH_CRM_849_Comments.sql` 仅作可选的 comments 修复；脚本 1 已包含全部注释，不需重复执行 5。
-5. **先升级表，再部署匹配的 hosttohost 包及 HTH ORM XML**。此次配置更名还须更新 config_cz/Preferences.xml 的 HTHCrmConfiguration 节点，同批重新编译部署 common、hosttohost、approval、sms（接口常量会内联），按维护窗口停止旧实例、迁移配置、发布并重启。BCO 现有配置节点和业务逻辑不改。已升级的 113 列表无需为配置更名再次调整。
+5. **先升级表，再部署匹配的 hosttohost 包及 HTH ORM XML**。此次配置更名还须更新 config_cz/Preferences.xml 的 HTHCRMConfiguration 节点，同批重新编译部署 common、hosttohost、approval、sms（接口常量会内联），按维护窗口停止旧实例、迁移配置、发布并重启。BCO 现有配置节点和业务逻辑不改。已升级的 113 列表无需为配置更名再次调整。
 
 Oracle DDL 会隐式提交，不能承诺整份脚本事务回滚。对不安全类型/约束差异明确报错。安装脚本可重复执行，不修改 `HTH_MTB_EVENT_DETAILS`、`HTH_MTB_API_CONFIG` 或 BCO 对象；关闭 HTH ENABLED 即停用新增写入，保留已采集数据。
 

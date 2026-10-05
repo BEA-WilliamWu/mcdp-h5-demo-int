@@ -113,7 +113,7 @@ public class HthCRMTest {
         return values;
     }
     private static void disabledGateDiagnostics() {
-        Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHCrmConfiguration");
+        Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHCRMConfiguration");
         String previous=config.get("ENABLED",null);
         final int[] transactionLookups={0};
         weblogic.transaction.TransactionHelper.pushTransactionHelper(new weblogic.transaction.TransactionHelper() {

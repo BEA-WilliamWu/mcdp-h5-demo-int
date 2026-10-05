@@ -381,7 +381,7 @@ public class HthCRMOrmTest {
         verifyRow(observer,sparse,false);
     }
     static void productionContextCollection(Connection observer)throws Exception {
-        java.util.prefs.Preferences hth=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHCrmConfiguration");
+        java.util.prefs.Preferences hth=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHCRMConfiguration");
         java.util.prefs.Preferences crm=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("CRMConfiguration");
         String oldEnabled=hth.get("ENABLED",null),oldActivity=hth.get("ACTIVITY_PASSWORD_RESET",null);
         String oldChannel=crm.get("CRM_CHNL-ID_INTERNET",null),oldType=crm.get("CRM_RECORD_TYPE",null);

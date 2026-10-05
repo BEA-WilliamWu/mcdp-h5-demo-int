@@ -26,7 +26,7 @@ public final class HthCRMAsserter {
             if (activity.startsWith("USER_") && !com.ofss.digx.cz.bea.common.hth.HthChannelSupport.isHthChange(
                     HthCRMRequestAssembler.text(source,"oldUserChannelType"),
                     HthCRMRequestAssembler.text(source,"newUserChannelType"))) return;
-            java.util.prefs.Preferences config=ConfigurationFactory.getInstance().getConfigurations("HTHCrmConfiguration");
+            java.util.prefs.Preferences config=ConfigurationFactory.getInstance().getConfigurations("HTHCRMConfiguration");
             if (!"Y".equalsIgnoreCase(config.get("ENABLED","N"))) {
                 LOG.log(Level.INFO,"HTH_CRM stage=DISABLED, activity={0}",activity);
                 return;

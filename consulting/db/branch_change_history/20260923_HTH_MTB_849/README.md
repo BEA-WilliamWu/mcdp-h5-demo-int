@@ -1,6 +1,27 @@
 # BCOH2H-849 部署和验证
 
-## 本次字段扩展
+## 2026-10-05 配置加载修复及 CRM 更名
+
+UAT 日志的 `Found incorrect preference setup for HTHMtbConfiguration` 对应漏注册配置组。数据库有 `ENABLED=Y` 并不代表框架能读取；缺 Provider 时框架返回调用方默认值 N。本次在 `consulting/config/Preferences.xml` 新增 HTH 专用节点，使用与 BCO 相同的 `MultiEntityDBBasedPropProvider`；默认查询限定 determinant=N，实体覆盖仍由 Provider 处理。
+
+| 原名称 | 新名称 | 位置 |
+| --- | --- | --- |
+| HTHMtbConfiguration | HTHCrmConfiguration | Java、Preferences.xml、DIGX 配置组 |
+| HTH_MTB_ADAPTER_FACTORY | HTH_CRM_ADAPTER_FACTORY | HTH 接口常量、DIGX Factory 注册 |
+| HTH_MTB_ADAPTER | HTH_CRM_ADAPTER | HTH 接口常量与 Factory 调用 |
+
+已完成 113 列升级的环境，本次无需重建表，也无需重跑 Schema/Comments：
+
+1. 在维护窗口停止相关应用实例，使用 **DIGX 配置连接**执行最新版 `2_HTH_CRM_849_DIGX_Config.sql`，再执行 `4_HTH_CRM_849_DIGX_Verify.sql`。脚本迁移旧配置组及 Factory 名称；按 determinant 保留已有 ENABLED（包括 Y）、活动码和其他配置。同键同值可合并；新旧同键值冲突会报错并回滚本次配置修改，先确认正确值再重跑。
+2. 同批部署重新编译的 **common、hosttohost、approval、sms** 包，并更新实际运行目录 **`config_cz/Preferences.xml`**。Java 的接口字符串常量会被编译器内联，approval/sms 源码虽未改，仍须重新编译，不能只替换 common 包。旧实例读取旧 key，所以此次配置迁移与应用发布应同批完成。
+3. 保持原来为 Y 的开关，不要重新改成 N。新安装、没有旧开关时仍默认 N；UAT 要采集时明确启用新的 `HTHCrmConfiguration / ENABLED`。重启加载配置，确认不再出现配置组错误。
+4. 做一笔新的 HTH User Access submit/approve，跟踪 `HTH_CRM stage=COLLECT` 到 `stage=WRITE`，按 eventId 查 `HTH_BEA.HTH_CRM_EVENT_DETAILS`。之前跳过的操作不会自动补录。
+
+Factory 在 `DIGX_FW_CONFIG_ALL_B / adapterfactoryconfig` 注册 HTH 基础项；`DIGX_FW_CONFIG_ALL_O / AdapterFactories` 的既有 HTH 覆盖项也更名。框架可选的 `adapterfactoryconfigoverride` / `AdapterFactoriesOverride` 层只迁移已有 HTH 项，不新增覆盖项。这样基础 Factory 不依赖部署环境的 `default.enterprise.code` 是否为 N。只改变 HTH 配置项，BCO 原有节点和行不改。Verify 检查数据库定义，仍需用实际操作确认应用配置加载和入库。
+
+此次没有修改 CRM 表结构、ORM、事务写入逻辑、BCO 业务逻辑或 batch。原 `HTH_MTB_EVENT_DETAILS` / `HTH_MTB_API_CONFIG` 是独立旧对象，保持不动。旧名称仅保留在迁移及历史说明中，不再用于运行时采集。
+
+## 字段扩展基线
 
 落库目标仍是独立的 **`HTH_BEA.HTH_CRM_EVENT_DETAILS`**，由现有 24 列扩展为 **113 列：BCO ORM 的 99 个字段 + 14 个 HTH 专用字段**。实体、XML 和 SQL 使用同一份字段清单：[hth_crm_849_fields.json](../../../../devtools/backend-compile/tests/fixtures/hth_crm_849_fields.json)。
 
@@ -21,9 +42,9 @@ HTH 与 DIGX 不在同一 schema，必须使用各自连接。
 | 顺序 | 文件 | 连接 | 用途 |
 | --- | --- | --- | --- |
 | 1 | `1_HTH_CRM_849_Schema.sql` | HTH_BEA | 新建 113 列表，或把原 24 列表增量升级；包含全部注释 |
-| 2 | `2_HTH_CRM_849_DIGX_Config.sql` | DIGX 配置 schema | 注册 HTH Factory；已有 ENABLED、活动码等操作配置保留；本次文件未修改 |
+| 2 | `2_HTH_CRM_849_DIGX_Config.sql` | DIGX 配置 schema | 迁移为 CRM 名称并注册 HTH Factory；保留已有 ENABLED、活动码和其他配置 |
 | 3 | `3_HTH_CRM_849_HTH_Verify.sql` | HTH_BEA | 只读检查 113 列、精确注释、主键、索引及运行数据 |
-| 4 | `4_HTH_CRM_849_DIGX_Verify.sql` | DIGX 配置 schema | 只读检查开关、Factory；本次文件未修改 |
+| 4 | `4_HTH_CRM_849_DIGX_Verify.sql` | DIGX 配置 schema | 只读检查新配置、Factory、重复键及旧名称残留 |
 | 可选 | `5_HTH_CRM_849_Comments.sql` | HTH_BEA | 已有 113 列表单独补注释，不替代结构升级 |
 
 1、2 在 DBeaver 中打开整份文件，用 **Execute SQL Script / Alt+X**。也可选中完整 `DECLARE ... END;` 后 Ctrl+Enter。脚本不含局部 procedure/function 或单独的 `/`，避免旧问题中的客户端提前拆分。3、4、5 可整份 Alt+X 执行。
@@ -32,7 +53,7 @@ HTH 与 DIGX 不在同一 schema，必须使用各自连接。
 
 1. 用 HTH_BEA 运行脚本 1，再运行脚本 3。无需删除、重建表；已有行保留，新 89 列在历史行中为 NULL。
 2. 先完成数据库扩展，再同批部署 hosttohost Java 包及 `config_cz` 内 `orm/eclipselink/mappings/cz/hosttohost/crm/HthCRMEvent3DomainDTO.orm.xml`，重启应用加载映射。`cz-hosttohost.cfg.xml` 中原有 HTH 注册继续使用。不能只发布 Java 或只发布 XML。
-3. 首次部署 849 时还需用 DIGX 连接执行 2、4，并核对 NONXA datasource 账号对 HTH 新表的 SELECT/INSERT 权限。已部署且 Factory/开关正确时无需为了本次加列重新修改配置。脚本不猜测 datasource 账号、不授权 PUBLIC、不自动启用采集。
+3. 首次部署 849 时还需用 DIGX 连接执行 2、4，并核对 NONXA datasource 账号对 HTH 新表的 SELECT/INSERT 权限。此次配置更名即使已部署旧版 849 也必须执行 2、4；历史上单纯加列无需修改配置。脚本不猜测 datasource 账号、不授权 PUBLIC、不自动启用采集。
 4. 做真实 HTH User Access submit/approve，再用脚本 3 的时间范围、业务引用和 `HTH_CRM stage=WRITE` 核对。确认新事件的适用字段有值；历史行新字段为空是正常的。
 
 扩展后的新字段都可空，因此原 24 列版本写入时不要求提供新字段。旧实例仍可能产生缺少新元数据的行，需确认所有实例已部署新包。关闭采集期间的操作不会补录；应用回退也不会删除已扩展字段或历史数据。
@@ -72,7 +93,7 @@ Oracle DDL（包括 COMMENT）会隐式提交，使用专用部署连接。此�
 - 授权列表需与实际 NONXA datasource 账号核对；表 owner 无显式对象授权正常。部署账号能查询不代表应用账号能写入。
 - 去重键查询应无重复。最近事件查询为空不代表元数据错误，更不能据此插入假事件。
 
-脚本 4 的 `FACTORY_CHECK` 必须 PASS；`COLLECTION_GATE` 为数据库配置状态，仍需确认应用配置缓存。正式外部活动码取 `ACTIVITY_<ACTIVITY_KEY>`，缺少配置时保持 NULL，不伪造编码。
+脚本 4 的 Factory、重复键、旧名称和键完整性检查均须 PASS；`BASE_FACTORY_CHECK` 检查实际基础 Provider 来源，不能只看 `_O` 的 `FACTORY_CHECK`。`COLLECTION_GATE` 为数据库默认 determinant=N 的状态，实体覆盖另列明细，仍需确认应用配置缓存。正式外部活动码取 `ACTIVITY_<ACTIVITY_KEY>`，缺少配置时保持 NULL，不伪造编码。
 
 **Verify 的 PASS 证明所列元数据符合要求，不代表真实应用操作已完成验收。** 需要真实操作、对应 WRITE 日志和新表记录一并确认。
 
@@ -102,16 +123,27 @@ Oracle DDL（包括 COMMENT）会隐式提交，使用专用部署连接。此�
 
 ```sh
 JAVA_HOME=<JDK21> H2_JAR=<local-h2.jar> python3 devtools/backend-compile/tests/verify_hth_849.py
+JAVA_HOME=<JDK21> H2_JAR=<local-h2.jar> python3 devtools/backend-compile/tests/verify_hth_crm_configuration.py
 JAVA_HOME=<JDK21> DBEAVER_HOME=<DBeaver26.2.1安装目录> python3 devtools/backend-compile/tests/verify_hth_849_sql_script.py
 ```
 
 Java 回归使用项目 EclipseLink、真实 Session wrapper、生产 ORM XML 和 H2，验证 113 字段映射/类型、BigDecimal、实际入库、重复保护、事务隔离与 BCO 原映射同时存在。字段清单同时对照 BCO XML，不能只检查“字段个数相同”。
 
-SQL 分段使用原版 DBeaver 26.2.1 Oracle parser，六组设置下 1/2 各为一个完整匿名块，3/4 分别为 13/6 条查询，5 为 114 条 COMMENT + 3 条查询。解析结果原文通过项目 JDBC 19.8 在隔离 Oracle Free 23.26.3 上测试新建、原 24 列带数据升级、重复执行、注释、VARCHAR2 扩容、NUMBER 精度和不兼容定义预检查；测试证据与最终结果以本次提交说明为准。
+SQL 分段使用原版 DBeaver 26.2.1 Oracle parser，六组设置下 1/2 各为一个完整匿名块，3、4 为只读查询，5 为 114 条 COMMENT + 3 条查询。解析结果原文通过项目 JDBC 19.8 在隔离 Oracle Free 23.26.3 上测试新建、原 24 列带数据升级、重复执行、注释、VARCHAR2 扩容、NUMBER 精度和不兼容定义预检查；测试证据与最终结果以本次提交说明为准。
 
 上述验证均为本地合成数据，不连接 UAT。真实 WebLogic 事务、datasource 权限/目标库、配置缓存和 CM/BM 操作仍需部署后验收。
 
-### 2026-09-28 本次验证结果
+### 2026-10-05 配置修复验证
+
+- 22 项真实配置框架检查通过：读取完整生产 `Preferences.xml`，使用项目 `ConfigurationFactory`、`ConfigurationManager` 和 DB Provider，仅把 SYSCONFIG 连接换成隔离 H2。验证数据库 Y 的读取、实体覆盖、漏注册退回 N，以及仅 `_O/N` Factory 无法加载、补 `_B` 后可加载。
+- 849 回归通过：201 项上下文检查、2,938 项 EclipseLink/OBDX ORM 检查、71 项 CRM 检查及审批/BCO 边界回归。编译检查包含使用 HTH 接口常量的调用方，并明确断言新 Factory/Adapter 名称。
+- 最终配置及 Verify 脚本通过 DBeaver 26.2.1 六组分段设置；配置脚本保持一个完整匿名块，Verify 为 15 条只读查询。
+- DBeaver 导出的最终原文通过隔离 Oracle Free 23.26.3 / 项目 JDBC 19.8 的 29 个场景、160 项断言：旧 Y/活动配置保留、重复执行、同值合并、冲突/重复/NULL 键拒绝、可选 Factory 覆盖层迁移，以及两张配置表已修改后再发生错误的完整回滚。BCO 和无关配置行对比一致。
+- 独立 XML 对比确认：除新增 HTH 节点，原有配置节点及属性全部保持一致。
+
+以上是本地框架及合成数据回归，不能替代 UAT 发布后实际 submit/approve 验收。Java 输出：`/tmp/hth849-crm-config-regression.log`；DBeaver 输出：`/tmp/hth849-crm-config-parser.log`；Oracle 场景、断言及最终 SQL SHA-256：`/tmp/hth849-crm-config-oracle-20261005/`。隔离 Oracle 容器和网络已清理。
+
+### 2026-09-28 字段扩展历史验证结果
 
 - Java 8 目标编译通过；201 项请求上下文/元数据检查、2,938 项真实 EclipseLink/OBDX ORM 检查、69 项原有 CRM 检查及既有 791/审批隔离回归通过。覆盖实际审批 ProcessingError 到 ORM、全部 113 列读写、BigDecimal、空格 filler、NULL、复制/回滚及并发不可覆盖。
 - Oracle 原 24 列带数据升级及 45 项结构/数据/重复执行检查通过；随后只修改 OMB_FLAG、ERR_CODE 注释，各跑 8 项 Oracle 针对性验证，最终安装、注释和 Verify 均通过，重复安装为 0 DDL。最终 SQL 与该 45 项版本的结构和安装逻辑相同，只有这两处注释变化，未把 45 项声称为再次全量运行。

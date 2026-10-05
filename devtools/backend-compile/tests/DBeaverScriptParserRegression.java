@@ -124,7 +124,7 @@ public class DBeaverScriptParserRegression {
                     List<SQLScriptElement> queries = SQLScriptParser.parseScript(dataSource, dialect, prefs, related);
                     List<String> commentLines = related.lines().filter(line -> line.startsWith("COMMENT ON "))
                         .map(line -> line.substring(0, line.length() - 1)).toList();
-                    int expectedCount = name.startsWith("3") ? 13 : name.startsWith("4") ? 6 : 117;
+                    int expectedCount = name.startsWith("3") ? 13 : name.startsWith("4") ? 15 : 117;
                     require(queries.size() == expectedCount, setting + ": " + name + " split into "
                         + queries.size() + " queries; expected " + expectedCount);
                     if (name.startsWith("5")) require(commentLines.size() == 114, "Expected one table and 113 column comments");

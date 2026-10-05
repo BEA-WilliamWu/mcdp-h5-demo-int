@@ -25,6 +25,8 @@ public class HthCRMTest {
         return HthCRMRequestAssembler.assemble("x.HostToHostApiPassword.setup",data(op),null);
     }
     public static void main(String[] args) throws Exception {
+        check("HTH_CRM_ADAPTER_FACTORY".equals(com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter.FACTORY));
+        check("HTH_CRM_ADAPTER".equals(com.ofss.digx.cz.bea.common.hth.IHthCRMAdapter.ADAPTER));
         disabledGateDiagnostics();
         Map<String,Object> user=data("CREATE");user.put("newUserChannelType","BCO");
         check(HthCRMRequestAssembler.assemble("UserExtensionData.create",user,null)==null);
@@ -96,7 +98,7 @@ public class HthCRMTest {
         }
         Resources active=new Resources("NONE");active.status=Status.STATUS_ACTIVE;
         HthCRMWriter.write(reset,active);check(active.opens==0 && active.closes==0);
-        System.out.println("PASS HTH MTB: "+checks+" mapping, secret exclusion, commit/rollback, isolation and ORM save checks");
+        System.out.println("PASS HTH CRM: "+checks+" mapping, secret exclusion, commit/rollback, isolation and ORM save checks");
     }
     /** Inspect actual bean values, including the key, without relying on redacted DTO logging. */
     private static Map<String,Object> beanProperties(Object bean) throws ReflectiveOperationException {
@@ -111,7 +113,7 @@ public class HthCRMTest {
         return values;
     }
     private static void disabledGateDiagnostics() {
-        Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHMtbConfiguration");
+        Preferences config=com.ofss.fc.infra.config.ConfigurationFactory.getInstance().getConfigurations("HTHCrmConfiguration");
         String previous=config.get("ENABLED",null);
         final int[] transactionLookups={0};
         weblogic.transaction.TransactionHelper.pushTransactionHelper(new weblogic.transaction.TransactionHelper() {

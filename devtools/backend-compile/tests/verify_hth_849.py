@@ -5,12 +5,20 @@ actual entity XML, EntityManager, Session, persister and transaction wrappers ru
 unchanged. H2 checks do not replace Oracle/WebLogic deployment verification.
 """
 from pathlib import Path
-import os,subprocess,tempfile,re,shutil,xml.etree.ElementTree as ET
+import os,subprocess,tempfile,re,shutil,sys,xml.etree.ElementTree as ET
 def run(command):
     result=subprocess.run(command,check=False)
     if result.returncode: raise SystemExit(result.returncode)
 
 root=Path(__file__).resolve().parents[3];projects=root/'consulting/middleware/projects'
+# A preferences-node mock accepts misspelled/unregistered groups. Pin the deployed
+# registration here and exercise the real SDK loader/providers in a separate JVM.
+registered=[node for node in ET.parse(root/'consulting/config/Preferences.xml').iter('Preference')
+            if node.get('name')=='HTHCrmConfiguration']
+assert len(registered)==1, 'Missing/duplicate deployed HTHCrmConfiguration registration'
+assert registered[0].get('PreferencesProvider')=='com.ofss.digx.infra.config.impl.MultiEntityDBBasedPropProvider'
+if os.environ.get('H2_JAR'):
+    run([sys.executable,str(Path(__file__).with_name('verify_hth_crm_configuration.py'))])
 # Architecture contract: audit has no MTB callback; common exposes data and interface only.
 common=projects/'common/com.ofss.digx.cz.bea.common/src/com/ofss/digx/cz/bea/common'
 assert sorted(p.name for p in (common/'hth').glob('*.java')) == ['HthCRMInputData.java','HthChannelSupport.java','HthOnboardingAudit.java','IHthCRMAdapter.java']
@@ -149,7 +157,7 @@ public class DataAccessManager {
 public class ConfigurationFactory {
  public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
  public java.util.prefs.Preferences getRootConfigurations(){return java.util.prefs.Preferences.userRoot().node("hth849-tests");}
- public java.util.prefs.Preferences getConfigurations(String category){if(category.equals(System.getProperty("hth849.failConfigCategory"))){if(Boolean.getBoolean("hth849.failConfigLinkage"))throw new NoClassDefFoundError("injected dependency failure");throw new IllegalStateException("injected configuration failure");}if("HTHMtbConfiguration".equals(category))System.setProperty("hth849.configReads",String.valueOf(Integer.parseInt(System.getProperty("hth849.configReads","0"))+1));return getRootConfigurations().node(category);}
+ public java.util.prefs.Preferences getConfigurations(String category){if(category.equals(System.getProperty("hth849.failConfigCategory"))){if(Boolean.getBoolean("hth849.failConfigLinkage"))throw new NoClassDefFoundError("injected dependency failure");throw new IllegalStateException("injected configuration failure");}if("HTHCrmConfiguration".equals(category))System.setProperty("hth849.configReads",String.valueOf(Integer.parseInt(System.getProperty("hth849.configReads","0"))+1));return getRootConfigurations().node(category);}
 }''')
     files.append(config)
     session=Path(out)/'SessionDataManager.java'

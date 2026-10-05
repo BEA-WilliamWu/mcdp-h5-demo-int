@@ -312,7 +312,7 @@ HTH 沿用 BCO 的 Entity + embedded Key + XML ORM + Assembler/Repository/Adapte
 
 框架调用存在需要保留的差异：BCO `super.create()` 使用线程业务 Session，HTH 则由 Writer 明确传入独立 NONXA Session。已检查本项目框架实现，`save()` 还会读取线程 Session 缓存；HTH 使用“拒绝已有 EVENT_ID 后 saveOrUpdate(entity)”路径，在该独立 Session 的 EntityManager 中执行 ORM persist，避免绑定或提交原业务 Session。DEDUP_KEY 仍由数据库唯一约束控制。
 
-本次只有 HTH cfg 增加映射注册；不修改共用 persistence / module-cfg、公共 Java、BCO CRM 或 batch。发布需要 hosttohost 包与 HTH ORM 配置一起更新。验证和部署限制以 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md) 为准。
+字段扩展使用 HTH cfg 注册 ORM，不修改共用 persistence / module-cfg、BCO CRM 或 batch。2026-10-05 配置修复另外在 Preferences.xml 新增 HTHCrmConfiguration 节点，迁移 DIGX 中旧配置名和 Factory key，调整 common/hth 接口常量；不修改 BCO 节点或业务逻辑。除 hosttohost 与 HTH ORM 外，本次须同批发布 config_cz/Preferences.xml，并重新编译部署 common、approval、sms，以更新内联的 HTH 常量。验证和部署限制以 [849 实施说明](../../consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md) 为准。
 
 
 ### 2026-09-28：HTH 字段模型对齐 BCO

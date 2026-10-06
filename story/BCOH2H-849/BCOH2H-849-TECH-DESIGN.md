@@ -113,3 +113,7 @@ UAT 至少覆盖 BM Enable/Edit/Disable，CM HTH User Create/Edit，HTH Access C
 4. 1293 的文件字段、排序、编码、文件名、空文件、交接和下游去重属于独立文件合同；849 表设计完成不代表文件接口已经通过验收。
 
 本设计的详细字段表见 HTH-CRM-FIELD-MAPPING.md；部署检查和可重跑 SQL 的技术细节见 consulting/db/branch_change_history/20260923_HTH_MTB_849/README.md。
+
+## 9. SIT 执行指引
+
+交给 SIT 同事的逐步检查、测试矩阵、查询 SQL、证据要求和空表排查见 [BCOH2H-849-SIT-GUIDE.md](BCOH2H-849-SIT-GUIDE.md)。该指引只验证 849 的 HTH CRM 入库；1293 的文件抽取和下游接收须单独验收。

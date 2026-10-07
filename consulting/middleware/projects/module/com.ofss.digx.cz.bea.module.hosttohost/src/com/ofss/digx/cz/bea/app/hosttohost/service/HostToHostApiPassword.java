@@ -420,6 +420,11 @@ public class HostToHostApiPassword extends AbstractApplication
         LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=BUILD, reason=MISSING_IP_ADDRESS");
         return;
       }
+      // The independent HTH extract selects yesterday's Hong Kong business date.
+      java.time.ZonedDateTime hktNow = java.time.ZonedDateTime.now(
+          java.time.ZoneId.of("Asia/Hong_Kong"));
+      data.setEventDte(hktNow.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE));
+      data.setEventTime(hktNow.format(java.time.format.DateTimeFormatter.ofPattern("HHmmss")));
       data.setChnlId("ELE-HTH");
       data.setChnlTypeCode("ELE");
       data.setEventActvTypeCode(SETUP.equals(operation) ? CRM_CREATE_ACTIVITY : CRM_CHANGE_ACTIVITY);

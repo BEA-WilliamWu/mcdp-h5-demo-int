@@ -1,6 +1,8 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
 import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.app.crm.adapter.ICRMAsserterCallAdapter;
+import com.ofss.digx.cz.bea.common.framework.crm.CRMInputData;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -61,6 +63,7 @@ import com.ofss.fc.enumeration.ep.SubscriberType;
 import com.ofss.fc.service.response.TransactionStatus;
 import com.ofss.fc.xface.ep.dto.NotificationDetail;
 import java.util.Calendar;
+import java.text.SimpleDateFormat;
 
 import com.ofss.fc.infra.das.orm.DataAccessManager;
 import com.ofss.fc.infra.das.orm.Session;
@@ -84,6 +87,8 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final String RESET = "RESET";
   private static final String SETUP_EVENT = "HTH_API_PASSWORD_SETUP_SUCCESS";
   private static final String RESET_EVENT = "HTH_API_PASSWORD_RESET_SUCCESS";
+  private static final String CRM_CREATE_ACTIVITY = "HTH_PWD_CRD";
+  private static final String CRM_CHANGE_ACTIVITY = "HTH_PWD_UPD";
   private static final String ADAPTER_CATEGORY = "HthApiCredentialAdapterConfig";
   private static final String FEATURE_ENABLED = "HTH_API_PASSWORD.ENABLED";
   private static final String ADAPTER_CLASS = "HTH_API_PASSWORD.ADAPTER_CLASS";
@@ -338,6 +343,8 @@ public class HostToHostApiPassword extends AbstractApplication
         response.setResetAllowed(false);
         response.getStatus().setReferenceNumber(reference);
         response.getStatus().setExternalReferenceNumber(reference);
+        // Record only the first completed write; an idempotent replay must not create a second event.
+        recordCRM(sessionContext, operation, true, identity);
         stage = "NOTIFICATION";
         if (SETUP.equals(operation)) {
           notifySetupSuccess(sessionContext, identity);
@@ -348,6 +355,7 @@ public class HostToHostApiPassword extends AbstractApplication
     } catch (java.lang.Exception failure) {
       audit.put("processingStage", stage);
       logPhaseFailure(stage, failure);
+      recordCRM(sessionContext, operation, false, null);
       throw failure;
     } finally {
       password = null;
@@ -369,6 +377,86 @@ public class HostToHostApiPassword extends AbstractApplication
       throw failure;
     }
     return response;
+  }
+
+  /** BCO CRM persistence is reused for the two HTH password activities. */
+  private void recordCRM(SessionContext context, String operation, boolean accepted, Identity identity) {
+    SessionLease crmSession = null;
+    boolean insertCompleted = false;
+    try {
+      if (context == null || normalize(context.getUserId()) == null) {
+        LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=BUILD, reason=MISSING_SESSION_IDENTITY");
+        return;
+      }
+      crmSession = open(true);
+      IAdapterFactory factory = AdapterFactoryConfigurator.getInstance()
+          .getAdapterFactory(CommonAdapterFactoryConstants.CRM_ADAPTER_FACTORY);
+      ICRMAsserterCallAdapter adapter = (ICRMAsserterCallAdapter)
+          factory.getAdapter(CommonAdapterConstants.CRM_ADAPTER);
+      Preferences config = ConfigurationFactory.getInstance().getConfigurations("CRMConfiguration");
+      CRMInputData data = adapter.fetchCommonInfo(null, "", config, (TransactionStatus) null,
+          context, context.getUserId());
+      if (data == null) {
+        // The shared BCO builder can return null when its optional thread attributes are absent.
+        // Populate the fields required for this HTH activity without changing BCO behaviour.
+        data = new CRMInputData();
+        java.util.Date now = new java.util.Date();
+        data.setEventDte(new SimpleDateFormat("yyyyMMdd", Locale.ENGLISH).format(now));
+        data.setEventTime(new SimpleDateFormat("HHmmss", Locale.ENGLISH).format(now));
+        String userId = context.getUserId();
+        int separator = userId.indexOf('@');
+        data.setUserId(separator < 0 ? userId : userId.substring(0, separator));
+        data.setIpAddress((String) ThreadAttribute.get("FMO_IP_ADDRESS"));
+      }
+      if (normalize(data.getIpAddress()) == null) {
+        LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=BUILD, reason=MISSING_IP_ADDRESS");
+        return;
+      }
+      data.setChnlId("ELE-HTH");
+      data.setChnlTypeCode("ELE");
+      data.setEventActvTypeCode(SETUP.equals(operation) ? CRM_CREATE_ACTIVITY : CRM_CHANGE_ACTIVITY);
+      data.setEventStatusCode(accepted ? "A" : "R");
+      data.setRecordType("50");
+      data.setFiller01("1");
+      data.setFeeChrgCode("SERV");
+      data.setEventCountryCode("HK");
+      data.setFinInd("N");
+      data.setSelfSrvInd("Y");
+      data.setUserId(canonicalUser(context.getUserId(), context.getTransactingPartyCode()));
+      if (identity == null) {
+        data.setAcctNbr(context.getTransactingPartyCode());
+      }
+      data.setScreenId(SETUP.equals(operation) ? "api-password-setup" : "api-password-reset");
+      if (identity != null) {
+        data.setAcctNbr(identity.partyId);
+        try {
+          com.ofss.digx.domain.sms.entity.user.User user =
+              readNotificationUser(identity.partyId, identity.userId);
+          if (user != null) {
+            data.setElectAdd(user.getEmailId());
+          }
+        } catch (java.lang.Exception lookupFailure) {
+          LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=EMAIL_LOOKUP, exceptionType={0}",
+              lookupFailure.getClass().getName());
+        }
+      }
+      adapter.crmInsertForRaq(data);
+      insertCompleted = true;
+      LOGGER.log(Level.INFO, "HTH_CRM_849 stage=INSERT, activity={0}, status={1}",
+          new Object[] {data.getEventActvTypeCode(), data.getEventStatusCode()});
+    } catch (java.lang.Exception failure) {
+      LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=INSERT, exceptionType={0}",
+          failure.getClass().getName());
+    } finally {
+      if (crmSession != null) {
+        try {
+          crmSession.close(insertCompleted);
+        } catch (java.lang.Exception failure) {
+          LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=CLOSE, exceptionType={0}",
+              failure.getClass().getName());
+        }
+      }
+    }
   }
 
   /** Log phase and exception classes without exception messages or submitted values. */

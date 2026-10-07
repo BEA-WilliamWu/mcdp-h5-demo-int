@@ -242,6 +242,7 @@ public class HostToHostApiPassword extends AbstractApplication
     String password = null;
     String code = null;
     String codeId = null;
+    boolean crmRejected = false;
     String stage = "STORAGE_CONFIG";
     LOGGER.log(Level.INFO,
         "HTH_API_PASSWORD lifecycle: stage=CHANGE_BEGIN, independentPersistenceUnit=NONXA");
@@ -355,7 +356,7 @@ public class HostToHostApiPassword extends AbstractApplication
     } catch (java.lang.Exception failure) {
       audit.put("processingStage", stage);
       logPhaseFailure(stage, failure);
-      recordCRM(sessionContext, operation, false, null);
+      crmRejected = true;
       throw failure;
     } finally {
       password = null;
@@ -367,7 +368,14 @@ public class HostToHostApiPassword extends AbstractApplication
         Interaction.close();
       } catch (java.lang.Exception failure) {
         logPhaseFailure("INTERACTION_CLOSE", failure);
+        if (crmRejected) {
+          recordCRM(sessionContext, operation, false, null);
+        }
         throw failure;
+      }
+      if (crmRejected) {
+        // Persist rejection outside the failed business interaction.
+        recordCRM(sessionContext, operation, false, null);
       }
     }
     try {

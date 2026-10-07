@@ -1,4 +1,4 @@
-package com.ofss.digx.cz.bea.common.hth;
+package com.ofss.digx.cz.bea.common.audit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ofss.digx.infra.audit.dto.AuditDTO;

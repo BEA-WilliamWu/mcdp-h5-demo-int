@@ -1,7 +1,6 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
-import com.ofss.digx.cz.bea.common.hth.HthOnboardingAudit;
-import com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMScope;
+import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -212,25 +211,21 @@ public class HostToHostApiPassword extends AbstractApplication
 
   private HostToHostApiPasswordResponseDTO auditedChange(SessionContext context,
       HostToHostApiPasswordRequestDTO request, String operation, String service) throws Exception {
-    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(context, service, operation);
-         HthCRMScope crm = new HthCRMScope(context, service, operation)) {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(context, service, operation)) {
       audit.put("targetUserId", context.getUserId()).put("requestId", request == null ? null : request.getRequestId());
-      crm.put("targetUserId", context.getUserId()).put("requestId", request == null ? null : request.getRequestId());
       try {
-        HostToHostApiPasswordResponseDTO result = change(context, request, operation, service, audit, crm);
+        HostToHostApiPasswordResponseDTO result = change(context, request, operation, service, audit);
         audit.result("SUCCESS").response(result).put("referenceNumber", result.getStatus().getReferenceNumber());
-        crm.result("SUCCESS").response(result).put("referenceNumber", result.getStatus().getReferenceNumber());
         return result;
       } catch (java.lang.Exception failure) {
         audit.failure(failure);
-        crm.failure(failure);
         throw failure;
       }
     }
   }
 
   private HostToHostApiPasswordResponseDTO change(SessionContext sessionContext,
-      HostToHostApiPasswordRequestDTO request, String operation, String serviceId, HthOnboardingAudit.Entry audit, HthCRMScope crm)
+      HostToHostApiPasswordRequestDTO request, String operation, String serviceId, HthOnboardingAudit.Entry audit)
       throws Exception {
     super.checkAccessPolicy(serviceId, sessionContext, request);
     if (!isFeatureEnabled()) {
@@ -250,12 +245,10 @@ public class HostToHostApiPassword extends AbstractApplication
       stage = "IDENTITY";
       Identity identity = identity(sessionContext, true, storage);
       audit.put("partyId", identity.partyId).put("targetUserId", HthOnboardingAudit.fullUser(identity.userId, identity.partyId));
-      crm.put("partyId", identity.partyId).put("targetUserId", HthCRMScope.fullUser(identity.userId, identity.partyId));
       stage = "OPERATION_LOOKUP";
       OperationResult previous = findSuccessfulOperation(
           request.getRequestId(), identity.partyId, identity.profileUserId, operation, storage.name(), identity.uamClientId);
       audit.put("idempotentReplay", Boolean.valueOf(previous != null && "SUCCESS".equals(previous.status)));
-      crm.put("idempotentReplay", Boolean.valueOf(previous != null && "SUCCESS".equals(previous.status)));
       if (previous != null) {
         if ("SUCCESS".equals(previous.status)) {
           response.setSetupState("ACTIVE");
@@ -293,7 +286,6 @@ public class HostToHostApiPassword extends AbstractApplication
             code, request.getRequestId(), storage.name(), identity.uamClientId);
 
         audit.put("codeId", codeId).put("purpose", operation);
-        crm.put("codeId", codeId).put("purpose", operation);
         String reference = request.getRequestId();
         if (storage == HthApiPasswordStorage.DATABASE) {
           stage = "DATABASE_COMPLETE";
@@ -355,7 +347,6 @@ public class HostToHostApiPassword extends AbstractApplication
       }
     } catch (java.lang.Exception failure) {
       audit.put("processingStage", stage);
-      crm.put("processingStage", stage);
       logPhaseFailure(stage, failure);
       throw failure;
     } finally {
@@ -702,8 +693,7 @@ public class HostToHostApiPassword extends AbstractApplication
       type = TaskType.ADMINISTRATION)
   public HthApiPasswordCodeResponseDTO generate(SessionContext sessionContext,
       HthApiPasswordGenerateDTO requestDTO) throws Exception {
-    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, GENERATE_SERVICE_ID, "GENERATE");
-         HthCRMScope crm = new HthCRMScope(sessionContext, GENERATE_SERVICE_ID, "GENERATE")) {
+    try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.begin(sessionContext, GENERATE_SERVICE_ID, "GENERATE")) {
     try {
 
     super.checkAccessPolicy(GENERATE_SERVICE_ID, sessionContext, requestDTO);
@@ -727,10 +717,8 @@ public class HostToHostApiPassword extends AbstractApplication
           LocalHthApiPasswordCodeRepositoryAdapter.getInstance();
       HthApiPasswordCode previousCode = adapter.findLatestByOwner(partyId, userName);
       audit.put("partyId", partyId).put("targetUserId", HthOnboardingAudit.fullUser(userName, partyId)).put("purpose", purpose);
-      crm.put("partyId", partyId).put("targetUserId", HthCRMScope.fullUser(userName, partyId)).put("purpose", purpose);
       if (previousCode != null) {
         audit.put("operation", "REGENERATE").put("previousCodeId", previousCode.getKey().getId());
-        crm.put("operation", "REGENERATE").put("previousCodeId", previousCode.getKey().getId());
       }
       retirePendingCodes(partyId, userName, purpose, operator);
       String plaintext = HthApiPasswordCrypto.randomDigits(CODE_LENGTH);
@@ -767,12 +755,9 @@ public class HostToHostApiPassword extends AbstractApplication
     super.checkResponsePolicy(sessionContext, response);
     audit.result("SUCCESS").response(response).put("codeId", response.getCodeId())
         .put("codeStatus", "PENDING").put("processingStage", "PENDING_APPROVAL");
-    crm.result("SUCCESS").response(response).put("codeId", response.getCodeId())
-        .put("codeStatus", "PENDING").put("processingStage", "PENDING_APPROVAL");
     return response;
       } catch (java.lang.Exception auditFailure) {
       audit.failure(auditFailure);
-      crm.failure(auditFailure);
       throw auditFailure;
     }
     }
@@ -957,13 +942,6 @@ public class HostToHostApiPassword extends AbstractApplication
           System.currentTimeMillis() + EXPIRY_HOURS * MILLIS_PER_HOUR)));
       row.setTransactionId(transactionId);
       notifyHthApiPasswordApproved(row, operator);
-      java.util.Map<String,Object> crm = new java.util.LinkedHashMap<String,Object>();
-      crm.put("operation", "CODE_ACTIVATE"); crm.put("businessOutcome", "SUCCESS");
-      crm.put("crmPhase", "APPLY"); crm.put("crmActionId", codeId);
-      crm.put("actorUserId", operator); crm.put("partyId", partyId);
-      crm.put("targetUserId", HthCRMScope.fullUser(userName, partyId));
-      crm.put("approvalReference", transactionId); crm.put("occurredAt", java.time.Instant.now().toString());
-      com.ofss.digx.cz.bea.app.hosttohost.crm.HthCRMAsserter.collect(GENERATE_SERVICE_ID, crm);
     }
   }
 

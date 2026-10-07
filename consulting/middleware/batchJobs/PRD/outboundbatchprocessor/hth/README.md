@@ -2,7 +2,9 @@
 
 本作业只读取 `HTH_BEA.HTH_CRM_EVENT`，不调用 BCO 的 `GenTxnLog2CRM`，
 不修改 `DIGX_CZ_CRM_EVENT3_DETAILS` 或其 `BATCH_PROCESSED_DATE`。
-Java 类放在 `PRD/outboundbatchprocessor/hth`，现有
+按照 `GenTxnLog2CRM` 的仓库布局，Java 类及启动脚本在外层、`UAT`、`PRD`
+各保留一份相同内容。现有 pipeline 实际从 `PRD` 编译；更新 HTH 作业时
+必须同步三份，避免 SIT 和生产部署取到不同版本。现有
 `consulting/ant/build_batch_Jenkins.xml` 的 `outboundbatchprocessor/**/*.java`
 会将它编入 `CDCBatchesUAT.jar`。现有 Ant 构建**只生成 JAR**；新 shell
 脚本仍须由部署步骤或 SIT 人员复制到批处理服务器。

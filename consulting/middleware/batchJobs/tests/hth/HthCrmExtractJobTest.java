@@ -1,5 +1,6 @@
 package outboundbatchprocessor.hth;
 
+import java.io.OutputStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -19,6 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Logger;
+import util.AESUtil;
 
 /** Run directly with javac/java; no Oracle server or BCO batch execution needed. */
 public final class HthCrmExtractJobTest {
@@ -90,6 +92,35 @@ public final class HthCrmExtractJobTest {
     public static void main(String[] args) throws Exception {
         DriverManager.registerDriver(DRIVER);
         Path dir = Files.createTempDirectory("hth-crm-test-");
+        Path configDir = Files.createTempDirectory("hth-crm-config-test-");
+        String passphrase = "hth-crm-test-passphrase";
+        Properties encrypted = new Properties();
+        encrypted.setProperty("encr_passphrase", AESUtil.encrypt(passphrase, AESUtil.DEFAULT_KEY));
+        encrypted.setProperty("db.hostname", AESUtil.encrypt("hth-db", passphrase));
+        encrypted.setProperty("db.port", AESUtil.encrypt("1521", passphrase));
+        encrypted.setProperty("db.servicename", AESUtil.encrypt("hth-service", passphrase));
+        encrypted.setProperty("db.username", AESUtil.encrypt("hth-user", passphrase));
+        encrypted.setProperty("db.password", AESUtil.encrypt("test-password", passphrase));
+        Path configFile = configDir.resolve("hth_crm_batch_config.properties");
+        try (OutputStream output = Files.newOutputStream(configFile)) {
+            encrypted.store(output, "HTH test configuration");
+        }
+        HthCrmExtractJob.DatabaseConfig database = HthCrmExtractJob.loadDatabaseConfig(configDir);
+        check("jdbc:oracle:thin:@//hth-db:1521/hth-service".equals(database.url),
+            "HTH database URL did not use the encrypted HTH configuration");
+        check("hth-user".equals(database.user) && "test-password".equals(database.password),
+            "HTH database credentials did not decrypt");
+        encrypted.remove("db.password");
+        try (OutputStream output = Files.newOutputStream(configFile)) {
+            encrypted.store(output, "HTH test configuration");
+        }
+        boolean missingCredentialRejected = false;
+        try {
+            HthCrmExtractJob.loadDatabaseConfig(configDir);
+        } catch (IllegalArgumentException expected) {
+            missingCredentialRejected = expected.getMessage().contains("db.password");
+        }
+        check(missingCredentialRejected, "Missing HTH database credential was accepted");
         LocalDate day = LocalDate.of(2026, 9, 30);
         String name = HthCrmExtractJob.fileName(day, null);
         Path output = dir.resolve(name);

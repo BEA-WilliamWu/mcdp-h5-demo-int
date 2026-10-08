@@ -21,11 +21,15 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Properties;
+import util.AESUtil;
+import util.LoadProperties;
 
 /** Independent HTH/DSP extract; never reads or updates BCO CRM tables or batch markers. */
 public final class HthCrmExtractJob {
     private static final ZoneId HKT = ZoneId.of("Asia/Hong_Kong");
     private static final DateTimeFormatter DATE = DateTimeFormatter.BASIC_ISO_DATE;
+    private static final String CONFIG_FILE = "hth_crm_batch_config.properties";
     // API_MTB_latest.xlsx / HTH_CRM_MAPPING_APIs, rows 12-72, in file order.
     static final String[] HEADERS = {
         "record_type", "Filler_01", "Event_Id", "Event_Dte", "Event_Time",
@@ -80,6 +84,51 @@ public final class HthCrmExtractJob {
         return value;
     }
 
+    static final class DatabaseConfig {
+        final String url;
+        final String user;
+        final String password;
+
+        DatabaseConfig(String url, String user, String password) {
+            this.url = url;
+            this.user = user;
+            this.password = password;
+        }
+    }
+
+    private static String encryptedValue(Properties properties, String key, String passphrase)
+            throws Exception {
+        String encrypted = properties.getProperty(key);
+        if (encrypted == null || encrypted.trim().isEmpty()) {
+            throw new IllegalArgumentException("Missing HTH CRM configuration key " + key);
+        }
+        String value = AESUtil.decrypt(encrypted, passphrase);
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("Empty HTH CRM configuration key " + key);
+        }
+        return value;
+    }
+
+    static DatabaseConfig loadDatabaseConfig(Path configDirectory) throws Exception {
+        Properties properties = LoadProperties.getPropertiesFromFile(
+            configDirectory.resolve(CONFIG_FILE).toString());
+        String encryptedPassphrase = properties.getProperty("encr_passphrase");
+        if (encryptedPassphrase == null || encryptedPassphrase.trim().isEmpty()) {
+            throw new IllegalArgumentException("Missing HTH CRM configuration key encr_passphrase");
+        }
+        String passphrase = AESUtil.decryptdefault(encryptedPassphrase);
+        if (passphrase == null || passphrase.trim().isEmpty()) {
+            throw new IllegalArgumentException("Empty HTH CRM configuration key encr_passphrase");
+        }
+        String hostname = encryptedValue(properties, "db.hostname", passphrase);
+        String port = encryptedValue(properties, "db.port", passphrase);
+        String service = encryptedValue(properties, "db.servicename", passphrase);
+        String user = encryptedValue(properties, "db.username", passphrase);
+        String password = encryptedValue(properties, "db.password", passphrase);
+        return new DatabaseConfig("jdbc:oracle:thin:@//" + hostname + ":" + port + "/" + service,
+            user, password);
+    }
+
     static String fileName(LocalDate date, String pattern) {
         if (pattern == null || pattern.isEmpty()) pattern = "HTH_CRM_{date}.csv";
         if (!pattern.contains("{date}")) {
@@ -112,10 +161,9 @@ public final class HthCrmExtractJob {
         return value;
     }
 
-    private static String failureReason(Exception e) {
+    private static String failureReason(Exception e, String password) {
         String reason = e.getMessage();
         if (reason == null || reason.isEmpty()) reason = e.getClass().getSimpleName();
-        String password = System.getenv("HTH_CRM_JDBC_PASSWORD");
         if (password != null && !password.isEmpty()) reason = reason.replace(password, "[REDACTED]");
         reason = reason.replace('\r', ' ').replace('\n', ' ');
         if (reason.length() > 500) reason = reason.substring(0, 500);
@@ -190,14 +238,15 @@ public final class HthCrmExtractJob {
         String started = java.time.ZonedDateTime.now(HKT).toString();
         String file = "";
         int count = 0;
+        DatabaseConfig database = null;
         try {
             LocalDate day = date(args);
             file = fileName(day, System.getenv("HTH_CRM_FILE_PATTERN"));
             System.out.println("HTH_CRM_1293 stage=START time=" + started
                 + " date=" + DATE.format(day) + " file=" + file);
+            database = loadDatabaseConfig(Paths.get(required("batchConfigPath")));
             count = run(day, Paths.get(required("HTH_CRM_OUTPUT_DIR")), file,
-                required("HTH_CRM_JDBC_URL"), required("HTH_CRM_JDBC_USER"),
-                required("HTH_CRM_JDBC_PASSWORD"));
+                database.url, database.user, database.password);
             System.out.println("HTH_CRM_1293 stage=END status=SUCCESS start=" + started
                 + " end=" + java.time.ZonedDateTime.now(HKT) + " count=" + count
                 + " file=" + file);
@@ -205,7 +254,7 @@ public final class HthCrmExtractJob {
             System.err.println("HTH_CRM_1293 stage=END status=FAILED start=" + started
                 + " end=" + java.time.ZonedDateTime.now(HKT) + " count=" + count
                 + " file=" + file + " errorType=" + e.getClass().getSimpleName()
-                + " reason=" + failureReason(e));
+                + " reason=" + failureReason(e, database == null ? null : database.password));
             System.exit(1);
         }
     }

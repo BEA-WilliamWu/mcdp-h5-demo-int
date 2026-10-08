@@ -15,10 +15,10 @@ if [ "$#" -gt 1 ]; then
     exit 2
 fi
 
-# Set these in the HTH job configuration; do not reuse BCO database or output settings.
-if [ -z "${HTH_CRM_JDBC_URL:-}" ] || [ -z "${HTH_CRM_JDBC_USER:-}" ] ||
-   [ -z "${HTH_CRM_JDBC_PASSWORD:-}" ]; then
-    echo "HTH_CRM_1293 missing required HTH database/output environment" >&2
+# Follow BCO's encrypted batch configuration pattern with a separate HTH file.
+if [ -z "${batchConfigPath:-}" ] ||
+   [ ! -r "$batchConfigPath/hth_crm_batch_config.properties" ]; then
+    echo "HTH_CRM_1293 missing readable HTH CRM configuration under batchConfigPath" >&2
     exit 50
 fi
 HTH_CRM_OUTPUT_DIR=${HTH_CRM_OUTPUT_DIR:-$Outputfile/hth}

@@ -17,18 +17,22 @@
 2. 复制本目录对应的 `PRD/Deployables/sh/GenHthCrmExtract.sh` 到
    `/CDCBatch/sh/GenHthCrmExtract.sh`，并执行
    `chmod 750 /CDCBatch/sh/GenHthCrmExtract.sh`。
-3. 由运维在**HTH 作业的受控环境**提供
-   `HTH_CRM_JDBC_URL`、`HTH_CRM_JDBC_USER`、`HTH_CRM_JDBC_PASSWORD`。
-   数据库用户需要 `HTH_BEA.HTH_CRM_EVENT` 的 `SELECT` 权限。
-   不要把密码写进脚本或命令行。可选 `HTH_CRM_OUTPUT_DIR`；未设置时
-   写入 `/project/CDC/ftp/snd/hth`，与 BCO 的文件分开。
+3. BCO 的 `/CDCBatch/sh/Env.sh` 导出 `batchConfigPath=/CDCBatch/config`，
+   `GenericOutBoundProcessor` 从该目录的 `batch_config.properties` 读取 AES 加密的
+   `encr_passphrase`、`db.username`、`db.password`、`db.hostname`、`db.port`、
+   `db.servicename`。HTH 使用**相同的加密/解密方式**，但从同一目录的独立文件
+   `/CDCBatch/config/hth_crm_batch_config.properties` 读取这些同名字段。
+   由运维按现有 BCO 配置流程生成 HTH 数据库的加密值并部署该文件，权限仅授予
+   batch 作业用户；不要复制 BCO 的数据库密文，也不要把明文密码写进脚本、
+   命令行或 Git。HTH 数据库用户需要 `HTH_BEA.HTH_CRM_EVENT` 的 `SELECT` 权限。
+   新配置文件缺失或缺少字段时作业会失败，不会回退到 BCO 数据库。可选
+   `HTH_CRM_OUTPUT_DIR`；未设置时写入 `/project/CDC/ftp/snd/hth`，与 BCO 文件分开。
 4. 可选 `HTH_CRM_FILE_PATTERN`，必须包含 `{date}` 且以 `.csv` 结尾。
    测试默认名为 `HTH_CRM_{date}.csv`；正式文件名需由接收方确认。
 
 ## 手动执行
 
-登录**部署 `/CDCBatch` 的 BCO batch 服务器**，在已注入上述 HTH 环境变量的
-会话中执行：
+登录**部署 `/CDCBatch` 的 BCO batch 服务器**，确认上述 HTH 加密配置文件已部署后执行：
 
 ```sh
 sh /CDCBatch/sh/GenHthCrmExtract.sh             # 昨天（香港时间）

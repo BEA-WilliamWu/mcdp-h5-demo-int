@@ -17,10 +17,10 @@
 
 | Password operation | CRM activity (`EVENT_ACTV_TYPE_CODE`) | When written | Status |
 | --- | --- | --- | --- |
-| First successful setup | `HTH_PWD_CRD` | After the credential and Code lifecycle completes, before success notification | `A` (accepted) |
-| Successful reset/change | `HTH_PWD_UPD` | After the credential and Code lifecycle completes, before success notification | `A` |
-| Setup failure inside `change()` | `HTH_PWD_CRD` | After the failed business interaction closes | `R` (rejected) |
-| Reset/change failure inside `change()` | `HTH_PWD_UPD` | After the failed business interaction closes | `R` |
+| First successful setup | `PWD_CRD` | After the credential and Code lifecycle completes, before success notification | `A` (accepted) |
+| Successful reset/change | `PWD_UPD` | After the credential and Code lifecycle completes, before success notification | `A` |
+| Setup failure inside `change()` | `PWD_CRD` | After the failed business interaction closes | `R` (rejected) |
+| Reset/change failure inside `change()` | `PWD_UPD` | After the failed business interaction closes | `R` |
 
 `change()` is reached by the setup/reset service. An idempotent replay of an already successful `requestId` returns the earlier result and **does not write another accepted event**. Access-policy, feature-switch or request-validation failures that occur before the business interaction are not recorded by this 849 hook. User access linkage, approval, BM company management, Code Generate and ordinary BCO activities are not added by 849.
 
@@ -59,9 +59,9 @@ No 849 `CREATE TABLE`, `ALTER TABLE`, new ORM or new CRM preference records are 
 | CRM column / field | HTH value or source |
 | --- | --- |
 | `EVENT_ID` | Existing `CRMAsserter.generateEventID()` / `CRM_SEQUENCE`; one ID per attempted insert |
-| `EVENT_DTE`, `EVENT_TIME` | Operation time in `Asia/Hong_Kong`, `yyyyMMdd` and `HHmmss` |
+| `EVENT_DTE`, `EVENT_TIME` | Operation time in the JVM default time zone, `yyyyMMdd` and `HHmmss` |
 | `CHNL_ID`, `CHNL_TYPE_CODE` | `ELE-HTH`, `ELE` |
-| `EVENT_ACTV_TYPE_CODE` | `HTH_PWD_CRD` for setup; `HTH_PWD_UPD` for reset/change |
+| `EVENT_ACTV_TYPE_CODE` | `PWD_CRD` for setup; `PWD_UPD` for reset/change |
 | `EVENT_STATUS_CODE` | `A` for accepted; `R` for rejected |
 | `RECORD_TYPE`, `FILLER_01` | `50`, `1` |
 | `FEE_CHRG_CODE`, `EVENT_COUNTRY_CODE` | `SERV`, `HK` |
@@ -77,7 +77,7 @@ The 85 columns in `API_MTB_latest(HTH_CRM_MAPPING_BCO).xlsx`, rows 11–95, desc
 
 ## 5. Boundary with 1293 and BCO
 
-849 writes `ELE-HTH` rows to the shared CRM table. The 1293 job independently selects that channel, the two activity codes and one HKT `EVENT_DTE`; it writes a date-specific CSV and does not update `BATCH_PROCESSED_DATE`. The BCO `GenTxnLog2CRM` job's select and both marker updates exclude the HTH channel so HTH rows cannot be consumed by the BCO fixed-width file (its activity field is only seven characters). This filter preserves eligibility of non-HTH BCO rows, including rows with a null channel.
+849 writes `ELE-HTH` rows to the shared CRM table. The 1293 job independently selects that channel, the two activity codes and one HKT `EVENT_DTE`; it writes a date-specific CSV and does not update `BATCH_PROCESSED_DATE`. The BCO `GenTxnLog2CRM` job's select and both marker updates exclude the HTH channel so HTH rows cannot be consumed by the BCO fixed-width file (HTH is handled separately). This filter preserves eligibility of non-HTH BCO rows, including rows with a null channel.
 
 The 1293 file name, schedule, CSV envelope and MTB transfer contract are governed by 1293 and downstream agreement. They are not database changes in 849.
 
@@ -90,7 +90,7 @@ The HTH hook logs `HTH_CRM_849 stage=BUILD`, `EMAIL_LOOKUP`, `INSERT` and `CLOSE
 ## 7. Deployment and verification
 
 1. Deploy the HTH backend module containing `HostToHostApiPassword` and the existing BCO CRM adapter stack. Confirm the shared table, column length and `CRM_SEQUENCE` with `consulting/db/branch_change_history/20261007_BCOH2H_849/1_HTH_CRM_849_Verify.sql`. No 849 DDL is applied.
-2. Complete one real setup and one real reset/change with valid Codes. Query `DIGX_CZ_CRM_EVENT3_DETAILS` and check one `A` row for each expected activity, HTH channel, HKT date/time, user and party. Check that a replay of the successful `requestId` adds no second accepted row.
+2. Complete one real setup and one real reset/change with valid Codes. Query `DIGX_CZ_CRM_EVENT3_DETAILS` and check one `A` row for each expected activity, HTH channel, recorded date/time, user and party. Check that a replay of the successful `requestId` adds no second accepted row.
 3. Exercise incorrect/expired Code and credential-operation failure. Where failure occurs inside `change()`, verify the corresponding `R` row. Test failures before the interaction separately; no 849 row is expected there.
 4. Test missing IP and forced CRM persistence failure: password response behavior must remain unchanged, while the missing/failed CRM row is visible to support. Check notification-failure behavior separately because it can reach the rejected path after an accepted attempt.
 5. Run ordinary BCO CRM regression and confirm non-HTH rows still enter its batch; confirm HTH rows enter the separate 1293 extract only. Compare 1293's extracted count with the HTH source count for that business date.
@@ -103,7 +103,7 @@ SELECT EVENT_ID, EVENT_DTE, EVENT_TIME, CHNL_ID,
        USER_ID, ACCT_NBR, BATCH_PROCESSED_DATE
 FROM DIGX_CZ_CRM_EVENT3_DETAILS
 WHERE CHNL_ID = 'ELE-HTH'
-  AND EVENT_ACTV_TYPE_CODE IN ('HTH_PWD_CRD', 'HTH_PWD_UPD')
+  AND EVENT_ACTV_TYPE_CODE IN ('PWD_CRD', 'PWD_UPD')
   AND EVENT_DTE = :business_date_yyyymmdd
 ORDER BY EVENT_ID DESC;
 ```

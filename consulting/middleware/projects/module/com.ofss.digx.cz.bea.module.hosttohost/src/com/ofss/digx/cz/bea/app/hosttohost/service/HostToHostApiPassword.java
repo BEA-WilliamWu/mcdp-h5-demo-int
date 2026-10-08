@@ -88,8 +88,8 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final String RESET = "RESET";
   private static final String SETUP_EVENT = "HTH_API_PASSWORD_SETUP_SUCCESS";
   private static final String RESET_EVENT = "HTH_API_PASSWORD_RESET_SUCCESS";
-  private static final String CRM_CREATE_ACTIVITY = "HTH_PWD_CRD";
-  private static final String CRM_CHANGE_ACTIVITY = "HTH_PWD_UPD";
+  private static final String CRM_CREATE_ACTIVITY = "PWD_CRD";
+  private static final String CRM_CHANGE_ACTIVITY = "PWD_UPD";
   private static final String ADAPTER_CATEGORY = "HthApiCredentialAdapterConfig";
   private static final String FEATURE_ENABLED = "HTH_API_PASSWORD.ENABLED";
   private static final String ADAPTER_CLASS = "HTH_API_PASSWORD.ADAPTER_CLASS";

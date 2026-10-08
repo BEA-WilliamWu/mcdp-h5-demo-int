@@ -1,0 +1,4 @@
+# Keep the HTH CRM batch entry points executable after Windows checkouts.
+consulting/middleware/batchJobs/Deployables/sh/GenHthCrmExtract.sh text eol=lf
+consulting/middleware/batchJobs/UAT/Deployables/sh/GenHthCrmExtract.sh text eol=lf
+consulting/middleware/batchJobs/PRD/Deployables/sh/GenHthCrmExtract.sh text eol=lf

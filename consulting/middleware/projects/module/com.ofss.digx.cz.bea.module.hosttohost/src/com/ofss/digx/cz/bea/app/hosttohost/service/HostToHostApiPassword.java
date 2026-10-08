@@ -3,6 +3,7 @@ package com.ofss.digx.cz.bea.app.hosttohost.service;
 import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
 import com.ofss.digx.cz.bea.app.crm.adapter.ICRMAsserterCallAdapter;
 import com.ofss.digx.cz.bea.common.framework.crm.CRMInputData;
+import com.ofss.digx.cz.bea.common.framework.crm.CRMConstants;
 import com.ofss.digx.annotations.Entitlement;
 import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
@@ -408,9 +409,6 @@ public class HostToHostApiPassword extends AbstractApplication
         // The shared BCO builder can return null when its optional thread attributes are absent.
         // Populate the fields required for this HTH activity without changing BCO behaviour.
         data = new CRMInputData();
-        java.util.Date now = new java.util.Date();
-        data.setEventDte(new SimpleDateFormat("yyyyMMdd", Locale.ENGLISH).format(now));
-        data.setEventTime(new SimpleDateFormat("HHmmss", Locale.ENGLISH).format(now));
         String userId = context.getUserId();
         int separator = userId.indexOf('@');
         data.setUserId(separator < 0 ? userId : userId.substring(0, separator));
@@ -420,11 +418,15 @@ public class HostToHostApiPassword extends AbstractApplication
         LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=BUILD, reason=MISSING_IP_ADDRESS");
         return;
       }
-      // The independent HTH extract selects yesterday's Hong Kong business date.
-      java.time.ZonedDateTime hktNow = java.time.ZonedDateTime.now(
-          java.time.ZoneId.of("Asia/Hong_Kong"));
-      data.setEventDte(hktNow.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE));
-      data.setEventTime(hktNow.format(java.time.format.DateTimeFormatter.ofPattern("HHmmss")));
+      // Match BCO CRM field formats while recording the HTH operation in Hong Kong time.
+      java.util.Date now = new java.util.Date();
+      java.util.TimeZone hongKong = java.util.TimeZone.getTimeZone("Asia/Hong_Kong");
+      SimpleDateFormat crmDateFormat = new SimpleDateFormat(CRMConstants.CRM_DATE_FORMAT, Locale.ENGLISH);
+      SimpleDateFormat crmTimeFormat = new SimpleDateFormat(CRMConstants.CRM_TIME_FORMAT, Locale.ENGLISH);
+      crmDateFormat.setTimeZone(hongKong);
+      crmTimeFormat.setTimeZone(hongKong);
+      data.setEventDte(crmDateFormat.format(now));
+      data.setEventTime(crmTimeFormat.format(now));
       data.setChnlId("ELE-HTH");
       data.setChnlTypeCode("ELE");
       data.setEventActvTypeCode(SETUP.equals(operation) ? CRM_CREATE_ACTIVITY : CRM_CHANGE_ACTIVITY);

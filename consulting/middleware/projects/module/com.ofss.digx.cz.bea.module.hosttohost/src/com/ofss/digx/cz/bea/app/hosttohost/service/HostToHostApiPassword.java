@@ -418,13 +418,10 @@ public class HostToHostApiPassword extends AbstractApplication
         LOGGER.log(Level.WARNING, "HTH_CRM_849 stage=BUILD, reason=MISSING_IP_ADDRESS");
         return;
       }
-      // Match BCO CRM field formats while recording the HTH operation in Hong Kong time.
+      // Match BCO CRM date/time formats and use the JVM default time zone.
       java.util.Date now = new java.util.Date();
-      java.util.TimeZone hongKong = java.util.TimeZone.getTimeZone("Asia/Hong_Kong");
       SimpleDateFormat crmDateFormat = new SimpleDateFormat(CRMConstants.CRM_DATE_FORMAT, Locale.ENGLISH);
       SimpleDateFormat crmTimeFormat = new SimpleDateFormat(CRMConstants.CRM_TIME_FORMAT, Locale.ENGLISH);
-      crmDateFormat.setTimeZone(hongKong);
-      crmTimeFormat.setTimeZone(hongKong);
       data.setEventDte(crmDateFormat.format(now));
       data.setEventTime(crmTimeFormat.format(now));
       data.setChnlId("ELE-HTH");

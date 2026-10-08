@@ -18,8 +18,13 @@ cp = os.pathsep.join([str(jackson / ("jackson-" + kind + "-2.11.0.jar"))
                      for kind in ("annotations", "core", "databind")]
                      + [str(root / "devtools/backend-compile/build/classes/java/main")]
                      + [str(p) for p in (root / "consulting/middleware/lib").rglob("*.jar")])
+# Recompile the current shared delegate and its updated dependencies instead of
+# checking the new approval hook against stale cached BCO APIs.
 sources = [next(projects.rglob("HthApiPasswordApprovalLifecycle.java")),
            next(projects.rglob("CZTransactionExt.java")),
+           next(projects.rglob("CZTransactionExtFunc.java")),
+           next(projects.rglob("CZAdhocBulkpaymentPayout.java")),
+           next(projects.rglob("HttpUtils.java")),
            next(projects.rglob("UserExtensionDataDTO.java")),
            Path(__file__).with_name("HthApiPasswordApprovalLifecycleTest.java")]
 # Guard the lifecycle assumption against the actual deployed SDK API: the post

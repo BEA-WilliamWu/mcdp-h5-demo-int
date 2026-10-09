@@ -53,6 +53,10 @@ define([
         self.hthApiPasswordCodePurpose = ko.observable();
         self.hthApiPasswordCodeExpiryTime = ko.observable();
 
+        const hthCodeSnapshot = rootParams.rootModel.params.data
+            && rootParams.rootModel.params.data.userChannelType === "HTH"
+            ? rootParams.rootModel.params.data : null;
+
         self.hthApiPasswordCodeStatusText = ko.pureComputed(function () {
             const status = self.hthApiPasswordCodeStatus();
 
@@ -213,8 +217,15 @@ define([
             }
 
             if (self.userExtensionData() && self.userExtensionData().userChannelType === "HTH") {
-                self.hthApiPasswordCodeId(self.userExtensionData().hthApiPasswordCodeId);
-                self.hthApiPasswordCodeCanReveal(true);
+                self.hthApiPasswordCodeId(hthCodeSnapshot.hthApiPasswordCodeId);
+
+                if (hthCodeSnapshot.hthApiPasswordCodeId) {
+                    UserReadModel.getHthApiPasswordCodeMasked(
+                        hthCodeSnapshot.cdcNo || hthCodeSnapshot.userDTO.partyId.value,
+                        hthCodeSnapshot.userID || hthCodeSnapshot.userDTO.username,
+                        hthCodeSnapshot.hthApiPasswordCodeId
+                    ).done(self.updateHthApiPasswordCode);
+                }
             }
 
             if(self.userExtensionData().dictionaryArray !== undefined){
@@ -701,7 +712,8 @@ define([
                 });
             }
 
-            if (self.userExtensionData() && self.userExtensionData().userChannelType === "HTH") {
+            // Order Code metadata comes from its snapshot, never the live user's saved pointer.
+            if (!hthCodeSnapshot && self.userExtensionData() && self.userExtensionData().userChannelType === "HTH") {
                 UserReadModel.getHthApiPasswordCodeMasked(
                     self.userFullData().partyId.value,
                     self.userFullData().username,

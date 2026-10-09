@@ -2,6 +2,8 @@
 
 WebLogic transaction suspension, configuration and service bootstrap are fixtures.
 EntityManager, ORM Session/Query/Transaction wrappers, change() orchestration and Code crypto are real.
+Masked/reveal tests execute production methods, keyed repository reads, Code entity mappings and DTOs;
+access/response policies and framework status building remain fixtures.
 For change() tests, session decryption, DSP and notification delivery are fixtures;
 the separate transport tests exercise real RSA and HTTPS.
 The STATE MERGE source parameters receive explicit VARCHAR casts for H2 type inference,
@@ -55,6 +57,10 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
     rejection = re.search(r"  public void rejectOnUserApproval\(.*?\n  }", source, re.S)
     assert rejection
     methods.append(rejection.group())
+    for name in ("fillMaskedResponse", "isExpired", "key", "requireCodeOwner"):
+        methods.append(re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S).group())
+    methods.append(re.search(r"  public HthApiPasswordCodeResponseDTO masked\(SessionContext sessionContext, String partyId,\s+String userName, String codeId\).*?\n  }", source, re.S).group())
+    methods.append(re.search(r"  public HthApiPasswordCodeResponseDTO reveal\(.*?\n  }", source, re.S).group())
     lease = source[source.index("  private static final class OperationResult {"):source.rindex("\n}")]
     identity_class = re.search(r"  private static final class Identity \{.*?\n  }", source, re.S).group()
     # Compile the production call sites as well as the methods they invoke.
@@ -80,9 +86,18 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
             bodies = [body.replace("SELECT ? PARTY_ID, ? USER_ID FROM DUAL",
                                    "SELECT CAST(? AS VARCHAR(50)) PARTY_ID, CAST(? AS VARCHAR(80)) USER_ID FROM DUAL")
                       for body in bodies]
-        write(name + ".java", "import com.ofss.digx.infra.exceptions.Exception;\n"
-              "import com.ofss.fc.infra.das.orm.*; import java.util.List;\n"
-              "public class " + name + " {\n" + "\n".join(bodies) + "\n}")
+        # Display tests execute production keyed reads and entity SQL with real ORM mappings.
+        parent, extra, imports = "", "", ""
+        if kind == "Code":
+            parent = " extends com.ofss.digx.framework.domain.repository.adapter.AbstractLocalRepositoryAdapter<HthApiPasswordCode>"
+            imports = "import com.ofss.digx.cz.bea.domain.hosttohost.entity.*;\n"
+            extra = "public static " + name + " getInstance() { return new " + name + "(); }\n"
+            extra += "\n".join(re.search(r"  public HthApiPasswordCode " + method + r"\(.*?\n  }", adapter, re.S).group()
+                               for method in ("read", "findCurrentByOwner"))
+            extra += '\nprivate static final String ACTIVE = "A";\n'
+        write(name + ".java", "import com.ofss.digx.infra.exceptions.Exception;\n" + imports
+              + "import com.ofss.fc.infra.das.orm.*; import java.util.List;\n"
+              + "public class " + name + parent + " {\n" + "\n".join(bodies) + extra + "\n}")
         fields.append("private final " + name + " " + kind.lower() + "Repository = new " + name + "();")
     write("PasswordTransactionHarness.java", """
 import com.ofss.digx.infra.exceptions.Exception;
@@ -99,9 +114,20 @@ import java.util.UUID;
 import java.util.prefs.Preferences;
 import java.util.logging.*;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordPolicyDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordCodeResponseDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordRevealDTO;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.*;
 public class PasswordTransactionHarness extends PolicyFixture {
   private static final Logger LOGGER = Logger.getLogger("transaction-test");
   private static final String SETUP = "SETUP", RESET = "RESET";
+  private static final String MASKED_SERVICE_ID = "test.masked", REVEAL_SERVICE_ID = "test.reveal";
+  private static final String STATUS_PENDING = "PENDING", STATUS_ACTIVE = "ACTIVE", STATUS_EXPIRED = "EXPIRED";
+  private static final String OBJECT_ACTIVE = "A", MASKED_CODE = "******";
+  private static final int EXPIRY_HOURS = 24;
+  protected com.ofss.digx.app.messages.Status fetchStatus() { return new com.ofss.digx.app.messages.Status(); }
+  protected TransactionStatus fetchTransactionStatus() { return new TransactionStatus(); }
+  protected com.ofss.digx.app.messages.Status buildStatus(TransactionStatus status) { return fetchStatus(); }
+  protected void fillTransactionStatus(TransactionStatus status, Throwable failure) { }
   private static final String ADAPTER_CATEGORY = "HthApiCredentialAdapterConfig";
   private static final FormatterFixture FORMATTER = new FormatterFixture();
   private IHthApiCredentialAdapter adapter() { return RemoteCredentialFixture.INSTANCE; }
@@ -201,8 +227,15 @@ class HthManagement {
   String getUamClientId() { return clientId; }
 }
 class PolicyFixture {
+  protected void checkAccessPolicy(String id, SessionContext session) { }
   protected void checkAccessPolicy(String id, SessionContext session, Object request) { }
   protected void checkResponsePolicy(SessionContext session, Object response) { }
+}
+class TransactionStatus { }
+class HthApiPasswordCodeRepository {
+  static HthApiPasswordCodeRepository getInstance() { return new HthApiPasswordCodeRepository(); }
+  com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiPasswordCode findCurrentByOwner(String party, String user)
+      throws Exception { return LocalHthApiPasswordCodeRepositoryAdapter.getInstance().findCurrentByOwner(party, user); }
 }
 class Interaction {
   static void begin(SessionContext session) { }
@@ -326,6 +359,7 @@ public class DataAccessManager {
     opened++;
     return TestOrmAccess.wrap(factory.createEntityManager());
   }
+  public Session openSession() { outerSession = openSession("NONXA"); return outerSession; }
   public static boolean failOpen;
   private static final DataAccessManager INSTANCE = new DataAccessManager();
   public static DataAccessManager getManager() { return INSTANCE; }
@@ -336,12 +370,22 @@ public class DataAccessManager {
     opened++;
     return TestOrmAccess.wrap(factory.createEntityManager());
   }
-  public void closeSession(Session session) { closed++; session.close(); }
+  public void closeSession(Session session) { closed++; session.close(); if (session == outerSession) outerSession = null; }
 }
 """)
+    mapping_root = ROOT / "consulting/config/orm/eclipselink/mappings/cz/hosttohost"
+    for filename in ("HthApiPasswordCode.orm.xml", "HthApiPasswordCodeKey-embeddable.orm.xml"):
+        write("META-INF/" + filename, (mapping_root / filename).read_text())
+    write("META-INF/converters.orm.xml", '''<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" version="2.5">
+<converter name="DateTime" class="com.ofss.fc.datatype.EclipseLinkDateTimeConverter"/>
+</entity-mappings>''')
     write("META-INF/persistence.xml", """<persistence xmlns="http://java.sun.com/xml/ns/persistence" version="2.0">
 <persistence-unit name="NONXA" transaction-type="RESOURCE_LOCAL">
-<provider>org.eclipse.persistence.jpa.PersistenceProvider</provider><exclude-unlisted-classes>true</exclude-unlisted-classes>
+<provider>org.eclipse.persistence.jpa.PersistenceProvider</provider>
+<mapping-file>META-INF/converters.orm.xml</mapping-file>
+<mapping-file>META-INF/HthApiPasswordCodeKey-embeddable.orm.xml</mapping-file>
+<mapping-file>META-INF/HthApiPasswordCode.orm.xml</mapping-file>
+<exclude-unlisted-classes>true</exclude-unlisted-classes>
 <properties>
 <property name="javax.persistence.jdbc.driver" value="org.h2.Driver"/>
 <property name="javax.persistence.jdbc.url" value="jdbc:h2:mem:hth;MODE=Oracle;DB_CLOSE_DELAY=-1"/>
@@ -349,6 +393,10 @@ public class DataAccessManager {
 </properties></persistence-unit></persistence>""")
     common = ROOT / "consulting/middleware/projects/common"
     sources += [str(next((ROOT / "consulting/middleware/projects").rglob("HthOnboardingAudit.java")))]
+    sources += [str(BASE / ("domain/hosttohost/entity/" + name + ".java"))
+                for name in ("HthApiPasswordCode", "HthApiPasswordCodeKey")]
+    sources += [str(common / ("com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/" + name + ".java"))
+                for name in ("HthApiPasswordCodeResponseDTO", "HthApiPasswordRevealDTO")]
     sources += [str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordPolicyDTO.java"),
                 str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/HthApiCredentialWriteException.java"), str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
                 str(BASE / "app/hosttohost/util/HthApiPasswordHash.java"),

@@ -62,7 +62,8 @@ const readerContext = vm.createContext({self: reader, UserReadModel: {getHthApiP
     readArguments = args; return {done(callback) { callback({status: {result: "SUCCESSFUL"}, codeId: "OLD", codeStatus: "ACTIVE", canReveal: true, maskedCode: "******"}); }};
 }}});
 vm.runInContext(assignment(read, "updateHthApiPasswordCode", 8), readerContext);
-const readCall = block(read, "UserReadModel.getHthApiPasswordCodeMasked(", "\n            }");
+const readCall = block(read.slice(read.lastIndexOf("UserReadModel.getHthApiPasswordCodeMasked(")),
+    "UserReadModel.getHthApiPasswordCodeMasked(", "\n            }");
 vm.runInContext(readCall, readerContext);
 assert.equal(readArguments[2], null, "Ordinary page queries the approved/history Code, not a rejected saved pointer");
 assert.equal(reader.hthApiPasswordCodeId(), "OLD");

@@ -1,6 +1,8 @@
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordHash;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordGenerateDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordCodeResponseDTO;
+import com.ofss.digx.cz.bea.app.hosttohost.dto.HthApiPasswordRevealDTO;
 import com.ofss.fc.infra.config.ConfigurationFactory;
 import com.ofss.fc.infra.das.orm.DataAccessManager;
 import java.lang.reflect.Proxy;
@@ -56,6 +58,7 @@ public final class HthApiPasswordTransactionTest {
       }
       dspChangeFlow();
       pendingAndRejectedCodeLifecycle();
+      pendingOrderViews();
       check(DataAccessManager.opened == DataAccessManager.closed, "Every independent ORM session closed");
       check(TransactionHelper.suspends == TransactionHelper.resumes, "Every suspended transaction restored");
       System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: automatic SETUP/RESET by target/store, PBKDF2 password changes, failed-attempt commit/lockout, Code aliases/purpose/expiry/consumption/decryption, profile foreign keys, atomic rollback, status/retry reads and session cleanup");
@@ -176,7 +179,7 @@ public final class HthApiPasswordTransactionTest {
         + "USER_NAME VARCHAR(80), PURPOSE VARCHAR(10), CODE_CIPHER VARCHAR(200), STATUS VARCHAR(20), "
         + "OBJECT_STATUS CHAR(1), EXPIRY_TIME TIMESTAMP, ATTEMPT_COUNT INT, MAX_ATTEMPTS INT, "
         + "CREATION_DATE TIMESTAMP, LAST_UPDATE_DATE TIMESTAMP, REQUEST_ID VARCHAR(40), "
-        + "USED_TIME TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), TRANSACTION_ID VARCHAR(40))");
+        + "USED_TIME TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), TRANSACTION_ID VARCHAR(40), CREATED_BY VARCHAR(80))");
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_OPERATION (REQUEST_ID VARCHAR(40) PRIMARY KEY, PARTY_ID VARCHAR(40), "
         + "USER_ID VARCHAR(80), OPERATION VARCHAR(10), CODE_ID VARCHAR(40), STATUS VARCHAR(20), CREATED_BY VARCHAR(80), "
         + "CREATION_DATE TIMESTAMP, LAST_UPDATED_BY VARCHAR(80), LAST_UPDATE_DATE TIMESTAMP, OBJECT_STATUS CHAR(1), "
@@ -250,6 +253,42 @@ public final class HthApiPasswordTransactionTest {
     sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET CREATION_DATE=TIMESTAMP '2020-01-01 00:00:00'");
     seed("new-draft", purpose, "654321");
     sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='PENDING', EXPIRY_TIME=NULL WHERE ID='new-draft'");
+  }
+
+  private static void pendingOrderViews() throws java.lang.Exception {
+    for (String purpose : new String[] {"SETUP", "RESET"}) {
+      pendingPair(purpose);
+      SERVICE.supersedePending(purpose);
+      seed("second-draft", purpose, "987654");
+      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='PENDING',EXPIRY_TIME=NULL WHERE ID='second-draft'");
+      DataAccessManager.factory.getCache().evictAll();
+      HthApiPasswordCodeResponseDTO first = SERVICE.masked(new SessionContext(), "PARTY", "USER@PARTY", "new-draft");
+      check("new-draft".equals(first.getCodeId()) && "INVALID".equals(first.getCodeStatus()),
+          "First order reads its superseded Code, labeled invalid rather than another order's Code");
+      check(first.getCode() == null && "******".equals(first.getMaskedCode()) && first.getCanReveal(),
+          "Opening the first order masks its Code and allows separately authorized historical reveal");
+      HthApiPasswordCodeResponseDTO second = SERVICE.masked(new SessionContext(), "PARTY", "USER", "second-draft");
+      check("second-draft".equals(second.getCodeId()) && "PENDING".equals(second.getCodeStatus())
+          && second.getExpiryTime() == null && second.getCode() == null, "Second order shows its own pending masked Code");
+      HthApiPasswordCodeResponseDTO current = SERVICE.masked(new SessionContext(), "PARTY", "USER@PARTY", null);
+      check("old-valid".equals(current.getCodeId()) && "ACTIVE".equals(current.getCodeStatus()),
+          "Ordinary user view retains the approved Code with two pending orders");
+      HthApiPasswordRevealDTO reveal = new HthApiPasswordRevealDTO();
+      reveal.setCodeId("new-draft");
+      check("654321".equals(SERVICE.reveal(new SessionContext(), reveal).getCode()), "Eye reveals first order's original Code");
+      reveal.setCodeId("second-draft");
+      check("987654".equals(SERVICE.reveal(new SessionContext(), reveal).getCode()), "Eye reveals second order's Code");
+      reject("DIGX_CZ_HTH_PW_008", () -> SERVICE.masked(new SessionContext(), "PARTY", "OTHER", "new-draft"));
+      reject("DIGX_CZ_HTH_PW_008", () -> SERVICE.masked(new SessionContext(), "OTHER", "USER", "new-draft"));
+      reject("DIGX_CZ_HTH_PW_008", () -> SERVICE.masked(new SessionContext(), "PARTY", "USER", "missing"));
+      reject("DIGX_CZ_HTH_PW_008", () -> SERVICE.approve("new-draft", purpose));
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, "654321", "superseded-view"));
+      reject("DIGX_CZ_HTH_API_PASSWORD_002", () -> SERVICE.reserve(purpose, "987654", "pending-view"));
+      check("old-valid".equals(SERVICE.reserve(purpose, CODE, "old-after-views")),
+          "Viewing both orders never activates or consumes their Codes and preserves old Code usability");
+    }
+    HthOnboardingAudit.clearRequestStack();
+    System.out.println("PASS: production masked/reveal + actual Code entity mappings: old ACTIVE and two draft orders, correct snapshot IDs, historical mask/reveal, owner guards, pending/superseded unusable");
   }
 
   private static void pendingAndRejectedCodeLifecycle() throws java.lang.Exception {

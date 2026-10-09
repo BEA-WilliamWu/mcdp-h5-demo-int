@@ -936,34 +936,49 @@ public class HostToHostApiPassword extends AbstractApplication
     response.setStatus(fetchStatus());
     TransactionStatus transactionStatus = fetchTransactionStatus();
     Interaction.begin(sessionContext);
+    String stage = "OWNER_CHECK";
     try {
       requireCodeOwner(sessionContext, normalize(partyId));
       if (normalize(userName) == null) { throw new Exception("DIGX_CZ_HTH_PW_009"); }
       String canonicalName = canonicalUser(normalize(userName), normalize(partyId));
       HthApiPasswordCode row;
       if (normalize(codeId) == null) {
+        stage = "CURRENT_CODE_READ";
         row = HthApiPasswordCodeRepository.getInstance()
             .findCurrentByOwner(normalize(partyId), canonicalName);
       } else {
+        stage = "SNAPSHOT_CODE_READ";
         // Approval details use the exact snapshot Code, never another request's latest row.
         row = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(normalize(codeId)));
-        if (row == null || !normalize(partyId).equals(row.getPartyId())
-            || !canonicalName.equals(canonicalUser(row.getUserName(), row.getPartyId()))) {
+        if (row == null) {
+          stage = "SNAPSHOT_NOT_FOUND";
+          throw new Exception("DIGX_CZ_HTH_PW_008");
+        }
+        if (!normalize(partyId).equals(row.getPartyId())) {
+          stage = "SNAPSHOT_PARTY_MISMATCH";
+          throw new Exception("DIGX_CZ_HTH_PW_008");
+        }
+        if (!canonicalName.equals(canonicalUser(row.getUserName(), row.getPartyId()))) {
+          stage = "SNAPSHOT_USER_MISMATCH";
           throw new Exception("DIGX_CZ_HTH_PW_008");
         }
       }
+      stage = "RESPONSE_BUILD";
       if (row != null) {
         fillMaskedResponse(response, row, true);
-        response.setCanReveal(Boolean.valueOf(OBJECT_ACTIVE.equals(row.getObjectStatus())));
       }
       response.setStatus(buildStatus(transactionStatus));
     } catch (Exception e) {
       fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.WARNING, "HTH_API_PASSWORD code view: stage={0}, exceptionType={1}",
+          new Object[] {stage, e.getClass().getName()});
       LOGGER.log(Level.SEVERE, FORMATTER.formatMessage(
           "Exception while reading masked HTH API password code for user '%s'", userName), e);
       throw e;
     } catch (RuntimeException e) {
       fillTransactionStatus(transactionStatus, e);
+      LOGGER.log(Level.WARNING, "HTH_API_PASSWORD code view: stage={0}, exceptionType={1}",
+          new Object[] {stage, e.getClass().getName()});
       throw new Exception(e);
     } finally {
       Interaction.close();
@@ -1000,7 +1015,8 @@ public class HostToHostApiPassword extends AbstractApplication
       String codeId = normalize(requestDTO == null ? null : requestDTO.getCodeId());
       HthApiPasswordCode row = codeId == null ? null
           : LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
-      if (row == null || !OBJECT_ACTIVE.equals(row.getObjectStatus())) {
+      // A saved order may reference a superseded/rejected Code. Viewing it does not reactivate it.
+      if (row == null) {
         throw new Exception("DIGX_CZ_HTH_PW_008");
       }
       requireCodeOwner(sessionContext, row.getPartyId());
@@ -1297,7 +1313,8 @@ public class HostToHostApiPassword extends AbstractApplication
     response.setCodeId(row.getKey().getId());
     response.setPurpose(row.getPurpose());
     response.setMaskedCode(MASKED_CODE);
-    response.setCodeStatus(applyExpiry && isExpired(row) ? STATUS_EXPIRED : row.getStatus());
+    response.setCodeStatus(STATUS_PENDING.equals(row.getStatus()) && !OBJECT_ACTIVE.equals(row.getObjectStatus())
+        ? "INVALID" : applyExpiry && isExpired(row) ? STATUS_EXPIRED : row.getStatus());
     if (row.getExpiryTime() != null) {
       response.setExpiryTime(new java.util.Date(row.getExpiryTime().getMillis()));
     }

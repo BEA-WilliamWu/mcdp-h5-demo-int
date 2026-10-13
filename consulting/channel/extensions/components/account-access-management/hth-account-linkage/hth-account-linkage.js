@@ -102,9 +102,11 @@ define([
             return self.mode() !== "VIEW";
         });
 
+        // Next requires a selected account in the displayed tab; other tabs retain their choices.
         self.selectedCount = ko.pureComputed(function () {
             return self.accounts().filter(function (account) {
-                return account.selected();
+                return normalizeAccountType(account.accountType) === self.activeAccountType()
+                    && account.selected();
             }).length;
         });
 

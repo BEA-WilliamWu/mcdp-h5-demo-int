@@ -9,7 +9,8 @@ const components = path.join(root, "consulting/channel/extensions/components/acc
 const nls = {
     navLabels: {CASA: "Current and Savings", TD: "Time Deposits"},
     pageTitle: {hthUserAccess: "User Account & Services Access"},
-    headers: {hthApiMapping: "API Services"}, notes: {}, info: {}, fieldname: {}
+    headers: {hthApiMapping: "API Services"}, notes: {},
+    info: {hthSelectAccount: "Select at least one Current and Savings or Time Deposit account."}, fieldname: {}
 };
 class DataSource {
     constructor(data) { this.data = data; }
@@ -149,9 +150,51 @@ async function main() {
     });
     view.model.toggleAll(event([], "internal"));
     assert.equal(view.model.accounts()[0].selected(), true, "View mode remains read-only");
+    for (const linkageType of ["RELATED", "ASSOCIATED"]) {
+        const selection = seed();
+        selection[2].selected = false;
+        const gate = page("hth-account-linkage", {
+            hthLinkageContext: {...context, linkageType, initialAccountType: "TD"},
+            preloadedAccounts: selection, action: "EDIT"
+        });
+        const active = gate.model;
+        assert.equal(active.nextDisabled(), true,
+            "TD without checked records disables Next even with a checked CASA account");
+        active.next();
+        assert.equal(gate.navigation.length, 0, "Calling Next directly cannot bypass empty TD selection");
+        assert.equal(gate.messages.length, 1);
+        active.accounts()[2].selected(true);
+        assert.equal(active.nextDisabled(), false, "Selecting a TD row enables Next reactively");
+        active.next();
+        assert.equal(gate.navigation.length, 1);
+        assert.equal(gate.navigation[0].data.hthLinkageContext.initialAccountType, "TD");
+        assert.equal(gate.navigation[0].data.accounts[0].selected(), true,
+            "Next carries selections from both tabs without clearing CASA");
+        active.accounts()[2].selected(false);
+        assert.equal(active.nextDisabled(), true, "Unchecking the last TD row disables Next again");
+        active.next();
+        assert.equal(gate.navigation.length, 1, "Empty TD cannot open another mapping page");
+        active.menuSelection("CASA");
+        assert.equal(active.accounts()[0].selected(), true);
+        assert.equal(active.nextDisabled(), false, "Switching back restores Next for selected CASA rows");
+        active.accounts()[0].selected(false);
+        active.accounts()[2].selected(true);
+        assert.equal(active.nextDisabled(), true, "Checked TD does not enable Next on an empty CASA selection");
+        active.menuSelection("TRD");
+        assert.equal(active.nextDisabled(), false);
+        active.dispose();
+    }
+    const noTd = page("hth-account-linkage", {
+        hthLinkageContext: {...context, initialAccountType: "TD"},
+        preloadedAccounts: seed().filter(account => account.accountType !== "TD"), action: "EDIT"
+    });
+    assert.equal(noTd.model.nextDisabled(), true, "A TD tab with no eligible records keeps Next disabled");
+    noTd.model.next();
+    assert.equal(noTd.navigation.length, 0);
+    noTd.model.dispose();
     view.model.dispose(); back.model.dispose(); mapping.model.dispose();
     selectionSubscription.dispose(); model.dispose();
     await Promise.resolve();
-    console.log("PASS: real Knockout + production HTH pages: checked/unchecked CASA and TD rows, external JET events, manual edits, Map All/clear, API selections, Next/Back and read-only mode");
+    console.log("PASS: real Knockout + production HTH pages: checked/unchecked CASA and TD rows, external JET events, manual edits, Map All/clear, API selections, active-tab Next guard, empty TD, Next/Back and read-only mode");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

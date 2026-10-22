@@ -79,3 +79,27 @@ assert.strictEqual(requestedId, "AUDIT-791");
 assert.strictEqual(lastNavigation[0], "audit-log-results");
 assert.strictEqual(lastNavigation[1].dataToPass.selectedActivity, "UAT_N_HUA_EDT");
 console.log("PASS: production BCO JSON detail/back navigation; legacy falsy-value handling and 1000 HTH changes; CM HUA-only exception, existing BM filter, plain Event cell");
+
+// Both dropdown and Event labels resolve the new IDs in every supported language.
+for (const suffix of ["", "_zh-hans-cn", "_zh-hant"]) {
+    const properties = kind => Object.fromEntries(fs.readFileSync(path.join(root, "consulting/config/resources/nls", kind + suffix + ".properties"), "utf8")
+        .split(/\r?\n/).filter(line => line && !line.startsWith("#") && line.includes("="))
+        .map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+    const high = properties("HighRiskTask"), common = properties("CommonTask"),
+        entries = Object.entries(high).map(([taskCode, taskName]) => ({taskCode, taskName}));
+    for (const base of ["MT_N_CUS", "MT_N_UUS", "MT_N_RUS"]) {
+        assert.strictEqual(high[base + "_HTH"], "HTH " + common[base]);
+        assert.strictEqual(common[base + "_HTH"], high[base + "_HTH"]);
+        for (const id of (high[base] ? [base, base + "_HTH"] : [base + "_HTH"])) {
+            const codes = [], observable = () => codes; observable.removeAll = () => {codes.length = 0;};
+            let selected;
+            vm.runInNewContext(searchSource.slice(searchSource.indexOf("//TaskCode Implementation Starts"), searchSource.indexOf("//TaskCode Implementation Ends")), {
+                self: {taskCode: value => {selected = value;}, codesArray: observable,
+                    highRiskTransaction: () => [high[id]], transactionEnumCode: () => entries,
+                    selectedActivity: () => [], activityEnum: () => []}
+            });
+            assert.strictEqual(selected, id, "Original and HTH dropdown options select disjoint task IDs");
+        }
+    }
+}
+console.log("PASS: production High Risk selector separates BCO/HTH Create/Edit; dropdown and Event labels agree in three languages");

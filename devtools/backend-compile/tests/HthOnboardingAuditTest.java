@@ -59,8 +59,56 @@ public final class HthOnboardingAuditTest {
         check("UAT_N_HAP_GEN".equals(noEvidence.getTaskCode()),"No previous-code evidence retains Generate");
         System.out.println("PASS: Generate/Re-Generate audit task separation, JMS roundtrip, failure records, spoof rejection and shared activity isolation");
     }
+    static void userActivityTests() throws java.lang.Exception {
+        SessionContext context=new SessionContext(); context.setUserId("BCO_APPROVER@PARTY");
+        for (String operation : Arrays.asList("CREATE", "UPDATE", "READ")) {
+            String original="CREATE".equals(operation) ? "MT_N_CUS" : "READ".equals(operation) ? "MT_N_RUS" : "MT_N_UUS";
+            for (String channel : Arrays.asList("HTH", "H2H", "BCO")) {
+                for (String outcome : Arrays.asList("SUCCESS", "FAILURE", "PENDING_APPROVAL")) {
+                    HthOnboardingAudit.clearRequestStack();
+                    try (HthOnboardingAudit.Entry entry=HthOnboardingAudit.user(context,operation,"TARGET","PARTY",channel,null)) {
+                        entry.result(outcome);
+                    }
+                    AuditDTO audit=dto(Type.REST,map("userChannelType",channel),null);
+                    audit.setTaskCode(original);
+                    if (stack()!=null) audit.getAuditDetailsDTOList().addAll(stack());
+                    HthOnboardingAudit.clearRequestStack();
+                    boolean active=HthOnboardingAudit.prepare(audit);
+                    if (active) HthOnboardingAudit.finish(audit);
+                    String expected="BCO".equals(channel) ? original : original+"_HTH";
+                    check(expected.equals(audit.getTaskCode()),"Target channel classification: "+operation+channel+outcome);
+                    check(active != "BCO".equals(channel),"BCO audit remains outside HTH projection");
+                    ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+                    new ObjectOutputStream(bytes).writeObject(audit);
+                    AuditDTO restored=(AuditDTO)new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray())).readObject();
+                    check(expected.equals(restored.getTaskCode()),"User category survives JMS serialization");
+                    if(active) HthOnboardingAudit.finish(audit);
+                    check(expected.equals(audit.getTaskCode()),"User classification is idempotent");
+                }
+            }
+        }
+        try (HthOnboardingAudit.Entry entry=HthOnboardingAudit.user(context,"UPDATE","TARGET","PARTY","BCO",null)) {
+            entry.channel("HTH","BCO").result("SUCCESS");
+        }
+        AuditDTO transition=dto(Type.REST,map(),null); transition.setTaskCode("MT_N_UUS");
+        transition.getAuditDetailsDTOList().addAll(stack()); HthOnboardingAudit.clearRequestStack();
+        HthOnboardingAudit.prepare(transition); HthOnboardingAudit.finish(transition);
+        check("MT_N_UUS_HTH".equals(transition.getTaskCode()),"HTH channel removal is still an HTH edit");
+        for (String service : Arrays.asList("UserExtensionData.create", "HostToHostApiPassword.generate")) {
+            AuditDTO wrong=dto(Type.SERVICE,map("hthOnboarding",map("schemaVersion","1","operation","UPDATE","newUserChannelType","HTH")),null);
+            wrong.setTaskCode("MT_N_UUS"); wrong.getAuditDetailsDTOList().get(0).setOperationName(HthOnboardingAudit.MARKER);
+            wrong.getAuditDetailsDTOList().get(0).setServiceName(service);
+            HthOnboardingAudit.finish(wrong);
+            check("MT_N_UUS".equals(wrong.getTaskCode()),"Mismatched service cannot reclassify user edit");
+        }
+        AuditDTO forged=dto(Type.REST,map("hthOnboarding",map("schemaVersion","1","operation","CREATE","newUserChannelType","HTH")),null);
+        forged.setTaskCode("MT_N_CUS"); HthOnboardingAudit.finish(forged);
+        check("MT_N_CUS".equals(forged.getTaskCode()),"REST marker cannot select HTH user category");
+        System.out.println("PASS: HTH/BCO Create/Edit separation, pending/failure, channel removal, JMS, idempotency and spoof isolation");
+    }
     public static void main(String[] args) throws java.lang.Exception {
         generationActivityTests();
+        userActivityTests();
         SessionContext context=new SessionContext(); context.setUserId("MAKER@PARTY"); context.setTargetUnit("OBDX_BU");
         String secret="SYNTHETIC-SECRET-791";
         try (HthOnboardingAudit.Entry scope=HthOnboardingAudit.begin(context,"HostToHostApiPassword.setup","SETUP")) {

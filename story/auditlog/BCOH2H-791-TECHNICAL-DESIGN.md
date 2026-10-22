@@ -159,3 +159,22 @@
 重复执行时不会重复插入，也不会更新已正确的 audit 标记或 Re-Generate 名称/时间。每个前置 Task 单独校验，冲突映射、重复配置会报错并回滚本次全部操作；不自动删除环境异常数据。使用三个配置表的短期 NOWAIT DML 锁，避免并发插入及 MAX(ID)+1 冲突，遇到忙表立即失败，待其他事务完成再执行。请在没有其他未提交修改的独立会话中整块执行，成功只有一次 COMMIT。
 
 不改历史审计、原 BCO Task、审批/权限、通知或菜单。脚本未经真实 Oracle 环境执行，不能把静态检查等同于 UAT 验证。
+
+
+## 2026-10-22：HTH 用户创建／修改／查看独立审计分类（覆盖上文共用 Activity 的方案）
+
+| 操作 | 下拉及 Event 名称 | 审计编号 |
+| --- | --- | --- |
+| 创建 HTH 用户 | HTH User Management - Create | MT_N_CUS_HTH |
+| 修改 HTH 用户 | HTH User Management - Edit | MT_N_UUS_HTH |
+| 查看 HTH 用户 | HTH User Management - View | MT_N_RUS_HTH |
+
+- 三个分类加入 High Risk Transaction 下拉及 CommonTask 显示文案；简中、繁中沿用原翻译并加 `HTH ` 前缀。原 BCO 名称不改。
+- 原选项只查询原编号，新选项只查询 HTH 编号；不选此筛选项时仍显示全部。原 HighRiskTask 没有 BCO View，本次只新增 HTH View，不调整原 BCO 下拉。
+- 只在已有审计副本发送前分类，依据 `UserExtensionData.create/update/read` 的服务端摘要及目标用户 Channel；不按操作人判断。HTH/H2H 都识别，HTH 改回 BCO 仍属于 HTH Edit。
+- View 在读取数据库中的目标资料后才启用 HTH 摘要，不信任请求传入的 Channel；加载资料前失败且无法确认 Channel 时保持原 View 分类。仅原 task 为 MT_N_RUS 时分类为 HTH View，嵌套 read 不会把 Create/Edit 改成 View。
+- 成功、失败、待审批保留原结果；本次不改变既有记录产生时机。不能凭客户端自带 `hthOnboarding` 选择类别。
+- 业务 Task、CURRENT_TASK、审批、授权、通知不变；公共审计 Handler、页面 JS/HTML、batch 不修改。六个 NLS 文件新增名称；`HthOnboardingAudit` 增加分类；`UserExtensionData.read` 补充 HTH 摘要。
+- 部署：先完整执行最新 `1_HTH_Audit_Config.sql`（专用会话；可重复执行，不更新历史审计数据），再部署 common、sms 模块 JAR 和六个 `CommonTask*` / `HighRiskTask*` properties；按部署流程重启相关应用，使 ResourceBundle/Task 缓存更新。使用 `2_HTH_Audit_Verify.sql` 核对。
+- 历史记录仍保留原编号，因此历史 HTH 仍可能出现在原选项下；不按用户当前 Channel 反推历史。部署后新建／编辑／查看 HTH 与 BCO 各一笔，分别验证筛选项和 Event 文案。
+- 本地覆盖实际 AuditDTO、JMS 序列化、待审批/失败、HTH 转 BCO、伪造摘要及原页面过滤逻辑；Oracle SQL 和服务器端落库/查询仍需 UAT 验证。

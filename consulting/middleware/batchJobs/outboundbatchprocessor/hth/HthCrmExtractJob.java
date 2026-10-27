@@ -29,6 +29,7 @@ import util.LoadProperties;
 public final class HthCrmExtractJob {
     private static final ZoneId HKT = ZoneId.of("Asia/Hong_Kong");
     private static final DateTimeFormatter DATE = DateTimeFormatter.BASIC_ISO_DATE;
+    private static final DateTimeFormatter FILE_DATE = DateTimeFormatter.ofPattern("yyMMdd");
     private static final String CONFIG_FILE = "hth_crm_batch_config.properties";
     // API_MTB_latest.xlsx / HTH_CRM_MAPPING_APIs, rows 12-72, in file order.
     static final String[] HEADERS = {
@@ -130,13 +131,11 @@ public final class HthCrmExtractJob {
     }
 
     static String fileName(LocalDate date, String pattern) {
-        if (pattern == null || pattern.isEmpty()) pattern = "hthtomtb_mvp1apis_D{shortDate}.csv";
-        if (!pattern.contains("{date}") && !pattern.contains("{shortDate}")) {
-            throw new IllegalArgumentException("HTH_CRM_FILE_PATTERN must contain {date} or {shortDate}");
+        if (pattern == null || pattern.isEmpty()) pattern = "hthtomtb_mvp1apis_D{date}.csv";
+        if (!pattern.contains("{date}")) {
+            throw new IllegalArgumentException("HTH_CRM_FILE_PATTERN must contain {date}");
         }
-        String batchDate = batchDate(date);
-        String name = pattern.replace("{date}", batchDate)
-            .replace("{shortDate}", batchDate.substring(2));
+        String name = pattern.replace("{date}", FILE_DATE.format(date));
         if (!name.matches("[A-Za-z0-9_.-]+\\.csv") || name.startsWith(".")) {
             throw new IllegalArgumentException("Invalid HTH_CRM_FILE_PATTERN");
         }
@@ -276,6 +275,7 @@ public final class HthCrmExtractJob {
         String started = java.time.ZonedDateTime.now(HKT).toString();
         String file = "";
         long count = 0;
+        long size = -1;
         DatabaseConfig database = null;
         try {
             LocalDate day = date(args);
@@ -283,15 +283,17 @@ public final class HthCrmExtractJob {
             System.out.println("HTH_CRM_1293 stage=START time=" + started
                 + " date=" + DATE.format(day) + " file=" + file);
             database = loadDatabaseConfig(Paths.get(required("batchConfigPath")));
-            count = run(day, Paths.get(required("HTH_CRM_OUTPUT_DIR")), file,
+            Path outputDir = Paths.get(required("HTH_CRM_OUTPUT_DIR"));
+            count = run(day, outputDir, file,
                 database.url, database.user, database.password);
+            size = Files.size(outputDir.resolve(file));
             System.out.println("HTH_CRM_1293 stage=END status=SUCCESS start=" + started
                 + " end=" + java.time.ZonedDateTime.now(HKT) + " count=" + count
-                + " file=" + file);
+                + " size=" + size + " file=" + file);
         } catch (Exception e) {
             System.err.println("HTH_CRM_1293 stage=END status=FAILED start=" + started
                 + " end=" + java.time.ZonedDateTime.now(HKT) + " count=" + count
-                + " file=" + file + " errorType=" + e.getClass().getSimpleName()
+                + " size=" + size + " file=" + file + " errorType=" + e.getClass().getSimpleName()
                 + " reason=" + failureReason(e, database == null ? null : database.password));
             System.exit(1);
         }

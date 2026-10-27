@@ -2,6 +2,8 @@ package outboundbatchprocessor.hth;
 
 import java.io.OutputStream;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -35,7 +37,10 @@ public final class HthCrmExtractJobTest {
     }
 
     private static final Driver DRIVER = new Driver() {
-        public boolean acceptsURL(String url) { return "jdbc:hth-crm-test".equals(url); }
+        public boolean acceptsURL(String url) {
+            return "jdbc:hth-crm-test".equals(url)
+                || "jdbc:oracle:thin:@//hth-db:1521/hth-service".equals(url);
+        }
         public Connection connect(String url, Properties props) {
             if (!acceptsURL(url)) return null;
             return (Connection) proxy(Connection.class, new InvocationHandler() {
@@ -111,8 +116,37 @@ public final class HthCrmExtractJobTest {
         check(!content.contains("\r"), "Output must use LF");
     }
 
+    private static String runMain(Path configDirectory, Path outputDirectory, boolean fail)
+            throws Exception {
+        ProcessBuilder command = new ProcessBuilder(
+            java.nio.file.Paths.get(System.getProperty("java.home"), "bin", "java").toString(),
+            "-cp", System.getProperty("java.class.path"), HthCrmExtractJobTest.class.getName(),
+            fail ? "--run-job-failure" : "--run-job");
+        command.environment().put("batchConfigPath", configDirectory.toString());
+        command.environment().put("HTH_CRM_OUTPUT_DIR", outputDirectory.toString());
+        command.environment().put("HTH_CRM_FILE_PATTERN", "hthtomtb_mvp1apis_D{date}.csv");
+        command.redirectErrorStream(true);
+        Process process = command.start();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (InputStream input = process.getInputStream()) {
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = input.read(buffer)) != -1) output.write(buffer, 0, length);
+        }
+        String log = new String(output.toByteArray(), StandardCharsets.UTF_8);
+        check(process.waitFor() == (fail ? 1 : 0), "Unexpected main exit status: " + log);
+        check(!log.contains("test-password"), "Password leaked in main log");
+        return log;
+    }
+
     public static void main(String[] args) throws Exception {
         DriverManager.registerDriver(DRIVER);
+        if (args.length == 1 && args[0].startsWith("--run-job")) {
+            rows = Collections.singletonList(row("--run-job-failure".equals(args[0]) ? null : "id-1",
+                "中文,\\path\r\n\"quoted\""));
+            HthCrmExtractJob.main(new String[] {"--date", "20260930"});
+            return;
+        }
         Path dir = Files.createTempDirectory("hth-crm-test-");
         Path configDir = Files.createTempDirectory("hth-crm-config-test-");
         String passphrase = "hth-crm-test-passphrase";
@@ -132,6 +166,18 @@ public final class HthCrmExtractJobTest {
             "HTH database URL did not use the encrypted HTH configuration");
         check("hth-user".equals(database.user) && "test-password".equals(database.password),
             "HTH database credentials did not decrypt");
+        String successLog = runMain(configDir, dir, false);
+        Path mainOutput = dir.resolve("hthtomtb_mvp1apis_D260930.csv");
+        byte[] published = Files.readAllBytes(mainOutput);
+        checkFile(new String(published, StandardCharsets.UTF_8), "20260930", 1);
+        check(successLog.contains("stage=END status=SUCCESS")
+            && successLog.contains(" count=1 size=" + published.length + " file=" + mainOutput.getFileName()),
+            "Latest count/byte-size/filename logging changed: " + successLog);
+        String failureLog = runMain(configDir, dir, true);
+        check(failureLog.contains("stage=END status=FAILED") && failureLog.contains(" size=-1 "),
+            "Failure log lost the latest size field: " + failureLog);
+        check(Arrays.equals(published, Files.readAllBytes(mainOutput)),
+            "Main failure replaced a published complete file");
         encrypted.remove("db.password");
         try (OutputStream output = Files.newOutputStream(configFile)) {
             encrypted.store(output, "HTH test configuration");
@@ -146,8 +192,11 @@ public final class HthCrmExtractJobTest {
         LocalDate day = LocalDate.of(2026, 9, 30);
         String name = HthCrmExtractJob.fileName(day, null);
         check("hthtomtb_mvp1apis_D260930.csv".equals(name), "Wrong v16 filename");
-        check("HTH_CRM_20260930.csv".equals(HthCrmExtractJob.fileName(day, "HTH_CRM_{date}.csv")),
-            "Existing filename override no longer works");
+        check("HTH_CRM_260930.csv".equals(HthCrmExtractJob.fileName(day, "HTH_CRM_{date}.csv")),
+            "Latest filename override must retain its six-digit date");
+        check("hthtomtb_mvp1apis_D260930.csv".equals(
+            HthCrmExtractJob.fileName(day, "hthtomtb_mvp1apis_D{date}.csv")),
+            "Latest deployed filename pattern changed");
         check(day.equals(HthCrmExtractJob.date(new String[] {"--date", "20260930"})),
             "Explicit extraction date changed");
         Path output = dir.resolve(name);

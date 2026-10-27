@@ -28,10 +28,11 @@
    新配置文件缺失或缺少字段时作业会失败，不会回退到 BCO 数据库。可选
    `HTH_CRM_OUTPUT_DIR`；未设置时写入 `/project/CDC/ftp/snd/hth`，与 BCO 文件分开。
 4. 默认文件名按 v16 Data Extraction 使用 `hthtomtb_mvp1apis_Dyymmdd.csv`。
-   可选 `HTH_CRM_FILE_PATTERN`，必须包含 `{date}`（yyyyMMdd）或
-   `{shortDate}`（yyMMdd）且以 `.csv` 结尾。既有 `HTH_CRM_{date}.csv`
-   配置继续生效；采用文档文件名时请取消旧 override，或设置为
-   `hthtomtb_mvp1apis_D{shortDate}.csv`。下游取文件规则也需配合新名称。
+   保留最新同步版本的 `HTH_CRM_FILE_PATTERN` 规则：必须包含 `{date}`，
+   替换值为 **yyMMdd（6 位）**，且以 `.csv` 结尾。例如 `HTH_CRM_{date}.csv`
+   在业务日 20261007 输出 `HTH_CRM_261007.csv`。采用文档文件名时可取消
+   override，或设置为 `hthtomtb_mvp1apis_D{date}.csv`。
+   不使用上一版补丁的 `{shortDate}`。命令行日期和文件内首行日期仍为 8 位。
 
 ## 手动执行
 
@@ -45,6 +46,9 @@ echo $?                                         # 0 成功；50 失败
 
 脚本首先打印本次日志路径，然后将详细输出写入
 `/project/CDC/log/GenHthCrmExtract.<运行时间>.log`。
+保留最新版本的 `stage=END` 日志字段 `size`：成功时是完整文件的字节数，
+包含首行、列名、数据、尾行和换行；失败前未取得大小时为 `-1`。
+它与尾行的 `file_size` 不同，后者按文档固定填 15 个空格。
 例如日期 `20261007` 的默认输出是
 `/project/CDC/ftp/snd/hth/hthtomtb_mvp1apis_D261007.csv`。
 失败时不会替换既有的同日文件。同日成功重跑会原子替换同一文件，不会改其他日期。
@@ -108,6 +112,8 @@ WHERE CREATION_DATE >= TO_DATE('2026-10-07', 'YYYY-MM-DD')
 `DISTINCT_IDS`；`wc -l` 应为 `DB_ROWS + 3`。可按 `ID` 查一笔记录，再用列名在 CSV 中比对值。
 数据库 `CREATION_DATE` 必须按香港业务时间存储；运行前与 HTH/DSP 团队确认。
 此次不新增数据库表或 SQL，不修改 BCO 抽取逻辑、配置或 shell。
+外层、UAT、PRD 统一采用最新外层代码的加密配置读取方式，与三份现有
+启动脚本一致；不再使用旧 UAT 类中的 `HTH_CRM_JDBC_*` 环境变量方式。
 
 ## 本地回归
 

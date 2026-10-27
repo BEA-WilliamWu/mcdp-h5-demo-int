@@ -4,14 +4,14 @@
 
 BCOH2H-1386 strengthens debit account status validation for overseas Telegraphic Transfer (TT) payments. The debit account must exist in the existing account access lookup and have an active status before payment submission can proceed. Invalid or missing status values must produce a business error instead of a technical exception.
 
-The implementation enhances an existing validation. Account existence checks and rejection of non-active statuses are already present. The functional correction makes the status comparison null-safe; additional tests establish the expected behavior and verify that rejected requests do not trigger payment side effects.
+The implementation enhances an existing validation. Account existence checks and rejection of non-active statuses are already present. The implementation handles missing account lookup results and null statuses safely; additional tests establish the expected behavior and verify that rejected requests do not trigger payment side effects.
 
 ## Scope and agreed decisions
 
 | Item | Decision |
 | --- | --- |
 | Business acceptance scope | Overseas TT debit account validation |
-| Shared implementation | TT and DR use `OverseasPaymentService`; DR is included in regression coverage |
+| Shared implementation | TT and Direct Remittance (DR) use `OverseasPaymentService`; DR is included in regression coverage |
 | Status source | Continue using `HTH_BEA.HTH_USER_ACCESS_ACCOUNT.OBJECT_STATUS` |
 | Multiple records | Continue using the first returned record |
 | Active values | Accept `A` and `ACTIVE`, ignoring case |
@@ -31,7 +31,13 @@ hthUserAccessAccountMapper.selectFromAccountInfo(
 
 The query matches `PARTY_ID`, `CLOSE_ID`, and the formatted account number with hyphens removed. It returns account access records including `OBJECT_STATUS`.
 
-A null or empty result, or a null first record, produces error `600020`. The existing status check accepts `A` or `ACTIVE` and rejects other values. However, it calls `equalsIgnoreCase()` on the returned status directly. A null status therefore causes a `NullPointerException` instead of error `600061`.
+The synchronized baseline contains three defects:
+
+- Calling `getFirst()` directly on a null or empty lookup result causes a technical exception before the intended account-not-found handling.
+- When the first record is null, the warning log dereferences `first.getProductCode()`, preventing error `600020` from being returned.
+- Calling `equalsIgnoreCase()` on a null status causes a `NullPointerException` instead of error `600061`.
+
+The existing non-null status check already accepts `A` or `ACTIVE` and rejects other values. This change preserves those rules while correcting the failure paths.
 
 The query has no explicit ordering. This change preserves first-record behavior rather than introducing a selection rule by product or currency. Where multiple records have conflicting statuses, the result depends on the first record returned by the database.
 
@@ -51,9 +57,21 @@ Values such as `FROZEN`, `INACTIVE`, `CLOSED`, `DORMANT`, and `HOLD` are rejecte
 
 ## Implementation
 
-Update the status comparison in `OverseasPaymentService.validateFromAccount()`:
+Update account selection and status comparison in `OverseasPaymentService.validateFromAccount()`:
 
 ```java
+List<HthUserAccessAccount> accessAccounts =
+        hthUserAccessAccountMapper.selectFromAccountInfo(
+                partyId, closeId, fromAccount.getAccountNumber());
+HthUserAccessAccount first = accessAccounts == null || accessAccounts.isEmpty()
+        ? null : accessAccounts.getFirst();
+
+if (first == null) {
+    log.warn("Debit account does not exist, partyId={}, accountNumber={}, productCode={}",
+            partyId, fromAccount.getAccountNumber(), productCode);
+    throw new ServiceException(HTHSupportErrorMapping.ACCOUNT_NOT_FOUND_EXCEPTION);
+}
+
 String status = first.getObjectStatus();
 boolean active = "A".equalsIgnoreCase(status)
         || AccountStatus.ACTIVE.value().equalsIgnoreCase(status);
@@ -63,7 +81,7 @@ if (!active) {
 }
 ```
 
-Both comparisons start from non-null active constants. A null status evaluates to false and follows the existing business-error path. The account-not-found branch remains unchanged.
+Both comparisons start from non-null active constants. A null status evaluates to false and follows the existing business-error path. The account-not-found branch logs the previously resolved `productCode` without dereferencing a missing record, then returns `600020`.
 
 No additional service, database query, configuration property or dependency is required.
 
@@ -71,15 +89,15 @@ No additional service, database query, configuration property or dependency is r
 
 The existing payment sequence is retained:
 
-1. BFF checks applicable service windows and maps the request.
-2. Support `PaymentServiceImpl` performs common validation.
-3. IPE smart routing selects the payment type.
-4. The TT or DR service performs overseas validation, including debit account status validation.
-5. Once validation succeeds, processing continues to WMG creation for TT, IPE payment submission, and payment persistence.
+1. BFF checks applicable service windows and forwards the payment request.
+2. Support `PaymentServiceImpl.processLocalPayment()` performs common validation and dispatches by the requested payment type.
+3. `OverseasPaymentService.processPayment()` runs `validateOverseas()`, beginning with debit account validation, followed by type-specific validation.
+4. After validation, request construction invokes WMG creation for TT and builds a `BatchCreditTransferRequest`.
+5. `LocalPaymentApi.submitOutwardCreditTransfer()` submits the payment to IPE, followed by response handling and payment persistence.
 
-An account validation failure propagates as a `ServiceException` before WMG creation, IPE `submit`, or payment record persistence. It does not enter the submit-stage exception handler and is not converted into a `PROCESSING` payment response.
+An account validation failure propagates as a `ServiceException` before request construction, WMG creation, IPE submission, or payment record persistence. It does not enter the submit-stage exception handler and is not converted into a `PROCESSING` payment response. Existing audit and event logging is unaffected.
 
-IPE `route` may already have been called by the common entry point before this validation. The rejection guarantee concerns payment submission and subsequent payment side effects, not the absence of all downstream calls. Existing audit and event logging is unaffected.
+Tests and implementation use the synchronized baseline's `BatchCreditTransferRequest` and `submitOutwardCreditTransfer()` contract. No smart-routing API or `BatchRoutingCreditTransferRequest` is introduced.
 
 ## Error contract
 
@@ -96,7 +114,7 @@ All paths below are relative to `hth-ms-support/hth-ms-support-svc/`.
 
 | File | Change |
 | --- | --- |
-| `src/main/java/com/hkbea/hth/service/OverseasPaymentService.java` | Null-safe active status comparison |
+| `src/main/java/com/hkbea/hth/service/OverseasPaymentService.java` | Safe handling of null/empty account results, null first records, and null statuses |
 | `src/test/java/com/hkbea/hth/service/OverseasPaymentServiceTest.java` | Status matrix, missing account results, and first-record selection tests |
 | `src/test/java/com/hkbea/hth/service/TtPaymentServiceTest.java` | TT rejection tests and assertions that IPE submission, WMG invocation and payment persistence do not occur |
 | `src/test/java/com/hkbea/hth/service/DrPaymentServiceTest.java` | DR regression tests and assertions that IPE submission and payment persistence do not occur |
@@ -105,17 +123,37 @@ No API specification, generated model, Mapper SQL, database schema or BFF change
 
 ## Unit test results
 
-Nine test methods were added, with several methods exercising multiple status values. Existing success-path tests cover normal payment processing for active accounts.
+Nine test methods are added, with several methods exercising multiple input values. The existing account-not-found and inactive-account tests are also repaired. All three test fixtures mock the current three-argument `selectFromAccountInfo()` method; previously commented-out two-argument stubs are replaced.
 
-The following suites were executed using Java 21 and Maven 3.10.0 on 26 October 2026:
+The tests include explicit imports for `ServiceException`, `List`, and `ArgumentMatchers.nullable` where needed. The nullable matcher accepts a null `closeId` in existing fixtures. No test references the absent routing request model. Existing success-path tests cover normal payment processing for active accounts.
+
+The following active suites were executed from a clean build using Java 21 and Maven 3.10.0 on 27 October 2026:
 
 - `OverseasPaymentServiceTest`
 - `TtPaymentServiceTest`
 - `DrPaymentServiceTest`
-- `PaymentServiceImplTest`
-- `PaymentRoutingSubmitterTest`
+- `TtPaymentServiceSupportTest`
 
-Result: **151 tests run, 0 failures, 0 errors, 0 skipped**. This is the result for the selected suites, not a full system or end-to-end test run. OpenAPI generation was disabled with `-Dcodegen.skip=true`, and test failures were not ignored.
+| Validation run | Result |
+| --- | --- |
+| Dedicated BCOH2H-1386 tests | 9 tests, 0 failures, 0 errors, 0 skipped |
+| Selected regression suites | 83 tests, 79 passed, 4 failures, 0 errors, 0 skipped |
+| Isolated baseline reproduction of the affected WMG test groups | The same 4 failures reproduced without this change |
+
+The existing regression failures are:
+
+- `TtPaymentServiceTest.createProcessInstanceExecute_buildsRequestModelAndCallsSupport`
+- `TtPaymentServiceTest.createProcessInstanceExecute_supportCalledWithCorrectBatchId`
+- `TtPaymentServiceTest.createProcessInstanceExecute_supportException_logged`
+- `TtPaymentServiceSupportTest.createProcessInstanceExecute_parseException_logsError`
+
+The first three fail because WMG request construction parses a date-only settlement value as an `OffsetDateTime`, so the expected support invocation is never reached. The fourth expects a parsing failure and no database insert, but its input does not trigger that failure. These WMG issues are outside debit account validation and remain unchanged.
+
+`PaymentServiceImplTest` is entirely commented out in the synchronized baseline and contributes no executed tests.
+
+OpenAPI generation was disabled with `-Dcodegen.skip=true`. The project POM explicitly sets `testFailureIgnore=true`, so Maven can report `BUILD SUCCESS` despite failed tests. Results above were verified from the test reports. The isolated baseline reproduction disabled failure ignoring in its temporary POM and returned `BUILD FAILURE`. The repository POM was not changed.
+
+These checks establish compilation and story-specific behavior; they do not represent a fully passing regression suite or completed SIT/UAT.
 
 ## SIT and UAT approach
 
@@ -134,7 +172,7 @@ Use controlled SIT account records and an otherwise valid TT payment request. En
 | Padded active value | API returns `600061` |
 | DR regression | Active processing remains valid; invalid status prevents submission |
 
-For rejected requests, inspect downstream call records and payment persistence to confirm that no IPE `submit`, TT WMG creation, or payment insert/update occurred. Capture the request correlation identifier, prepared account state, response, and relevant logs or database evidence.
+For rejected requests, inspect downstream call records and payment persistence to confirm that no IPE `submitOutwardCreditTransfer`, TT WMG creation, or payment insert/update occurred. Capture the request correlation identifier, prepared account state, response, and relevant logs or database evidence.
 
 Use a downstream test stub where the payment engine is unavailable, and record which integrations were simulated. Unit tests cover the first-record selection rule deterministically; SIT must not assume a stable ordering for an unordered database query.
 
@@ -148,4 +186,4 @@ Keep all other request conditions valid and retain evidence that the active requ
 
 Deploy the updated `hth-ms-support-svc` artifact through the existing release process. No database migration or configuration change is needed, and the change adds no database or network calls.
 
-Rollback consists of restoring the previous service artifact. This also restores the previous null-status behavior, including the possibility of a technical exception, so rollback should be assessed against that known defect.
+Rollback consists of restoring the previous service artifact. This also restores the previous missing-account and null-status behavior, including the possibility of technical exceptions, so rollback should be assessed against that known defect.

@@ -9,13 +9,11 @@ import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentInternal;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
 import com.hkbea.hth.ipe.api.LocalPaymentApi;
-import com.hkbea.hth.ipe.model.BatchRoutingCreditTransferRequest;
-import com.hkbea.hth.ipe.model.DirectRemittance;
-import com.hkbea.hth.ipe.model.PaymentInformation;
+import com.hkbea.hth.ipe.model.BatchCreditTransferRequest;
+import com.hkbea.hth.ipe.model.DirectRemittanceRequest;
+import com.hkbea.hth.ipe.model.ModelApiResponse;
 import com.hkbea.hth.ipe.model.PaymentResultQueryResponse;
-import com.hkbea.hth.ipe.model.RoutingTransactionDetailRequest;
-import com.hkbea.hth.ipe.model.TransferModelApiResponse;
-import com.hkbea.hth.ipe.model.TransferPaymentResultQueryResponse;
+import com.hkbea.hth.ipe.model.TransactionDetailRequest;
 import com.hkbea.hth.mapper.HthPaymentPayoutMapper;
 import com.hkbea.hth.mapper.HthUserAccessAccountMapper;
 import com.hkbea.hth.mapper.InternalPayeeMapper;
@@ -31,7 +29,6 @@ import com.hkbea.hth.model.Creditor;
 import com.hkbea.hth.model.CreditorAgent;
 import com.hkbea.hth.model.Currency;
 import com.hkbea.hth.model.FinancialInstitutionId;
-import com.hkbea.hth.model.IntermediaryAgent;
 import com.hkbea.hth.model.LocalPayment;
 import com.hkbea.hth.model.Payment;
 import com.hkbea.hth.model.PaymentIdentification;
@@ -52,19 +49,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,7 +103,7 @@ class DrPaymentServiceTest {
 
     @Test
     void invalidDebitStatusRejectsBeforePaymentSideEffects() {
-        for (String status : java.util.Arrays.asList(null, "", " ", "I", "FROZEN", "CLOSED", " A ")) {
+        for (String status : Arrays.asList(null, "", " ", "I", "FROZEN", "CLOSED", " A ")) {
             HthUserAccessAccount account = activeAccessAccount();
             account.setObjectStatus(status);
             when(hthUserAccessAccountMapper.selectFromAccountInfo(
@@ -118,24 +116,28 @@ class DrPaymentServiceTest {
 
             assertEquals(600061, exception.getErrCode());
             assertEquals("Invalid account status.", exception.getMessage());
-            verify(localPaymentApi, never()).submit(any(BatchRoutingCreditTransferRequest.class));
+            verify(localPaymentApi, never()).submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class));
             verifyNoInteractions(paymentInternalMapper, paymentPayoutRecordMapper);
         }
     }
 
     @Test
     void missingDebitAccountRejectsBeforePaymentSideEffects() {
-        when(hthUserAccessAccountMapper.selectFromAccountInfo(
-                nullable(String.class), nullable(String.class), nullable(String.class)))
-                .thenReturn(Collections.emptyList());
+        List<List<HthUserAccessAccount>> results = Arrays.asList(
+                null, Collections.emptyList(), Collections.singletonList(null));
+        for (List<HthUserAccessAccount> accounts : results) {
+            when(hthUserAccessAccountMapper.selectFromAccountInfo(
+                    nullable(String.class), nullable(String.class), nullable(String.class)))
+                    .thenReturn(accounts);
 
-        ServiceException exception = assertThrows(ServiceException.class,
-                () -> drPaymentService.processPayment(buildDrPayment()));
+            ServiceException exception = assertThrows(ServiceException.class,
+                    () -> drPaymentService.processPayment(buildDrPayment()));
 
-        assertEquals(600020, exception.getErrCode());
-        assertEquals("The specified account does not exist or is not accessible.", exception.getMessage());
-        verify(localPaymentApi, never()).submit(any(BatchRoutingCreditTransferRequest.class));
-        verifyNoInteractions(paymentInternalMapper, paymentPayoutRecordMapper);
+            assertEquals(600020, exception.getErrCode());
+            assertEquals("The specified account does not exist or is not accessible.", exception.getMessage());
+            verify(localPaymentApi, never()).submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class));
+            verifyNoInteractions(paymentInternalMapper, paymentPayoutRecordMapper);
+        }
     }
 
     @BeforeEach
@@ -151,8 +153,6 @@ class DrPaymentServiceTest {
         lenient().when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString())).thenReturn("PAYER NAME");
         lenient().when(accountApi.enquireGenericBalance(any()))
                 .thenReturn(buildBalanceResponse("999999999", Currency.CNY));
-        lenient().when(localPaymentApi.route(any(BatchRoutingCreditTransferRequest.class)))
-                .thenAnswer(invocation -> PaymentRoutingTestSupport.routeResponse(invocation.getArgument(0)));
     }
 
     // ===================== Test Data Builders =====================
@@ -194,27 +194,27 @@ class DrPaymentServiceTest {
         txnAmount.setCurrency(currency);
 
         Creditor creditor = new Creditor();
-        creditor.setCreditorName("DR BENEFICIARY");
+        creditor.setAccountName("DR BENEFICIARY");
         PostalAddress address = new PostalAddress();
-        address.setAddressLine1("Shenzhen Road 88");
-        address.setTownName("Shenzhen");
-        address.setCountry("CN");
+        address.setPayeeAddressLine1("Shenzhen Road 88");
+        address.setPayeeTownName("Shenzhen");
+        address.setPayeeCreditorCountry("CN");
         creditor.setPostalAddress(address);
 
         CreditorAgent creditorAgent = new CreditorAgent();
         FinancialInstitutionId financialInstitutionId = new FinancialInstitutionId();
-        financialInstitutionId.setBicfi("BKCHCNBJ110");
+        financialInstitutionId.setBICFI("BKCHCNBJ110");
         creditorAgent.setFinancialInstitutionId(financialInstitutionId);
 
         CategoryPurpose categoryPurpose = new CategoryPurpose();
-        categoryPurpose.setCode("GSCB");
-        categoryPurpose.setProprietary("GOODS");
+        categoryPurpose.setPurposeCode("GSCB");
+        categoryPurpose.setPurposeProprietary("GOODS");
 
         PaymentIdentification paymentIdentification = new PaymentIdentification();
+//        paymentIdentification.setCustomerTransactionId(CUSTOMER_TXN_ID);
         paymentIdentification.setEndToEndId("E2E-DR");
 
         LocalPayment payment = new LocalPayment();
-        payment.setTransactionID(CUSTOMER_TXN_ID);
         payment.setPaymentType(LocalPayment.PaymentTypeEnum.DR);
         payment.setPartyId(PARTY_ID);
         payment.setFromAccount(fromAccount);
@@ -222,47 +222,27 @@ class DrPaymentServiceTest {
         payment.setTxnAmount(txnAmount);
         payment.setCreditor(creditor);
         payment.setCreditorAgent(creditorAgent);
-        FinancialInstitutionId intermediaryFid = new FinancialInstitutionId();
-        intermediaryFid.setBicfi("SNNRHKH2XXX");
-        IntermediaryAgent intermediaryAgent = new IntermediaryAgent();
-        intermediaryAgent.setFinancialInstitutionId(intermediaryFid);
-        payment.setIntermediaryAgent(intermediaryAgent);
         payment.setCategoryPurpose(categoryPurpose);
         payment.setPaymentIdentification(paymentIdentification);
-        payment.setCreationDateTime("2026-09-20T10:15:30+08:00");
+        payment.setTransactionID(CUSTOMER_TXN_ID);
         payment.setSettlementDate(LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE));
-        payment.setChargesOption(null);
+        payment.setChargesOption(LocalPayment.ChargesOptionEnum.SHA);
         payment.setPaymentDetails(new java.util.ArrayList<>(Collections.singletonList("dr-detail")));
         return payment;
     }
 
-    private TransferModelApiResponse buildPaymentResponse(
-            PaymentResultQueryResponse.StatusEnum status, String errorMessage) {
-        TransferPaymentResultQueryResponse result = new TransferPaymentResultQueryResponse();
-        result.setEndToEndId("IPE-TXN-DR");
-        result.setStatus(toRoutingStatus(status));
+    private ModelApiResponse buildPaymentResponse(PaymentResultQueryResponse.StatusEnum status, String errorMessage) {
+        PaymentResultQueryResponse result = new PaymentResultQueryResponse();
+        result.setTransactionId("IPE-TXN-DR");
+        result.setStatus(status);
         result.setErrorMessage(errorMessage);
         result.setErrorCode("DR-ERR-001");
         result.setIpeReferenceId("IPE-REF-DR-001");
 
-        TransferModelApiResponse response = new TransferModelApiResponse();
+        ModelApiResponse response = new ModelApiResponse();
         response.setCode("00");
         response.setData(result);
         return response;
-    }
-
-    private static TransferPaymentResultQueryResponse.StatusEnum toRoutingStatus(
-            PaymentResultQueryResponse.StatusEnum status) {
-        if (status == null) {
-            return null;
-        }
-        return switch (status) {
-            case SUCCESS -> TransferPaymentResultQueryResponse.StatusEnum.COMPLETED;
-            case FAILED -> TransferPaymentResultQueryResponse.StatusEnum.FAILED;
-            case PENDING -> TransferPaymentResultQueryResponse.StatusEnum.PENDING;
-            case PROCESSING -> TransferPaymentResultQueryResponse.StatusEnum.PROCESSING;
-            case MANUAL_REVIEW -> TransferPaymentResultQueryResponse.StatusEnum.MANUAL_REVIEW;
-        };
     }
 
     private BatchEnquiryResponse buildBalanceResponse(String availableBalance, Currency currency) {
@@ -284,7 +264,7 @@ class DrPaymentServiceTest {
 
         @Test
         void success_mapsIpeRequestAndPersistence() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
 
             LocalPayment request = buildDrPayment();
@@ -293,29 +273,39 @@ class DrPaymentServiceTest {
             assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
             assertNotNull(result.getTxnRef());
 
-            ArgumentCaptor<BatchRoutingCreditTransferRequest> ipeCaptor =
-                    ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
-            verify(localPaymentApi).submit(ipeCaptor.capture());
-            BatchRoutingCreditTransferRequest ipeRequest = ipeCaptor.getValue();
-            assertEquals(PaymentInformation.PaymentMethodEnum.DR,
-                    ipeRequest.getPaymentInformation().getPaymentMethod());
+            ArgumentCaptor<BatchCreditTransferRequest> ipeCaptor =
+                    ArgumentCaptor.forClass(BatchCreditTransferRequest.class);
+            verify(localPaymentApi).submitOutwardCreditTransfer(ipeCaptor.capture());
+            BatchCreditTransferRequest ipeRequest = ipeCaptor.getValue();
+            assertEquals(BatchCreditTransferRequest.TransactionTypeEnum.DR, ipeRequest.getTransactionType());
+            assertEquals(0, BigDecimal.ZERO.compareTo(ipeRequest.getServiceChargeAmount()));
 
-            RoutingTransactionDetailRequest txn = ipeRequest.getTransactions().getFirst();
-            assertEquals(" ", txn.getCreditorAgent().getPostalAddress().getCountry());
-            assertEquals("", txn.getSupplementaryData().getPaymentSource());
-            assertEquals("", txn.getSupplementaryData().getEnquiryType());
-            assertEquals("", txn.getSupplementaryData().getCostCenterCode());
-            assertEquals("", txn.getCharges().getFeeCode());
-            assertEquals("", txn.getSupplementaryData().getAlnovaLimitCheckIndicator());
+            TransactionDetailRequest txn = ipeRequest.getTransactions().getFirst();
+            assertEquals(" ", txn.getPayeeBankCountyCode());
+            assertEquals("", txn.getPaymentSource());
+            assertEquals("", txn.getEnquiryType());
+            assertEquals("", txn.getCostCenterCode());
+            assertEquals("", txn.getFeeCode());
+            assertEquals("", txn.getAlnovaLimitCheckInd());
             // DR does not set chargeBearer on the IPE request (enrichment line is commented out)
-            assertNull(txn.getCharges().getChargeBearer());
-            assertEquals("BKCHCNBJ110", txn.getCreditorAgent().getFinancialInstitution().getBicfi());
-            assertEquals(0, BigDecimal.ZERO.compareTo(txn.getCharges().getChargeAmount().getAmount()));
+            assertNull(txn.getChargeBearer());
+            assertEquals("BKCHCNBJ110", txn.getPayeeBicCode());
 
-            DirectRemittance dr = txn.getSupplementaryData().getDirectRemittance();
+            DirectRemittanceRequest dr = txn.getDirectRemittanceRequest();
+            assertEquals("I", dr.getHdrChSrcInd());
+            assertEquals("REMC1", dr.getHdrMessageId());
+            assertEquals("32", dr.getHdrOpt());
+            assertEquals("015", dr.getHdrBankCode());
+            assertEquals("01", dr.getHdrIntBankCode());
+            assertEquals("CDC", dr.getHdrMediaCode());
+            assertEquals("01", dr.getHdrSubOpt());
+            assertEquals("03", dr.getHdrTxnType());
+            assertEquals("C001505216810034096REM02TFR00466185", dr.getHdrTxnNumber());
+            assertEquals("CNY", dr.getChinaAcCcy());
             assertEquals("01", dr.getChinaAcType());
             assertEquals(BENEFICIARY_ACCOUNT, dr.getChinaAcno());
             assertEquals("DR BENEFICIARY", dr.getChinaAccEnglishName());
+            assertEquals(0, BigDecimal.ZERO.compareTo(dr.getCrAmt()));
 
             ArgumentCaptor<PaymentInternal> insertCaptor = ArgumentCaptor.forClass(PaymentInternal.class);
             verify(paymentInternalMapper).insert(insertCaptor.capture());
@@ -338,7 +328,7 @@ class DrPaymentServiceTest {
 
         @Test
         void ipeException_returnsProcessingAndPersists() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenThrow(new RuntimeException("IPE timeout"));
 
             Payment result = drPaymentService.processPayment(buildDrPayment());
@@ -349,7 +339,7 @@ class DrPaymentServiceTest {
 
         @Test
         void insertException_swallowed() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
             when(paymentInternalMapper.insert(any(PaymentInternal.class)))
                     .thenThrow(new RuntimeException("db down"));
@@ -362,7 +352,7 @@ class DrPaymentServiceTest {
 
         @Test
         void ipeFailed_mapsRejectedAndPersists() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.FAILED, "cny rejected"));
 
             Payment result = drPaymentService.processPayment(buildDrPayment());
@@ -380,16 +370,17 @@ class DrPaymentServiceTest {
 
         @Test
         void serviceChargeAmount_isZero() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
 
             drPaymentService.processPayment(buildDrPayment());
 
-            ArgumentCaptor<BatchRoutingCreditTransferRequest> captor =
-                    ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
-            verify(localPaymentApi).submit(captor.capture());
+            ArgumentCaptor<BatchCreditTransferRequest> captor =
+                    ArgumentCaptor.forClass(BatchCreditTransferRequest.class);
+            verify(localPaymentApi).submitOutwardCreditTransfer(captor.capture());
             assertEquals(0, BigDecimal.ZERO.compareTo(
-                    captor.getValue().getTransactions().getFirst().getCharges().getChargeAmount().getAmount()));
+                    captor.getValue().getServiceChargeAmount() == null
+                            ? BigDecimal.ZERO : captor.getValue().getServiceChargeAmount()));
         }
     }
 
@@ -409,11 +400,11 @@ class DrPaymentServiceTest {
         @Test
         void blankCreditorName_throws() {
             LocalPayment request = buildDrPayment();
-            request.getCreditor().setCreditorName(" ");
+            request.getCreditor().setAccountName(" ");
 
             ParameterException exception = assertThrows(ParameterException.class,
                     () -> drPaymentService.processPayment(request));
-            assertEquals(HTHSupportErrorMapping.CREDITORNAME_MISSING_OR_INVALID, exception.getErrCode());
+            assertEquals(HTHSupportErrorMapping.TT_PAYEE_INFO_MISSING, exception.getErrCode());
         }
 
         @Test
@@ -446,12 +437,12 @@ class DrPaymentServiceTest {
             ParameterException exception = assertThrows(ParameterException.class,
                     () -> drPaymentService.processPayment(buildDrPayment()));
             assertEquals(HTHSupportErrorMapping.INSUFFICIENT_BALANCE, exception.getErrCode());
-            verify(localPaymentApi, never()).submit(any());
+            verify(localPaymentApi, never()).submitOutwardCreditTransfer(any());
         }
 
         @Test
         void drFlow_skipsScameter() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
 
             drPaymentService.processPayment(buildDrPayment());

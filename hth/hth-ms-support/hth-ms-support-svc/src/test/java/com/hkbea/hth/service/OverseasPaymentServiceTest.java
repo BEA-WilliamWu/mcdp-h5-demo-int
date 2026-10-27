@@ -10,10 +10,8 @@ import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
 import com.hkbea.hth.ipe.api.LocalPaymentApi;
 import com.hkbea.hth.ipe.model.BatchCreditTransferRequest;
-import com.hkbea.hth.ipe.model.BatchRoutingCreditTransferRequest;
+import com.hkbea.hth.ipe.model.ModelApiResponse;
 import com.hkbea.hth.ipe.model.PaymentResultQueryResponse;
-import com.hkbea.hth.ipe.model.TransferModelApiResponse;
-import com.hkbea.hth.ipe.model.TransferPaymentResultQueryResponse;
 import com.hkbea.hth.ipe.model.TransactionDetailRequest;
 import com.hkbea.hth.mapper.HthPaymentPayoutMapper;
 import com.hkbea.hth.mapper.HthUserAccessAccountMapper;
@@ -30,7 +28,6 @@ import com.hkbea.hth.model.Creditor;
 import com.hkbea.hth.model.CreditorAgent;
 import com.hkbea.hth.model.Currency;
 import com.hkbea.hth.model.FinancialInstitutionId;
-import com.hkbea.hth.model.IntermediaryAgent;
 import com.hkbea.hth.model.LocalPayment;
 import com.hkbea.hth.model.Payment;
 import com.hkbea.hth.model.PaymentIdentification;
@@ -49,9 +46,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,7 +60,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -133,8 +131,6 @@ class OverseasPaymentServiceTest {
         lenient().when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString())).thenReturn("PAYER NAME");
         lenient().when(accountApi.enquireGenericBalance(any()))
                 .thenReturn(buildBalanceResponse("999999999", Currency.HKD));
-        lenient().when(localPaymentApi.route(any(BatchRoutingCreditTransferRequest.class)))
-                .thenAnswer(invocation -> PaymentRoutingTestSupport.routeResponse(invocation.getArgument(0)));
     }
 
     /** Access account record with an ACTIVE object status (required by validateFromAccount). */
@@ -170,7 +166,7 @@ class OverseasPaymentServiceTest {
 
         @Test
         void nonActiveAndMissingStatusesReturnBusinessError() {
-            for (String status : java.util.Arrays.asList(null, "", " ", "\t", "I", "INACTIVE",
+            for (String status : Arrays.asList(null, "", " ", "\t", "I", "INACTIVE",
                     "FROZEN", "frozen", "CLOSED", "DORMANT", "HOLD", "UNKNOWN", " A ", " ACTIVE ")) {
                 givenAccounts(List.of(accountWithStatus(status)));
                 ServiceException exception = assertThrows(ServiceException.class,
@@ -183,7 +179,7 @@ class OverseasPaymentServiceTest {
 
         @Test
         void missingAccountResultsReturnAccountNotFound() {
-            List<List<HthUserAccessAccount>> results = java.util.Arrays.asList(
+            List<List<HthUserAccessAccount>> results = Arrays.asList(
                     null, Collections.emptyList(), Collections.singletonList(null));
             for (List<HthUserAccessAccount> accounts : results) {
                 givenAccounts(accounts);
@@ -228,27 +224,27 @@ class OverseasPaymentServiceTest {
         txnAmount.setCurrency(currency);
 
         Creditor creditor = new Creditor();
-        creditor.setCreditorName("OVERSEAS BENEFICIARY");
+        creditor.setAccountName("OVERSEAS BENEFICIARY");
         PostalAddress address = new PostalAddress();
-        address.setAddressLine1("Flat 12A 88 Queens Road");
-        address.setTownName("Hong Kong");
-        address.setCountry("HK");
+        address.setPayeeAddressLine1("Flat 12A 88 Queens Road");
+        address.setPayeeTownName("Hong Kong");
+        address.setPayeeCreditorCountry("HK");
         creditor.setPostalAddress(address);
 
         CreditorAgent creditorAgent = new CreditorAgent();
         FinancialInstitutionId financialInstitutionId = new FinancialInstitutionId();
-        financialInstitutionId.setBicfi("BKCHHKHHXXX");
+        financialInstitutionId.setBICFI("BKCHHKHHXXX");
         creditorAgent.setFinancialInstitutionId(financialInstitutionId);
 
         CategoryPurpose categoryPurpose = new CategoryPurpose();
-        categoryPurpose.setCode("GSCB");
-        categoryPurpose.setProprietary("CXBSNS");
+        categoryPurpose.setPurposeCode("GSCB");
+        categoryPurpose.setPurposeProprietary("CXBSNS");
 
         PaymentIdentification paymentIdentification = new PaymentIdentification();
+//        paymentIdentification.setCustomerTransactionId(CUSTOMER_TXN_ID);
         paymentIdentification.setEndToEndId("E2E-OVERSEAS");
 
         LocalPayment payment = new LocalPayment();
-        payment.setTransactionID(CUSTOMER_TXN_ID);
         payment.setPaymentType(type);
         payment.setPartyId(PARTY_ID);
         payment.setFromAccount(fromAccount);
@@ -256,14 +252,9 @@ class OverseasPaymentServiceTest {
         payment.setTxnAmount(txnAmount);
         payment.setCreditor(creditor);
         payment.setCreditorAgent(creditorAgent);
-        FinancialInstitutionId intermediaryFid = new FinancialInstitutionId();
-        intermediaryFid.setBicfi("SNNRHKH2XXX");
-        IntermediaryAgent intermediaryAgent = new IntermediaryAgent();
-        intermediaryAgent.setFinancialInstitutionId(intermediaryFid);
-        payment.setIntermediaryAgent(intermediaryAgent);
         payment.setCategoryPurpose(categoryPurpose);
         payment.setPaymentIdentification(paymentIdentification);
-        payment.setCreationDateTime("2026-09-20T10:15:30+08:00");
+        payment.setTransactionID(CUSTOMER_TXN_ID);
         payment.setSettlementDate(LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE));
         payment.setChargesOption(LocalPayment.ChargesOptionEnum.SHA);
         payment.setPaymentDetails(new java.util.ArrayList<>(Collections.singletonList("overseas-detail")));
@@ -274,38 +265,23 @@ class OverseasPaymentServiceTest {
         return buildOverseasPayment(LocalPayment.PaymentTypeEnum.TT, currency);
     }
 
-    static TransferModelApiResponse buildPaymentResponse(PaymentResultQueryResponse.StatusEnum status,
-                                                         String errorMessage, String statusReason, String ipeRefId) {
-        TransferPaymentResultQueryResponse result = new TransferPaymentResultQueryResponse();
-        result.setEndToEndId("IPE-TXN-001");
-        result.setStatus(toRoutingStatus(status));
+    static ModelApiResponse buildPaymentResponse(PaymentResultQueryResponse.StatusEnum status,
+                                                 String errorMessage, String statusReason, String ipeRefId) {
+        PaymentResultQueryResponse result = new PaymentResultQueryResponse();
+        result.setTransactionId("IPE-TXN-001");
+        result.setStatus(status);
         result.setErrorMessage(errorMessage);
         result.setStatusReason(statusReason);
         result.setIpeReferenceId(ipeRefId);
 
-        TransferModelApiResponse response = new TransferModelApiResponse();
+        ModelApiResponse response = new ModelApiResponse();
         response.setCode("00");
         response.setData(result);
         return response;
     }
 
-    static TransferModelApiResponse buildPaymentResponse(
-            PaymentResultQueryResponse.StatusEnum status, String errorMessage) {
+    static ModelApiResponse buildPaymentResponse(PaymentResultQueryResponse.StatusEnum status, String errorMessage) {
         return buildPaymentResponse(status, errorMessage, null, null);
-    }
-
-    private static TransferPaymentResultQueryResponse.StatusEnum toRoutingStatus(
-            PaymentResultQueryResponse.StatusEnum status) {
-        if (status == null) {
-            return null;
-        }
-        return switch (status) {
-            case SUCCESS -> TransferPaymentResultQueryResponse.StatusEnum.COMPLETED;
-            case FAILED -> TransferPaymentResultQueryResponse.StatusEnum.FAILED;
-            case PENDING -> TransferPaymentResultQueryResponse.StatusEnum.PENDING;
-            case PROCESSING -> TransferPaymentResultQueryResponse.StatusEnum.PROCESSING;
-            case MANUAL_REVIEW -> TransferPaymentResultQueryResponse.StatusEnum.MANUAL_REVIEW;
-        };
     }
 
     static BatchEnquiryResponse buildBalanceResponse(String availableBalance, Currency currency) {
@@ -337,7 +313,7 @@ class OverseasPaymentServiceTest {
 
         @Test
         void success_flow() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS,
                             null, null, "IPE-REF-001"));
 
@@ -348,22 +324,22 @@ class OverseasPaymentServiceTest {
             assertNotNull(result.getTxnTime());
             assertEquals(CUSTOMER_TXN_ID, result.getOriginalTransactionID());
             assertEquals("E2E-OVERSEAS", result.getOriginalEndtoendID());
-            verify(localPaymentApi).submit(any(BatchRoutingCreditTransferRequest.class));
+            verify(localPaymentApi).submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class));
         }
 
         @Test
         void ipeFailed_mapsRejected() {
-            TransferPaymentResultQueryResponse failed = new TransferPaymentResultQueryResponse();
-            failed.setEndToEndId("IPE-TXN-001");
-            failed.setStatus(TransferPaymentResultQueryResponse.StatusEnum.FAILED);
+            PaymentResultQueryResponse failed = new PaymentResultQueryResponse();
+            failed.setTransactionId("IPE-TXN-001");
+            failed.setStatus(PaymentResultQueryResponse.StatusEnum.FAILED);
             failed.setErrorMessage("beneficiary rejected");
             failed.setErrorCode("DOWNSTREAM-001");
             failed.setStatusReason("downstream-error");
             failed.setIpeReferenceId("IPE-REF-002");
-            TransferModelApiResponse response = new TransferModelApiResponse();
+            ModelApiResponse response = new ModelApiResponse();
             response.setCode("00");
             response.setData(failed);
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(response);
 
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
@@ -375,9 +351,9 @@ class OverseasPaymentServiceTest {
 
         @Test
         void nonSuccessCode_returnsProcessing() {
-            TransferModelApiResponse response = new TransferModelApiResponse();
+            ModelApiResponse response = new ModelApiResponse();
             response.setCode("99");
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(response);
 
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
@@ -387,10 +363,10 @@ class OverseasPaymentServiceTest {
 
         @Test
         void nullResponseData_returnsProcessing() {
-            TransferModelApiResponse response = new TransferModelApiResponse();
+            ModelApiResponse response = new ModelApiResponse();
             response.setCode("00");
             response.setData(null);
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(response);
 
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
@@ -400,7 +376,7 @@ class OverseasPaymentServiceTest {
 
         @Test
         void ipeException_returnsProcessingAndPersists() {
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenThrow(new RuntimeException("IPE timeout"));
 
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
@@ -415,19 +391,19 @@ class OverseasPaymentServiceTest {
                     PaymentResultQueryResponse.StatusEnum.PENDING,
                     PaymentResultQueryResponse.StatusEnum.PROCESSING,
                     PaymentResultQueryResponse.StatusEnum.MANUAL_REVIEW)) {
-                when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+                when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                         .thenReturn(buildPaymentResponse(status, null));
                 Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
                 assertEquals(Payment.StatusEnum.PROCESSING, result.getStatus());
             }
 
             // null 状态
-            TransferPaymentResultQueryResponse nullStatus = new TransferPaymentResultQueryResponse();
-            nullStatus.setEndToEndId("IPE-TXN-NULL");
-            TransferModelApiResponse response = new TransferModelApiResponse();
+            PaymentResultQueryResponse nullStatus = new PaymentResultQueryResponse();
+            nullStatus.setTransactionId("IPE-TXN-NULL");
+            ModelApiResponse response = new ModelApiResponse();
             response.setCode("00");
             response.setData(nullStatus);
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(response);
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
             assertEquals(Payment.StatusEnum.PROCESSING, result.getStatus());
@@ -523,7 +499,7 @@ class OverseasPaymentServiceTest {
             // current behavior: a blank product code does not abort the flow
             // (the former ACCOUNT_NOT_FOUND check on productCode has been removed)
             when(partyAccountMapper.selectProductCode(anyString(), anyString())).thenReturn(" ");
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
 
             Payment result = service.processPayment(buildOverseasPayment(Currency.HKD));
@@ -577,7 +553,7 @@ class OverseasPaymentServiceTest {
         @Test
         void invalidPayeeBicCode_throws() {
             LocalPayment request = buildOverseasPayment(Currency.HKD);
-            request.getCreditorAgent().getFinancialInstitutionId().setBicfi("invalid-bic");
+            request.getCreditorAgent().getFinancialInstitutionId().setBICFI("invalid-bic");
 
             ParameterException exception = assertThrows(ParameterException.class,
                     () -> service.processPayment(request));
@@ -587,10 +563,10 @@ class OverseasPaymentServiceTest {
         @Test
         void blankPayeeBicCode_passes() {
             LocalPayment request = buildOverseasPayment(Currency.HKD);
-            request.getCreditorAgent().getFinancialInstitutionId().setBicfi(" ");
+            request.getCreditorAgent().getFinancialInstitutionId().setBICFI(" ");
             // either-or rule: memberId provided while BICFI is blank keeps the request valid
             request.getCreditorAgent().getFinancialInstitutionId().setClearingSystemMemberId("015");
-            when(localPaymentApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+            when(localPaymentApi.submitOutwardCreditTransfer(any(BatchCreditTransferRequest.class)))
                     .thenReturn(buildPaymentResponse(PaymentResultQueryResponse.StatusEnum.SUCCESS, null));
 
             Payment result = service.processPayment(request);
@@ -717,7 +693,7 @@ class OverseasPaymentServiceTest {
             assertEquals("N/A", service.accountNameOrFallback(new LocalPayment()));
 
             LocalPayment blank = buildOverseasPayment(Currency.HKD);
-            blank.getCreditor().setCreditorName(" ");
+            blank.getCreditor().setAccountName(" ");
             assertEquals("N/A", service.accountNameOrFallback(blank));
 
             assertEquals("OVERSEAS BENEFICIARY", service.accountNameOrFallback(buildOverseasPayment(Currency.HKD)));

@@ -6,7 +6,6 @@ import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
-import com.hkbea.hth.convert.PaymentModelConvert;
 import com.hkbea.hth.entity.HthUserAccessAccount;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -101,53 +100,21 @@ public abstract class OverseasPaymentService {
         // TT-specific
     }
 
-    public final Payment processPayment(LocalPayment localPayment) {
-        return processPayment(localPayment, prepareRoutingRequest(localPayment));
-    }
-
-    Payment processPayment(LocalPayment localPayment,
-                           BatchRoutingCreditTransferRequest routingRequest) {
-        BatchRoutingCreditTransferRequest submitRequest = routingRequest != null
-                ? routingRequest : prepareRoutingRequest(localPayment);
-        return buildResponse(localPayment, submitRequest);
-    }
-
-    BatchRoutingCreditTransferRequest prepareRoutingRequest(LocalPayment localPayment) {
-        if (localPayment == null) {
-            throw logAndCreateException(HTHSupportErrorMapping.MISSING_MANDATORY_PARAMETER);
-        }
-        if (localPayment.getPaymentType() == LocalPayment.PaymentTypeEnum.TT) {
-            PaymentValidationSupport.validateTtRules(localPayment);
-        } else if (localPayment.getPaymentType() == LocalPayment.PaymentTypeEnum.DR) {
-            PaymentValidationSupport.validateDrRules(localPayment);
-        }
-        PaymentValidationSupport.useDebitCurrencyForCreditorAccount(localPayment);
+    public Payment processPayment(LocalPayment localPayment) {
         validateOverseas(localPayment);
         validateSpecific(localPayment);
-        BatchRoutingCreditTransferRequest request = PaymentCommonRoutingBuilder
-                .prepareCommonRoutingRequest(localPayment, partyAccountMapper);
-        PaymentModelConvert.applyTypeSpecificRoutingDetails(request,
-                PaymentModelConvert.toRoutingRequest(buildRequest(localPayment, newBatchId())));
-        return request;
+        return buildResponse(localPayment);
     }
 
     protected BatchCreditTransferRequest buildRequest(LocalPayment localPayment) {
-        String batchId = newBatchId();
+        String batchId = CHANNEL + LocalDateTime.now().format(TIMESTAMP_FMT) + AccountUtils.generateDigits();
         //call wmg
         createProcessInstanceExecute(localPayment, batchId);
-        return buildRequest(localPayment, batchId);
-    }
-
-    private BatchCreditTransferRequest buildRequest(LocalPayment localPayment, String batchId) {
         BatchCreditTransferRequest request = buildEnvelope(localPayment, batchId);
         TransactionDetailRequest txn = buildTransactionDetail(localPayment, batchId);
         enrichTransaction(txn, localPayment, batchId, txn.getPayerAcProdCode());
         request.setTransactions(Collections.singletonList(txn));
         return request;
-    }
-
-    private String newBatchId() {
-        return CHANNEL + LocalDateTime.now().format(TIMESTAMP_FMT) + AccountUtils.generateDigits();
     }
 
     protected void validateOverseas(LocalPayment payment) {
@@ -170,7 +137,7 @@ public abstract class OverseasPaymentService {
     protected void validatePayeeBicCode(LocalPayment payment) {
         CreditorAgent agent = payment.getCreditorAgent();
         FinancialInstitutionId fid = agent == null ? null : agent.getFinancialInstitutionId();
-        String bicfi = fid == null ? null : fid.getBicfi();
+        String bicfi = fid == null ? null : fid.getBICFI();
         String memberId = fid == null ? null : fid.getClearingSystemMemberId();
 
         boolean bicfiProvided = StringUtils.isNotBlank(bicfi);
@@ -279,7 +246,7 @@ public abstract class OverseasPaymentService {
     protected void validateSufficientBalance(
             String accountNumber, String currency, BigDecimal amount) {
         if (!hasEnoughBalance(accountNumber, currency, amount)) {
-            throw new ParameterException("debtorAccount ", HTHSupportErrorMapping.INSUFFICIENT_BALANCE);
+            throw new ParameterException("", HTHSupportErrorMapping.INSUFFICIENT_BALANCE);
         }
     }
 
@@ -304,23 +271,14 @@ public abstract class OverseasPaymentService {
         return false;
     }
 
-    protected final Payment buildResponse(LocalPayment localPayment,
-                                          BatchRoutingCreditTransferRequest routingRequest) {
+    protected final Payment buildResponse(LocalPayment localPayment) {
         Payment payment = new Payment();
-        BatchCreditTransferRequest request = buildRequest(localPayment, newBatchId());
-        PaymentRoutingSubmitter.alignLegacyIdentifiers(request, routingRequest);
-        // TT creates the WMG process after validation, using the same batch id
-        // that was accepted by smart-routing and will be submitted to IPE.
-        createProcessInstanceExecute(localPayment, request.getBatchId());
+        BatchCreditTransferRequest request = buildRequest(localPayment);
         String transactionId = request.getTransactions().getFirst().getTransactionId();
         payment.setTxnRef(transactionId);
         PaymentResultQueryResponse result = null;
         try {
-            BatchRoutingCreditTransferRequest submitRequest = routingRequest != null
-                    ? routingRequest : PaymentModelConvert.toRoutingRequest(request);
-            TransferModelApiResponse routingResponse =
-                    PaymentRoutingSubmitter.submit(localPaymentApi, submitRequest);
-            ModelApiResponse response = PaymentModelConvert.toLegacyApiResponse(routingResponse);
+            ModelApiResponse response = localPaymentApi.submitOutwardCreditTransfer(request);
             result = parsePaymentResponse(response, payment);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
@@ -371,17 +329,15 @@ public abstract class OverseasPaymentService {
         txn.setDebitAmountCcy(localPayment.getFromAccount().getCurrency().toString());
         txn.setPaymentDetails(localPayment.getPaymentDetails());
         txn.setPurposeCode(localPayment.getCategoryPurpose() != null
-                ? localPayment.getCategoryPurpose().getCode() : null);
+                ? localPayment.getCategoryPurpose().getPurposeCode() : null);
         txn.setPurposeProprietary(localPayment.getCategoryPurpose() != null
-                ? localPayment.getCategoryPurpose().getProprietary() : null);
+                ? localPayment.getCategoryPurpose().getPurposeProprietary() : null);
 
         String debitInternalAccountNo = AccountUtils.ext2intAccNo(
                 localPayment.getFromAccount().getAccountNumber(),
                 localPayment.getFromAccount().getAccountType().value().substring(0, 1));
         txn.setPayerType(TransactionDetailRequest.PayerTypeEnum.CORPORATE);
         txn.setPayerAccountNo(debitInternalAccountNo);
-        txn.setPayerInternalAccountNo(debitInternalAccountNo);
-        txn.setDebitInternalAccount(debitInternalAccountNo);
         txn.setPayerAccountNoFmt(formatPayerAccountNoFmt(localPayment.getFromAccount().getAccountNumber()));
         txn.setPayerAccountCurrency(localPayment.getFromAccount().getCurrency().toString());
         txn.setPayerName(partyPreferenceMapper.selectCustomerNameByPartyId(localPayment.getPartyId()));
@@ -393,7 +349,6 @@ public abstract class OverseasPaymentService {
                 ? null
                 : Integer.valueOf(partyAccount.getCompanyCode().replaceFirst("^0+", "")));
         txn.setPayerAcProdCode(productCode);
-        txn.setProductType(productCode);
         txn.setPayerAccountType("CSA");
         txn.setAcStatus(0);
         txn.setHdrCibExtAcNo(localPayment.getFromAccount().getAccountNumber());
@@ -405,7 +360,7 @@ public abstract class OverseasPaymentService {
         remittanceRequest.setPinCnt(0);
         remittanceRequest.setPinListArea(null);
         remittanceRequest.setLmInd(null);
-        remittanceRequest.setDepositAccountName1(localPayment.getCreditor().getCreditorName());
+        remittanceRequest.setDepositAccountName1(localPayment.getCreditor().getAccountName());
         //TODO DepositAc2 is bener address , if registered select from bco db DIGX_PY_DOMESTIC_PAYEE ADDRESS_LINE1
         remittanceRequest.setDepositAccountName2(null);
         //DepositAc3 is bener address , if registered select from bco db DIGX_PY_DOMESTIC_PAYEE ADDRESS_LINE2
@@ -515,7 +470,7 @@ public abstract class OverseasPaymentService {
         if (creditor == null) {
             return ACCOUNT_NAME_NA;
         }
-        String name = creditor.getCreditorName();
+        String name = creditor.getAccountName();
         return name != null && !name.isBlank() ? name : ACCOUNT_NAME_NA;
     }
 

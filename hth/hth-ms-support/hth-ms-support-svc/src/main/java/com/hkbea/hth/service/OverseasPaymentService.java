@@ -2,10 +2,13 @@ package com.hkbea.hth.service;
 
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.hkbea.common.constant.CommonConstant;
+import com.hkbea.common.exception.ErrorMapping;
 import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
+import com.hkbea.hth.bg3.model.bg9ch7e0.request.*;
+import com.hkbea.hth.bg3.model.bg9ch7e0.response.Bgech7e0Response;
 import com.hkbea.hth.entity.HthUserAccessAccount;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -79,6 +82,8 @@ public abstract class OverseasPaymentService {
     protected InternalPayeeMapper internalPayeeMapper;
     @Autowired
     protected AccountApi accountApi;
+    @Autowired
+    protected com.hkbea.hth.bg3.api.AccountApi bgAccountApi;
     @Autowired
     protected CommonHeader headers;
     @Autowired
@@ -201,6 +206,67 @@ public abstract class OverseasPaymentService {
         if (!active) {
             throw new ServiceException(HTHSupportErrorMapping.FPS_DEBIT_ACCOUNT_STATUS_INVALID);
         }
+        validateDebitAccountStatus(debitInternalAccountNo, fromAccount.getCurrency());
+    }
+
+    private void validateDebitAccountStatus(String internalAccountNumber, String currency) {
+        Bgech7e0Response response;
+        try {
+            response = bgAccountApi.queryAccountInfo(buildDebitAccountInfoRequest(internalAccountNumber, currency));
+        } catch (Exception e) {
+            log.warn("Debit account status enquiry failed", e);
+            throw new ServiceException(ErrorMapping.GENERAL_SERVICE_EXCEPTION);
+        }
+        if (response == null || response.getDfhcommarea() == null
+                || response.getDfhcommarea().getQaechcc() == null) {
+            throw new ServiceException(ErrorMapping.GENERAL_SERVICE_EXCEPTION);
+        }
+        var envelope = response.getDfhcommarea().getQaechcc();
+        if (!"0000".equals(envelope.getQaechccErrData()) || envelope.getBgech7e0() == null
+                || envelope.getBgech7e0().getEh7e0Output() == null) {
+            throw new ServiceException(ErrorMapping.GENERAL_SERVICE_EXCEPTION);
+        }
+        var output = envelope.getBgech7e0().getEh7e0Output();
+        if (!SUCCESS_CODE.equals(output.getEh7e0CodReturnO())) {
+            throw new ServiceException(ErrorMapping.GENERAL_SERVICE_EXCEPTION);
+        }
+        // Match TransactionServiceImpl.mapStatus: other values fall through; Hold is not checked.
+        if ("C".equalsIgnoreCase(output.getEh7e0FlgStatusO())
+                || "Y".equalsIgnoreCase(output.getEh7e0FlgDormantO())) {
+            throw new ServiceException(HTHSupportErrorMapping.FPS_DEBIT_ACCOUNT_STATUS_INVALID);
+        }
+    }
+
+    private Bgech7e0Request buildDebitAccountInfoRequest(String accountNumber, String currency) {
+        Eh7e0CacI account = new Eh7e0CacI();
+        account.setEh7e0EntI(Integer.valueOf(accountNumber.substring(0, 4)));
+        account.setEh7e0CenRegI(Integer.valueOf(accountNumber.substring(4, 8)));
+        account.setEh7e0AccI(Long.valueOf(accountNumber.substring(8)));
+        Eh7e0Input input = new Eh7e0Input();
+        input.setEh7e0CacI(account);
+        input.setEh7e0FccI(currency);
+        Eh7e0Record record = new Eh7e0Record();
+        record.setEh7e0Input(input);
+        Bgech7e0 enquiry = new Bgech7e0();
+        enquiry.setEh7e0Record(record);
+        QaechccReq7e0 envelope = new QaechccReq7e0();
+        envelope.setQaechccTypChannel("IN");
+        envelope.setQaechccApplId("BG");
+        envelope.setQaechccCollecName("BG9CH7E0");
+        envelope.setQaechccCodEntity(accountNumber.substring(0, 4));
+        envelope.setQaechccDateOp(LocalDate.now().toString());
+        envelope.setQaechccCollecFunc("");
+        envelope.setQaechccCodBrn("");
+        envelope.setQaechccCodTerm("");
+        envelope.setQaechccCodUser("");
+        envelope.setQaechccErrData("");
+        envelope.setQaechccFrArea("");
+        envelope.setBgech7e0(enquiry);
+        DfhcommareaReq7e0 area = new DfhcommareaReq7e0();
+        area.setQaechcc(envelope);
+        Bgech7e0Request request = new Bgech7e0Request();
+        request.setDfhcommarea(area);
+        return request;
     }
 
     protected void validateTxnAmount(TxnAmount txnAmount) {

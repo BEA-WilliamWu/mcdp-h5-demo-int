@@ -99,6 +99,27 @@ class TtPaymentServiceTest {
     private TtPaymentServiceSupport ttPaymentServiceSupport;
 
     @Test
+    void hostClosedOrDormantRejectsBeforePaymentSideEffects() {
+        for (String[] state : new String[][] {{"C", "N"}, {"c", "N"}, {"A", "Y"}, {"A", "y"}}) {
+            when(bgAccountApi.queryAccountInfo(any())).thenReturn(
+                    OverseasPaymentServiceTest.hostAccount(state[0], state[1], "N"));
+            ServiceException error = assertThrows(ServiceException.class,
+                    () -> ttPaymentService.processPayment(buildTtPayment()));
+            assertEquals(600061, error.getErrCode());
+        }
+        verifyNoInteractions(accountApi, localPaymentApi, paymentPayoutRecordMapper, ttPaymentServiceSupport);
+    }
+
+    @Test
+    void hostEnquiryFailureStopsBeforePaymentSideEffects() {
+        when(bgAccountApi.queryAccountInfo(any())).thenReturn(null);
+        ServiceException error = assertThrows(ServiceException.class,
+                () -> ttPaymentService.processPayment(buildTtPayment()));
+        assertEquals(600000, error.getErrCode());
+        verifyNoInteractions(accountApi, localPaymentApi, paymentPayoutRecordMapper, ttPaymentServiceSupport);
+    }
+
+    @Test
     void invalidDebitStatusRejectsBeforePaymentSideEffects() {
         for (String status : Arrays.asList(null, "", " ", "I", "FROZEN", "CLOSED", " A ")) {
             HthUserAccessAccount account = activeAccessAccount();
@@ -137,9 +158,14 @@ class TtPaymentServiceTest {
         }
     }
 
+    @Mock
+    private com.hkbea.hth.bg3.api.AccountApi bgAccountApi;
+
     @BeforeEach
     void setUp() {
         new HTHSupportErrorMapping();
+        org.mockito.Mockito.lenient().when(bgAccountApi.queryAccountInfo(any()))
+                .thenReturn(OverseasPaymentServiceTest.hostAccount("A", "N", "N"));
         org.mockito.Mockito.lenient().when(headers.getMessageId()).thenReturn(MESSAGE_ID);
         org.mockito.Mockito.lenient().when(hthUserAccessAccountMapper.selectFromAccountInfo(
                         nullable(String.class), nullable(String.class), nullable(String.class)))

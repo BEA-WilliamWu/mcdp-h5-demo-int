@@ -5,6 +5,10 @@ import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
+import com.hkbea.hth.bg3.model.bg9ch7e0.response.*;
+import com.hkbea.hth.bg3.model.bg9ch7e0.request.Bgech7e0Request;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.Mockito.verifyNoInteractions;
 import com.hkbea.hth.entity.HthUserAccessAccount;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -118,9 +122,14 @@ class OverseasPaymentServiceTest {
     @Mock
     protected HthUserAccessAccountMapper hthUserAccessAccountMapper;
 
+    @Mock
+    private com.hkbea.hth.bg3.api.AccountApi bgAccountApi;
+
     @BeforeEach
     void setUp() {
         new HTHSupportErrorMapping();
+        org.mockito.Mockito.lenient().when(bgAccountApi.queryAccountInfo(any()))
+                .thenReturn(OverseasPaymentServiceTest.hostAccount("A", "N", "N"));
         lenient().when(headers.getMessageId()).thenReturn(MESSAGE_ID);
         lenient().when(hthUserAccessAccountMapper.selectFromAccountInfo(
                         nullable(String.class), nullable(String.class), nullable(String.class)))
@@ -131,6 +140,130 @@ class OverseasPaymentServiceTest {
         lenient().when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString())).thenReturn("PAYER NAME");
         lenient().when(accountApi.enquireGenericBalance(any()))
                 .thenReturn(buildBalanceResponse("999999999", Currency.HKD));
+    }
+
+    static Bgech7e0Response hostAccount(String status, String dormant, String hold) {
+        Eh7e0Output output = new Eh7e0Output();
+        output.setEh7e0CodReturnO("00");
+        output.setEh7e0FlgStatusO(status);
+        output.setEh7e0FlgDormantO(dormant);
+        output.setEh7e0FlgAccHoldO(hold);
+        Bgech7e0Res enquiry = new Bgech7e0Res();
+        enquiry.setEh7e0Output(output);
+        QaechccRes7e0 envelope = new QaechccRes7e0();
+        envelope.setQaechccErrData("0000");
+        envelope.setBgech7e0(enquiry);
+        DfhcommareaRes7e0 area = new DfhcommareaRes7e0();
+        area.setQaechcc(envelope);
+        Bgech7e0Response response = new Bgech7e0Response();
+        response.setDfhcommarea(area);
+        return response;
+    }
+
+    @Nested
+    class HostAccountStatusTests {
+        @Test
+        void closedAndDormantRejectWithActiveAuthorization() {
+            for (String[] state : new String[][] {{"C", "N"}, {"c", null},
+                    {"A", "Y"}, {null, "y"}, {"C", "Y"}}) {
+                when(bgAccountApi.queryAccountInfo(any())).thenReturn(hostAccount(state[0], state[1], "N"));
+                ServiceException error = assertThrows(ServiceException.class,
+                        () -> service.processPayment(buildOverseasPayment(Currency.HKD)));
+                assertEquals(600061, error.getErrCode());
+                assertEquals("Invalid account status.", error.getMessage());
+            }
+            verifyNoInteractions(accountApi, localPaymentApi, paymentPayoutRecordMapper, paymentInternalMapper);
+        }
+
+        @Test
+        void otherValuesAndHoldRetainTransactionQueryFallback() {
+            for (String status : Arrays.asList("A", "a", null, "", " ", " C ", "CLOSED", "FROZEN", "UNKNOWN")) {
+                for (String dormant : Arrays.asList("N", "n", null, "", " ", " Y ", "UNKNOWN")) {
+                    when(bgAccountApi.queryAccountInfo(any())).thenReturn(hostAccount(status, dormant, "Y"));
+                    assertDoesNotThrow(() -> service.validateOverseas(buildOverseasPayment(Currency.HKD)),
+                            "status=" + status + ", dormant=" + dormant);
+                }
+            }
+        }
+
+        @Test
+        void enquiryUsesDebitAccountAndCurrencyOnce() {
+            LocalPayment payment = buildOverseasPayment(Currency.USD);
+            payment.getFromAccount().setCurrency("HKD");
+            service.validateOverseas(payment);
+            ArgumentCaptor<Bgech7e0Request> captor = ArgumentCaptor.forClass(Bgech7e0Request.class);
+            verify(bgAccountApi).queryAccountInfo(captor.capture());
+            var envelope = captor.getValue().getDfhcommarea().getQaechcc();
+            var input = envelope.getBgech7e0().getEh7e0Record().getEh7e0Input();
+            String internal = com.hkbea.hth.utils.AccountUtils.ext2intAccNo(
+                    payment.getFromAccount().getAccountNumber(),
+                    payment.getFromAccount().getAccountType().value().substring(0, 1));
+            assertEquals(Integer.valueOf(internal.substring(0, 4)), input.getEh7e0CacI().getEh7e0EntI());
+            assertEquals(Integer.valueOf(internal.substring(4, 8)), input.getEh7e0CacI().getEh7e0CenRegI());
+            assertEquals(Long.valueOf(internal.substring(8)), input.getEh7e0CacI().getEh7e0AccI());
+            assertEquals("HKD", input.getEh7e0FccI());
+            assertEquals("BG9CH7E0", envelope.getQaechccCollecName());
+        }
+
+        @Test
+        void missingResponseNodesFailWithoutStatusFallback() {
+            List<Bgech7e0Response> responses = new java.util.ArrayList<>();
+            responses.add(null);
+            responses.add(new Bgech7e0Response());
+            Bgech7e0Response missingEnvelope = hostAccount("A", "N", "N");
+            missingEnvelope.getDfhcommarea().setQaechcc(null);
+            responses.add(missingEnvelope);
+            Bgech7e0Response missingEnquiry = hostAccount("A", "N", "N");
+            missingEnquiry.getDfhcommarea().getQaechcc().setBgech7e0(null);
+            responses.add(missingEnquiry);
+            Bgech7e0Response missingOutput = hostAccount("A", "N", "N");
+            missingOutput.getDfhcommarea().getQaechcc().getBgech7e0().setEh7e0Output(null);
+            responses.add(missingOutput);
+            for (Bgech7e0Response response : responses) {
+                when(bgAccountApi.queryAccountInfo(any())).thenReturn(response);
+                assertEnquiryFailure();
+            }
+        }
+
+        @Test
+        void unsuccessfulEnvelopeOrInnerCodeFailsBeforeStateCheck() {
+            for (String code : Arrays.asList(null, "", "9999", " 0000 ")) {
+                Bgech7e0Response response = hostAccount("C", "Y", "N");
+                response.getDfhcommarea().getQaechcc().setQaechccErrData(code);
+                when(bgAccountApi.queryAccountInfo(any())).thenReturn(response);
+                assertEnquiryFailure();
+            }
+            for (String code : Arrays.asList(null, "", "10", " 00 ")) {
+                Bgech7e0Response response = hostAccount("C", "Y", "N");
+                response.getDfhcommarea().getQaechcc().getBgech7e0().getEh7e0Output().setEh7e0CodReturnO(code);
+                when(bgAccountApi.queryAccountInfo(any())).thenReturn(response);
+                assertEnquiryFailure();
+            }
+        }
+
+        @Test
+        void transportFailureStopsPayment() {
+            when(bgAccountApi.queryAccountInfo(any())).thenThrow(new RuntimeException("Host timeout"));
+            assertEnquiryFailure();
+        }
+
+        @Test
+        void missingAuthorizationDoesNotQueryHost() {
+            when(hthUserAccessAccountMapper.selectFromAccountInfo(
+                    nullable(String.class), nullable(String.class), nullable(String.class)))
+                    .thenReturn(Collections.emptyList());
+            ServiceException error = assertThrows(ServiceException.class,
+                    () -> service.processPayment(buildOverseasPayment(Currency.HKD)));
+            assertEquals(600020, error.getErrCode());
+            verifyNoInteractions(bgAccountApi);
+        }
+
+        private void assertEnquiryFailure() {
+            ServiceException error = assertThrows(ServiceException.class,
+                    () -> service.processPayment(buildOverseasPayment(Currency.HKD)));
+            assertEquals(600000, error.getErrCode());
+            verifyNoInteractions(accountApi, localPaymentApi, paymentPayoutRecordMapper, paymentInternalMapper);
+        }
     }
 
     /** Access account record with an ACTIVE object status (required by validateFromAccount). */

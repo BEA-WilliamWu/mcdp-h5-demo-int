@@ -1,9 +1,18 @@
+aa728217d302332722552c5d88519ceda4a6ff37d89f86796faff6d694f6c475  hhfi/consulting/channel/extensions/components/account-access-management/hth-account-linkage/hth-account-linkage.js
+582fd023366d7317d4b18c7ceb2ad8def3e9e04e2df0c1a80cd32aa0fb9b9cc9  hhfi/consulting/channel/extensions/components/account-access-management/hth-api-service-mapping/hth-api-service-mapping.js
+983008389e2de939cd261d1d255bd0f0f646b90208ca5214fa8350a439f7dc0d  hhfi/consulting/channel/extensions/components/account-access-management/review-hth-user-access/review-hth-user-access.js
 69d7ae83a2a6833a3445322b3fbea9bda88357134cab9531f3e8e3b3a1b6dd2f  hhfi/consulting/channel/extensions/components/host-to-host/host-to-host-details/host-to-host-details.js
 02af447c0a91a6701d4feef30e89244acb42814f299de7598f077fd5fe9a8f8a  hhfi/consulting/channel/extensions/components/host-to-host/host-to-host-review/host-to-host-review.js
 aeae14762cb31cb080ca6a512830f2cfaeda165d08a08a09cf8c984cf3fa7cf3  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostManagement.java
+9bbd2c3f25d0c0f791b6f97681493169d6a8260601727ef75c970b784722a29c  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostUserAccess.java
+17a327c98527b8bd12733e9417e826a3640be2371a54b54a9dd1edc0de12139b  hhfi/devtools/backend-compile/tests/Hth876UserAccessTest.java
 105d2591c08d0fe93e47ae9efcdd36d4b268edc3e206fcb77ed974f5fce737d2  hhfi/devtools/backend-compile/tests/Hth881ManagementTest.java
 eee0188f748fa8b2ba614c8fc0b2996d922d7b3001d4b02414d1f046e1accdf0  hhfi/devtools/backend-compile/tests/verify_hth_1288.py
+0a0236a3b1f31e7b6384f57c5ac84fd398c0832ca3081ebd678694a322fbba2f  hhfi/devtools/backend-compile/tests/verify_hth_876.py
 d1e8af1e7afcf994e0e1e656b280f1d0b268664639f2613fa218a79c2ef316ef  hhfi/devtools/backend-compile/tests/verify_hth_881.py
+110179a29b395eb55d299986bad3cc242df113b7b077117ede301c4adca44ef2  hhfi/devtools/frontend-tests/hth-876-user-access.test.js
 3afc4267a2ae907624ed9abd2daed80805a4fb7eb4d39b5144edb342ad2b6585  hhfi/devtools/frontend-tests/hth-881-management.test.js
+4954d972692d4a4da1d25c4e5cd475b689e42e7588fe64506237ca8df1ae22f0  hhfi/story/account/BCOH2H-876-TECHNICAL-DESIGN.md
 1808bfeb7717bdb7775e2aabd99d8bac329ab078e5c9f125dc02f2f0f62aaedc  hhfi/story/account/BCOH2H-881-TECHNICAL-DESIGN.md
+a19b83a58f126b2a05257d80ed58a0bf26aa10dc4e5c939a9d6aa126b0820b4d  hhfi/story/account/[#BCOH2H-876] CM - HTH User Accounts & Service Access - Removal of User API Audit Log Service.pdf
 ed5ea260e7c587589446a4437e92b72d4b400ff5be26bfb71cf172e126b09495  hhfi/story/account/[#BCOH2H-881] BM - HTH Management - Removal of Corporate API Audit Log Service.pdf

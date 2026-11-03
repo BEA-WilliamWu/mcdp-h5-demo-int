@@ -1,5 +1,7 @@
 # BCOH2H-880 delivery
 
+> **880 与 2110 联合部署请改用 [bco-notification](../bco-notification/README.md)。** 本目录保留历史交付快照；不要再将两个旧目录依次覆盖使用，以免同名文件互相回退。
+
 Source: `hth-application` commit `e91aa291989cf4083f60d68a55a3d6d064a83872`. Revision dated 4 November 2026.
 
 This isolated overlay retains source paths below `bcohth-880/hhfi/`. Nothing is copied to mcdp's root `consulting` directory. Use the matching full source baseline, which includes the separately delivered 2110 work; SDK JARs, cached classes, reviewed DOCX and H2 are not bundled.

@@ -1,5 +1,7 @@
 # BCOH2H-2110 delivery — minimal BCO reuse
 
+> **880 与 2110 联合部署请改用 [bco-notification](../bco-notification/README.md)。** 本目录保留历史交付快照；不要再将两个旧目录依次覆盖使用，以免同名文件互相回退。
+
 Source: `hth-application` commit `876dd4376179720fb90f637fea85659c120ceada`.
 
 This revision replaces the earlier private 2110 notification implementation. HTH combined Email + Mobile changes reuse the existing BCO events, templates and recipient flow. Remove only the two additional target-specific SMS reminders copied to the final approver; keep the generic `USER_MANAGEMENT_EDIT` event and its existing recipient/template configuration.

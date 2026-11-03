@@ -1,4 +1,4 @@
-"""Run the production HTH approval/rejection hook with SDK DTOs and synthetic transactions.
+"""Run the existing production HTH rejection hook with SDK DTOs and synthetic transactions.
 
 Server transaction reads and dispatch are fixtures. Post-commit cleanup and approval
 rollback are tested by verify_hth_password_transactions.py; Oracle/WebLogic require UAT validation.
@@ -20,8 +20,7 @@ cp = os.pathsep.join([str(jackson / ("jackson-" + kind + "-2.11.0.jar"))
                      + [str(p) for p in (root / "consulting/middleware/lib").rglob("*.jar")])
 # Recompile the current shared delegate and its updated dependencies instead of
 # checking the new approval hook against stale cached BCO APIs.
-sources = [next(projects.rglob("HthContactUpdateApprovalLifecycle.java")),
-           next(projects.rglob("HthApiPasswordApprovalLifecycle.java")),
+sources = [next(projects.rglob("HthApiPasswordApprovalLifecycle.java")),
            next(projects.rglob("CZTransactionExt.java")),
            next(projects.rglob("CZTransactionExtFunc.java")),
            next(projects.rglob("CZAdhocBulkpaymentPayout.java")),
@@ -38,7 +37,7 @@ end = bytecode.find("\n  public ", start + 10)
 perform = bytecode[start:end]
 hook = perform.index("ITransactionExtExecutor.postPerformAction:")
 assert perform.index("ServiceInvocationHelper.invokeService:") < perform.rindex("Transaction.commit:", 0, hook), \
-    "Notification hook requires a commit after business execution, not just the earlier approval-state commit"
+    "Post hook must follow business commit, not just the earlier approval-state commit"
 assert "DataAccessManager.closeSession:" in perform[hook:], "Post hook is expected before session close"
 with tempfile.TemporaryDirectory(prefix="hth-code-approval-") as directory:
     configuration = Path(directory) / "ConfigurationFactory.java"

@@ -1,153 +1,95 @@
-# BCOH2H-2110 — CM user contact update: Email + Mobile
+# BCOH2H-2110 — Combined Email and Mobile update notification
 
-Date: 2026-11-03 · Implementation baseline: `4efb66ed`
+Revised: 2026-11-04. Scope: an existing HTH user's email and mobile number are **both changed** in CM.
 
-## 1. Scope and result
+## 1. Agreed outcome
 
-For an existing HTH user whose **email and mobile number are both changed**, send the reviewed Feature 9 notifications after final approval and successful business execution. Preserve ordinary BCO, HTH email-only/mobile-only changes, PIN notifications, user creation and API Password Code approval flows.
+Use the existing BCO notification events, templates and recipient flow. Remove only the two additional target-specific SMS reminders previously copied to the HTH final approver. Keep BCO's generic user-edit notification, including its existing approver/company routes.
 
-Sources:
-- `[#BCOH2H-2110] CM - User Management - User Contract Point Edit - Update Email + Mobile number - Notification template.pdf`, AC1–AC5.
-- `2.Customer Onboarding CM - Notification V1.0-v81-20261103_105653.docx`, Feature 9.
-- Current `UserExtensionData`, approval extension, Alert framework SDK and `SMSDispatcher`.
+This clarification supersedes the earlier proposal to create private `HTH_2110_*` events, eighteen templates and a separate completion callback. It does not change HTH email-only/mobile-only behavior, ordinary BCO, PIN state-change notifications or API Password Code approval.
 
-## 2. Exact recipient and template mapping
+## 2. Notifications retained
 
-All routes below use explicit `EXTERNAL / USER` recipients. The template content comes from the named reviewed template; a private database ID prevents changing BCO or other HTH features.
+| Existing Event ID | Channel / content | Existing recipient flow retained |
+|---|---|---|
+| `INFO_UPDATE_BY_CORP_ADMIN` | Email: email address and mobile number updated | Target's old email, target's new email, company officeEmail and final approver email. All use the existing external-recipient flow. |
+| `CORPORATEPLUS_WELCOME_MAIL` | SMS: welcome / mobile registration | Target's new mobile. Existing `.create` activity mapping is retained. |
+| `USER_MOBILE_NUMBER_UPDATED_REMINDER` | SMS: mobile number changed | Target's old mobile. **Do not also copy this reminder to the approver.** |
+| `USER_EMAIL_ADDRESS_UPDATE` | SMS: email address changed | Target's new mobile. **Do not also copy this reminder to the approver.** |
+| `USER_MANAGEMENT_EDIT` | Generic user-edit email / SMS | Existing BCO configuration derives recipients and chooses templates. The log carries the executing session user ID and company/target information. In the normal CM flow the session user is the final approver. Retain the configured user/company routes. |
 
-| Route | Event ID | Private template ID | Reviewed template family | Recipients |
-|---|---|---|---|---|
-| Email A | `HTH_2110_CONTACT_UPDATE` | `HTH2110_EMAIL_A_<locale>` | `INFO_UPDATE_BY_CORP_ADMIN_EXTERNAL_USER_EMAIL` | Target's old email, new email, final approver email, company officeEmail |
-| Email B | `HTH_2110_USER_EDIT` | `HTH2110_EMAIL_B_<locale>` | `USER_MANAGEMENT_EDIT_CORPORATE_USER_EMAIL` | Final approver email and company officeEmail |
-| SMS A | `HTH_2110_MOBILE_WELCOME` | `HTH2110_SMS_A_<locale>` | `CorporatePlus Welcome Mail_EXTERNAL_USER_SMS` | Target's new mobile: welcome |
-| SMS B | `HTH_2110_EMAIL_UPDATED` | `HTH2110_SMS_B_<locale>` | `User Email Address update_EXTERNAL_USER_SMS` | Target's new mobile: email update |
-| SMS C | `HTH_2110_USER_EDIT` | `HTH2110_SMS_C_<locale>` | `USER_MANAGEMENT_EDIT_CORPORATE_USER_SMS` | Final approver mobile: generic user information update |
-| SMS D | `HTH_2110_OLD_MOBILE` | `HTH2110_SMS_D_<locale>` | `User Mobile Number Updated Reminder_EXTERNAL_USER_SMS` | Target's old mobile: mobile update reminder |
+No new template text, language fallback, subscriber mapping or delivery-count rule is introduced. Template IDs, content and enabled channels come from the existing database mappings. Do not force the corporate-user template onto a company route. Query Q1 in the verification SQL shows the actual mappings for each recipient type and locale.
 
-Supported locales: `en`, `zh-hant`, `zh-hans-cn`. Email A/B use the reviewed bilingual English/Traditional Chinese HTML for all three locales. SMS has separate English, Traditional Chinese and Simplified Chinese text. The existing Alert locale-selection mechanism remains in use.
+With distinct addresses, the contact-update method registers four explicit email notices, three explicit target SMS notices and one generic `USER_MANAGEMENT_EDIT` event. The generic event can produce further messages according to database configuration; registration counts are not delivered-message counts. Missing contacts, configuration and existing deduplication can affect results.
 
-With distinct valid contacts this produces **6 emails and 4 SMS**. The company receives no separate SMS under 2110. The approver receives **SMS C**, not the two target-specific SMS reminders previously added by 851.
-
-Email A and Email B have different subjects and bodies. Both are required for the approver/company, even when sent to the same address. No notification contains a password or Password Code.
-
-## 3. Existing behavior and required change
-
-| Existing implementation | 2110 implementation |
-|---|---|
-| Combined contact changes call the general BCO notification method. Generic event recipient rules can choose the company variant. | Bypass that method only for the persisted HTH combined-contact case; explicitly select Email B's corporate-user wording for both approver and company. |
-| 851 adds the target-specific email/mobile-update SMS to the final approver. | One generic user-edit SMS C for the final approver. |
-| Several events reuse the same mutable log/detail object. | Each destination has a new log and detail object; deferred processing cannot observe a later recipient's data. |
-| Some deduplication applies only when adding the approver. | Deduplicate normalized email within each event/channel across all four roles. Keep different events separate. |
-| SMS country lookup may see the target's updated country code when sending to the old number. | Preserve old and new number/country pairs; use the existing explicit `number~country` dispatcher contract. |
-| Notification registration occurs inside user update. | Save a request-local snapshot only after update success; register after the SDK's final business commit. |
-
-## 4. Trigger and data sources
-
-1. `UserExtensionData.update` (`MT_N_UUS`) uses the existing persisted `HTH_USER_PROFILE` channel lookup. Client-supplied channel alone does not select 2110.
-2. Existing `checkAlerts` compares stored and requested contacts. Its flags mean **unchanged**; 2110 requires both flags to be false.
-3. Before writing, copy old email/mobile/country plus the requested new values, target party/user and approval reference. Later changes to managed entities cannot replace the old values.
-4. A successful `CZProductUsers.update` result sets the 2110 marker. Validation-only calls do not set it. A failed result does not register a success notification.
-5. The SDK invokes `CZTransactionExt.postPerformAction` after service execution and its final commit. The HTH callback consumes the marker, verifies the saved transaction is `APPROVED`, action `APPROVE`, processing `SUCCESS`, service `UserExtensionData.update`, and has the same target party/user and transaction ID.
-6. Read the last actual signer from the stored approval record. Do not assume the executing session user is the target or final approver. Maker-only and unresolved approval data do not qualify.
-7. Re-read the saved target contacts and require them to match the snapshot before notification registration. Resolve the final approver's email/mobile/country from its user/extension records and company officeEmail/name from existing party preferences.
-8. Register each explicit route using the existing Alert pipeline. A missing contact skips that destination; a registration failure is logged without changing an already committed business result.
+## 3. Processing and data sources
 
 ```mermaid
-sequenceDiagram
-    participant AP as Final approver
-    participant A as Approval service
-    participant U as User update
-    participant DB as Existing database
-    participant N as HTH 2110 helper
-    participant E as Existing Alert / MNG pipeline
-    AP->>A: Approve user contact change
-    A->>U: Execute approved update
-    U->>DB: Read persisted HTH identity and old contacts
-    U->>U: Copy old/new contacts and country codes
-    U->>DB: Save user and extension
-    alt Business update succeeds
-        U->>U: Store request-local notification snapshot
-    else Business update fails
-        U-->>A: Failure; no notification snapshot
-    end
-    U-->>A: Execution result
-    A->>DB: Commit transaction and execution outcome
-    A->>N: Post-approval callback
-    N->>N: Consume snapshot; check action/result/transaction
-    N->>DB: Confirm APPROVED + SUCCESS and final signer
-    N->>DB: Confirm saved contacts; read approver/company
-    alt All execution and ownership gates pass
-        N->>E: Email A to old/new target, approver, company
-        N->>E: Email B to approver and company
-        N->>E: SMS A+B to new target mobile
-        N->>E: SMS C to final approver; SMS D to old target mobile
-    else Failed, partial, missing snapshot or mismatched transaction
-        N->>N: No success notification
-    end
+flowchart TD
+    A[CM user change completes approval] --> B[Existing UserExtensionData.update executes]
+    B --> C[Read persisted channel and old contacts]
+    C --> D[Existing user update]
+    D --> E{Existing business-success check passes?}
+    E -- No --> F[No contact-update success notification]
+    E -- Yes --> G[Existing alertUserProfileUpdate]
+    G --> H[BCO contact-update emails and target SMS]
+    G --> I[BCO generic USER_MANAGEMENT_EDIT event]
+    G --> J[Combined HTH change: skip two extra approver SMS]
+    H --> K[Existing Alert framework and MNG delivery]
+    I --> K
 ```
 
-## 5. Content, masking and deduplication
+- Keep the existing upstream approval flow and notification timing inside the successful user update. No new post-commit callback or request-local completion marker is required.
+- Old email is copied by the existing HTH helper before persistence; old mobile is captured by the existing update method. Reusing a managed entity must not replace these old values.
+- New contacts come from the approved update request. Company email/name come from existing party preferences.
+- The existing HTH helper resolves the final signed approver for explicit contact-update email. The generic BCO event still uses session user ID, as before; it is not rewritten to a new recipient mechanism. Background/OMB execution identities must be verified in that environment if used.
+- Keep the existing success-code handling and PIN change gates. A contact-only update must not be turned into a PIN reset disablement notification.
 
-- SQL contains the exact reviewed subjects, HTML, punctuation, placeholders and literal `\r\n` SMS markers. It does not substitute sample transaction data into templates.
-- Reuse existing DTOs and BCO placeholder bindings. Email A describes the target ID; Email B's `compName` comes from **company preferences**, not the target user's name.
-- Email A's Chinese subject/content fragments use existing `INFOUPDATE_EMAILMOB_UPDATE_MAILSUBJ` / `...MAILCONTENT` configuration. Deployment verification includes their values.
-- Before SMS registration, apply existing `CZCommonUtils.maskName/sepChar` to the identity placeholder. Preserve existing email-address masking for SMS B. No new masking algorithm is introduced. SMS C contains no customer name.
-- Email keys are trimmed and compared without case. SMS keys use normalized country + local number. Deduplication applies to **one event and channel in this execution**.
-- Different events are not deduplicated: two new-mobile SMS and both approver/company email families remain. There is no new cross-transaction or cross-retry deduplication store.
+## 4. Minimal implementation
 
-## 6. Code and BCO impact
-
-| File / configuration | Change and impact |
+| File | Final change |
 |---|---|
-| SMS module `UserExtensionData.java` | Small HTH-only combined-contact branch; preserve old data before update and defer the route after success. The existing notification method stays unchanged. |
-| SMS module `HthContactUpdateNotification.java` | New feature helper: snapshot, six routes, explicit destinations, masking and event-scoped deduplication. |
-| Approval module `CZTransactionExt.java` | One call to the HTH-only completion callback. No marker means no additional reads or sends. |
-| Approval module `HthContactUpdateApprovalLifecycle.java` | New final-approval/processing/ownership gates and internal bridge to the SMS module; preserves module build order. |
-| `20261103_BCOH2H-2110/1_HTH_Contact_Update_Notification.sql` | Five private events, eighteen private templates/routes and copied placeholder bindings. Existing source templates are read only. |
-| Existing SMS country skip-list | Append only four `HTH_2110_*` SMS events; retain every existing value/default. No BCO event is added, removed or reconfigured. |
+| `HthProfileApproverNotification.java` | Return no additional approver SMS when both contact fields changed. Three added lines including comments. Existing single-field behavior remains. |
+| `UserExtensionData.java` | Restore the existing notification-method call and old-contact/approver capture; remove the 2110 diversion and deferred snapshot. Preserve the current 880 activation-after-success change. |
+| `CZTransactionExt.java` | Remove the one 2110 callback call. No new approval logic. |
+| `HthContactUpdateNotification.java`, `HthContactUpdateApprovalLifecycle.java` | Delete the two unnecessary 2110 classes, including their marker and reflective module bridge. |
+| Original 2110 template-creation SQL | Remove it from this delivery. Reuse existing BCO configuration; no replacement DML is required. |
+| Tests and verification SQL | Replace the private-route tests with the existing BCO-path comparison and a combined-contact regression; retain read-only environment queries. |
 
-No schema changes, new tables, scheduler, batch, shared DTO/common package, dispatcher source, REST API or frontend changes. Existing bounce-back handling is unchanged. Prior 880/881 functionality stays in the source baseline.
+No changes to batch jobs, dispatchers, common packages, DTOs, frontend or BCO templates. The shared notification method is restored without changes to its body.
 
-## 7. Deployment and verification
+## 5. Existing behavior checked
 
-1. Export the private configuration rows, if already present, and the country skip-list as a backup.
-2. Execute the **whole** `1_HTH_Contact_Update_Notification.sql` block with UTF-8. It checks source templates/bindings, replaces only feature-owned configuration and commits once. On failure it rolls back this block. Execute after older notification scripts.
-3. Run `2_HTH_Contact_Update_Verification.sql`: expect eighteen template routes and five active actions; confirm four events in the country skip-list, and none in recipient-override lists.
-4. Build/deploy both SMS and approval modules from the same revision. Reload the environment's existing notification/configuration caches or restart the affected application according to its normal deployment procedure.
-5. Execute a new final approval; check `HTH_2110 stage=DEFERRED`, then `REGISTERED`. Diagnose `APPROVAL_CALLBACK_FAILED`, `COMMITTED_CONTACT_MISMATCH`, `CONTACT_SKIPPED`, `POST_COMMIT_FAILED` and `REGISTER_FAILED` as distinct stages. Logs omit addresses, phone numbers and message content.
-6. Use verification Q5 with a narrow time range to reconcile the six-email/four-SMS matrix. A framework/MNG success acknowledgement does not establish actual inbox or handset delivery.
+| Check | Finding |
+|---|---|
+| Old email after managed-object update | Existing pre-save HTH snapshot retains both old and new email destinations. Regression passed. |
+| Reused activity/detail objects | The repository SDK serializes ActivityData when registering. The local test uses that SDK snapshot operation and observes separate destinations. No additional object-copy mechanism is needed for this inspected path. |
+| Generic approver notification | Existing `USER_MANAGEMENT_EDIT` registration remains. Only the two additional contact-specific approver SMS are suppressed. |
+| Deduplication | Preserve existing rules: explicit HTH approver email is compared with emails already in that contact-event list, ignoring case and recipient suffix. There is no new global deduplication across all recipients, events or transactions. Different events can still reach the same mailbox/phone. |
+| Country code and dispatcher overrides | Existing BCO routing remains. Old/new numbers in different countries and environment-specific recipient override lists need UAT verification; this change does not claim to fix those shared behaviors. |
 
-Rollback: restore the previous SMS/approval binaries together, restore the backed-up feature configuration/skip-list, and reload caches. Do not remove other HTH/BCO configuration. This change does not migrate customer data.
+## 6. Validation and deployment
 
-## 8. Validation and remaining environment checks
+Local validation passed:
+- Execute the production notification method and compare ordinary BCO behavior for email-only, mobile-only, both and no-op cases against the pre-change baseline.
+- Execute combined HTH changes with the CM final approver as session user: same BCO events, explicit recipients and business template inputs; three target SMS retained and two extra approver SMS absent.
+- Check old/new email snapshots, existing email deduplication, single-field SMS routing, success/failure gates and PIN hook behavior using repository SDK classes with bank-data/transport fixtures.
+- Compile restored SMS and approval classes against repository dependencies for Java 8; run existing API Password approval/rejection regression.
 
-Local tests:
-- Compile both complete modified shared classes and new helpers against repository SDKs, Java 8 target.
-- Execute production recipient builder and approval gates with SDK DTOs; contact/database/network/clock configuration use fixtures.
-- Check all six routes, ten notices, missing contacts, distinct/shared mailbox/phone cases, preservation of old values after managed-object mutation, different country codes, and application of the existing masking function.
-- Verify real SDK EXTERNAL recipient derivation keeps the explicit destination and delivery identity.
-- Verify no success notifications for failed/partial/unrelated approval, mismatched owner or contacts, missing marker, replay callback, ordinary BCO or single-field updates.
-- Compare raw SQL subjects/HTML and all twelve SMS language bodies with v81 Feature 9; compare the existing BCO notification method with the baseline.
-- Re-run existing 851 recipient/PIN-gate and 880 approval regressions.
+Run from the full source checkout with `JAVA_HOME` set:
 
-SIT/UAT still required: execute/re-execute Oracle SQL; verify actual placeholder values and locale selection, real final approval (including the environment's OMB route), actual MNG email/SMS delivery, and ordinary BCO/email-only/mobile-only regression. Local tests do not claim these environment checks passed.
-
-The completion marker is request-local and consumed once. This release adds no durable notification outbox or automatic recovery for a process crash between business commit and event registration; registration failures are diagnostic/manual follow-up cases. A custom background execution path that does not return through the inspected SDK completion hook needs explicit environment verification before release.
-
-## 9. Source control and mcdp delivery
-
-Commit/push the source repository, then copy this change's committed files into:
-
-```text
-mcdp-h5-demo-int/
-  bcohth-2110/
-    README.md
-    SHA256SUMS
-    hhfi/
-      consulting/middleware/projects/...
-      consulting/db/branch_change_history/20261103_BCOH2H-2110/...
-      story/notification/BCOH2H-2110-TECHNICAL-DESIGN.md
-      devtools/backend-compile/tests/...
+```sh
+python3 devtools/backend-compile/tests/verify_hth_2110.py
 ```
 
-The mcdp root `consulting` directory is not a sync target. The overlay is based on the stated source revision, not a standalone application checkout.
+Deployment:
+1. Build/deploy the SMS and approval modules from the same revision. A clean build must exclude the two deleted classes; the approval class no longer invokes the old callback.
+2. **No database update is required. Do not re-run the superseded 2110 template-creation SQL.** If it was already executed, its private mappings can remain unused; this delivery does not delete database configuration or notification history. Old binaries or already queued old messages may still refer to those IDs.
+3. Use `2_HTH_Contact_Update_Verification.sql` to inspect the active BCO mappings, dispatcher configuration and messages for a new final approval. Existing private configuration rows alone do not mean the new code uses them.
+4. UAT must confirm actual final approval and email/SMS delivery. Expect the two target-specific events to reach the target only; the approver's generic user-edit notification remains subject to existing BCO configuration. Reconcile messages by time, event and recipient, not just total count.
+
+Local tests do not establish live Oracle configuration or actual inbox/handset delivery.
+
+## 7. Source and isolated mcdp delivery
+
+Commit/push source changes and synchronize only this story under `mcdp-h5-demo-int/bcohth-2110/hhfi/`, preserving source-relative paths. Keep root mcdp `consulting` unchanged. `DELETED_FILES.txt` lists the obsolete files to remove when applying an earlier overlay; `SHA256SUMS` verifies the current overlay files. Existing 876/881 work is outside this delivery.

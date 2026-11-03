@@ -1,0 +1,5 @@
+consulting/db/branch_change_history/20261103_BCOH2H-2110/1_HTH_Contact_Update_Notification.sql
+consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthContactUpdateApprovalLifecycle.java
+consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.sms/src/com/ofss/digx/cz/bea/app/sms/service/user/HthContactUpdateNotification.java
+devtools/backend-compile/tests/Hth2110ApprovalLifecycleTest.java
+devtools/backend-compile/tests/Hth2110NotificationTest.java

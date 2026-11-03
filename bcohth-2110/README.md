@@ -1,31 +1,29 @@
-# BCOH2H-2110 delivery
+# BCOH2H-2110 delivery — minimal BCO reuse
 
-Source: `hth-application` commit `0e8faa5b87c746fd049fc39327945d43157f04fe`.
+Source: `hth-application` commit `876dd4376179720fb90f637fea85659c120ceada`.
 
-This is an isolated overlay. All source paths are retained beneath `bcohth-2110/hhfi/`. The existing mcdp root `consulting` directory is not a sync target.
+This revision replaces the earlier private 2110 notification implementation. HTH combined Email + Mobile changes reuse the existing BCO events, templates and recipient flow. Remove only the two additional target-specific SMS reminders copied to the final approver; keep the generic `USER_MANAGEMENT_EDIT` event and its existing recipient/template configuration.
 
-- `consulting/middleware/projects/...`: four changed/new Java files in the SMS and approval modules.
-- `consulting/db/branch_change_history/20261103_BCOH2H-2110/`: configuration/template SQL and read-only verification SQL.
-- `story/notification/BCOH2H-2110-TECHNICAL-DESIGN.md`: scope, recipient/template matrix, approval flow, BCO impact and deployment checks.
-- `devtools/backend-compile/tests/`: five changed/new validation files.
+The effective additional production rule is three lines, including comments, in the existing `HthProfileApproverNotification.sms` helper. Other Java changes restore the original notification call and remove the 2110 marker, two helper classes and approval callback. Ordinary BCO and HTH single-field flows retain their existing behavior. Current 880 fixes are preserved.
 
-The feature covers existing HTH users when **both Email and Mobile change**. After successful final approval and business commit, it selects the reviewed Feature 9 templates for the old/new target contacts, final approver and company. With distinct valid contacts, expect six emails and four SMS. Deduplication is per event/channel; different required templates remain separate. Ordinary BCO and HTH single-field notification paths retain their existing behavior.
+## Apply the overlay
 
-Apply the overlay to the matching full source baseline before building or testing. The overlay does not include SDK JARs, cached module classes, the reviewed v81 DOCX or unchanged test dependencies. Build/deploy both SMS and approval modules together. The source baseline also contains previous 880/881 changes; this folder is only the 2110 delta.
+1. Use the matching full source baseline. Copy the source-relative files beneath `hhfi/` into that checkout.
+2. Remove the five source-relative files listed in `DELETED_FILES.txt` from an earlier 2110 overlay. A copy-only update would leave the obsolete classes and SQL script behind.
+3. Build/deploy the SMS and approval modules from the same revision, using a clean build to exclude deleted classes. This overlay does not contain SDK JARs, cached classes or unchanged test dependencies.
+4. **No database update is required.** Do not execute the superseded `1_HTH_Contact_Update_Notification.sql`. If previously executed, its private rows may remain unused; no BCO configuration or historical delivery records are deleted. Old deployments/queued messages may still use the old IDs.
+5. Run the read-only `2_HTH_Contact_Update_Verification.sql` to inspect existing BCO templates/routes, dispatcher configuration and delivery records for a new approval. Do not assume a fixed total email/SMS count: the generic event uses existing database mappings.
 
-Execute the entire UTF-8 `1_HTH_Contact_Update_Notification.sql` block after older notification scripts. It commits once on success and rolls back its own changes on failure. It creates feature-owned event/template mappings and appends only the four private SMS events to the existing country-code skip-list. Run `2_HTH_Contact_Update_Verification.sql` afterwards, and reload notification/configuration caches through the standard deployment procedure.
+The delivery is isolated under `bcohth-2110/hhfi/`. Root mcdp `consulting` is not a synchronization target. Unrelated 876/881 changes are outside this delivery.
 
-Local checks passed: Java 8 target compilation against repository SDKs, six-route recipient/dedup/masking/country snapshot tests, final-approval gates, exact reviewed DOCX/SQL text comparison, and existing 851/PIN/880 regressions. Oracle execution/re-execution and actual SIT/UAT approval/MNG delivery remain environment checks. See the design for the request-local completion marker and recovery/OMB limitations.
+## Validation
 
-From the full source checkout, run:
+Local regression passed: production combined-contact notification flow compared with BCO events, destinations and template inputs; old/new email snapshots; three target SMS retained and two extra approver SMS removed; ordinary BCO, HTH single-field and PIN behavior; Java 8 target compilation of restored shared classes; existing API Password approval regression. Bank data/configuration/transport are fixtures; actual Oracle configuration, approval execution and MNG inbox/handset delivery still require UAT.
+
+From the full source checkout with `JAVA_HOME` set:
 
 ```sh
 python3 devtools/backend-compile/tests/verify_hth_2110.py
-python3 devtools/backend-compile/tests/verify_hth_851_approver.py
-python3 devtools/backend-compile/tests/verify_hth_code_approval.py
-python3 devtools/backend-compile/tests/verify_hth_851_compile.py
 ```
 
-Set `JAVA_HOME` to the installed JDK when needed; tests compile for Java 8.
-
-`SHA256SUMS` covers all twelve files copied byte-for-byte from the source commit. From this directory, verify with `shasum -a 256 -c SHA256SUMS`.
+`SHA256SUMS` covers the nine source files copied byte-for-byte from the stated commit. From this directory, verify with `shasum -a 256 -c SHA256SUMS`. See the revised technical design for recipient mapping, deduplication boundaries and remaining environment checks.

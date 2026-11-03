@@ -11,7 +11,6 @@ cp = os.pathsep.join([str(root / 'devtools/backend-compile/build/classes/java/ma
                     [str(p) for p in (root / 'consulting/middleware/lib').rglob('*.jar')])
 files = list(projects.rglob('HthProfileApprover*.java')) + list(projects.rglob('UserProfUpdateActivityLogDTO.java'))
 files += list(projects.rglob('HthOnboardingAudit.java'))
-files += list(projects.rglob('HthContactUpdateNotification.java'))
 for name in ('UserExtensionData.java', 'CZUserExtensionDataExt.java'):
     files.extend(p for p in (projects / 'module').rglob(name)
                  if name != 'UserExtensionData.java' or '/app/sms/service/user/' in str(p))

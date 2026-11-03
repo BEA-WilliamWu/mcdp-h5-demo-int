@@ -5400,7 +5400,6 @@ public class CZTransactionExt extends VoidTransactionExt {
 		// BCOCDC-8508 end
 
 		new HthApiPasswordApprovalLifecycle().afterAction(sessionContext, transactionActionDTO, transactionActionResponse);
-		new HthContactUpdateApprovalLifecycle().afterAction(sessionContext, transactionActionDTO, transactionActionResponse);
 		new CZTransactionExtFunc().postPerformAction(sessionContext, transactionActionDTO, transactionActionResponse);
 	}
 

@@ -90,8 +90,8 @@ public class HthApiPasswordCodeRepository {
     return repositoryAdapter().retireActive(session, operator, partyId, userName, purpose);
   }
 
-  public int activate(Session session, String transactionId, long expiryTime, String operator, String codeId) throws Exception {
-    return repositoryAdapter().activate(session, transactionId, expiryTime, operator, codeId);
+  public int activate(Session session, String transactionId, int expiryHours, String operator, String codeId) throws Exception {
+    return repositoryAdapter().activate(session, transactionId, expiryHours, operator, codeId);
   }
 
 }

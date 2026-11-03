@@ -3,6 +3,8 @@
 -- Run this delta AFTER older HTH password/template scripts; those scripts contain superseded text.
 -- Re-runnable; exact two events / six existing EMAIL templates only. No setup/reset or BCO updates.
 -- v81 Feature 6 supplies one bilingual body; use it for all three configured locales and both roles.
+-- Runtime remains approval + 24 hours. The reviewed next-day wording below requires separate
+-- wording confirmation before customer release; this delta does not change Code expiry.
 -- English 2211 1056 and Chinese 2211 1321 are retained verbatim from the reviewed document.
 DECLARE
   c_activity CONSTANT VARCHAR2(200) := 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval';
@@ -46,8 +48,9 @@ BEGIN
   FOR role IN (SELECT 'USER' name FROM DUAL UNION ALL SELECT 'COMPANY' FROM DUAL) LOOP
     v_event := 'HTH_API_PASSWORD_CODE_APPROVED_' || role.name || '_EMAIL_EVENT';
     SELECT COUNT(*) INTO v_count FROM DIGX_EP_ACT_EVT_ACN_B
-     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A' AND OBJECT_STATUS='A';
-    IF v_count <> 1 THEN RAISE_APPLICATION_ERROR(-20880, '880: missing/ambiguous active Code approval action: ' || role.name); END IF;
+     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A' AND OBJECT_STATUS='A'
+       AND FLG_TRANSACTIONAL='N';
+    IF v_count <> 1 THEN RAISE_APPLICATION_ERROR(-20880, '880: expected one active non-transactional Code approval action: ' || role.name); END IF;
     FOR lang IN (SELECT 'en' locale FROM DUAL UNION ALL SELECT 'zh-Hant' FROM DUAL UNION ALL SELECT 'zh-Hans-CN' FROM DUAL) LOOP
       v_template := 'HTH_API_PWD_CODE_' || role.name || '_EMAIL_' || lang.locale;
       SELECT COUNT(*) INTO v_count FROM DIGX_EP_MSG_TMPL_B

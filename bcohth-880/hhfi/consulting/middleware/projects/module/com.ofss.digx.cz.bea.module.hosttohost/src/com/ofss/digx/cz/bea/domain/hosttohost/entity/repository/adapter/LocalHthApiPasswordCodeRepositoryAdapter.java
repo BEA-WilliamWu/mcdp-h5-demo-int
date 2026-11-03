@@ -407,14 +407,14 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
   }
 
   @Override
-  public int activate(Session session, String transactionId, long expiryTime, String operator, String codeId) throws Exception {
+  public int activate(Session session, String transactionId, int expiryHours, String operator, String codeId) throws Exception {
     Query activate = session.createSQLQuery(
         "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = 'ACTIVE', TRANSACTION_ID = ?, "
-            + "EXPIRY_TIME = ?, LAST_UPDATED_BY = ?, "
+            + "EXPIRY_TIME = SYSTIMESTAMP + NUMTODSINTERVAL(?, 'HOUR'), LAST_UPDATED_BY = ?, "
             + "LAST_UPDATE_DATE = SYSDATE WHERE ID = ? AND STATUS = 'PENDING' "
             + "AND OBJECT_STATUS = 'A'");
     activate.setParameter(1, transactionId);
-    activate.setParameter(2, new java.sql.Timestamp(expiryTime));
+    activate.setParameter(2, expiryHours);
     activate.setParameter(3, operator);
     activate.setParameter(4, codeId);
     return activate.executeUpdate();

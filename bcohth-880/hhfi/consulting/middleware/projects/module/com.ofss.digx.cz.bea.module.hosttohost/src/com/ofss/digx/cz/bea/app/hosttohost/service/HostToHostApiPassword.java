@@ -128,7 +128,7 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final int CODE_LENGTH = 6;
 
 
-  private static final long MILLIS_PER_HOUR = 3600000L;
+  private static final int EXPIRY_HOURS = 24;
 
   private static final String ACTIVITY_HTH_API_PASSWORD_APPROVED =
       "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval";
@@ -1070,38 +1070,8 @@ public class HostToHostApiPassword extends AbstractApplication
       throw new Exception("DIGX_CZ_HTH_PW_008");
     }
     String transactionId = readTransactionId();
-    long expiryTime = com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCodeExpiry
-        .nextDayEnd(System.currentTimeMillis());
-    if (activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
-        operator, transactionId, expiryTime)) {
-      // Defer only this HTH event to the existing post-commit approval extension.
-      // A rollback or a later business failure must never publish a success email.
-      com.ofss.fc.infra.thread.ThreadAttribute.set("HTH_880_CODE_ACTIVATED",
-          new String[] {codeId, transactionId});
-    }
-  }
-
-  /** Called only by the HTH approval extension after successful final approval commits. */
-  public void notifyOnUserApprovalCommit(SessionContext context, String codeId, String partyId,
-      String userName, String transactionId) throws Exception {
-    SessionLease lease = open(false);
-    HthApiPasswordCode row;
-    try {
-      row = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
-      // Activation uses native SQL. The approval session can still cache a PENDING entity.
-      // Refresh from the committed row before checking status, transaction and expiry.
-      if (row != null) lease.session.refresh(row);
-    } finally {
-      lease.close(false);
-    }
-    if (row == null || !STATUS_ACTIVE.equals(row.getStatus()) || !OBJECT_ACTIVE.equals(row.getObjectStatus())
-        || normalize(partyId) == null || normalize(userName) == null || normalize(transactionId) == null
-        || !partyId.equals(row.getPartyId()) || !transactionId.equals(row.getTransactionId())
-        || !canonicalUser(userName, partyId).equals(canonicalUser(row.getUserName(), partyId))) {
-      LOGGER.log(Level.WARNING, "HTH_880 stage=NOTIFY_SKIPPED reason=CODE_OWNER_OR_STATE");
-      return;
-    }
-    notifyHthApiPasswordApproved(context, row);
+    activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
+        operator, transactionId, EXPIRY_HOURS);
   }
 
   /** The SDK invokes postPerformAction after committing approval; cleanup owns its write transaction. */
@@ -1289,8 +1259,7 @@ public class HostToHostApiPassword extends AbstractApplication
     if (row.getExpiryTime() != null) {
       response.setExpiryTime(new java.util.Date(row.getExpiryTime().getMillis()));
     }
-    response.setExpiryHours(row.getExpiryTime() == null ? null : Integer.valueOf((int) Math.max(0L,
-        (row.getExpiryTime().getMillis() - System.currentTimeMillis() + MILLIS_PER_HOUR - 1) / MILLIS_PER_HOUR)));
+    response.setExpiryHours(Integer.valueOf(EXPIRY_HOURS));
     response.setCanReveal(Boolean.valueOf(true));
   }
 
@@ -1538,7 +1507,7 @@ public class HostToHostApiPassword extends AbstractApplication
 
   /** Approval and consume share the same row locks and status constraints. */
   private boolean activateApprovedCode(String codeId, String partyId, String userName, String purpose,
-      String operator, String transactionId, long expiryTime) throws Exception {
+      String operator, String transactionId, int expiryHours) throws Exception {
     SessionLease lease = open(true);
     boolean success = false;
     try {
@@ -1561,9 +1530,15 @@ public class HostToHostApiPassword extends AbstractApplication
       }
       codeRepository.retireActive(lease.session, operator, partyId, userName, purpose);
       // The live-code unique index rejects activation while another code is IN_PROGRESS/UNKNOWN.
-      if (codeRepository.activate(lease.session, transactionId, expiryTime, operator, codeId) != 1) {
+      if (codeRepository.activate(lease.session, transactionId, expiryHours, operator, codeId) != 1) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
+      // Native SQL does not refresh a cached PENDING entity. Use the database expiry.
+      HthApiPasswordCode activated = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
+      lease.session.refresh(activated);
+      // Register through the existing BCO event framework while the approval transaction is open.
+      // The Code-approved actions use the existing non-transactional dispatch configuration.
+      notifyHthApiPasswordApproved(null, activated);
       success = true;
       return true;
     } catch (java.lang.Exception e) {

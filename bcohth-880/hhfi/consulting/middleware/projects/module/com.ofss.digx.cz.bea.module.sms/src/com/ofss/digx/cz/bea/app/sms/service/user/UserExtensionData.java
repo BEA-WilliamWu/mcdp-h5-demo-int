@@ -554,6 +554,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			TaskAspect.TWO_FACTOR_AUTHENTICATION, TaskAspect.APPROVALS,
 			TaskAspect.AUDIT }, type = TaskType.NONFINANCIAL_TRANSACTION)
 	public TransactionStatus update(SessionContext sessionContext, UserExtensionDataDTO requestDTO) throws Exception {
+        com.ofss.fc.infra.thread.ThreadAttribute.clear(HthContactUpdateNotification.MARKER);
     try (HthOnboardingAudit.Entry audit = HthOnboardingAudit.user(sessionContext, "UPDATE",
         requestDTO == null ? null : requestDTO.getUserID(), requestDTO == null ? null : requestDTO.getCdcNo(),
         requestDTO == null ? null : requestDTO.getUserChannelType(), requestDTO == null ? null : requestDTO.getHthApiPasswordCodeId())) {
@@ -936,8 +937,11 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("##########Old Mob No:- " + oldMobNo);
 				BeaSystemOut.println("#############Old Email:- " + userDomain.getEmailId());
 				resultDto = checkAlerts(requestDTO, userDomain);
+                boolean hthBothContacts = HthContactUpdateNotification.applies(sessionContext, resultDto, domain);
+                String[] hthContactSnapshot = hthBothContacts
+                        ? HthContactUpdateNotification.capture(sessionContext, requestDTO, userDomain, domain) : null;
 				HthProfileApproverNotification.Approver hthApprover =
-						HthProfileApproverNotification.resolve(sessionContext, requestDTO, resultDto, domain, userDomain);
+						hthBothContacts ? null : HthProfileApproverNotification.resolve(sessionContext, requestDTO, resultDto, domain, userDomain);
 
 				// UserExtensionDataKey key = new UserExtensionDataKey();
 				// key.setUserExtensionKey(requestDTO.getUserExtensionKey());
@@ -984,13 +988,17 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("Transaction Status Replytext + code : "+ transactionStatus.getReplyText() + "+" + transactionStatus.getReplyCode());
 				BeaSystemOut.println("Transaction Status ErrorCOde + code : "+ transactionStatus.getErrorCode() + "+" + transactionStatus.getValidationErrors());
 				if (HthProfileApproverNotification.profileUpdateSucceeded(transactionStatus, hthPinResetChanged)) {
-                    // BCOH2H-880: only activate after the user update succeeds. The HTH
-                    // approval extension publishes Code email after the final transaction commits.
+                    // Only activate and register Code notification after the user update succeeds.
                     activateHthApiPasswordCode(sessionContext, requestDTO);
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
                     hthProfileUpdated = true;
+                    if (hthBothContacts) {
+                        // 2110: replace only the combined HTH contact route; publish after final commit.
+                        HthContactUpdateNotification.defer(hthContactSnapshot);
+                    } else {
 					alertUserProfileUpdate(sessionContext, resultDto, requestDTO, userDomain, oldMobNo, hthApprover);
+                    }
 					BeaSystemOut.println("##############Executed alertUserProfileUpdate method");
 				}
 			}

@@ -67,5 +67,5 @@ public interface IHthApiPasswordCodeRepositoryAdapter
   int retireActive(Session session, String operator, String partyId, String userName, String purpose) throws Exception;
 
   /** Activates a PENDING Code and anchors its expiry at approval time. Uses the supplied session. */
-  int activate(Session session, String transactionId, long expiryTime, String operator, String codeId) throws Exception;
+  int activate(Session session, String transactionId, int expiryHours, String operator, String codeId) throws Exception;
 }

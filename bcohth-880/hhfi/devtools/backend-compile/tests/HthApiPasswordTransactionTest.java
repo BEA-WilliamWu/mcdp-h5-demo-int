@@ -59,7 +59,7 @@ public final class HthApiPasswordTransactionTest {
       dspChangeFlow();
       pendingAndRejectedCodeLifecycle();
       pendingOrderViews();
-      committedCodeNotificationReadsFreshState();
+      codeNotificationRegistrationSharesApprovalTransaction();
       check(DataAccessManager.opened == DataAccessManager.closed, "Every independent ORM session closed");
       check(TransactionHelper.suspends == TransactionHelper.resumes, "Every suspended transaction restored");
       System.out.println("PASS: actual OBDX/EclipseLink ORM + H2: automatic SETUP/RESET by target/store, PBKDF2 password changes, failed-attempt commit/lockout, Code aliases/purpose/expiry/consumption/decryption, profile foreign keys, atomic rollback, status/retry reads and session cleanup");
@@ -70,10 +70,9 @@ public final class HthApiPasswordTransactionTest {
     }
   }
 
-  private static void committedCodeNotificationReadsFreshState() throws java.lang.Exception {
+  private static void codeNotificationRegistrationSharesApprovalTransaction() throws java.lang.Exception {
     for (String purpose : new String[] {"SETUP", "RESET"}) {
       pendingPair(purpose);
-      // Fixture reseeds the same ID for each purpose using JDBC; clear its previous L2 entry.
       DataAccessManager.factory.getCache().evictAll();
       beginOuter();
       com.ofss.digx.cz.bea.domain.hosttohost.entity.HthApiPasswordCodeKey key =
@@ -81,30 +80,42 @@ public final class HthApiPasswordTransactionTest {
       key.setId("new-draft");
       check("PENDING".equals(LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key).getStatus()),
           "Approval session first sees pending entity");
-      SERVICE.approve("new-draft", purpose);
-      // Match SDK: commit, call postPerformAction, then close this same session.
-      outerEntityManager.getTransaction().commit();
-      int sent = PasswordTransactionHarness.codeNotifications;
-      SERVICE.notifyOnUserApprovalCommit(new SessionContext(), "new-draft", "PARTY", "USER@PARTY", "TX-APPROVED");
-      check(PasswordTransactionHarness.codeNotifications == sent + 1, "Native activation must not leave notification checking cached PENDING row");
-      java.time.LocalDate tomorrow = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Hong_Kong")).plusDays(1);
+      long before = System.currentTimeMillis();
+      check(SERVICE.approve("new-draft", purpose), "First approval activates Code");
+      check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 0,
+          "Another connection cannot see notification registration before commit");
+      commitOuter();
+      check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 1,
+          "Registration commits with Code activation");
       try (Statement statement = db.createStatement(); ResultSet rows = statement.executeQuery(
-          "SELECT EXPIRY_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='new-draft'")) {
-        rows.next();
-        check(rows.getTimestamp(1).toInstant().atZone(java.time.ZoneId.of("Asia/Hong_Kong")).toLocalDateTime()
-            .equals(tomorrow.atTime(23, 59, 59)), "Persisted expiry matches next-day Hong Kong 23:59:59 for " + purpose);
+          "SELECT c.EXPIRY_TIME, e.EXPIRY_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE c "
+          + "JOIN CODE_EVENT_FIXTURE e ON e.CODE_ID=c.ID WHERE c.ID='new-draft'")) {
+        check(rows.next(), "Committed registration exists");
+        long expiry = rows.getTimestamp(1).getTime();
+        long day = 24L * 60L * 60L * 1000L;
+        check(expiry >= before + day - 2000 && expiry <= System.currentTimeMillis() + day + 2000,
+            "Database approval expiry remains 24 hours for " + purpose);
+        check(expiry == rows.getTimestamp(2).getTime(), "Notification uses actual persisted expiry");
       }
-      SERVICE.notifyOnUserApprovalCommit(new SessionContext(), "new-draft", "OTHER", "USER", "TX-APPROVED");
-      SERVICE.notifyOnUserApprovalCommit(new SessionContext(), "new-draft", "PARTY", "OTHER", "TX-APPROVED");
-      SERVICE.notifyOnUserApprovalCommit(new SessionContext(), "new-draft", "PARTY", "USER", "OTHER-TX");
-      check(PasswordTransactionHarness.codeNotifications == sent + 1, "Wrong owner/transaction cannot notify");
-      sql("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='USED' WHERE ID='new-draft'");
-      SERVICE.notifyOnUserApprovalCommit(new SessionContext(), "new-draft", "PARTY", "USER", "TX-APPROVED");
-      check(PasswordTransactionHarness.codeNotifications == sent + 1, "Fresh read must also exclude subsequently used Code");
-      outerEntityManager.close(); DataAccessManager.outerSession = null; TransactionHelper.current = null;
-      sql("DELETE FROM OUTER_WORK");
+      DataAccessManager.factory.getCache().evictAll();
+      beginOuter();
+      check(!new PasswordTransactionHarness().approve("new-draft", purpose),
+          "Fresh service/session reads ACTIVE state and does not reactivate");
+      commitOuter();
+      check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 1,
+          "Approval replay does not register another event");
+
+      pendingPair(purpose);
+      DataAccessManager.factory.getCache().evictAll();
+      beginOuter();
+      SERVICE.approve("new-draft", purpose);
+      rollbackOuter();
+      check("PENDING".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='new-draft'")),
+          "Business rollback restores pending Code");
+      check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 0,
+          "Business rollback also removes notification registration");
     }
-    System.out.println("PASS: post-commit Code notification refreshes cached native-SQL state, checks owner/transaction, persists HKT expiry");
+    System.out.println("PASS: real ORM Code activation + fixture event registration commit/rollback, replay, cached refresh and 24-hour expiry");
   }
 
   private static void dspChangeFlow() throws java.lang.Exception {
@@ -211,6 +222,7 @@ public final class HthApiPasswordTransactionTest {
   private static void schema() throws SQLException {
     sql("CREATE SCHEMA HTH_BEA");
     sql("CREATE TABLE OUTER_WORK (ID INT)");
+    sql("CREATE TABLE CODE_EVENT_FIXTURE (CODE_ID VARCHAR(40), EXPIRY_TIME TIMESTAMP)");
     sql("CREATE TABLE HTH_BEA.HTH_USER_PROFILE (PARTY_ID VARCHAR(40), CLOSE_ID VARCHAR(80), "
         + "PRIMARY KEY (PARTY_ID, CLOSE_ID))");
     sql("CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CODE (ID VARCHAR(40) PRIMARY KEY, PARTY_ID VARCHAR(40), "
@@ -238,6 +250,7 @@ public final class HthApiPasswordTransactionTest {
   }
 
   private static void resetData(String closeId) throws SQLException {
+    sql("DELETE FROM CODE_EVENT_FIXTURE");
     for (String table : new String[] {"OPERATION", "CREDENTIAL", "STATE", "CODE"}) {
       sql("DELETE FROM HTH_BEA.HTH_API_PASSWORD_" + table);
     }

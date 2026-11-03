@@ -7,7 +7,7 @@ access/response policies and framework status building remain fixtures.
 For change() tests, session decryption, DSP and notification delivery are fixtures;
 the separate transport tests exercise real RSA and HTTPS.
 The STATE MERGE source parameters receive explicit VARCHAR casts for H2 type inference,
-with production approval timestamp bindings unchanged. Service method bodies are unchanged.
+and Oracle NUMTODSINTERVAL is translated to H2 DATEADD. Service method bodies are unchanged.
 This does not replace Oracle/WebLogic deployment tests. Requires JAVA_HOME and H2_JAR.
 """
 from pathlib import Path
@@ -57,7 +57,6 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
     rejection = re.search(r"  public void rejectOnUserApproval\(.*?\n  }", source, re.S)
     assert rejection
     methods.append(rejection.group())
-    methods.append(re.search(r"  public void notifyOnUserApprovalCommit\(.*?\n  }", source, re.S).group())
     for name in ("fillMaskedResponse", "isExpired", "key", "requireCodeOwner"):
         methods.append(re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S).group())
     methods.append(re.search(r"  public HthApiPasswordCodeResponseDTO masked\(SessionContext sessionContext, String partyId,\s+String userName, String codeId\).*?\n  }", source, re.S).group())
@@ -79,6 +78,9 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
         adapter = (BASE / ("domain/hosttohost/entity/repository/adapter/" + name + ".java")).read_text()
         bodies = re.findall(r"  public [^\n]+\(Session session[^{}]+ \{\n.*?\n  \}", adapter, re.S)
         assert bodies, name
+        if kind == "Code":
+            bodies = [body.replace("SYSTIMESTAMP + NUMTODSINTERVAL(?, 'HOUR')",
+                                   "DATEADD('HOUR', ?, SYSTIMESTAMP)") for body in bodies]
         if kind == "State":
             # H2 requires types for bind variables in a MERGE-derived table; Oracle infers them.
             bodies = [body.replace("SELECT ? PARTY_ID, ? USER_ID FROM DUAL",
@@ -121,7 +123,7 @@ public class PasswordTransactionHarness extends PolicyFixture {
   private static final String MASKED_SERVICE_ID = "test.masked", REVEAL_SERVICE_ID = "test.reveal";
   private static final String STATUS_PENDING = "PENDING", STATUS_ACTIVE = "ACTIVE", STATUS_EXPIRED = "EXPIRED";
   private static final String OBJECT_ACTIVE = "A", MASKED_CODE = "******";
-  private static final long MILLIS_PER_HOUR = 60L * 60L * 1000L;
+  private static final int EXPIRY_HOURS = 24;
   protected com.ofss.digx.app.messages.Status fetchStatus() { return new com.ofss.digx.app.messages.Status(); }
   protected TransactionStatus fetchTransactionStatus() { return new TransactionStatus(); }
   protected com.ofss.digx.app.messages.Status buildStatus(TransactionStatus status) { return fetchStatus(); }
@@ -131,7 +133,17 @@ public class PasswordTransactionHarness extends PolicyFixture {
   private IHthApiCredentialAdapter adapter() { return RemoteCredentialFixture.INSTANCE; }
   private IHthApiCredentialAdapter dspAdapter() { return DspCredentialFixture.INSTANCE; }
   static int setupNotifications, resetNotifications, codeNotifications;
-  private void notifyHthApiPasswordApproved(SessionContext context, HthApiPasswordCode row) { codeNotifications++; }
+  // Dispatch is a fixture: persist a registration in the current real ORM transaction.
+  // This tests service ordering/rollback, not the WebLogic event queue or MNG.
+  private void notifyHthApiPasswordApproved(SessionContext context, HthApiPasswordCode row) {
+    if (!"ACTIVE".equals(row.getStatus()) || row.getExpiryTime() == null)
+      throw new AssertionError("Notification must read freshly activated database state");
+    Session session = DataAccessManager.getManager().fetchCurrentSession();
+    session.createSQLQuery("INSERT INTO CODE_EVENT_FIXTURE (CODE_ID, EXPIRY_TIME) VALUES (?, ?)")
+        .setParameter(1, row.getKey().getId())
+        .setParameter(2, new java.sql.Timestamp(row.getExpiryTime().getMillis())).executeUpdate();
+    codeNotifications++;
+  }
   private boolean isFeatureEnabled() { return true; }
   private HostToHostApiPasswordResponseDTO response() { return new HostToHostApiPasswordResponseDTO(); }
   private List<String> decryptCredentials(HostToHostApiPasswordRequestDTO request, String user, String operation) throws Exception {
@@ -155,7 +167,7 @@ public class PasswordTransactionHarness extends PolicyFixture {
     return resolveCodePurpose(partyId, userName, requested);
   }
   public boolean approve(String codeId, String purpose) throws Exception {
-    return activateApprovedCode(codeId, "PARTY", "USER", purpose, "MAKER", "TX-APPROVED", com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCodeExpiry.nextDayEnd(System.currentTimeMillis()));
+    return activateApprovedCode(codeId, "PARTY", "USER", purpose, "MAKER", "TX-APPROVED", EXPIRY_HOURS);
   }
   public void supersedePending(String purpose) throws Exception {
     retirePendingCodes("PARTY", "USER", purpose, "MAKER");
@@ -356,7 +368,9 @@ public class DataAccessManager {
   public boolean isSessionOpen() { return outerSession != null; }
   public Session openSession(String unit) {
     opened++;
-    return TestOrmAccess.wrap(factory.createEntityManager());
+    Session session = TestOrmAccess.wrap(factory.createEntityManager());
+    if ("DIGX".equals(unit)) outerSession = session;
+    return session;
   }
   public Session openSession() { outerSession = openSession("NONXA"); return outerSession; }
   public static boolean failOpen;
@@ -399,7 +413,6 @@ public class DataAccessManager {
     sources += [str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordPolicyDTO.java"),
                 str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/HthApiCredentialWriteException.java"), str(BASE / "app/hosttohost/util/HthApiPasswordCrypto.java"),
                 str(BASE / "app/hosttohost/util/HthApiPasswordHash.java"),
-                str(BASE / "app/hosttohost/util/HthApiPasswordCodeExpiry.java"),
                 str(common / "com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HthApiPasswordGenerateDTO.java"),
                 str(common / "com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java"),
                 str(Path(__file__).with_name("HthApiPasswordTransactionTest.java"))]

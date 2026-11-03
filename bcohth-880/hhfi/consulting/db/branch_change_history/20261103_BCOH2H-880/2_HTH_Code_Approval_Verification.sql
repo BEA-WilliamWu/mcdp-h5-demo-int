@@ -1,3 +1,12 @@
+-- Existing background actions must have FLG_TRANSACTIONAL=N. Do not switch to Y.
+SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, FLG_TRANSACTIONAL,
+       OBJECT_STATUS, NUM_RETRY_CNT, FLG_RETRY_ALLOWED, EXPIRY_DATE
+FROM DIGX_EP_ACT_EVT_ACN_B
+WHERE COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+  AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+                       'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+ORDER BY COD_EVENT_ID, COD_ACTION_ID;
+
 -- Read-only. Six EMAIL rows; no SMS rows; bodies/subjects identical across both roles and locales.
 SELECT r.COD_EVENT_ID, r.LOCALE, r.TXT_DEST_TYP, r.SUBSCRIBER_TYPE, r.SUBSCRIBER_VALUE,
        r.COD_MSG_TMPL_ID, t.OBJECT_STATUS, t.TXT_SUBJECT_TMPL, t.TXT_MSG_TMPL
@@ -8,7 +17,9 @@ WHERE r.COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPas
                         'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
 ORDER BY r.COD_EVENT_ID, r.TXT_DEST_TYP, r.LOCALE;
 
--- Do not select CODE_CIPHER. Check only newly approved Codes; historical expiry is unchanged.
+-- Do not select CODE_CIPHER. New approvals expire 24 hours after activation.
+-- LAST_UPDATE_DATE can change after approval (attempt/use), so compare it only for a newly
+-- activated, untouched ACTIVE Code. Existing historical expiry is not rewritten.
 SELECT ID, PARTY_ID, USER_NAME, PURPOSE, STATUS, TRANSACTION_ID, EXPIRY_TIME,
        LAST_UPDATE_DATE
 FROM HTH_BEA.HTH_API_PASSWORD_CODE

@@ -1,103 +1,109 @@
 # BCOH2H-880 — HTH API Password Code Generation Notification
 
-## 1. Scope and AC
+## 1. Scope
 
-Creation or regeneration of an API Password Code from CM User Create / Edit sends email only after successful final approval. This covers SETUP and RESET Codes. It does not change successful password setup/reset notifications (1204/1205), 851 contact notifications, 1216 access notifications, BM notifications, batch or shared dispatchers.
+After CM User Create / Edit completes final approval and successfully activates a new API Password Code, notify the target API user and company by email. This covers SETUP and RESET Codes. Code generation sends no SMS. Independent User Create/Edit and password setup/reset notifications retain their own rules.
 
-| AC | Implementation |
-|---|---|
-| AC1 | After successful final approval commits, send email to the target API Profile User and company officeEmail. No maker/intermediate/final approver recipient solely because of that role. |
-| AC2 | No SMS event/destination for Code generation. Existing User Create/Edit SMS for their separate business events remain unchanged. |
-| AC3 | No success Code email for failure, rejection, pending/intermediate approval or transaction rollback. |
-| AC4 | Use Feature 6 of `2.Customer Onboarding CM - Notification V1.0-v81-20261103_105653.docx` as the exact subject/HTML source. |
+Sources: BCOH2H-880 story PDF and Feature 6 of `2.Customer Onboarding CM - Notification V1.0-v81-20261103_105653.docx` in this directory.
 
-Sources: the BCOH2H-880 PDF (updated 2 Nov 2026) and the reviewed v81 notification DOCX in this directory.
+**Revision agreed on 4 November 2026:** retain the original approval + 24-hour expiry; remove the new `HTH_880_CODE_ACTIVATED` thread marker, APPROVE callback and calendar-expiry utility. Use the existing BCO activity/event registration flow. No new batch, queue, shared dispatcher or database table.
 
-## 2. Trigger and transaction boundary
+## 2. Trigger and processing
 
 ```mermaid
 sequenceDiagram
-    participant CM as CM approval
+    participant CM as CM final approval
     participant User as User Create / Edit
-    participant HTH as HTH Code service
-    participant Hook as Existing HTH postPerformAction extension
-    participant Alert as Existing Alert / MNG
-    CM->>User: Execute final approved transaction
-    User->>HTH: Activate the submitted PENDING Code
-    HTH->>HTH: Join approval transaction; set next-day expiry
-    HTH->>HTH: Record request-local Code ID + transaction ID
-    alt Successful commit and saved APPROVED result
-        CM->>Hook: postPerformAction (SDK calls after commit)
-        Hook->>Hook: Consume marker; verify server snapshot and response
-        Hook->>HTH: Verify committed ACTIVE Code, owner and transaction
-        HTH->>Alert: User email + company email (deduplicated)
-    else Failure / rollback / intermediate approval
-        Note over HTH,Alert: No Code success email
+    participant Code as HTH Code service
+    participant DB as Existing database transaction
+    participant Alert as BCO notification framework
+    CM->>User: Execute approved business operation
+    alt User operation succeeds
+        User->>Code: Activate the submitted Code (owner checked)
+        Code->>DB: Lock Code; change PENDING to ACTIVE
+        Code->>DB: Set expiry to database time + 24 hours
+        Code->>DB: Refresh entity after native SQL
+        Code->>Alert: Register target/company email events
+        Alert->>DB: Save activity through existing framework
+        alt Approval transaction commits
+            CM->>DB: Commit
+            Alert->>DB: Read saved activity for dispatch
+            Alert->>Alert: Process configured email actions
+        else Approval transaction rolls back
+            CM->>DB: Roll back activation and registration
+        end
+    else User operation fails or Code already activated
+        Note over Code,Alert: No new Code approval event
     end
 ```
 
-The existing `HthApiPasswordApprovalLifecycle` is extended; no new common approval hook is added. It already runs from `CZTransactionExt.postPerformAction`. The SDK bytecode is checked by the regression test to establish that the callback follows commit. In User Edit, activation is moved after the existing successful user-update check. Activation itself no longer sends email.
+- The existing approval framework invokes the business service at final approval. `UserExtensionData.create/update` retains its HTH activation call. Update activation remains inside the successful user-update branch.
+- Only a new PENDING → ACTIVE database transition registers the Code events. Re-entry for ACTIVE / USED / IN_PROGRESS / UNKNOWN does not reactivate the Code or register another event.
+- Registration is inside the existing activation transaction, before its lease is closed. The refreshed Code entity supplies the database expiry; no stale PENDING state or application-clock estimate is used.
+- `HthApiPasswordApprovalLifecycle` returns to its previous **rejection cleanup only** implementation. The separate 2110 contact-notification implementation is not changed by this revision.
 
-Only a new PENDING → ACTIVE transition sets the marker. The callback consumes it before validation, matches Code ID and transaction ID to the server-owned snapshot, checks successful response, saved final APPROVED status and business processing SUCCESS, then refreshes the Code entity from the database and verifies its committed owner/state. The refresh is necessary because native activation SQL does not update a cached PENDING entity. Replayed activation does not set another marker. BCO users and unrelated tasks remain on their existing paths.
+### Existing framework boundary
 
-This is a request-local post-commit callback, not a durable outbox. A process failure between commit and notification registration can lose the notification; this story adds no recovery batch or new retry mechanism. Notification delivery failure must not turn a committed approval into a failed transaction. Oracle/WebLogic integration and one-man-band approval require UAT verification.
+The repository SDK saves activity data through `ActivityDataRepository.insert`. For the existing Code actions, `FLG_TRANSACTIONAL='N'` selects the framework's background dispatch path, which loads the saved activity before executing actions. Keep this existing configuration; changing it to transactional execution can send an external message before business commit.
 
-## 3. Recipients and deduplication
+No HTH-specific in-memory handoff remains between approval commit and notification registration. Code state and expiry remain in the database. This does **not** introduce a new durable outbox or guarantee exactly-once delivery: registration errors, framework queue/poller recovery, database/JTA enlistment and server-restart behavior remain those of the existing BCO notification framework. Verify these boundaries on WebLogic/UAT; local transaction tests do not prove the deployed queue behavior. Existing per-recipient error isolation is retained.
 
-| Destination | Source | Event | Template ID |
+## 3. Recipients, templates and deduplication
+
+| Recipient | Address source | Event ID | Template ID |
 |---|---|---|---|
-| Target API user email | Existing owner-checked OBDX user lookup for the Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | `HTH_API_PWD_CODE_USER_EMAIL_<locale>` |
-| Company officeEmail | Existing party preferences adapter | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | `HTH_API_PWD_CODE_COMPANY_EMAIL_<locale>` |
+| Target API user | Existing owner-checked OBDX user lookup for Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | `HTH_API_PWD_CODE_USER_EMAIL_<locale>` |
+| Company | Existing party preferences `officeEmail` | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | `HTH_API_PWD_CODE_COMPANY_EMAIL_<locale>` |
 
-Keep the existing activity `com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval`. Both routes use EXTERNAL / USER with explicit email destinations. Remove signedBy recipient traversal. Trim addresses and compare case-insensitively across the target/company recipients in this one Code notification. Target user takes precedence for a shared mailbox. This does not deduplicate independent User Create/Edit events. Missing email has no SMS fallback; each recipient failure is isolated.
+Activity: `com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval`.
 
-## 4. Template and expiry
+Both routes use EXTERNAL / USER with explicit email addresses. The target user is processed first, then company. Trim addresses and compare case-insensitively across these two recipients; a shared mailbox uses the target-user route. No maker or approver is added solely because of that role. This deduplication does not span separate User Create/Edit events or framework retries. Missing email does not trigger Code SMS fallback.
 
-The six existing templates (two roles × en / zh-Hant / zh-Hans-CN) receive the same reviewed English + Traditional Chinese subject/body. The DOCX supplies one bilingual body; no new translation is invented. HTML, wording and line breaks are retained. The template contains no actual Code, password or secret. Existing unused placeholder metadata is left intact; no new placeholder is required.
+The six existing templates (two recipient roles × en / zh-Hant / zh-Hans-CN) use the exact reviewed bilingual subject and raw HTML. No new translation or secret is added.
 
-To match the approved wording, a newly approved Code expires at **23:59:59 on the following Hong Kong calendar day**, for SETUP and RESET. Example: approval on 3 November at 10:00 HKT → expiry 4 November 23:59:59 HKT. Calculate once using `Asia/Hong_Kong` and bind that timestamp to the existing EXPIRY_TIME field. Do not backfill historical ACTIVE/USED/EXPIRED rows. The response's optional expiryHours becomes rounded-up remaining hours for a Code with an actual expiry, rather than a fixed 24-hour claim.
+## 4. Expiry and template discrepancy
 
-The reviewed wording is implemented verbatim, including English hotline 2211 1056 versus Chinese 2211 1321, setup-only wording for this shared Code notification and existing H2H/HTH UI-label differences. These are document consistency observations, not silent changes to the agreed text or to BCO screens.
+**Runtime rule remains the original rule: approval time + 24 hours**, calculated by Oracle with `SYSTIMESTAMP + NUMTODSINTERVAL(24, 'HOUR')`. Both SETUP and RESET use it. Example: approval on 4 November at 10:00 HKT → expiry on 5 November at 10:00 HKT. Restore the response's original fixed `expiryHours=24` contract. Existing historical rows are not rewritten.
 
-## 5. Change and BCO impact
+**The reviewed v81 template still says “23:59:59 (UTC+8) on the following day”. This conflicts with the retained 24-hour rule.** The template SQL preserves reviewed content; this revision does not silently rewrite approved wording. Confirm corrected expiry wording before releasing this template to customers. Do not treat the current template as evidence of a changed runtime expiry requirement. The story AC does not itself specify a new expiry duration.
 
-| Area | Change | BCO impact |
+The reviewed hotline and setup-only wording also remain verbatim; this revision is confined to the requested implementation simplification.
+
+## 5. Code changes and BCO impact
+
+| File / area | This revision | Impact |
 |---|---|---|
-| HostToHostApiPassword | Defer email; validate committed Code; target/company recipients only | HTH service only |
-| HthApiPasswordApprovalLifecycle | Add APPROVE handling to existing HTH-only extension | Fail-closed gates for HTH user create/edit only; rejection cleanup retained |
-| UserExtensionData.update | Move existing HTH activation into successful-update block | No change to BCO notification templates/recipients or general success condition |
-| HTH Code repository + adapter + interface | Bind explicit expiry timestamp | HTH Code table only |
-| HthApiPasswordCodeExpiry | Hong Kong calendar-day expiry calculation | New HTH utility |
-| 880 configuration delta | Six email templates and their two event routes; remove non-email routes for those events | No BCO/setup/reset/batch configuration changed |
+| `HostToHostApiPassword` | Remove marker and public post-commit bridge; register through the existing framework inside activation; refresh native-SQL state | HTH Code only; retain recipient and dedup changes |
+| `HthApiPasswordApprovalLifecycle` | Remove 880 APPROVE handling/reflection; restore earlier rejection hook | No new common approval behavior |
+| Code repository / interface / local adapter | Restore original integer expiry-hours parameter and Oracle interval SQL | HTH Code table only; earlier expiry implementation restored |
+| `HthApiPasswordCodeExpiry` | Delete the new next-calendar-day utility | Removes the unneeded rule change |
+| `UserExtensionData.update` | Retain the prior success gate; update obsolete comment | Ordinary BCO notification logic is unchanged by this revision |
+| 880 SQL | Keep reviewed templates and recipient routes; add configuration check / verification query | Only the two existing Code approval events |
 
-## 6. Deployment and synchronization
+No batch or shared notification package changes. The existing BCO framework may internally use thread context; this revision removes only the custom 880 notification handoff.
 
-1. Build/deploy the changed hosttohost, sms and approval modules together using the normal build; repository interface and implementation must be deployed together.
-2. Run `consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` as one block in the OBDX configuration schema, then COMMIT. It validates the six existing templates/routes and active actions before changing anything. On error it rolls back this block to its savepoint. Re-execution does not add duplicate rows.
-3. Run the accompanying read-only verification SQL. Use the existing deployment procedure to refresh notification configuration/template caches.
-4. Run this delta **after** older HTH password template scripts. Re-running old scripts afterwards restores superseded content.
-5. mcdp delivery directory: `bcohth-880/hhfi/consulting/...`; copy only changed consulting files with identical relative paths. Keep this design and regression tools at their original relative paths under `bcohth-880/hhfi/story/notification` and `bcohth-880/hhfi/devtools/backend-compile/tests`. Do not copy into mcdp's root `consulting`.
+## 6. Deployment
 
-## 7. Verification
+1. Build/deploy hosttohost, sms and approval modules together. The repository interface and implementation must match. Remove the deleted expiry utility from clean build outputs.
+2. Run `consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` as one block, after the existing HTH baseline scripts; COMMIT after success. It checks the two existing non-transactional actions and six templates/routes before updating. Re-execution adds no duplicate rows.
+3. Run `2_HTH_Code_Approval_Verification.sql`; refresh configuration caches using the existing deployment procedure. Resolve the template discrepancy in section 4 before customer release.
+4. Delivery is isolated under `mcdp/bcohth-880/hhfi/consulting/...`, with design/tests at their matching relative paths below `hhfi`. Do not copy into mcdp's root `consulting`. Apply against the matching full source baseline, not as a standalone project.
 
-Automated tests cover target/company-only emails, shared mailbox dedup, missing contacts, no SMS fallback, isolation of delivery failures, setup/reset notification preservation, final approval gates, error-type response despite SUCCESSFUL result, intermediate approval, rollback/no marker, replay, owner binding, rejection regression and ordinary BCO exclusion. The real EclipseLink/H2 test also exercises a cached PENDING entity through native activation, commit and notification, plus rollback and rejected/used Code cases. Expiry tests cover Hong Kong midnight, UTC date boundaries, month/year transitions and leap day. SQL tests compare the exact subject/body with the reviewed DOCX and restrict updates to the six Code templates/two events.
+## 7. Verification and limits
 
-Before UAT sign-off, execute real Create and Edit/regeneration approvals with multiple approvers; verify only user/company receive the Code emails, no Code SMS, no email on failure/rejection/partial approval, correct expiry, both email roles and all three locales, shared mailbox once, and unchanged independent BCO User Create/Edit notifications. Local compile/tests do not prove MNG inbox delivery or Oracle/WebLogic deployment behavior.
+| Check | What it establishes |
+|---|---|
+| Java 8 target compilation | Current production classes compile against repository SDK/dependencies |
+| Existing rejection-hook tests | Reject cleanup, server snapshot ownership and ordinary BCO exclusion remain unchanged |
+| Notification routing tests | Target/company-only Code emails; normalized dedup; missing contacts; failure isolation; existing setup/reset routes retained |
+| EclipseLink/H2 transaction tests | Production activation methods and SQL, with equivalent H2 interval syntax; cached refresh, 24-hour expiry, commit/rollback and replay. Notification registration is a test-table fixture in the same real ORM transaction; MNG and the SDK event processor are not executed |
+| DOCX/SQL contract checks | Exact reviewed subject/raw HTML, scoped six-template/two-event delta, no Code SMS, no custom 880 marker/bridge |
 
-## 8. Diagnostic evidence
+All five local checks listed above passed on 4 November 2026.
 
-Use the verification SQL and existing Code event IDs to correlate the approval test. New failure diagnostics use `HTH_880 stage=POST_COMMIT_NOTIFICATION_FAILED` or `HTH_880 stage=NOTIFY_SKIPPED`; they contain stage/reason/exception type only, not Code/password/email content. Check approval transaction status, Code TRANSACTION_ID and newly assigned EXPIRY_TIME before inspecting dispatch history.
+UAT must verify Create and Edit/regeneration with final and intermediate approvals, rollback after activation, registration failures, replay, shared mailbox, both recipient roles/all locales, no Code SMS, and unchanged independent BCO notifications. Check framework recovery on server restart separately. Oracle execution and actual MNG delivery are not local test results.
 
-### Local verification results
-
-- Java 8 API compilation of changed production classes and current module dependencies: passed (repository SDK/JARs; not a server deployment build).
-- `verify_hth_code_approval.py`: passed; SDK bytecode confirms business execution → commit → postPerformAction → session close; actual SDK DTO tests exercise all final-approval/failure gates and rejection regression.
-- `verify_hth_notifications.py`: passed; target/company-only Code email, normalized-mailbox dedup, independent role failures, missing contacts/no SMS fallback; existing password setup/reset channels preserved.
-- `verify_hth_password_transactions.py`: passed with EclipseLink/OBDX ORM and H2 1.4.200; real transaction rollback, native activation, cached-entity refresh, owner binding, SETUP/RESET expiry persistence and existing password lifecycle regression. Infrastructure bootstrap, DSP and actual delivery are fixtures.
-- `verify_hth_880.py`: passed; 21 Hong Kong expiry boundary cases under three JVM timezones; raw subject/HTML equal the reviewed DOCX.
-- Oracle PL/SQL execution/re-execution and real MNG delivery have **not** been run locally. These remain deployment checks, not claims of passing UAT.
-
-Run from the source repository with `JAVA_HOME` pointing to a JDK supporting `--release 8`, and `H2_JAR` pointing to H2 1.4.200:
+Run with a Java installation supporting `--release 8` and `H2_JAR` pointing to H2 1.4.200:
 
 ```sh
 python3 devtools/backend-compile/tests/verify_hth_audit_compile.py
@@ -106,3 +112,5 @@ python3 devtools/backend-compile/tests/verify_hth_notifications.py
 python3 devtools/backend-compile/tests/verify_hth_password_transactions.py
 python3 devtools/backend-compile/tests/verify_hth_880.py
 ```
+
+For investigation, use the two Code event IDs, Code `TRANSACTION_ID` and the verification SQL. Existing failure logs include `Unable to publish HTH notification event` and `Unable to resolve HTH notification`; the removed `HTH_880 stage=POST_COMMIT_NOTIFICATION_FAILED` / `NOTIFY_SKIPPED` messages no longer apply.

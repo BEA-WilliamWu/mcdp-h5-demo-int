@@ -1,48 +1,22 @@
-"""880 expiry calendar contract and exact reviewed DOCX/SQL template contract.
+"""880 expiry/registration contract and exact reviewed DOCX/SQL template contract.
 
 No Oracle or MNG connection: use the deployment verification SQL in UAT as well.
-JAVA_HOME must support --release 8. Uses only Python standard library.
+Uses only Python standard library; transaction execution is covered by verify_hth_password_transactions.py.
 """
 from pathlib import Path
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
-import os
 import re
-import subprocess
-import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-JDK = Path(os.environ['JAVA_HOME']) / 'bin'
-UTILITY = next((ROOT / 'consulting/middleware/projects').rglob('HthApiPasswordCodeExpiry.java'))
-with tempfile.TemporaryDirectory(prefix='hth-880-expiry-') as directory:
-    java = Path(directory) / 'ExpiryTest.java'
-    java.write_text('''
-import java.time.*;
-import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCodeExpiry;
-public class ExpiryTest {
-  public static void main(String[] args) {
-    String[][] cases = {
-      {"2026-11-02T16:00:00Z", "2026-11-04T23:59:59+08:00"},
-      {"2026-11-03T15:59:59Z", "2026-11-04T23:59:59+08:00"},
-      {"2026-11-03T16:00:00Z", "2026-11-05T23:59:59+08:00"},
-      {"2026-12-31T09:00:00Z", "2027-01-01T23:59:59+08:00"},
-      {"2028-02-28T09:00:00Z", "2028-02-29T23:59:59+08:00"},
-      {"2028-02-29T09:00:00Z", "2028-03-01T23:59:59+08:00"},
-      {"2026-02-28T09:00:00Z", "2026-03-01T23:59:59+08:00"}
-    };
-    for (String zone : new String[] {"UTC", "Asia/Hong_Kong", "America/New_York"}) {
-      java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
-      for (String[] c : cases) {
-        long actual = HthApiPasswordCodeExpiry.nextDayEnd(Instant.parse(c[0]).toEpochMilli());
-        long expected = OffsetDateTime.parse(c[1]).toInstant().toEpochMilli();
-        if (actual != expected) throw new AssertionError(zone + ": " + c[0]);
-      }
-    }
-    System.out.println("PASS: 21 expiry cases; Hong Kong next-day end independent of JVM timezone");
-  }
-}''')
-    subprocess.run([str(JDK / 'javac'), '--release', '8', '-d', directory, str(UTILITY), str(java)], check=True)
-    subprocess.run([str(JDK / 'java'), '-cp', directory, 'ExpiryTest'], check=True)
+projects = ROOT / 'consulting/middleware/projects'
+service = next(projects.rglob('HostToHostApiPassword.java')).read_text()
+assert 'private static final int EXPIRY_HOURS = 24;' in service
+assert 'HTH_880_CODE_ACTIVATED' not in service
+assert 'notifyOnUserApprovalCommit' not in service
+assert not list(projects.rglob('HthApiPasswordCodeExpiry.java'))
+assert "SYSTIMESTAMP + NUMTODSINTERVAL(?, 'HOUR')" in next(projects.rglob('LocalHthApiPasswordCodeRepositoryAdapter.java')).read_text()
+print('PASS: 24-hour DB expiry contract; no 880 thread marker/post-commit bridge/calendar utility')
 
 source = ROOT / 'story/notification/2.Customer Onboarding CM - Notification V1.0-v81-20261103_105653.docx'
 with ZipFile(source) as docx:
@@ -73,6 +47,7 @@ assert not re.search(r'HTH_API_PASSWORD_(SETUP|RESET)_SUCCESS', sql), '880 must 
 assert "'USER' name FROM DUAL UNION ALL SELECT 'COMPANY'" in sql
 assert "SUBSCRIBER_TYPE='EXTERNAL', SUBSCRIBER_VALUE='USER'" in sql
 assert "TXT_DEST_TYP <> 'EMAIL'" in sql
+assert "AND FLG_TRANSACTIONAL='N'" in sql, "Require the existing background Code action"
 assert 'ROLLBACK TO HTH_880_CONFIG;' in sql
 assert not re.search(r'(?im)^\s*(INSERT|CREATE|ALTER|DROP)\b', sql), 'Delta must not add duplicate configuration/schema rows'
 print('PASS: exact v81 subject/raw HTML, two recipient roles, three locales, EMAIL-only delta; no unrelated event mutation')

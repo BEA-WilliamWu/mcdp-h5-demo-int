@@ -7,7 +7,6 @@ import com.ofss.digx.cz.bea.app.sms.dto.user.UserExtensionDataDTO;
 import com.ofss.digx.app.messages.Status.ResultType;
 import com.ofss.digx.enumeration.approval.ApprovalAction;
 import com.ofss.digx.enumeration.approval.ApprovalStatus;
-import com.ofss.digx.enumeration.approval.ProcessingStatus;
 import com.ofss.digx.framework.domain.transaction.Transaction;
 import com.ofss.digx.framework.domain.transaction.TransactionKey;
 import com.ofss.digx.infra.exceptions.Exception;
@@ -16,16 +15,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** HTH-only callback after the SDK commits user-maintenance approval or rejection. */
+/** HTH-only callback after the SDK has committed the user-maintenance rejection. */
 class HthApiPasswordApprovalLifecycle {
     private static final Logger LOGGER = Logger.getLogger(HthApiPasswordApprovalLifecycle.class.getName());
     void afterAction(SessionContext context, TransactionActionDTO request,
             TransactionActionResponse response) throws Exception {
-        Object activated = com.ofss.fc.infra.thread.ThreadAttribute.clear("HTH_880_CODE_ACTIVATED");
-        if (request != null && request.getAction() == ApprovalAction.APPROVE) {
-            afterApproved(context, request, response, activated);
-            return;
-        }
         if (context == null || request == null || request.getAction() != ApprovalAction.REJECT
                 || request.getTransactionDTO() == null || response == null
                 || (response.getStatus() != null && response.getStatus().getResult() == ResultType.FAILED)) {
@@ -59,52 +53,6 @@ class HthApiPasswordApprovalLifecycle {
             LOGGER.log(Level.WARNING,
                     "HTH_API_PASSWORD code: stage=REJECT_CLEANUP_FAILED, transactionId={0}, exceptionType={1}",
                     new Object[] {requested.getTransactionId(), failure.getClass().getName()});
-        }
-    }
-
-    private void afterApproved(SessionContext context, TransactionActionDTO request,
-            TransactionActionResponse response, Object activated) {
-        // The marker is set only for a new PENDING -> ACTIVE transition in this request.
-        // It is consumed before these gates, including on failed/partial approval and replay.
-        if (context == null || !"OBDX_BU".equals(context.getTargetUnit())
-                || !(activated instanceof String[]) || response == null || response.getStatus() == null
-                || response.getStatus().getResult() != ResultType.SUCCESSFUL
-                || response.getStatus().getLastKnownError() != null
-                || (response.getStatus().getMessage() != null
-                    && "ERROR".equals(String.valueOf(response.getStatus().getMessage().getType())))
-                || request.getTransactionDTO() == null) return;
-        String[] pending = (String[]) activated;
-        TransactionDTO requested = request.getTransactionDTO();
-        if (pending.length != 2 || !isUserTask(requested.getTransactionName())
-                || requested.getTransactionId() == null
-                || !requested.getTransactionId().equals(pending[1])) return;
-        try {
-            Transaction stored = readTransaction(requested.getTransactionId());
-            if (stored == null || !requested.getTransactionName().equals(stored.getTransactionName())
-                    || stored.getApprovalDetails() == null
-                    || stored.getProcessingDetails() == null
-                    || stored.getProcessingDetails().getStatus() != ProcessingStatus.SUCCESS
-                    || stored.getApprovalDetails().getStatus() != ApprovalStatus.APPROVED
-                    || stored.getApprovalDetails().getAction() != ApprovalAction.APPROVE
-                    || !(stored.getTransactionSnapshot() instanceof UserExtensionDataDTO)) return;
-            UserExtensionDataDTO user = (UserExtensionDataDTO) stored.getTransactionSnapshot();
-            if (!"HTH".equalsIgnoreCase(user.getUserChannelType())
-                    || !pending[0].equals(user.getHthApiPasswordCodeId())) return;
-            notifyCode(context, user, requested.getTransactionId());
-        } catch (java.lang.Exception failure) {
-            LOGGER.log(Level.WARNING, "HTH_880 stage=POST_COMMIT_NOTIFICATION_FAILED exceptionType={0}",
-                    failure.getClass().getName());
-        }
-    }
-
-    void notifyCode(SessionContext context, UserExtensionDataDTO user, String transactionId) throws Exception {
-        try {
-            Class<?> service = Class.forName("com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword");
-            service.getMethod("notifyOnUserApprovalCommit", SessionContext.class, String.class,
-                    String.class, String.class, String.class).invoke(service.getDeclaredConstructor().newInstance(),
-                    context, user.getHthApiPasswordCodeId(), user.getCdcNo(), user.getUserID(), transactionId);
-        } catch (java.lang.Exception failure) {
-            throw new Exception(failure);
         }
     }
 

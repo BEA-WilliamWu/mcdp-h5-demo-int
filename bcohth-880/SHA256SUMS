@@ -1,0 +1,16 @@
+1184bd32a6f40bc5441800b6c8a591249ffe0b088d28498bbfc4a5d379186064  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApiPasswordApprovalLifecycle.java
+e1f05ed905827a31f3a8d1b259c1b537a13dcf4af008107d3a53863abcaafc33  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.sms/src/com/ofss/digx/cz/bea/app/sms/service/user/UserExtensionData.java
+2bc31111f1c596e02990dfcc83e161a74ab527b06d05cd532c6413209111d61a  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
+7e7228184c5b859addaf59f37f80c80213dc42406474035b8f71a9d0483a68e0  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordCodeExpiry.java
+6af01b78e4e6953efac593e1597ff9a59472b737d354fa7023b08c5137e2a85d  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/HthApiPasswordCodeRepository.java
+5639ff4f186cf660c9cc3e3b5cf69a56e83ddf47d34f9fa8d5201bb25dd254bb  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/IHthApiPasswordCodeRepositoryAdapter.java
+564faa8e9d4e1c8a70d64f349c6d80d434f65da94bbea4801470b170e336003c  hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordCodeRepositoryAdapter.java
+b4ffdba6bfe55bba629141da1e2a282655b86bc0686d986f6cc5ab97533c743f  hhfi/consulting/db/branch_change_history/20261103_BCOH2H-880/2_HTH_Code_Approval_Verification.sql
+8fe7c0ae88a9a72aab2f7de1ccdbef202aa70b27b368e3e0d434d5cf7644744c  hhfi/consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql
+567001f54148337e56f82dd61e74b97f1934d71af4af7bdeb641da5b8d78b16a  hhfi/story/notification/BCOH2H-880-TECHNICAL-DESIGN.md
+6d9a6d79423c9b1b765c99e8a7f90245df4b5b4d216bdc5f2e791ee39e93890c  hhfi/devtools/backend-compile/tests/verify_hth_880.py
+dfa35f2ee501c2a47d7f8d7ab013b6663cf9e8db464148f33051f360bdcc9ac6  hhfi/devtools/backend-compile/tests/verify_hth_code_approval.py
+d3ecf856d50203d77444e81dbff555fe08a10e3add6d35bc2c0effa350388116  hhfi/devtools/backend-compile/tests/verify_hth_notifications.py
+27df00255b5aa0a811d0501f13ade2e4757fb76ac5832b732cc3b6753d953cfd  hhfi/devtools/backend-compile/tests/verify_hth_password_transactions.py
+5f4a645307d63b4445d74661043e932df7039c793b87d8de620971a08875e963  hhfi/devtools/backend-compile/tests/HthApiPasswordApprovalLifecycleTest.java
+eb25ae1a8ed30bc9e90300e1731ab512cb1ceeccc5e3dc0afcb8d7833fec4761  hhfi/devtools/backend-compile/tests/HthApiPasswordTransactionTest.java

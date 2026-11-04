@@ -1,18 +1,35 @@
 -- BCOH2H-880. Run as one PL/SQL block in the OBDX configuration schema (UTF-8).
--- Prerequisite: deployed HTH Code approval events (either historical template naming scheme).
--- Run this delta AFTER older HTH password/template scripts; those scripts contain superseded text.
--- Re-runnable; exact two events / six existing EMAIL templates only. No setup/reset or BCO updates.
--- v81 Feature 6 supplies one bilingual body; use it for all three configured locales and both roles.
--- Runtime remains approval + 24 hours. The reviewed next-day wording below requires separate
+-- Run AFTER older HTH password/template scripts; those scripts contain superseded text.
+-- Resolve ALL installed EMAIL template IDs/locales from the two Code approval events.
+-- No template-name assumptions, route creation or missing-template inserts.
+-- Existing 880 EMAIL-only / explicit-recipient route normalization is retained.
+-- Validate all bindings before writing; an error rolls back this whole block.
+-- Re-runnable: no new rows, no changes to BCO/setup/reset templates or other units.
+-- v81 Feature 6 supplies the same bilingual subject/body for both roles and all locales.
+-- Runtime remains approval + 24 hours. The reviewed next-day wording requires separate
 -- wording confirmation before customer release; this delta does not change Code expiry.
--- English 2211 1056 and Chinese 2211 1321 are retained verbatim from the reviewed document.
+-- English 2211 1056 and Chinese 2211 1321 are verbatim from the reviewed document.
 DECLARE
   c_activity CONSTANT VARCHAR2(200) := 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval';
-  v_event VARCHAR2(100);
-  v_template VARCHAR2(100);
+  v_event DIGX_EP_EVT_REC_B.COD_EVENT_ID%TYPE;
   v_count NUMBER;
-  TYPE t_template_ids IS TABLE OF VARCHAR2(100) INDEX BY VARCHAR2(100);
+  v_destination DIGX_EP_MSG_TMPL_B.DESTINATION_TYPE%TYPE;
+  TYPE t_template_ids IS TABLE OF DIGX_EP_MSG_TMPL_B.COD_TMPL_ID%TYPE INDEX BY BINARY_INTEGER;
   v_templates t_template_ids;
+  v_template_count PLS_INTEGER := 0;
+  CURSOR c_bound_templates IS
+    -- Include configured alternate templates as well as the main template.
+    -- UNION ensures a template shared by these two events/locales is updated once.
+    SELECT COD_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
+     WHERE COD_ACT_ID=c_activity AND COD_ACTION_ID='A' AND TXT_DEST_TYP='EMAIL'
+       AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+                            'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+    UNION
+    SELECT UNSECURE_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
+     WHERE COD_ACT_ID=c_activity AND COD_ACTION_ID='A' AND TXT_DEST_TYP='EMAIL'
+       AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+                            'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+       AND TRIM(UNSECURE_MSG_TMPL_ID) IS NOT NULL;
   v_subject VARCHAR2(1000) := q'~BEA Corporate Online : H2H API Password Setup Code Approved
 東亞企業網上銀行：銀企直連密碼設定碼已獲批准~';
   v_body CLOB := TO_CLOB(q'~<p>Dear Valued Customer,</p><p> </p>
@@ -46,71 +63,80 @@ This is a system-generated email – please do not  reply to this email or via 
 <p>中英文本文義如有歧異，概以英文本為準。此乃電腦系統發出之電郵，請勿回覆此電郵和電郵內的超連結。</p>~');
 BEGIN
   SAVEPOINT HTH_880_CONFIG;
-  -- Validate the complete baseline before any update. A partial deployment must fail visibly.
+  -- Keep the existing background action. Do not guess a missing event or route.
   FOR role IN (SELECT 'USER' name FROM DUAL UNION ALL SELECT 'COMPANY' FROM DUAL) LOOP
     v_event := 'HTH_API_PASSWORD_CODE_APPROVED_' || role.name || '_EMAIL_EVENT';
     SELECT COUNT(*) INTO v_count FROM DIGX_EP_ACT_EVT_ACN_B
-     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A' AND OBJECT_STATUS='A'
-       AND FLG_TRANSACTIONAL='N';
-    IF v_count <> 1 THEN RAISE_APPLICATION_ERROR(-20880, '880: expected one active non-transactional Code approval action: ' || role.name); END IF;
-    FOR lang IN (SELECT 'en' locale FROM DUAL UNION ALL SELECT 'zh-Hant' FROM DUAL UNION ALL SELECT 'zh-Hans-CN' FROM DUAL) LOOP
-      -- Resolve the installed route, not a reconstructed template ID. Both repository
-      -- baselines use the same events but different USER / COMPANY (legacy PARTY) IDs.
-      SELECT COUNT(*), MIN(COD_MSG_TMPL_ID) INTO v_count, v_template FROM DIGX_EP_EVT_REC_B
-       WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
-         AND LOCALE=lang.locale AND TXT_DEST_TYP='EMAIL';
-      IF v_count <> 1 THEN
-        RAISE_APPLICATION_ERROR(-20880, '880: expected one EMAIL route; rows=' || v_count
-          || ', role=' || role.name || ', locale=' || lang.locale);
-      END IF;
-      -- Only these feature-owned IDs may be edited; never update a shared BCO template.
-      IF v_template IS NULL OR (
-           v_template <> 'HTH_API_PWD_CODE_' || role.name || '_EMAIL_' || lang.locale
-           AND v_template <> 'HTH API Password Code Approved_'
-             || CASE role.name WHEN 'COMPANY' THEN 'PARTY' ELSE 'USER' END
-             || '_EMAIL_' || lang.locale) THEN
-        RAISE_APPLICATION_ERROR(-20880, '880: unexpected bound template for '
-          || role.name || '/' || lang.locale || ': ' || NVL(v_template, '<NULL>'));
-      END IF;
-      SELECT COUNT(*) INTO v_count FROM DIGX_EP_MSG_TMPL_B
-       WHERE COD_TMPL_ID=v_template AND DETERMINANT_VALUE='OBDX_BU' AND DESTINATION_TYPE='EMAIL';
-      IF v_count <> 1 THEN
-        RAISE_APPLICATION_ERROR(-20880, '880: bound EMAIL template rows=' || v_count
-          || ' in OBDX_BU: ' || v_template);
-      END IF;
-      SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
-       WHERE COD_MSG_TMPL_ID=v_template
-         AND (COD_ACT_ID IS NULL OR COD_ACT_ID <> c_activity OR COD_EVENT_ID IS NULL
-           OR COD_EVENT_ID NOT IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
-                                   'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT'));
-      IF v_count <> 0 THEN
-        RAISE_APPLICATION_ERROR(-20880, '880: template is shared outside Code approval: ' || v_template);
-      END IF;
-      v_templates(role.name || '|' || lang.locale) := v_template;
-    END LOOP;
+     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
+       AND OBJECT_STATUS='A' AND FLG_TRANSACTIONAL='N';
+    IF v_count <> 1 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: expected one active non-transactional Code approval action: ' || role.name);
+    END IF;
     SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
      WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
-       AND TXT_DEST_TYP='EMAIL' AND (LOCALE IS NULL OR LOCALE NOT IN ('en','zh-Hant','zh-Hans-CN'));
-    IF v_count <> 0 THEN RAISE_APPLICATION_ERROR(-20880, '880: unexpected Code EMAIL locale'); END IF;
+       AND TXT_DEST_TYP='EMAIL';
+    IF v_count = 0 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: no EMAIL route for event: ' || v_event);
+    END IF;
+    SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
+     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
+       AND TXT_DEST_TYP='EMAIL' AND TRIM(COD_MSG_TMPL_ID) IS NULL;
+    IF v_count <> 0 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: EMAIL route has empty template ID: ' || v_event);
+    END IF;
   END LOOP;
+
+  -- Resolve and validate every distinct bound ID before any template/route changes.
+  FOR bound IN c_bound_templates LOOP
+    SELECT COUNT(*), MIN(DESTINATION_TYPE) INTO v_count, v_destination
+      FROM DIGX_EP_MSG_TMPL_B
+     WHERE COD_TMPL_ID=bound.template_id AND DETERMINANT_VALUE='OBDX_BU';
+    IF v_count <> 1 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: bound template rows=' || v_count
+        || ' in OBDX_BU: ' || bound.template_id || '; check event binding; no changes applied');
+    END IF;
+    IF v_destination IS NULL OR v_destination <> 'EMAIL' THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: bound template is not EMAIL: ' || bound.template_id);
+    END IF;
+    SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
+     WHERE (COD_MSG_TMPL_ID=bound.template_id OR UNSECURE_MSG_TMPL_ID=bound.template_id)
+       AND (COD_ACT_ID IS NULL OR COD_ACT_ID <> c_activity
+         OR COD_ACTION_ID IS NULL OR COD_ACTION_ID <> 'A'
+         OR TXT_DEST_TYP IS NULL OR TXT_DEST_TYP <> 'EMAIL'
+         OR COD_EVENT_ID IS NULL OR COD_EVENT_ID NOT IN (
+           'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+           'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT'));
+    IF v_count <> 0 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: template is also referenced outside these Code EMAIL routes: '
+        || bound.template_id || '; no changes applied');
+    END IF;
+    v_template_count := v_template_count + 1;
+    v_templates(v_template_count) := bound.template_id;
+  END LOOP;
+
+  FOR i IN 1..v_template_count LOOP
+    UPDATE DIGX_EP_MSG_TMPL_B SET TXT_SUBJECT_TMPL=v_subject, TXT_MSG_TMPL=v_body,
+      OBJECT_STATUS='A', LAST_UPDATED_BY=USER, LAST_UPDATED_DATE=SYSDATE,
+      OBJECT_VERSION_NUMBER=NVL(OBJECT_VERSION_NUMBER,0)+1
+     WHERE COD_TMPL_ID=v_templates(i) AND DETERMINANT_VALUE='OBDX_BU'
+       AND DESTINATION_TYPE='EMAIL';
+    IF SQL%ROWCOUNT <> 1 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: template changed during update: ' || v_templates(i));
+    END IF;
+  END LOOP;
+
+  -- Retain the existing 880 routing change; preserve every installed template ID/locale.
   FOR role IN (SELECT 'USER' name FROM DUAL UNION ALL SELECT 'COMPANY' FROM DUAL) LOOP
     v_event := 'HTH_API_PASSWORD_CODE_APPROVED_' || role.name || '_EMAIL_EVENT';
-    -- AC2: no SMS or other delivery routes for these Code-approved events.
     DELETE FROM DIGX_EP_EVT_REC_B WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event
       AND COD_ACTION_ID='A' AND (TXT_DEST_TYP IS NULL OR TXT_DEST_TYP <> 'EMAIL');
-    FOR lang IN (SELECT 'en' locale FROM DUAL UNION ALL SELECT 'zh-Hant' FROM DUAL UNION ALL SELECT 'zh-Hans-CN' FROM DUAL) LOOP
-      v_template := v_templates(role.name || '|' || lang.locale);
-      UPDATE DIGX_EP_MSG_TMPL_B SET TXT_SUBJECT_TMPL=v_subject, TXT_MSG_TMPL=v_body,
-        OBJECT_STATUS='A', LAST_UPDATED_BY=USER, LAST_UPDATED_DATE=SYSDATE,
-        OBJECT_VERSION_NUMBER=NVL(OBJECT_VERSION_NUMBER,0)+1
-       WHERE COD_TMPL_ID=v_template AND DETERMINANT_VALUE='OBDX_BU' AND DESTINATION_TYPE='EMAIL';
-      -- Preserve the installed template ID; only normalize this event's delivery route.
-      UPDATE DIGX_EP_EVT_REC_B SET SUBSCRIBER_TYPE='EXTERNAL', SUBSCRIBER_VALUE='USER', RECIPIENT_TYPE=NULL,
-        FLG_CONDITIONAL='N', COD_DEC_ID='0'
-       WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
-         AND TXT_DEST_TYP='EMAIL' AND LOCALE=lang.locale;
-    END LOOP;
+    UPDATE DIGX_EP_EVT_REC_B SET SUBSCRIBER_TYPE='EXTERNAL', SUBSCRIBER_VALUE='USER', RECIPIENT_TYPE=NULL,
+      FLG_CONDITIONAL='N', COD_DEC_ID='0'
+     WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
+       AND TXT_DEST_TYP='EMAIL';
   END LOOP;
+  DBMS_OUTPUT.PUT_LINE('880: updated ' || v_template_count
+    || ' distinct bound EMAIL templates in OBDX_BU. Verify and COMMIT.');
 EXCEPTION WHEN OTHERS THEN
   ROLLBACK TO HTH_880_CONFIG;
   RAISE;

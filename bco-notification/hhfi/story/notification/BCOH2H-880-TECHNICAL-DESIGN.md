@@ -52,16 +52,20 @@ No HTH-specific in-memory handoff remains between approval commit and notificati
 
 | Recipient | Address source | Event ID | Template ID |
 |---|---|---|---|
-| Target API user | Existing owner-checked OBDX user lookup for Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | Installed route: `HTH_API_PWD_CODE_USER_EMAIL_<locale>` or `HTH API Password Code Approved_USER_EMAIL_<locale>` |
-| Company | Existing party preferences `officeEmail` | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | Installed route: `HTH_API_PWD_CODE_COMPANY_EMAIL_<locale>` or `HTH API Password Code Approved_PARTY_EMAIL_<locale>` |
+| Target API user | Existing owner-checked OBDX user lookup for Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | Existing template IDs bound to the user event in `DIGX_EP_EVT_REC_B`; no naming assumption |
+| Company | Existing party preferences `officeEmail` | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | Existing template IDs bound to the company event in `DIGX_EP_EVT_REC_B`; no naming assumption |
 
 Activity: `com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval`.
 
 Both routes use EXTERNAL / USER with explicit email addresses. The target user is processed first, then company. Trim addresses and compare case-insensitively across these two recipients; a shared mailbox uses the target-user route. No maker or approver is added solely because of that role. This deduplication does not span separate User Create/Edit events or framework retries. Missing email does not trigger Code SMS fallback.
 
-The six existing templates (two recipient roles × en / zh-Hant / zh-Hans-CN) use the exact reviewed bilingual subject and raw HTML. No new translation or secret is added.
+All EMAIL templates bound to these two events use the exact reviewed bilingual subject and raw HTML. The baseline has two roles × three locales, but the update follows the installed configuration rather than assuming six IDs or particular locale names. No new translation or secret is added.
 
-The 880 SQL resolves each template from its existing event/locale route and preserves that ID. The two historical baseline scripts use different names, so requiring only `HTH_API_PWD_CODE_*` incorrectly rejects the older installed configuration. Before updating, the script checks unique routes, a matching EMAIL template in OBDX_BU, the two known feature-owned naming schemes, and no template references outside the two Code approval events. Missing or duplicate rows still stop the whole block with a row count; the script does not create templates or overwrite shared BCO templates.
+The 880 SQL selects every distinct main (`COD_MSG_TMPL_ID`) and configured alternate (`UNSECURE_MSG_TMPL_ID`) template for the exact activity, the two Code approval event IDs, action A and EMAIL channel. It updates OBDX_BU templates in place, preserving existing IDs and locale bindings. Multiple bindings may share a template; that template is updated once per execution. Templates not referenced by those routes are not updated. The earlier draft that inserted missing templates is withdrawn.
+
+Before writing, it verifies both existing non-transactional actions, at least one email route for each event, nonempty main IDs, exactly one existing EMAIL template per bound ID in OBDX_BU, and no primary or alternate references from other activities/events/actions/channels. A missing, duplicate, conflicting or shared template stops the entire block before changes. A later write failure rolls back this block. Existing 880 EMAIL-only / EXTERNAL-USER route normalization is retained; the revised lookup does not create routes, rename templates, or change locale bindings.
+
+Re-execution does not add records or alter unrelated BCO templates or other units. Template versions/audit timestamps advance on each successful execution. The verification SQL lists all bindings and missing/conflicting templates together. A dangling binding is a separate data issue: updating by Event ID cannot create the referenced row or establish which other template was intended; inspect the bindings before deciding on a data repair.
 
 ## 4. Expiry and template discrepancy
 
@@ -87,9 +91,9 @@ No batch or shared notification package changes. The existing BCO framework may 
 ## 6. Deployment
 
 1. Build/deploy hosttohost, sms and approval modules together. The repository interface and implementation must match. Remove the deleted expiry utility from clean build outputs.
-2. Run `consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` as one block, after the existing HTH baseline scripts; COMMIT after success. It checks the two existing non-transactional actions and six templates/routes before updating. Re-execution adds no duplicate rows.
+2. Run `consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` as one block against the existing Code approval events/routes; COMMIT after success. It validates the two non-transactional actions and all installed EMAIL bindings before updating existing templates. It does not create missing template rows; use the verification queries to investigate dangling bindings. Do not rerun older broad setup/reset scripts to repair these templates. Re-execution adds no rows.
 3. Run `2_HTH_Code_Approval_Verification.sql`; refresh configuration caches using the existing deployment procedure. Resolve the template discrepancy in section 4 before customer release.
-4. Delivery is isolated under `mcdp/bcohth-880/hhfi/consulting/...`, with design/tests at their matching relative paths below `hhfi`. Do not copy into mcdp's root `consulting`. Apply against the matching full source baseline, not as a standalone project.
+4. Delivery is isolated under `mcdp/bco-notification/hhfi/consulting/...`, with design/tests at their matching relative paths below `hhfi`. Do not copy into mcdp's root `consulting`. Apply against the matching full source baseline, not as a standalone project.
 
 ## 7. Verification and limits
 
@@ -99,9 +103,9 @@ No batch or shared notification package changes. The existing BCO framework may 
 | Existing rejection-hook tests | Reject cleanup, server snapshot ownership and ordinary BCO exclusion remain unchanged |
 | Notification routing tests | Target/company-only Code emails; normalized dedup; missing contacts; failure isolation; existing setup/reset routes retained |
 | EclipseLink/H2 transaction tests | Production activation methods and SQL, with equivalent H2 interval syntax; cached refresh, 24-hour expiry, commit/rollback and replay. Notification registration is a test-table fixture in the same real ORM transaction; MNG and the SDK event processor are not executed |
-| DOCX/SQL contract checks | Exact reviewed subject/raw HTML, scoped six-template/two-event delta, no Code SMS, no custom 880 marker/bridge |
+| DOCX/SQL contract checks | Exact reviewed subject/raw HTML, event-based template selection; arbitrary IDs/locales, shared/alternate bindings, failure rollback and two-event scope, no Code SMS, no custom 880 marker/bridge |
 
-All five local checks listed above passed on 4 November 2026.
+The Java/transaction checks above passed in the earlier 4 November 2026 revision. For the subsequent SQL-only revision, the DOCX contract and actual relational queries/updates were retested with both historical route baselines plus arbitrary IDs/locales, alternate templates, repeated execution, unrelated BCO/other-unit data, missing/conflicting bindings and a later write failure. SQLite supplies the relational fixture; Oracle PL/SQL itself was not executed locally.
 
 UAT must verify Create and Edit/regeneration with final and intermediate approvals, rollback after activation, registration failures, replay, shared mailbox, both recipient roles/all locales, no Code SMS, and unchanged independent BCO notifications. Check framework recovery on server restart separately. Oracle execution and actual MNG delivery are not local test results.
 

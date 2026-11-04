@@ -7,26 +7,80 @@ WHERE COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassw
                        'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
 ORDER BY COD_EVENT_ID, COD_ACTION_ID;
 
--- Read-only. Six EMAIL rows; no SMS rows; bodies/subjects identical across both roles and locales.
--- The installed ID may be HTH_API_PWD_CODE_* or HTH API Password Code Approved_*.
-SELECT r.COD_EVENT_ID, r.LOCALE, r.TXT_DEST_TYP, r.SUBSCRIBER_TYPE, r.SUBSCRIBER_VALUE,
-       r.COD_MSG_TMPL_ID, t.DETERMINANT_VALUE, t.DESTINATION_TYPE,
-       t.OBJECT_STATUS, t.TXT_SUBJECT_TMPL, t.TXT_MSG_TMPL
-FROM DIGX_EP_EVT_REC_B r LEFT JOIN DIGX_EP_MSG_TMPL_B t
-  ON t.COD_TMPL_ID=r.COD_MSG_TMPL_ID AND t.DETERMINANT_VALUE='OBDX_BU'
-WHERE r.COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
-  AND r.COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+-- Run BEFORE and AFTER the update. No assumptions about template names or locales.
+-- MAIN = COD_MSG_TMPL_ID; ALTERNATE = UNSECURE_MSG_TMPL_ID (when configured).
+-- MISSING_TEMPLATE means the route exists but its OBDX_BU template does not.
+-- The update stops before changes on missing/duplicate/wrong-channel/shared templates.
+WITH routes AS (
+  SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, LOCALE, TXT_DEST_TYP,
+         SUBSCRIBER_TYPE, SUBSCRIBER_VALUE, COD_MSG_TMPL_ID, UNSECURE_MSG_TMPL_ID
+  FROM DIGX_EP_EVT_REC_B
+  WHERE COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+    AND COD_ACTION_ID='A'
+    AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
                         'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
-ORDER BY r.COD_EVENT_ID, r.TXT_DEST_TYP, r.LOCALE;
+), bindings AS (
+  SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, LOCALE, TXT_DEST_TYP,
+         SUBSCRIBER_TYPE, SUBSCRIBER_VALUE,
+         'MAIN' AS BINDING_TYPE, COD_MSG_TMPL_ID AS BOUND_TEMPLATE_ID
+  FROM routes
+  UNION ALL
+  SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, LOCALE, TXT_DEST_TYP,
+         SUBSCRIBER_TYPE, SUBSCRIBER_VALUE,
+         'ALTERNATE' AS BINDING_TYPE, UNSECURE_MSG_TMPL_ID AS BOUND_TEMPLATE_ID
+  FROM routes WHERE TRIM(UNSECURE_MSG_TMPL_ID) IS NOT NULL
+)
+SELECT r.COD_EVENT_ID, r.LOCALE, r.TXT_DEST_TYP, r.SUBSCRIBER_TYPE, r.SUBSCRIBER_VALUE,
+       r.BINDING_TYPE, r.BOUND_TEMPLATE_ID,
+       t.DETERMINANT_VALUE, t.DESTINATION_TYPE, t.OBJECT_STATUS,
+       CASE WHEN TRIM(r.BOUND_TEMPLATE_ID) IS NULL THEN 'EMPTY_TEMPLATE_ID'
+            WHEN t.COD_TMPL_ID IS NULL THEN 'MISSING_TEMPLATE'
+            WHEN (SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B d
+                  WHERE d.COD_TMPL_ID=r.BOUND_TEMPLATE_ID
+                    AND d.DETERMINANT_VALUE='OBDX_BU') > 1 THEN 'DUPLICATE_TEMPLATE'
+            WHEN t.DESTINATION_TYPE IS NULL OR t.DESTINATION_TYPE <> r.TXT_DEST_TYP THEN 'WRONG_CHANNEL'
+            WHEN t.OBJECT_STATUS IS NULL OR t.OBJECT_STATUS <> 'A' THEN 'INACTIVE_TEMPLATE'
+            ELSE 'OK' END AS TEMPLATE_CHECK,
+       t.TXT_SUBJECT_TMPL, t.TXT_MSG_TMPL
+FROM bindings r LEFT JOIN DIGX_EP_MSG_TMPL_B t
+  ON t.COD_TMPL_ID=r.BOUND_TEMPLATE_ID AND t.DETERMINANT_VALUE='OBDX_BU'
+ORDER BY r.COD_EVENT_ID, r.TXT_DEST_TYP, r.LOCALE, r.BINDING_TYPE, r.BOUND_TEMPLATE_ID;
 
--- If preflight fails, list both historical ID families across units/channels.
--- An existing template in another unit/channel does not satisfy OBDX_BU / EMAIL.
--- This query does not change or recreate any configuration.
-SELECT COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE, OBJECT_STATUS,
-       TXT_SUBJECT_TMPL
+-- Must return zero rows: bound EMAIL templates must not affect other events,
+-- activities, actions or channels. Check both primary and alternate references.
+WITH bound_ids AS (
+  SELECT COD_MSG_TMPL_ID AS TEMPLATE_ID FROM DIGX_EP_EVT_REC_B
+  WHERE COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+    AND COD_ACTION_ID='A' AND TXT_DEST_TYP='EMAIL'
+    AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+                        'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+  UNION
+  SELECT UNSECURE_MSG_TMPL_ID AS TEMPLATE_ID FROM DIGX_EP_EVT_REC_B
+  WHERE COD_ACT_ID='com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+    AND COD_ACTION_ID='A' AND TXT_DEST_TYP='EMAIL'
+    AND COD_EVENT_ID IN ('HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+                        'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+    AND TRIM(UNSECURE_MSG_TMPL_ID) IS NOT NULL
+)
+SELECT b.TEMPLATE_ID, r.COD_ACT_ID, r.COD_EVENT_ID, r.COD_ACTION_ID,
+       r.LOCALE, r.TXT_DEST_TYP, r.COD_MSG_TMPL_ID, r.UNSECURE_MSG_TMPL_ID
+FROM bound_ids b JOIN DIGX_EP_EVT_REC_B r
+  ON r.COD_MSG_TMPL_ID=b.TEMPLATE_ID OR r.UNSECURE_MSG_TMPL_ID=b.TEMPLATE_ID
+WHERE r.COD_ACT_ID IS NULL
+   OR r.COD_ACT_ID <> 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval'
+   OR r.COD_ACTION_ID IS NULL OR r.COD_ACTION_ID <> 'A'
+   OR r.TXT_DEST_TYP IS NULL OR r.TXT_DEST_TYP <> 'EMAIL'
+   OR r.COD_EVENT_ID IS NULL OR r.COD_EVENT_ID NOT IN (
+        'HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT',
+        'HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT')
+ORDER BY b.TEMPLATE_ID, r.COD_EVENT_ID;
+
+-- Optional broader inventory: names are discovery hints, not update filters.
+-- Inspect other units/channels without inserting new IDs or rebinding by name.
+SELECT COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE, OBJECT_STATUS, TXT_SUBJECT_TMPL
 FROM DIGX_EP_MSG_TMPL_B
-WHERE INSTR(COD_TMPL_ID, 'HTH_API_PWD_CODE_') = 1
-   OR INSTR(COD_TMPL_ID, 'HTH API Password Code Approved_') = 1
+WHERE UPPER(COD_TMPL_ID) LIKE '%HTH%' OR UPPER(COD_TMPL_ID) LIKE '%H2H%'
+   OR UPPER(TXT_SUBJECT_TMPL) LIKE '%HTH%' OR UPPER(TXT_SUBJECT_TMPL) LIKE '%H2H%'
 ORDER BY COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE;
 
 -- Do not select CODE_CIPHER. New approvals expire 24 hours after activation.

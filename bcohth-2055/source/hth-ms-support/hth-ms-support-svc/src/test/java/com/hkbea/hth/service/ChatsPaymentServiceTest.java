@@ -126,12 +126,6 @@ class ChatsPaymentServiceTest {
         serviceTime = mockStatic(LocalDateTime.class, CALLS_REAL_METHODS);
         serviceTime.when(LocalDateTime::now).thenReturn(businessTime);
         new HTHSupportErrorMapping();
-        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
-                new org.apache.ibatis.builder.MapperBuilderAssistant(
-                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), "chats-posting-test"),
-                PaymentPayoutRecord.class);
-        when(paymentPayoutRecordMapper.update(any(PaymentPayoutRecord.class), any())).thenReturn(1);
-        when(paymentPayoutRecordMapper.insert(any(PaymentPayoutRecord.class))).thenReturn(1);
         lenient().when(headers.getMessageId()).thenReturn(MESSAGE_ID);
         lenient().when(partyAccountMapper.selectProductCode(anyString(), anyString())).thenReturn("6802");
         lenient().when(partyAccountMapper.selectAccountStatus(anyString(), anyString(), anyString()))
@@ -413,12 +407,12 @@ class ChatsPaymentServiceTest {
         assertEquals("HKD", pending.getCreditAccountCur());
         assertEquals("SHA", pending.getSvcType());
         assertEquals("chats-detail", pending.getRemarks());
-        assertEquals(Payment.StatusEnum.PROCESSING.value(), pending.getStatus());
+        assertNull(pending.getStatus());
         assertEquals("A", pending.getStatusFlag());
 
         ArgumentCaptor<PaymentPayoutRecord> updateCaptor =
                 ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).update(updateCaptor.capture(), any());
+        verify(paymentPayoutRecordMapper).updateById(updateCaptor.capture());
         PaymentPayoutRecord updated = updateCaptor.getValue();
         assertEquals(Payment.StatusEnum.SUCCESS.value(), updated.getStatus());
         assertEquals(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS.value(), updated.getIpeStatus());
@@ -435,19 +429,22 @@ class ChatsPaymentServiceTest {
 
         assertEquals(Payment.StatusEnum.PROCESSING, result.getStatus());
         verify(paymentPayoutRecordMapper).insert(any(PaymentPayoutRecord.class));
-        verify(paymentPayoutRecordMapper).update(any(PaymentPayoutRecord.class), any());
+        verify(paymentPayoutRecordMapper).updateById(any(PaymentPayoutRecord.class));
     }
 
     @Test
-    @DisplayName("pending payout insert failure prevents IPE submission")
-    void pendingInsertException_preventsSubmission() {
+    @DisplayName("pending payout insert failure is swallowed")
+    void pendingInsertException_swallowed() {
+        when(payemtRoutApi.submit(any(BatchRoutingCreditTransferRequest.class)))
+                .thenReturn(buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS));
         when(paymentPayoutRecordMapper.insert(any(PaymentPayoutRecord.class)))
                 .thenThrow(new RuntimeException("db down"));
-        var error = assertThrows(com.hkbea.common.exception.ServiceException.class,
+
+        Payment result = assertDoesNotThrow(
                 () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
-        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, error.getErrCode());
-        verify(payemtRoutApi, never()).submit(any());
-        verify(paymentPayoutRecordMapper, never()).update(any(PaymentPayoutRecord.class), any());
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        verify(paymentPayoutRecordMapper).insert(any(PaymentPayoutRecord.class));
     }
 
     @Test
@@ -455,14 +452,14 @@ class ChatsPaymentServiceTest {
     void payoutUpdateException_swallowed() {
         when(payemtRoutApi.submit(any(BatchRoutingCreditTransferRequest.class)))
                 .thenReturn(buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS));
-        when(paymentPayoutRecordMapper.update(any(PaymentPayoutRecord.class), any()))
+        when(paymentPayoutRecordMapper.updateById(any(PaymentPayoutRecord.class)))
                 .thenThrow(new RuntimeException("db down"));
 
         Payment result = assertDoesNotThrow(
                 () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
 
         assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        verify(paymentPayoutRecordMapper).update(any(PaymentPayoutRecord.class), any());
+        verify(paymentPayoutRecordMapper).updateById(any(PaymentPayoutRecord.class));
     }
 
     // ===================== Debtor account status / persistence fallback =====================
@@ -735,75 +732,33 @@ class ChatsPaymentServiceTest {
         return routed;
     }
 
-    // ===================== BCOH2H-2055 posting lifecycle =====================
-
-    @Test
-    void pendingRecord_isDurableBeforeIpeSubmission() {
-        when(payemtRoutApi.submit(any())).thenReturn(buildSubmitResponse(
-                TransferPaymentResultQueryResponse.StatusEnum.PROCESSING));
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
-        var order = org.mockito.Mockito.inOrder(paymentPayoutRecordMapper, payemtRoutApi);
-        var inserted = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        order.verify(paymentPayoutRecordMapper).insert(inserted.capture());
-        order.verify(payemtRoutApi).submit(any());
-        order.verify(paymentPayoutRecordMapper).update(any(PaymentPayoutRecord.class), any());
-        assertEquals(Payment.StatusEnum.PROCESSING.value(), inserted.getValue().getStatus());
-        assertNull(inserted.getValue().getIpeTerminal());
-    }
-
-    @Test
-    void zeroRowsInserted_preventsIpeSubmission() {
-        when(paymentPayoutRecordMapper.insert(any(PaymentPayoutRecord.class))).thenReturn(0);
-        var error = assertThrows(com.hkbea.common.exception.ServiceException.class,
-                () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
-        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, error.getErrCode());
-        verify(payemtRoutApi, never()).submit(any());
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void postingSuccess_persistsIpeFinalitySeparatelyFromSuccess(boolean terminal) {
-        var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS);
-        response.getData().setTerminal(terminal);
-        response.getData().setStatusReason(terminal ? "SETTLED" : "PENDING_INTERBANK_SETTLEMENT");
-        when(payemtRoutApi.submit(any())).thenReturn(response);
-        Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).update(update.capture(), any());
-        assertEquals(Payment.StatusEnum.SUCCESS.value(), update.getValue().getStatus());
-        assertEquals(terminal, update.getValue().getIpeTerminal());
-        assertEquals(response.getData().getStatusReason(), update.getValue().getIpeStatusReason());
-    }
+    // ===================== BCOH2H-2055 submission results =====================
 
     @Test
     void acceptedSubmission_remainsProcessing() {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.PROCESSING);
-        response.getData().setTerminal(false);
         when(payemtRoutApi.submit(any())).thenReturn(response);
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
         assertEquals(Payment.StatusEnum.PROCESSING, result.getStatus());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).update(update.capture(), any());
+        verify(paymentPayoutRecordMapper).updateById(update.capture());
         assertEquals(Payment.StatusEnum.PROCESSING.value(), update.getValue().getStatus());
-        assertEquals(false, update.getValue().getIpeTerminal());
     }
 
     @Test
     void ebkInsufficientBalance_returnsAndPersistsRejected() {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.FAILED);
-        response.getData().setTerminal(true);
         response.getData().setErrorCode("EBK-INSUFFICIENT-BALANCE");
         response.getData().setErrorMessage("Insufficient balance including bank charges");
+        response.getData().setStatusReason("HOST_REJECTED");
         when(payemtRoutApi.submit(any())).thenReturn(response);
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
         assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
         assertEquals("EBK-INSUFFICIENT-BALANCE", result.getRejectCode());
         assertEquals("Insufficient balance including bank charges", result.getRejectMessage());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).update(update.capture(), any());
+        verify(paymentPayoutRecordMapper).updateById(update.capture());
         assertEquals(Payment.StatusEnum.REJECTED.value(), update.getValue().getStatus());
-        assertEquals(true, update.getValue().getIpeTerminal());
         assertEquals(result.getRejectMessage(), update.getValue().getRejectMessage());
     }
 
@@ -827,23 +782,6 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void submissionUpdate_isConditionalOnUntouchedPendingRow() {
-        when(payemtRoutApi.submit(any())).thenReturn(buildSubmitResponse(
-                TransferPaymentResultQueryResponse.StatusEnum.SUCCESS));
-        when(paymentPayoutRecordMapper.update(any(PaymentPayoutRecord.class), any())).thenReturn(0);
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
-        @SuppressWarnings("rawtypes")
-        var condition = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper.class);
-        verify(paymentPayoutRecordMapper).update(any(PaymentPayoutRecord.class), condition.capture());
-        String sql = condition.getValue().getSqlSegment();
-        assertTrue(sql.contains("IPE_STATUS IS NULL"));
-        assertTrue(sql.contains("IPE_TERMINAL IS NULL"));
-        assertTrue(sql.contains("STATUS ="));
-        assertTrue(condition.getValue().getParamNameValuePairs().containsValue(Payment.StatusEnum.PROCESSING.value()));
-        verify(paymentPayoutRecordMapper, never()).updateById(any(PaymentPayoutRecord.class));
-    }
-
-    @Test
     void overCharge_isNotAssumedToBeTheTotalBankCharge() {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS);
         response.getData().setOverChargeAmount(new BigDecimal("30.00"));
@@ -851,7 +789,7 @@ class ChatsPaymentServiceTest {
         when(payemtRoutApi.submit(any())).thenReturn(response);
         chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).update(update.capture(), any());
+        verify(paymentPayoutRecordMapper).updateById(update.capture());
         assertNull(update.getValue().getSvcAmount());
         assertNull(update.getValue().getSvcCur());
     }

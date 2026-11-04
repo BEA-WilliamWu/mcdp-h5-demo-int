@@ -1,7 +1,6 @@
 package com.hkbea.hth.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hkbea.common.constant.CommonConstant;
@@ -280,11 +279,7 @@ public class PaymentServiceImpl implements PaymentApi {
         if (payout != null) {
             String path = uriInfo.getPath();
             fineGrainedEntitlementUtil.isAuthorizedAccount(path, payout.getDebitAccountId());
-            if ("CHATS".equalsIgnoreCase(payout.getPaymentType())) {
-                payout = refreshChatsPayout(payout);
-            } else {
-                refreshPayoutIfPending(payout);
-            }
+            refreshPayoutIfPending(payout);
             return toPaymentTransaction(payout);
         }
 
@@ -367,8 +362,8 @@ public class PaymentServiceImpl implements PaymentApi {
     }
 
     /**
-     * Legacy status-based refresh for non-CHATS payout records.
-     * CHATS uses the separately persisted IPE finality flag.
+     * Same refresh as {@link #refreshInternalIfPending} but for shared
+     * FPS/CHATS/TT/DR payout records.
      */
     private void refreshPayoutIfPending(PaymentPayoutRecord entity) {
         RefreshDecision refresh = evaluateRefresh(
@@ -404,88 +399,6 @@ public class PaymentServiceImpl implements PaymentApi {
         payoutMapper.updateById(update);
         log.info("{} payment status refreshed from IPE, paymentId={}, status={}",
                 entity.getPaymentType(), entity.getCustomerTransactionId(), refresh.newStatus());
-    }
-
-    /**
-     * A CHATS posting can be successful while interbank settlement is still in
-     * flight. IPE's explicit terminal flag, rather than SUCCESS alone, controls
-     * further read-only enquiries. Missing flags retain the legacy status rule.
-     */
-    private PaymentPayoutRecord refreshChatsPayout(PaymentPayoutRecord entity) {
-        if (Boolean.TRUE.equals(entity.getIpeTerminal())
-                || (entity.getIpeTerminal() == null && !isPendingStatus(entity.getStatus())
-                && StringUtils.isNotBlank(entity.getStatus()))) {
-            return entity;
-        }
-        PaymentResultQueryResponse result = queryIpePaymentResult(entity.getPaymentId());
-        if (result == null || result.getStatus() == null) {
-            return entity;
-        }
-        // A batch or unrelated result must never update this payment's state.
-        if (!Objects.equals(entity.getPaymentId(), result.getTransactionId())) {
-            log.warn("Ignoring CHATS enquiry for a different/missing transactionId, paymentId={}",
-                    entity.getPaymentId());
-            return entity;
-        }
-        String newStatus = PaymentResponseSupport.toPaymentStatus(result.getStatus()).value();
-        String rejectMessage = null;
-        if (result.getStatus() == PaymentResultQueryResponse.StatusEnum.FAILED) {
-            rejectMessage = StringUtils.isNotBlank(result.getErrorMessage()) ? result.getErrorMessage()
-                    : StringUtils.isNotBlank(result.getStatusReason()) ? result.getStatusReason()
-                    : "Rejected by payment engine (no detail returned)";
-        }
-        boolean changed = !newStatus.equalsIgnoreCase(entity.getStatus())
-                || !Objects.equals(rejectMessage, entity.getRejectMessage())
-                || !Objects.equals(result.getStatus().value(), entity.getIpeStatus())
-                || (result.getTerminal() != null && !Objects.equals(result.getTerminal(), entity.getIpeTerminal()))
-                || (result.getStatusReason() != null && !Objects.equals(result.getStatusReason(), entity.getIpeStatusReason()))
-                || (result.getIpeReferenceId() != null && !Objects.equals(result.getIpeReferenceId(), entity.getIpeRefNo()));
-        if (!changed) {
-            return entity;
-        }
-
-        PaymentPayoutRecord update = new PaymentPayoutRecord();
-        update.setStatus(newStatus);
-        update.setRejectMessage(rejectMessage);
-        update.setIpeStatus(result.getStatus().value());
-        update.setIpeTerminal(result.getTerminal());
-        update.setIpeStatusReason(result.getStatusReason());
-        update.setIpeRefNo(result.getIpeReferenceId());
-        update.setLastUpdatedBy(PaymentConstants.SYSTEM_USER);
-        update.setLastUpdatedDate(result.getLastUpdatedAt() == null ? LocalDateTime.now()
-                : result.getLastUpdatedAt().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
-
-        // Compare the stored snapshot so a slower enquiry cannot overwrite a
-        // concurrent final result. NULL is meaningful for pre-migration rows.
-        LambdaUpdateWrapper<PaymentPayoutRecord> condition = new LambdaUpdateWrapper<PaymentPayoutRecord>()
-                .eq(PaymentPayoutRecord::getId, entity.getId())
-                .eq(entity.getStatus() != null, PaymentPayoutRecord::getStatus, entity.getStatus())
-                .isNull(entity.getStatus() == null, PaymentPayoutRecord::getStatus)
-                .eq(entity.getIpeTerminal() != null, PaymentPayoutRecord::getIpeTerminal, entity.getIpeTerminal())
-                .isNull(entity.getIpeTerminal() == null, PaymentPayoutRecord::getIpeTerminal)
-                .eq(entity.getLastUpdatedDate() != null, PaymentPayoutRecord::getLastUpdatedDate, entity.getLastUpdatedDate())
-                .isNull(entity.getLastUpdatedDate() == null, PaymentPayoutRecord::getLastUpdatedDate);
-        if (rejectMessage == null && entity.getRejectMessage() != null) {
-            condition.set(PaymentPayoutRecord::getRejectMessage, null);
-        }
-        if (payoutMapper.update(update, condition) == 0) {
-            PaymentPayoutRecord latest = payoutMapper.selectById(entity.getId());
-            return latest == null ? entity : latest;
-        }
-        entity.setStatus(newStatus);
-        entity.setRejectMessage(rejectMessage);
-        entity.setIpeStatus(update.getIpeStatus());
-        if (update.getIpeTerminal() != null) {
-            entity.setIpeTerminal(update.getIpeTerminal());
-        }
-        if (update.getIpeStatusReason() != null) {
-            entity.setIpeStatusReason(update.getIpeStatusReason());
-        }
-        if (update.getIpeRefNo() != null) {
-            entity.setIpeRefNo(update.getIpeRefNo());
-        }
-        entity.setLastUpdatedDate(update.getLastUpdatedDate());
-        return entity;
     }
 
     /**

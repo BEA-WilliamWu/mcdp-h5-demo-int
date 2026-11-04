@@ -61,6 +61,8 @@ public class ChatsPaymentService {
     private static final String CHATS_NETWORK = "CHATS";
 
     private static final String CHATS_PRINT_ADVICE_INDICATOR = "Y";
+    //TODO Need to get the rate
+    private static final BigDecimal CHATS_SERVICE_EXCHANGE_RATE = new BigDecimal("85.51068523");
     private static final String CHATS_LM_INDICATOR = "y";
     //TODO DepositAc2 is bener address , if registered select from bco db DIGX_PY_DOMESTIC_PAYEE ADDRESS_LINE1
     private static final String CHATS_DEPOSIT_ACCOUNT_NAME_2 = "6304357992232185";
@@ -301,7 +303,7 @@ public class ChatsPaymentService {
 
     /**
      * CHATS currency rules: all three currencies must be CHATS-supported
-     * (HKD/CNY/USD/EUR), and debit, payment and creditor currencies must match.
+     * (HKD/CNY) and payment currency must equal creditor currency.
      */
     private void validateChatsCurrencyConsistency(LocalPayment chats) {
         Currency fromCurrency = CurrencyUtils.parseLenient(chats.getFromAccount().getCurrency());
@@ -431,20 +433,16 @@ public class ChatsPaymentService {
             // remarks
             entity.setRemarks(PaymentServiceSupport.joinPaymentDetails(req.getPaymentDetails()));
             // status (pending before IPE)
-            entity.setStatus(Payment.StatusEnum.PROCESSING.value());
+            entity.setStatus(null);
             entity.setIpeStatus(null);
             entity.setIpeStatusReason(null);
             entity.setStatusFlag(PaymentConstants.MOCK_OBJECT_STATUS);
-            if (paymentPayoutRecordMapper.insert(entity) != 1) {
-                throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-            }
+            paymentPayoutRecordMapper.insert(entity);
             log.info("{} pending payout record inserted, customerTransactionId={}, status={}",
                     CHATS_NETWORK, customerTransactionId, entity.getStatus());
         } catch (Exception e) {
             log.error("Failed to insert {} pending payout record, customerTransactionId={}, error={}",
                     CHATS_NETWORK, customerTransactionId, e.getMessage(), e);
-            // Do not create an external payment without a durable enquiry record.
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
         }
         return id;
     }

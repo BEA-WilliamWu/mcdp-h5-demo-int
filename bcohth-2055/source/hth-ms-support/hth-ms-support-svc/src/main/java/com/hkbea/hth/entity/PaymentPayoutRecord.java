@@ -123,9 +123,6 @@ public class PaymentPayoutRecord {
     @TableField("IPE_STATUS")
     private String ipeStatus;
 
-    @TableField("IPE_TERMINAL")
-    private Boolean ipeTerminal;
-
     @TableField("IPE_STATUS_REASON")
     private String ipeStatusReason;
 
@@ -459,14 +456,6 @@ public class PaymentPayoutRecord {
 
     public void setIpeStatus(String ipeStatus) {
         this.ipeStatus = ipeStatus;
-    }
-
-    public Boolean getIpeTerminal() {
-        return ipeTerminal;
-    }
-
-    public void setIpeTerminal(Boolean ipeTerminal) {
-        this.ipeTerminal = ipeTerminal;
     }
 
     public String getIpeStatusReason() {

@@ -1,7 +1,6 @@
 package com.hkbea.hth.service.payment;
 
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hkbea.common.constant.CommonConstant;
 import com.hkbea.common.exception.ParameterException;
 import com.hkbea.hth.api.AccountApi;
@@ -243,26 +242,9 @@ public final class PaymentServiceSupport {
                     ? result.getStatus().value() : null);
             update.setIpeStatusReason(result != null ? result.getStatusReason() : null);
             update.setIpeRefNo(result != null ? result.getIpeReferenceId() : null);
-            if ("CHATS".equalsIgnoreCase(paymentNetwork) && result != null) {
-                update.setIpeTerminal(result.getTerminal());
-            }
             update.setLastUpdatedBy(PaymentConstants.SYSTEM_USER);
             update.setLastUpdatedDate(LocalDateTime.now());
-            if ("CHATS".equalsIgnoreCase(paymentNetwork)) {
-                // An enquiry may finish while submission is still returning.
-                // Only replace the untouched initial row, never a newer result.
-                int updated = mapper.update(update, new LambdaUpdateWrapper<PaymentPayoutRecord>()
-                        .eq(PaymentPayoutRecord::getId, id)
-                        .eq(PaymentPayoutRecord::getStatus, Payment.StatusEnum.PROCESSING.value())
-                        .isNull(PaymentPayoutRecord::getIpeStatus)
-                        .isNull(PaymentPayoutRecord::getIpeTerminal));
-                if (updated == 0) {
-                    log.info("CHATS submission update skipped; initial record no longer matches, id={}", id);
-                    return;
-                }
-            } else {
-                mapper.updateById(update);
-            }
+            mapper.updateById(update);
             log.info("{} payout record updated, id={}, status={}",
                     paymentNetwork, id, update.getStatus());
         } catch (Exception e) {

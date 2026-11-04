@@ -2,13 +2,28 @@
 
 本目录是 **BCOH2H-880 与 BCOH2H-2110 的统一交付版本**。以后一起部署这两个 Story 时，只使用这里的文件，不再依次覆盖 `bcohth-880`、`bcohth-2110` 的旧副本。
 
+## 2026-11-04：构建错误的修复方式
+
+报错：`HthApiPasswordCode cannot be converted to SessionContext`，错误行为 `notifyHthApiPasswordApproved(row, operator)`。
+
+当前源仓库及本合并包都已无此旧调用。截图中的构建文件仍含合并前的调用，但通知方法已使用新签名，文件内容与本包不同。
+
+1. **完整替换**构建目录的 `HostToHostApiPassword.java`，使用本包下列文件；不要只替换方法定义或报错行：
+   `hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java`
+2. `activateOnUserApproval` 中只调用 `activateApprovedCode(...)`，不再直接发通知。后者激活 Code、刷新实体后，只有一次 `notifyHthApiPasswordApproved(null, activated)` 调用。保留外层旧调用可能重复通知。
+3. 替换后核对文件 SHA-256：`7d2e13dbaf6b6acba1f7a6b5388e299d07f7009d1eb91438b644c37beea2e8d5`，再清理旧编译产物并重新构建。此编译错误无需修改数据库或模板。
+
+已验证：使用本包完整 service，连同 hosttohost 模块、当前 DTO 和必要依赖共 126 个生产 Java 源文件编译通过（Java 8 目标）。在临时副本重新加入截图的旧调用，会复现同一类型错误。编译使用现有外围模块 class/SDK JAR，未替换生产方法；不代表服务器全量 clean build 或 UAT 投递验证。
+
+完整源码目录可运行 `verify_hth_880_compile.py`；加 `--service-source /absolute/path/HostToHostApiPassword.java` 可核验另一份交付或构建副本。不要通过新增旧签名重载来掩盖文件混用。
+
 ## 版本依据与核查结论
 
-全部 22 个文件均逐字节提取自 `hth-application` 同一个源码提交：
+全部 23 个文件均逐字节提取自 `hth-application` 同一个源码提交：
 
-`876dd4376179720fb90f637fea85659c120ceada`
+`44caa6c2f7a7ae456f18cd9e04e93789ae82e73e`
 
-该提交在 880 最终修订 `e91aa291` 之后，因此已包含两项最后确认的改动。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
+业务代码保留 2110 最终修订 `876dd437`（其父提交为 880 最终修订 `e91aa291`），另补完整生产源码编译检查。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
 
 | 核查项 | 结果 |
 |---|---|
@@ -37,7 +52,7 @@ bco-notification/
   hhfi/
     consulting/middleware/projects/...  # 8 个生产 Java 文件
     consulting/db/branch_change_history/...  # 3 个 SQL 文件
-    devtools/backend-compile/tests/...  # 9 个回归文件
+    devtools/backend-compile/tests/...  # 10 个回归文件
     story/notification/...  # 两份技术设计
 ```
 
@@ -56,7 +71,7 @@ bco-notification/
 
 ## 已完成的合并验证
 
-- 从四次相关源码提交取文件并集，核对最终源码树：22 个现存文件、6 个删除项，无遗漏。
+- 从四次相关源码提交取文件并集，核对最终源码树：23 个现存文件、6 个删除项，无遗漏。
 - 所有交付文件均与统一源码提交逐字节一致；同名路径仅保留一份。
 - 880：24 小时有效期、通知路由、EclipseLink/H2 实际事务激活及回滚、重复处理、缓存刷新和模板原文检查通过。
 - 2110：执行生产通知方法，与 BCO 原流程对比；旧/新联系人保留，额外两条审批人短信移除；单字段、PIN、审批清理回归及 Java 8 目标编译通过。
@@ -71,6 +86,7 @@ shasum -a 256 -c SHA256SUMS
 在完整源代码目录运行回归，先设置 `JAVA_HOME`，事务测试另需 `H2_JAR`：
 
 ```sh
+python3 devtools/backend-compile/tests/verify_hth_880_compile.py
 python3 devtools/backend-compile/tests/verify_hth_880.py
 python3 devtools/backend-compile/tests/verify_hth_notifications.py
 python3 devtools/backend-compile/tests/verify_hth_password_transactions.py

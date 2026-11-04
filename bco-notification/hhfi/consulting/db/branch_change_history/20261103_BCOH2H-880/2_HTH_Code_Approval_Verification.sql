@@ -10,7 +10,8 @@ ORDER BY COD_EVENT_ID, COD_ACTION_ID;
 -- Run BEFORE and AFTER the update. No assumptions about template names or locales.
 -- MAIN = COD_MSG_TMPL_ID; ALTERNATE = UNSECURE_MSG_TMPL_ID (when configured).
 -- MISSING_TEMPLATE means the route exists but its OBDX_BU template does not.
--- The update stops before changes on missing/duplicate/wrong-channel/shared templates.
+-- Missing bound EMAIL templates are created by the repair; duplicate/wrong-channel/shared rows stop it.
+-- After a successful repair, no bound EMAIL row should report MISSING_TEMPLATE.
 WITH routes AS (
   SELECT COD_ACT_ID, COD_EVENT_ID, COD_ACTION_ID, LOCALE, TXT_DEST_TYP,
          SUBSCRIBER_TYPE, SUBSCRIBER_VALUE, COD_MSG_TMPL_ID, UNSECURE_MSG_TMPL_ID

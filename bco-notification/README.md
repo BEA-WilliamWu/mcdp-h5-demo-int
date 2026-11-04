@@ -2,15 +2,15 @@
 
 本目录是 **BCOH2H-880 与 BCOH2H-2110 的统一交付版本**。以后一起部署这两个 Story 时，只使用这里的文件，不再依次覆盖 `bcohth-880`、`bcohth-2110` 的旧副本。
 
-## 2026-11-04：880 按 Event ID 更新全部现有邮件模板
+## 2026-11-04：880 补齐现有事件绑定中缺失的邮件模板
 
-更新范围由两个 Code 批核 Event ID 的实际绑定决定，不再限制两套模板名称、三种语言或固定六个模板。读取 `COD_MSG_TMPL_ID` 和已配置的 `UNSECURE_MSG_TMPL_ID`，只更新该 activity / action A / EMAIL 对应的 OBDX_BU 模板；同一个模板被多条绑定引用时只更新一次。邮件主题和正文仍逐字保留 v81 的已评审内容。原有 880 的 EMAIL-only、EXTERNAL / USER 路由处理继续保留。
+修复上一版仅 UPDATE 导致的 `bound template rows=0`：按两个 Code 批核 Event ID 的现有绑定，模板存在则更新，不存在则按绑定的原 ID 在 OBDX_BU 创建。读取主模板及已配置的备用模板，不限制模板名称或语言；同一个模板被多条绑定引用时只处理一次。主题和正文保持 v81 已评审原文。
 
-先运行 `hhfi/consulting/db/branch_change_history/20261103_BCOH2H-880/2_HTH_Code_Approval_Verification.sql`，可以一次看到所有绑定、缺失/重复/通道异常，以及被其他通知共用的模板。再执行同目录 `1_HTH_Code_Approval_Notification.sql` 的完整块，成功后 COMMIT，并按环境原有方式刷新配置缓存。
+执行 `hhfi/consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` 的完整块，成功后 COMMIT，再运行同目录 `2_HTH_Code_Approval_Verification.sql` 检查。启用 DBMS_OUTPUT 后可看到 `created`、`updated` 数量。重复执行不会新增重复模板；不需要重跑旧基础脚本。
 
-**如果仍是 `bound template rows=0`，说明实际绑定对应的模板不存在，不能靠修改查询方式解决。** 脚本会停止并回滚本块，不猜测应改绑哪个 ID，也不自动创建模板。之前补建模板的本地草稿已撤回。其他事件/通道共用的模板同样会阻止更新，以免修改 BCO 的内容。
+仍然保留对重复模板、错误通道、其他通知共用模板以及缺失事件/路由的检查，失败时回滚本块。只补当前绑定的模板，不创建新事件、不改绑 ID；保留原有 880 的 EMAIL-only、EXTERNAL / USER 路由处理。BCO、setup/reset 模板及其他单位已有数据保持原样。
 
-本次只改 SQL、验证脚本及技术设计，没有改 Java。两套历史配置、自定义模板 ID/语言、多条绑定、备用模板、重复执行、异常回滚、无关 BCO/其他单位不变，以及验证查询均通过本地关系 SQL 测试。Oracle PL/SQL 和实际 MNG 发送仍需 UAT 验证。此修订不改变 24 小时有效期。
+本次只改 SQL、验证脚本及技术设计，Java 不变。本地已验证仅剩一份旧繁体模板、全部缺失、单个缺失、其他单位存在同名模板、备用模板缺失、重复执行及更新/插入失败回滚。Oracle PL/SQL 和实际投递仍需 UAT 验证。这项修复不代表已查明旧模板为何缺失；历史发送使用的 Template ID 和部署记录仍是排查依据。
 
 ## 2026-11-04：同步后审批激活与编译错误修复
 
@@ -38,7 +38,7 @@ SHA-256：`42db5fea134ace87475d7104fcf9443b7f26efeaac5e9912f845fedff2ba22ca`。�
 
 全部 23 个文件均逐字节提取自 `hth-application` 同一个源码提交：
 
-`3d6314cc488e6ba35f762e6195a33eedcb7c5ef2`
+`fdad029b41eb5bbedcf586f4f9718234545c0ae9`
 
 本版在 `825b19ff5` 同步代码上恢复 880 完整审批流程，保留 2110 最终修订 `876dd437`（其父提交为 880 最终修订 `e91aa291`），并加强公开审批入口的事务回归。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
 

@@ -1,10 +1,11 @@
 -- BCOH2H-880. Run as one PL/SQL block in the OBDX configuration schema (UTF-8).
 -- Run AFTER older HTH password/template scripts; those scripts contain superseded text.
 -- Resolve ALL installed EMAIL template IDs/locales from the two Code approval events.
--- No template-name assumptions, route creation or missing-template inserts.
+-- No template-name assumptions or route creation. Repair missing bound templates in OBDX_BU.
 -- Existing 880 EMAIL-only / explicit-recipient route normalization is retained.
 -- Validate all bindings before writing; an error rolls back this whole block.
--- Re-runnable: no new rows, no changes to BCO/setup/reset templates or other units.
+-- Re-runnable: create only missing bound rows; no duplicate rows on subsequent runs.
+-- No changes to BCO/setup/reset templates or existing rows in other units.
 -- v81 Feature 6 supplies the same bilingual subject/body for both roles and all locales.
 -- Runtime remains approval + 24 hours. The reviewed next-day wording requires separate
 -- wording confirmation before customer release; this delta does not change Code expiry.
@@ -17,6 +18,8 @@ DECLARE
   TYPE t_template_ids IS TABLE OF DIGX_EP_MSG_TMPL_B.COD_TMPL_ID%TYPE INDEX BY BINARY_INTEGER;
   v_templates t_template_ids;
   v_template_count PLS_INTEGER := 0;
+  v_created_count PLS_INTEGER := 0;
+  v_updated_count PLS_INTEGER := 0;
   CURSOR c_bound_templates IS
     -- Include configured alternate templates as well as the main template.
     -- UNION ensures a template shared by these two events/locales is updated once.
@@ -91,11 +94,12 @@ BEGIN
     SELECT COUNT(*), MIN(DESTINATION_TYPE) INTO v_count, v_destination
       FROM DIGX_EP_MSG_TMPL_B
      WHERE COD_TMPL_ID=bound.template_id AND DETERMINANT_VALUE='OBDX_BU';
-    IF v_count <> 1 THEN
-      RAISE_APPLICATION_ERROR(-20880, '880: bound template rows=' || v_count
-        || ' in OBDX_BU: ' || bound.template_id || '; check event binding; no changes applied');
+    IF v_count > 1 THEN
+      RAISE_APPLICATION_ERROR(-20880, '880: duplicate bound template rows=' || v_count
+        || ' in OBDX_BU: ' || bound.template_id || '; no changes applied');
     END IF;
-    IF v_destination IS NULL OR v_destination <> 'EMAIL' THEN
+    -- Zero rows is repairable: create this exact route-bound ID after all checks.
+    IF v_count = 1 AND (v_destination IS NULL OR v_destination <> 'EMAIL') THEN
       RAISE_APPLICATION_ERROR(-20880, '880: bound template is not EMAIL: ' || bound.template_id);
     END IF;
     SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
@@ -120,7 +124,21 @@ BEGIN
       OBJECT_VERSION_NUMBER=NVL(OBJECT_VERSION_NUMBER,0)+1
      WHERE COD_TMPL_ID=v_templates(i) AND DETERMINANT_VALUE='OBDX_BU'
        AND DESTINATION_TYPE='EMAIL';
-    IF SQL%ROWCOUNT <> 1 THEN
+    IF SQL%ROWCOUNT = 0 THEN
+      -- Use the existing route's exact ID and the reviewed static body.
+      -- No new IDs, routes or placeholder mappings are inferred from template names.
+      INSERT INTO DIGX_EP_MSG_TMPL_B
+        (COD_TMPL_ID, DESTINATION_TYPE, MSG_TMPL_NAME, MSG_TMPL_DESC, TXT_MSG_TMPL,
+         CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATED_DATE,
+         OBJECT_VERSION_NUMBER, OBJECT_STATUS, TXT_SUBJECT_TMPL, DOMAIN_OBJECT_EXTN,
+         DETERMINANT_VALUE)
+      VALUES
+        (v_templates(i), 'EMAIL', v_templates(i), 'HTH API Password Code approval email', v_body,
+         USER, SYSDATE, USER, SYSDATE, 1, 'A', v_subject, 'CZ', 'OBDX_BU');
+      v_created_count := v_created_count + 1;
+    ELSIF SQL%ROWCOUNT = 1 THEN
+      v_updated_count := v_updated_count + 1;
+    ELSE
       RAISE_APPLICATION_ERROR(-20880, '880: template changed during update: ' || v_templates(i));
     END IF;
   END LOOP;
@@ -135,8 +153,8 @@ BEGIN
      WHERE COD_ACT_ID=c_activity AND COD_EVENT_ID=v_event AND COD_ACTION_ID='A'
        AND TXT_DEST_TYP='EMAIL';
   END LOOP;
-  DBMS_OUTPUT.PUT_LINE('880: updated ' || v_template_count
-    || ' distinct bound EMAIL templates in OBDX_BU. Verify and COMMIT.');
+  DBMS_OUTPUT.PUT_LINE('880: created=' || v_created_count || ', updated=' || v_updated_count
+    || ', bound templates=' || v_template_count || ' in OBDX_BU. Verify and COMMIT.');
 EXCEPTION WHEN OTHERS THEN
   ROLLBACK TO HTH_880_CONFIG;
   RAISE;

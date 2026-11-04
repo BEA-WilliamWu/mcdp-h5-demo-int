@@ -51,11 +51,13 @@ assert "TXT_DEST_TYP <> 'EMAIL'" in sql
 assert "AND FLG_TRANSACTIONAL='N'" in sql, "Require the existing background Code action"
 assert 'ROLLBACK TO HTH_880_CONFIG;' in sql
 assert not re.search(r'(?im)^\s*(CREATE|ALTER|DROP)\b', sql), 'Delta must not alter schema'
-assert not re.search(r'(?im)^\s*INSERT\b', sql), 'Do not invent templates for dangling bindings'
+assert re.findall(r'(?im)^\s*INSERT INTO (\w+)', sql) == ['DIGX_EP_MSG_TMPL_B']
+assert 'IF SQL%ROWCOUNT = 0 THEN' in sql
+assert 'v_created_count' in sql and 'v_updated_count' in sql
 assert 'HTH_API_PWD_CODE_' not in sql and 'HTH API Password Code Approved_' not in sql
 assert not re.search(r'LOCALE\s*(=|IN|NOT IN)', sql), 'Use all installed locales'
 assert not re.search(r'#[A-Za-z][A-Za-z0-9_]*#', ''.join(chunks))
-print('PASS: exact v81 subject/raw HTML; event-based selection, no ID/locale assumptions or new templates')
+print('PASS: exact v81 subject/raw HTML; event-based selection, no ID/locale assumptions; missing-template repair uses exact bound IDs')
 
 # Execute the real relational SQL from the deployment block against representative data.
 # The Python driver supplies PL/SQL loop/bind values; this is NOT an Oracle execution test.
@@ -68,6 +70,7 @@ assert len(route_queries) == 3
 route_query, blank_query, shared_query = route_queries
 template_query = re.search(r'SELECT COUNT\(\*\), MIN\(DESTINATION_TYPE\).*?;', sql, re.S).group(0)
 template_update = re.search(r'UPDATE DIGX_EP_MSG_TMPL_B SET.*?;', sql, re.S).group(0)
+template_insert = re.search(r'INSERT INTO DIGX_EP_MSG_TMPL_B.*?;', sql, re.S).group(0)
 route_update = re.search(r'UPDATE DIGX_EP_EVT_REC_B SET.*?;', sql, re.S).group(0)
 route_delete = re.search(r'DELETE FROM DIGX_EP_EVT_REC_B.*?;', sql, re.S).group(0)
 assert 'COD_MSG_TMPL_ID=' not in route_update and 'UNSECURE_MSG_TMPL_ID=' not in route_update
@@ -100,15 +103,18 @@ def run_delta(db):
         for template in ids:
             params['template_id'] = template
             count, channel = db.execute(executable(template_query), params).fetchone()
-            if count != 1:
+            if count > 1:
                 raise InvalidConfig('template rows')
-            if channel != 'EMAIL':
+            if count == 1 and channel != 'EMAIL':
                 raise InvalidConfig('wrong channel')
             if db.execute(executable(shared_query), params).fetchone()[0]:
                 raise InvalidConfig('shared template')
         for template in ids:
             params['template_id'] = template
-            if db.execute(executable(template_update), params).rowcount != 1:
+            changed = db.execute(executable(template_update), params).rowcount
+            if changed == 0:
+                assert db.execute(executable(template_insert), params).rowcount == 1
+            elif changed != 1:
                 raise InvalidConfig('concurrent change')
         for event in events:
             params['v_event'] = event
@@ -126,7 +132,7 @@ route_columns = ('COD_ACT_ID', 'COD_EVENT_ID', 'COD_ACTION_ID', 'COD_MSG_TMPL_ID
                  'FLG_CONDITIONAL', 'COD_DEC_ID', 'UNSECURE_MSG_TMPL_ID')
 
 def seed_template(db, template, unit='OBDX_BU', channel='EMAIL'):
-    db.execute("INSERT INTO DIGX_EP_MSG_TMPL_B VALUES (?, ?, ?, 'old subject', 'old body', 'A', 'before', 'before', 1)",
+    db.execute("INSERT INTO DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE, TXT_SUBJECT_TMPL, TXT_MSG_TMPL, OBJECT_STATUS, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER) VALUES (?, ?, ?, 'old subject', 'old body', 'A', 'before', 'before', 1)",
                (template, unit, channel))
 
 def seed_route(db, template, event=events[0], locale='en', alternate=None, channel='EMAIL'):
@@ -140,7 +146,7 @@ def fixture(rows):
         db.execute('INSERT INTO DIGX_EP_ACT_EVT_ACN_B VALUES (?,?,?,?,?)', (activity, event, 'A', 'A', 'N'))
     db.execute('CREATE TABLE DIGX_EP_EVT_REC_B (' + ','.join(route_columns) + ')')
     # No key in this fixture so the production duplicate-row guard can also be exercised.
-    db.execute('CREATE TABLE DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE, TXT_SUBJECT_TMPL, TXT_MSG_TMPL, OBJECT_STATUS, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER)')
+    db.execute('CREATE TABLE DIGX_EP_MSG_TMPL_B (COD_TMPL_ID, DETERMINANT_VALUE, DESTINATION_TYPE, TXT_SUBJECT_TMPL, TXT_MSG_TMPL, OBJECT_STATUS, LAST_UPDATED_BY, LAST_UPDATED_DATE, OBJECT_VERSION_NUMBER, MSG_TMPL_NAME, MSG_TMPL_DESC, CREATED_BY, CREATION_DATE, DOMAIN_OBJECT_EXTN)')
     for row in rows:
         db.execute('INSERT INTO DIGX_EP_EVT_REC_B VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [row[k] for k in route_columns])
         seed_template(db, row['COD_MSG_TMPL_ID'])
@@ -208,18 +214,38 @@ for baseline_path in (
         db = fixture(rows)
         db.execute('UPDATE DIGX_EP_MSG_TMPL_B SET DESTINATION_TYPE=? WHERE COD_TMPL_ID=?', (channel, first_id))
         reject_without_changes(db, 'wrong channel')
-    for mode in ('missing', 'other_unit', 'duplicate', 'only_legacy_zh_hant'):
+    for mode in ('missing', 'other_unit', 'only_legacy_zh_hant', 'all_missing'):
         db = fixture(rows)
         if mode == 'missing':
             db.execute('DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID=?', (first_id,))
         elif mode == 'other_unit':
             db.execute("UPDATE DIGX_EP_MSG_TMPL_B SET DETERMINANT_VALUE='OTHER_BU' WHERE COD_TMPL_ID=?", (first_id,))
-        elif mode == 'duplicate':
-            seed_template(db, first_id)
         else:
             db.execute("DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID <> 'BCO_UNRELATED'")
-            seed_template(db, 'HTH API Password Code Approved_USER_EMAIL_zh-Hant')
-        reject_without_changes(db, 'template rows')
+            if mode == 'only_legacy_zh_hant':
+                seed_template(db, 'HTH API Password Code Approved_USER_EMAIL_zh-Hant')
+        # Include a missing alternate with a custom ID; duplicate binding must not
+        # create a second template row.
+        seed_route(db, first_id, locale='en-GB', alternate='Missing alternate')
+        ids_before = {r[0] for r in db.execute(executable(bound_query), {'c_activity': activity})}
+        missing_before = sum(db.execute("SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID=? AND DETERMINANT_VALUE='OBDX_BU'", (template,)).fetchone()[0] == 0 for template in ids_before)
+        count_before = db.execute('SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B').fetchone()[0]
+        binding_before = db.execute('SELECT COD_MSG_TMPL_ID, UNSECURE_MSG_TMPL_ID, LOCALE FROM DIGX_EP_EVT_REC_B ORDER BY rowid').fetchall()
+        for run in (1, 2):
+            ids = run_delta(db)
+            assert set(ids) == ids_before
+            assert db.execute('SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B').fetchone()[0] == count_before + missing_before
+            for template in ids:
+                assert db.execute("SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID=? AND DETERMINANT_VALUE='OBDX_BU' AND DESTINATION_TYPE='EMAIL' AND OBJECT_STATUS='A' AND TXT_SUBJECT_TMPL=? AND TXT_MSG_TMPL=?", (template, subject, ''.join(chunks))).fetchone()[0] == 1
+            assert db.execute('SELECT COD_MSG_TMPL_ID, UNSECURE_MSG_TMPL_ID, LOCALE FROM DIGX_EP_EVT_REC_B ORDER BY rowid').fetchall() == binding_before
+        assert db.execute("SELECT TXT_MSG_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID='BCO_UNRELATED'").fetchone()[0] == 'old body'
+        assert db.execute("SELECT COUNT(*) FROM DIGX_EP_MSG_TMPL_B WHERE DETERMINANT_VALUE='OTHER_BU' AND TXT_MSG_TMPL <> 'old body'").fetchone()[0] == 0
+        if mode == 'only_legacy_zh_hant' and 'HTH API Password Code Approved_USER_EMAIL_zh-Hant' not in ids:
+            assert db.execute("SELECT TXT_MSG_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID='HTH API Password Code Approved_USER_EMAIL_zh-Hant'").fetchone()[0] == 'old body'
+        db.close()
+    db = fixture(rows)
+    seed_template(db, first_id)
+    reject_without_changes(db, 'template rows')
     for kind in ('primary', 'alternate', 'other_activity', 'other_channel'):
         db = fixture(rows)
         if kind == 'primary':
@@ -232,6 +258,10 @@ for baseline_path in (
         else:
             seed_route(db, first_id, channel='SMS')
         reject_without_changes(db, 'shared template')
+    db = fixture(rows)
+    db.execute('DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID=?', (first_id,))
+    seed_route(db, first_id, event='BCO_OTHER_EVENT')
+    reject_without_changes(db, 'shared template')
     db = fixture(rows)
     db.execute('UPDATE DIGX_EP_EVT_REC_B SET COD_MSG_TMPL_ID=NULL WHERE COD_MSG_TMPL_ID=?', (first_id,))
     reject_without_changes(db, 'blank template ID')
@@ -246,9 +276,14 @@ for baseline_path in (
     blocked_id = max(r['COD_MSG_TMPL_ID'] for r in rows)
     db.execute("CREATE TRIGGER fail_update BEFORE UPDATE ON DIGX_EP_MSG_TMPL_B WHEN NEW.COD_TMPL_ID='" + blocked_id + "' BEGIN SELECT RAISE(ABORT, 'write failure'); END;")
     reject_without_changes(db, 'write failure')
+    db = fixture(rows)
+    db.execute("DELETE FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID <> 'BCO_UNRELATED'")
+    db.execute("CREATE TRIGGER fail_insert BEFORE INSERT ON DIGX_EP_MSG_TMPL_B WHEN NEW.COD_TMPL_ID='" + blocked_id + "' BEGIN SELECT RAISE(ABORT, 'insert failure'); END;")
+    reject_without_changes(db, 'insert failure')
 
 print('PASS: both baselines; arbitrary IDs/locales/multiple bindings/alternate templates; shared target templates updated once; reruns add no rows; unrelated BCO/other units preserved')
-print('PASS: missing/blank/duplicate/wrong-channel/shared templates, missing routes/actions and later write failures reject with no partial changes')
+print('PASS: missing/other-unit/only-one-legacy/all-missing fixtures repaired, exact bound IDs retained, repeated runs add no duplicates')
+print('PASS: blank/duplicate/wrong-channel/shared templates, missing routes/actions and later update/insert failures reject with no partial changes')
 verification = (ROOT / 'consulting/db/branch_change_history/20261103_BCOH2H-880/2_HTH_Code_Approval_Verification.sql').read_text()
 binding_report = re.search(r'WITH routes AS .*?;', verification, re.S).group(0)
 shared_report = re.search(r'WITH bound_ids AS .*?;', verification, re.S).group(0)

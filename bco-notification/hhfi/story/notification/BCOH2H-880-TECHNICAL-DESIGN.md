@@ -52,14 +52,16 @@ No HTH-specific in-memory handoff remains between approval commit and notificati
 
 | Recipient | Address source | Event ID | Template ID |
 |---|---|---|---|
-| Target API user | Existing owner-checked OBDX user lookup for Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | `HTH_API_PWD_CODE_USER_EMAIL_<locale>` |
-| Company | Existing party preferences `officeEmail` | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | `HTH_API_PWD_CODE_COMPANY_EMAIL_<locale>` |
+| Target API user | Existing owner-checked OBDX user lookup for Code party/user | `HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT` | Installed route: `HTH_API_PWD_CODE_USER_EMAIL_<locale>` or `HTH API Password Code Approved_USER_EMAIL_<locale>` |
+| Company | Existing party preferences `officeEmail` | `HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT` | Installed route: `HTH_API_PWD_CODE_COMPANY_EMAIL_<locale>` or `HTH API Password Code Approved_PARTY_EMAIL_<locale>` |
 
 Activity: `com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.activateOnUserApproval`.
 
 Both routes use EXTERNAL / USER with explicit email addresses. The target user is processed first, then company. Trim addresses and compare case-insensitively across these two recipients; a shared mailbox uses the target-user route. No maker or approver is added solely because of that role. This deduplication does not span separate User Create/Edit events or framework retries. Missing email does not trigger Code SMS fallback.
 
 The six existing templates (two recipient roles × en / zh-Hant / zh-Hans-CN) use the exact reviewed bilingual subject and raw HTML. No new translation or secret is added.
+
+The 880 SQL resolves each template from its existing event/locale route and preserves that ID. The two historical baseline scripts use different names, so requiring only `HTH_API_PWD_CODE_*` incorrectly rejects the older installed configuration. Before updating, the script checks unique routes, a matching EMAIL template in OBDX_BU, the two known feature-owned naming schemes, and no template references outside the two Code approval events. Missing or duplicate rows still stop the whole block with a row count; the script does not create templates or overwrite shared BCO templates.
 
 ## 4. Expiry and template discrepancy
 

@@ -2,6 +2,14 @@
 
 本目录是 **BCOH2H-880 与 BCOH2H-2110 的统一交付版本**。以后一起部署这两个 Story 时，只使用这里的文件，不再依次覆盖 `bcohth-880`、`bcohth-2110` 的旧副本。
 
+## 2026-11-04：880 SQL 兼容已安装的模板 ID
+
+880 更新脚本之前只识别 `HTH_API_PWD_CODE_*`，未兼容另一个历史脚本使用的 `HTH API Password Code Approved_USER_EMAIL_*` / `HTH API Password Code Approved_PARTY_EMAIL_*`。现在从这两个 Code 批核事件的现有 EMAIL/locale 路由读取真实模板 ID，更新正文并保留原 ID。真实缺失、重复、未知 ID 或被其他事件共用时仍停止，错误会明确指出角色、语言或匹配数量。
+
+重新执行 `hhfi/consulting/db/branch_change_history/20261103_BCOH2H-880/1_HTH_Code_Approval_Notification.sql` 的完整块，成功后 COMMIT；再运行同目录 `2_HTH_Code_Approval_Verification.sql`。不需要重跑旧基础脚本，也不需要为这次 SQL 修复重新部署 Java。若仍报缺失或重复，请提供验证脚本中路由和模板查询结果。
+
+本地已执行两套历史路由的查询及更新 SQL 回归，检查重复执行不增加记录、保留原模板 ID、无关 BCO 模板不变，以及缺失/重复/跨事件共用的识别。Oracle PL/SQL 和 UAT 数据未在本地实际执行；这次没有改变已评审正文及 24 小时有效期规则。
+
 ## 2026-11-04：同步后审批激活与编译错误修复
 
 本版以最新同步提交 `825b19ff5` 为基础修复。该同步提交把 `activateOnUserApproval` 中的激活流程整段注释，并删除 `activateApprovedCode` 内的刷新与通知调用；取消外层注释后，旧调用 `notifyHthApiPasswordApproved(row, operator)` 又与新方法签名不符。
@@ -28,7 +36,7 @@ SHA-256：`42db5fea134ace87475d7104fcf9443b7f26efeaac5e9912f845fedff2ba22ca`。�
 
 全部 23 个文件均逐字节提取自 `hth-application` 同一个源码提交：
 
-`974a22e7e35a8a27ca91e57761da3bc29bb6bc63`
+`42f7dac5811d691663d74d9c1bbe4d0718ffa149`
 
 本版在 `825b19ff5` 同步代码上恢复 880 完整审批流程，保留 2110 最终修订 `876dd437`（其父提交为 880 最终修订 `e91aa291`），并加强公开审批入口的事务回归。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
 

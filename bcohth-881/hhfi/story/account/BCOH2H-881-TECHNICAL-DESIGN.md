@@ -171,7 +171,7 @@ Python 检查需要设置 `JAVA_HOME`，并保留本地 OBDX 依赖和已有编�
 1. 保留原 HTH 通道、Token 解析和公司启用检查（`HTH_STATUS = ENABLE`、`OBJECT_STATUS = A`）。
 2. 检查通过后，客户本人查询 `POST /audit-log/v1` 默认允许，不再查 `HTH_MANAGEMENT_API` 是否分配过 Audit Log。
 3. 其他路径和 HTTP 方法继续走原 API 授权检查；不放开 `/operations/audit-log/v1/{partyId}`，不使用通配前缀，不加入 public-paths。
-4. 请求进入日志服务后，由 876 DSP 代码校验本人范围，并将 closeId/clientId 绑定 Token。公司启用校验也在该入口通过现有 PartyResolver 再次执行。
+4. 请求进入日志服务后，由 876 DSP 代码校验本人范围，并将 closeId/clientId 绑定 Token。公司启用继续沿用上述原过滤器检查，服务入口不再重复查询公司。
 
 这覆盖新公司、旧公司、无历史日志映射、停用后重新启用等情况，不需补权限数据，也不需人工迁移。账户关联或业务 API 的增删不影响本人日志查询；公司停用仍拒绝。
 
@@ -179,7 +179,7 @@ Python 检查需要设置 `JAVA_HOME`，并保留本地 OBDX 依赖和已有编�
 
 ### 验证与部署
 
-完整 Maven 编译通过；联合 62 项测试全部通过（0 failure、0 error、0 skipped），包括新默认权限 9 项、既有过滤器 14 项，以及 876 的本人范围、日志查询、错误响应、身份解析回归。测试使用内存边界替身，未连接 UAT/Oracle/APIC。
+完整 Maven 编译通过；联合 60 项测试全部通过（0 failure、0 error、0 skipped），包括新默认权限 9 项、既有过滤器 14 项，以及 876 的本人范围、日志查询、错误响应、身份解析回归。测试使用内存边界替身，未连接 UAT/Oracle/APIC。
 
 内部依赖已构建后，在 DSP 根目录运行：
 

@@ -35,7 +35,7 @@ DSP 本人范围校验已补充；需要一起合入 881 DSP 默认公司权限�
 
 DSP 源码基线：`e105c167b3d32b9756c4fda46b4881ffc5aa1b65`。
 
-本人查询按 Token closeId/clientId 绑定；指定他人或其他 client 拒绝，返回 500074 和 AC 指定文案；复用公司启用检查。
+本人查询按 Token closeId/clientId 绑定；指定他人或其他 client 拒绝，返回 500074 和 AC 指定文案；公司启用沿用原过滤器检查，不额外查询公司或改变原参数处理。
 
 文件保持 DSP 仓库的原相对路径，放在 `hth-dsp/`，与 `hhfi/` 同级：
 
@@ -51,4 +51,4 @@ DSP 源码基线：`e105c167b3d32b9756c4fda46b4881ffc5aa1b65`。
 
 重新构建 `hth-ms-support-api` 与 `hth-ms-support-svc`，部署 Support 服务。无需 SQL、无需新增授权记录、不改 public-paths、公共包、batch 或 BFF 生产代码。原 `hhfi/consulting` 文件保持既有交付版本。
 
-联合验证：完整 Maven 编译通过；62 项测试通过，0 failures / 0 errors / 0 skipped，含实际错误响应构造与 Feign 解码验证。测试替代数据库/身份解析边界，未连接真实 UAT/Oracle/APIC；实际 Token 验证、部署路由与新旧用户端到端验收仍需在 UAT 完成。测试入口见技术设计新增的 DSP 小节。
+联合验证：完整 Maven 编译通过；60 项测试通过，0 failures / 0 errors / 0 skipped，含实际错误响应构造与 Feign 解码验证。测试替代数据库/身份解析边界，未连接真实 UAT/Oracle/APIC；实际 Token 验证、部署路由与新旧用户端到端验收仍需在 UAT 完成。测试入口见技术设计新增的 DSP 小节。

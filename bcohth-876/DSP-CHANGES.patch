@@ -20,22 +20,13 @@ index 3fc384b..4b5f303 100644
          MESSAGE_MAP.put(INVALID_ACCOUNT_TYPE_EXCEPTION, "Invalid account type. Please enter a valid account type.");
          MESSAGE_MAP.put(INVALID_TRANSACTION_PERIOD_EXCEPTION, "Invalid transactionPeriod. Allowed values: TODAY, DATE_RANGE.");
 diff --git a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
-index cb95460..70fd2e3 100644
+index cb95460..4052912 100644
 --- a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
 +++ b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
-@@ -72,13 +72,26 @@ public class AuditLogServiceImpl implements AuditLogApi {
-     @FmoEventLog(businessType = FmoBusinessType.AUDIT_ENQUIRY)
-     @CrmEventLog(eventActvTypeCode = CrmConstants.HTH_AUDIT)
-     public AuditLogResponse queryAuditLogs(AuditLogRequest auditLogRequest) {
-+        if (auditLogRequest == null) {
-+            throw new ParameterException("request", HTHSupportErrorMapping.PARAMETER_MISSED_EXCEPTION);
-+        }
-         log.info("Received audit log query request: pageNo={}, pageSize={}, messageId={}, closeId={}, clientId={}, fromDateTime={}, toDateTime={}, lastNDays={}",
-                 auditLogRequest.getPageNumber(), auditLogRequest.getPageSize(),
-                 auditLogRequest.getMessageId(), auditLogRequest.getCloseId(), auditLogRequest.getClientId(),
+@@ -78,7 +78,16 @@ public class AuditLogServiceImpl implements AuditLogApi {
                  auditLogRequest.getFromDateTime(), auditLogRequest.getToDateTime(), auditLogRequest.getLastNDays());
          String closeId = partyResolver.resolveCloseId();
--        log.info("closeId is{}",closeId);
+         log.info("closeId is{}",closeId);
 +        String clientId = partyResolver.resolveClientId();
 +        // BCOH2H-876: reject an explicit foreign scope before binding both query keys to the token.
 +        if ((!StringUtils.isBlank(auditLogRequest.getCloseId())
@@ -44,32 +35,29 @@ index cb95460..70fd2e3 100644
 +                && !clientId.equals(auditLogRequest.getClientId().trim()))) {
 +            throw new ParameterException(HTHSupportErrorMapping.AUDIT_LOG_ACCESS_DENIED_EXCEPTION);
 +        }
-+        // Also enforce company enablement when this service is invoked outside the HTH filter.
-+        partyResolver.resolvePartyId();
          auditLogRequest.setCloseId(closeId);
 +        auditLogRequest.setClientId(clientId);
          return processAuditLogQuery(auditLogRequest);
      }
  
 diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
-index 4c6cf23..4858a66 100644
+index 4c6cf23..b00b5a1 100644
 --- a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
 +++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
-@@ -64,6 +64,8 @@ class AuditLogServiceImplTest {
+@@ -64,6 +64,7 @@ class AuditLogServiceImplTest {
      void setUp() {
          MockitoAnnotations.openMocks(this);
          when(partyResolver.resolveCloseId()).thenReturn("mockCloseId");
 +        when(partyResolver.resolveClientId()).thenReturn("client2");
-+        when(partyResolver.resolvePartyId()).thenReturn("test-party");
          auditLogService.setMaxQueryPeriodDays(180); // Explicitly set for unit tests
      }
  
 diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
 new file mode 100644
-index 0000000..8b1f0e4
+index 0000000..9f0afff
 --- /dev/null
 +++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,154 @@
 +package com.hkbea.hth.service;
 +
 +import com.baomidou.mybatisplus.core.MybatisConfiguration;
@@ -149,7 +137,6 @@ index 0000000..8b1f0e4
 +    @ValueSource(strings = {"omitted", "blank", "own"})
 +    void bindsEverySuccessfulQueryToTokenCompanyAndUser(String suppliedScope) {
 +        identity();
-+        when(resolver.resolvePartyId()).thenReturn("TEST-PARTY");
 +        successfulQuery();
 +        AuditLogRequest request = request();
 +        request.setMessageId("test-message");
@@ -163,7 +150,6 @@ index 0000000..8b1f0e4
 +        assertEquals(0, service.queryAuditLogs(request).getTotalRecords());
 +        assertEquals(CLOSE_ID, request.getCloseId());
 +        assertEquals(CLIENT_ID, request.getClientId());
-+        verify(resolver).resolvePartyId();
 +        verifyNoInteractions(managementMapper);
 +        ArgumentCaptor<LambdaQueryWrapper<AuditLogRecord>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
 +        verify(auditMapper).selectPage(any(Page.class), query.capture());
@@ -212,20 +198,6 @@ index 0000000..8b1f0e4
 +        when(resolver.resolveClientId()).thenThrow(new ServiceException(HTHSupportErrorMapping.INVALID_ACCESS_TOKEN_EXCEPTION));
 +        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
 +        verifyNoInteractions(auditMapper, managementMapper);
-+    }
-+
-+    @Test
-+    void disabledCompanyIsRejectedEvenWithoutTheHttpFilter() {
-+        identity();
-+        when(resolver.resolvePartyId()).thenThrow(new ServiceException(HTHSupportErrorMapping.CLIENT_ID_NOT_ENABLED_EXCEPTION));
-+        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
-+        verifyNoInteractions(auditMapper, managementMapper);
-+    }
-+
-+    @Test
-+    void missingBodyReturnsParameterError() {
-+        assertThrows(ParameterException.class, () -> service.queryAuditLogs(null));
-+        verifyNoInteractions(resolver, auditMapper, managementMapper);
 +    }
 +
 +    @Test

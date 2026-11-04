@@ -72,14 +72,12 @@ public class AuditLogServiceImpl implements AuditLogApi {
     @FmoEventLog(businessType = FmoBusinessType.AUDIT_ENQUIRY)
     @CrmEventLog(eventActvTypeCode = CrmConstants.HTH_AUDIT)
     public AuditLogResponse queryAuditLogs(AuditLogRequest auditLogRequest) {
-        if (auditLogRequest == null) {
-            throw new ParameterException("request", HTHSupportErrorMapping.PARAMETER_MISSED_EXCEPTION);
-        }
         log.info("Received audit log query request: pageNo={}, pageSize={}, messageId={}, closeId={}, clientId={}, fromDateTime={}, toDateTime={}, lastNDays={}",
                 auditLogRequest.getPageNumber(), auditLogRequest.getPageSize(),
                 auditLogRequest.getMessageId(), auditLogRequest.getCloseId(), auditLogRequest.getClientId(),
                 auditLogRequest.getFromDateTime(), auditLogRequest.getToDateTime(), auditLogRequest.getLastNDays());
         String closeId = partyResolver.resolveCloseId();
+        log.info("closeId is{}",closeId);
         String clientId = partyResolver.resolveClientId();
         // BCOH2H-876: reject an explicit foreign scope before binding both query keys to the token.
         if ((!StringUtils.isBlank(auditLogRequest.getCloseId())
@@ -88,8 +86,6 @@ public class AuditLogServiceImpl implements AuditLogApi {
                 && !clientId.equals(auditLogRequest.getClientId().trim()))) {
             throw new ParameterException(HTHSupportErrorMapping.AUDIT_LOG_ACCESS_DENIED_EXCEPTION);
         }
-        // Also enforce company enablement when this service is invoked outside the HTH filter.
-        partyResolver.resolvePartyId();
         auditLogRequest.setCloseId(closeId);
         auditLogRequest.setClientId(clientId);
         return processAuditLogQuery(auditLogRequest);

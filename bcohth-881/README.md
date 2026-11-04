@@ -45,4 +45,4 @@ DSP 源码基线：`e105c167b3d32b9756c4fda46b4881ffc5aa1b65`。
 
 重新构建 `hth-ms-support-api` 与 `hth-ms-support-svc`，部署 Support 服务。无需 SQL、无需新增授权记录、不改 public-paths、公共包、batch 或 BFF 生产代码。原 `hhfi/consulting` 文件保持既有交付版本。
 
-联合验证：完整 Maven 编译通过；62 项测试通过，0 failures / 0 errors / 0 skipped，含实际错误响应构造与 Feign 解码验证。测试替代数据库/身份解析边界，未连接真实 UAT/Oracle/APIC；实际 Token 验证、部署路由与新旧用户端到端验收仍需在 UAT 完成。测试入口见技术设计新增的 DSP 小节。
+联合验证：完整 Maven 编译通过；60 项测试通过，0 failures / 0 errors / 0 skipped，含实际错误响应构造与 Feign 解码验证。测试替代数据库/身份解析边界，未连接真实 UAT/Oracle/APIC；实际 Token 验证、部署路由与新旧用户端到端验收仍需在 UAT 完成。测试入口见技术设计新增的 DSP 小节。

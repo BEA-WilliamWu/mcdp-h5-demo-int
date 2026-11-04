@@ -77,7 +77,6 @@ class AuditLogOwnScopeTest {
     @ValueSource(strings = {"omitted", "blank", "own"})
     void bindsEverySuccessfulQueryToTokenCompanyAndUser(String suppliedScope) {
         identity();
-        when(resolver.resolvePartyId()).thenReturn("TEST-PARTY");
         successfulQuery();
         AuditLogRequest request = request();
         request.setMessageId("test-message");
@@ -91,7 +90,6 @@ class AuditLogOwnScopeTest {
         assertEquals(0, service.queryAuditLogs(request).getTotalRecords());
         assertEquals(CLOSE_ID, request.getCloseId());
         assertEquals(CLIENT_ID, request.getClientId());
-        verify(resolver).resolvePartyId();
         verifyNoInteractions(managementMapper);
         ArgumentCaptor<LambdaQueryWrapper<AuditLogRecord>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(auditMapper).selectPage(any(Page.class), query.capture());
@@ -140,20 +138,6 @@ class AuditLogOwnScopeTest {
         when(resolver.resolveClientId()).thenThrow(new ServiceException(HTHSupportErrorMapping.INVALID_ACCESS_TOKEN_EXCEPTION));
         assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
         verifyNoInteractions(auditMapper, managementMapper);
-    }
-
-    @Test
-    void disabledCompanyIsRejectedEvenWithoutTheHttpFilter() {
-        identity();
-        when(resolver.resolvePartyId()).thenThrow(new ServiceException(HTHSupportErrorMapping.CLIENT_ID_NOT_ENABLED_EXCEPTION));
-        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
-        verifyNoInteractions(auditMapper, managementMapper);
-    }
-
-    @Test
-    void missingBodyReturnsParameterError() {
-        assertThrows(ParameterException.class, () -> service.queryAuditLogs(null));
-        verifyNoInteractions(resolver, auditMapper, managementMapper);
     }
 
     @Test

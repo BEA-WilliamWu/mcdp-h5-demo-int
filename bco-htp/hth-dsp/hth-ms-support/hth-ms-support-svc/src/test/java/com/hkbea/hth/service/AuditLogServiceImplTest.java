@@ -65,7 +65,6 @@ class AuditLogServiceImplTest {
         MockitoAnnotations.openMocks(this);
         when(partyResolver.resolveCloseId()).thenReturn("mockCloseId");
         when(partyResolver.resolveClientId()).thenReturn("client2");
-        when(partyResolver.resolvePartyId()).thenReturn("test-party");
         auditLogService.setMaxQueryPeriodDays(180); // Explicitly set for unit tests
     }
 

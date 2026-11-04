@@ -150,7 +150,7 @@ mcdp-h5-demo-int/bcohth-876/
 
 | 文件 | 改动 |
 | --- | --- |
-| `hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java` | 在客户本人查询入口读取 Token 的 closeId、clientId；明确指定其他用户或 client 时拒绝；查询两个字段始终绑定 Token；复用 PartyResolver 检查公司启用状态；空请求返回参数错误 |
+| `hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java` | 在客户本人查询入口读取 Token 的 closeId、clientId；明确指定其他用户或 client 时拒绝；查询两个字段始终绑定 Token；公司启用沿用原 CoarseEntitlementFilter 检查，不额外查询公司或改变原参数处理 |
 | `hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java` | 新增 `AUDIT_LOG_ACCESS_DENIED_EXCEPTION = 500074`，返回 AC 指定文案 |
 
 请求不传 closeId/clientId、传空白或传本人值时均按 Token 查询；首尾空白去除后比较，大小写不折叠。指定别人的值会拒绝，不再静默改成本人。messageId、日期、分页、排序沿用原逻辑。仅本人查询入口增加校验，`queryAuditLogsByPartyId` 运维入口保持原行为。
@@ -162,8 +162,8 @@ mcdp-h5-demo-int/bcohth-876/
 ### 验证与部署
 
 - 完整 Maven 编译 Support API/SVC 和依赖模块成功。
-- 联合 62 项测试全部通过（0 failure、0 error、0 skipped）：既有权限 14、新默认权限 9、既有日志查询 15、本人范围 12、错误响应链路 2、PartyResolver 10。
-- 新测试：`AuditLogOwnScopeTest`、`AuditLogErrorResponseTest`；已有 `AuditLogServiceImplTest` 只补 Token clientId/公司测试桩。
+- 联合 60 项测试全部通过（0 failure、0 error、0 skipped）：既有权限 14、新默认权限 9、既有日志查询 15、本人范围 10、错误响应链路 2、PartyResolver 10。
+- 新测试：`AuditLogOwnScopeTest`、`AuditLogErrorResponseTest`；已有 `AuditLogServiceImplTest` 只补 Token clientId 测试桩。
 - 仓储和身份解析边界使用测试桩；检查了实际查询条件绑定用户及 client，未连接 Oracle、UAT、APIC 或真实 Token 服务。
 - 内部依赖已构建后，可在 DSP 根目录运行：
 

@@ -1,9 +1,9 @@
-c8ecd8e3526ca01d66f373fe1a56e68585a61854ae4fa1b8bcb5052fa0ba7903  DSP-CHANGES.patch
-70684834b26592664e2a17161253681507f6a63b0545df8a418d7fffee2a18e0  README.md
+83dbae6f3d252ad614dc66553544c2581b3ac937468a29e61a51abe7a89d73df  DSP-CHANGES.patch
+60ed678a4644adfb1b25a584eb9598f5f3de913b231c53a885f72bbe29942956  README.md
 a3d2398e8bd68fe9e1e58717054e7f03b2c2253fc08547220b2489a9201e8eed  hth-dsp/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java
 b2752afe3be805e37ff9b145ba36aa39806e7dd1278658dfa5c4ff7d6dfb2d1f  hth-dsp/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java
-3fc44c57194d64f224676bc5a0e0a64d992c5e3bf84aebbdb6a36b7a559addd2  hth-dsp/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
+d0375aba6636de3f1367f1f22026e5a7001cf48d05ca73609db26901b71e8dd9  hth-dsp/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
 35a693b5a36683e3c058dbe44a7cf30a217a3615d27e1571509f9749d9e7cca1  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/filter/CoarseEntitlementAuditLogTest.java
 e9d23fcfc8e6538f6a47ba864b21a741aa40ea5edda92788d29330ba051b79f8  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogErrorResponseTest.java
-0eb3f3cf720dc0505b84e3db836a2f5ae6c07e0113dafe04a12a416969c31c4e  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
-0a861e6550790c179b12491ecee1edae9d514184fd93ae998a0d4d0a6420f93b  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
+633c35f1ffac66b2406e9441299d9be63614b52223bccb9a5f6ec646c15baa5a  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
+03df24af2683b69ffafe578c5e0acec02a43d88976349661a9416ab2071a5e61  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java

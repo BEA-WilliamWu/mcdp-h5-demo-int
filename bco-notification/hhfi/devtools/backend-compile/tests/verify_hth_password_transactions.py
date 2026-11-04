@@ -57,6 +57,9 @@ with tempfile.TemporaryDirectory(prefix="hth-orm-transactions-") as temporary:
     rejection = re.search(r"  public void rejectOnUserApproval\(.*?\n  }", source, re.S)
     assert rejection
     methods.append(rejection.group())
+    approval_entries = re.findall(r"  public void activateOnUserApproval\(.*?\n  }", source, re.S)
+    assert len(approval_entries) == 2, "Both production approval entry points must be exercised"
+    methods.extend(approval_entries)
     for name in ("fillMaskedResponse", "isExpired", "key", "requireCodeOwner"):
         methods.append(re.search(r"  private [^\n]+ " + name + r"\(.*?\n  }", source, re.S).group())
     methods.append(re.search(r"  public HthApiPasswordCodeResponseDTO masked\(SessionContext sessionContext, String partyId,\s+String userName, String codeId\).*?\n  }", source, re.S).group())
@@ -169,6 +172,8 @@ public class PasswordTransactionHarness extends PolicyFixture {
   public boolean approve(String codeId, String purpose) throws Exception {
     return activateApprovedCode(codeId, "PARTY", "USER", purpose, "MAKER", "TX-APPROVED", EXPIRY_HOURS);
   }
+  // Approval framework context is a fixture; the public service bodies are copied unchanged.
+  private String readTransactionId() { return "TX-APPROVED"; }
   public void supersedePending(String purpose) throws Exception {
     retirePendingCodes("PARTY", "USER", purpose, "MAKER");
   }

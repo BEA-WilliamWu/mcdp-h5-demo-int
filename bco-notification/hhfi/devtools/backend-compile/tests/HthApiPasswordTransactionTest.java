@@ -81,12 +81,17 @@ public final class HthApiPasswordTransactionTest {
       check("PENDING".equals(LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key).getStatus()),
           "Approval session first sees pending entity");
       long before = System.currentTimeMillis();
-      check(SERVICE.approve("new-draft", purpose), "First approval activates Code");
+      // Exercise the actual public entry point: a commented-out body must not pass.
+      SERVICE.activateOnUserApproval("new-draft", "APPROVER", "PARTY", "USER");
       check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 0,
           "Another connection cannot see notification registration before commit");
       commitOuter();
       check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 1,
           "Registration commits with Code activation");
+      check("ACTIVE".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='new-draft'")),
+          "Public approval entry point activates Code");
+      check("TX-APPROVED".equals(value("SELECT TRANSACTION_ID FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='new-draft'")),
+          "Public approval entry point persists transaction reference");
       try (Statement statement = db.createStatement(); ResultSet rows = statement.executeQuery(
           "SELECT c.EXPIRY_TIME, e.EXPIRY_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE c "
           + "JOIN CODE_EVENT_FIXTURE e ON e.CODE_ID=c.ID WHERE c.ID='new-draft'")) {
@@ -99,8 +104,7 @@ public final class HthApiPasswordTransactionTest {
       }
       DataAccessManager.factory.getCache().evictAll();
       beginOuter();
-      check(!new PasswordTransactionHarness().approve("new-draft", purpose),
-          "Fresh service/session reads ACTIVE state and does not reactivate");
+      new PasswordTransactionHarness().activateOnUserApproval("new-draft", "APPROVER");
       commitOuter();
       check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 1,
           "Approval replay does not register another event");
@@ -108,14 +112,14 @@ public final class HthApiPasswordTransactionTest {
       pendingPair(purpose);
       DataAccessManager.factory.getCache().evictAll();
       beginOuter();
-      SERVICE.approve("new-draft", purpose);
+      SERVICE.activateOnUserApproval("new-draft", "APPROVER", "PARTY", "USER");
       rollbackOuter();
       check("PENDING".equals(value("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE WHERE ID='new-draft'")),
           "Business rollback restores pending Code");
       check(number("SELECT COUNT(*) FROM CODE_EVENT_FIXTURE") == 0,
           "Business rollback also removes notification registration");
     }
-    System.out.println("PASS: real ORM Code activation + fixture event registration commit/rollback, replay, cached refresh and 24-hour expiry");
+    System.out.println("PASS: public approval entry points, real ORM Code activation + fixture event registration commit/rollback, replay, cached refresh and 24-hour expiry");
   }
 
   private static void dspChangeFlow() throws java.lang.Exception {

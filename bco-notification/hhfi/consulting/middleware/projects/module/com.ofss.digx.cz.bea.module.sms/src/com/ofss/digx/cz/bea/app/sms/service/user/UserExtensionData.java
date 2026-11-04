@@ -381,6 +381,16 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			// BCM-2549: CDC6906 - View I-Token Status on BCO
 			sendITokenViewCrm(sessionContext, requestDTO.getUserExtensionKey(), true);
 
+            //BCOCDC6227 start
+            String lockStatus = userDomain.getLockStatus().toString();
+            String lockReason = userDomain.getLockReason();
+            requestDTO.setLockStatus(lockStatus);
+            requestDTO.setLockReason(lockReason);
+            if(null != lockStatus && lockStatus.equals("UNLOCK")){
+                requestDTO.setSuspendTime(null);
+                requestDTO.setSuspender(null);
+            }
+            //BCOCDC6227 end
 			response.setUserExtensionDataDTO(requestDTO);
 			extensionExecutor.postRead(sessionContext, requestDTO, response);
 		} catch (Exception e) {
@@ -439,7 +449,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("CZUserExtensionDataExt CRMAsserter.crmInsertData( crm" + e);
 		}
 	}
-	
+
 //	public UserIdMaintenanceRequestDTO buildUserIdMaintenanceRequestDTO(UserExtensionDataDTO requestDTO) {
 //
 //		UserIdMaintenanceKeyDTO userIdMaintenanceKeyDTOKey = new UserIdMaintenanceKeyDTO();

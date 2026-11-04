@@ -127,7 +127,6 @@ public class HostToHostApiPassword extends AbstractApplication
 
   private static final int CODE_LENGTH = 6;
 
-
   private static final int EXPIRY_HOURS = 24;
 
   private static final String ACTIVITY_HTH_API_PASSWORD_APPROVED =
@@ -1070,6 +1069,7 @@ public class HostToHostApiPassword extends AbstractApplication
       throw new Exception("DIGX_CZ_HTH_PW_008");
     }
     String transactionId = readTransactionId();
+    // Activation refreshes the database state and registers the notification once.
     activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
         operator, transactionId, EXPIRY_HOURS);
   }

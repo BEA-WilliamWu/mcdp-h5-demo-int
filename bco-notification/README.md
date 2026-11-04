@@ -2,35 +2,42 @@
 
 本目录是 **BCOH2H-880 与 BCOH2H-2110 的统一交付版本**。以后一起部署这两个 Story 时，只使用这里的文件，不再依次覆盖 `bcohth-880`、`bcohth-2110` 的旧副本。
 
-## 2026-11-04：构建错误的修复方式
+## 2026-11-04：同步后审批激活与编译错误修复
 
-报错：`HthApiPasswordCode cannot be converted to SessionContext`，错误行为 `notifyHthApiPasswordApproved(row, operator)`。
+本版以最新同步提交 `825b19ff5` 为基础修复。该同步提交把 `activateOnUserApproval` 中的激活流程整段注释，并删除 `activateApprovedCode` 内的刷新与通知调用；取消外层注释后，旧调用 `notifyHthApiPasswordApproved(row, operator)` 又与新方法签名不符。
 
-当前源仓库及本合并包都已无此旧调用。截图中的构建文件仍含合并前的调用，但通知方法已使用新签名，文件内容与本包不同。
+修复后两处代码必须配套：
 
-1. **完整替换**构建目录的 `HostToHostApiPassword.java`，使用本包下列文件；不要只替换方法定义或报错行：
-   `hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java`
-2. `activateOnUserApproval` 中只调用 `activateApprovedCode(...)`，不再直接发通知。后者激活 Code、刷新实体后，只有一次 `notifyHthApiPasswordApproved(null, activated)` 调用。保留外层旧调用可能重复通知。
-3. 替换后核对文件 SHA-256：`7d2e13dbaf6b6acba1f7a6b5388e299d07f7009d1eb91438b644c37beea2e8d5`，再清理旧编译产物并重新构建。此编译错误无需修改数据库或模板。
+- 外层保留 `readTransactionId()` 和 `activateApprovedCode(...)` 调用，审批才会实际激活 Code。
+- 内层由数据库更新 ACTIVE、交易号和 24 小时过期时间，再刷新实体并调用一次 `notifyHthApiPasswordApproved(null, activated)`。
+- 外层不再设置内存中的状态、重新计算过期时间或重复登记通知；不能把旧的整个 `if` 块加回，也不能把激活调用注释掉。
 
-已验证：使用本包完整 service，连同 hosttohost 模块、当前 DTO 和必要依赖共 126 个生产 Java 源文件编译通过（Java 8 目标）。在临时副本重新加入截图的旧调用，会复现同一类型错误。编译使用现有外围模块 class/SDK JAR，未替换生产方法；不代表服务器全量 clean build 或 UAT 投递验证。
+**完整替换**构建目录的同名文件：
 
-完整源码目录可运行 `verify_hth_880_compile.py`；加 `--service-source /absolute/path/HostToHostApiPassword.java` 可核验另一份交付或构建副本。不要通过新增旧签名重载来掩盖文件混用。
+`hhfi/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java`
+
+SHA-256：`42db5fea134ace87475d7104fcf9443b7f26efeaac5e9912f845fedff2ba22ca`。清理旧编译产物后重新构建，此修复不需要更改数据库或模板。mcdp 根目录的 `consulting` 不同步。
+
+已验证完整生产源码 Java 8 目标编译（126 个源文件）；真实 EclipseLink/H2 测试经过两个公开审批入口，检查 Code 激活、交易号、24 小时过期、单次通知登记、重入与回滚。通知登记边界使用测试替身，未验证 WebLogic/MNG 实际投递。
+
+本包同时保留 `825b19ff5` 已同步的 `UserExtensionData.java` 中 BCOCDC6227 锁定资料读取改动，防止交付旧共享文件时覆盖新 BCO 代码；没有另外改动该功能。
+
+完整源码目录可运行 `verify_hth_880_compile.py`；加 `--service-source /absolute/path/HostToHostApiPassword.java` 可核验另一份交付或构建副本。
 
 ## 版本依据与核查结论
 
 全部 23 个文件均逐字节提取自 `hth-application` 同一个源码提交：
 
-`44caa6c2f7a7ae456f18cd9e04e93789ae82e73e`
+`974a22e7e35a8a27ca91e57761da3bc29bb6bc63`
 
-业务代码保留 2110 最终修订 `876dd437`（其父提交为 880 最终修订 `e91aa291`），另补完整生产源码编译检查。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
+本版在 `825b19ff5` 同步代码上恢复 880 完整审批流程，保留 2110 最终修订 `876dd437`（其父提交为 880 最终修订 `e91aa291`），并加强公开审批入口的事务回归。本次合并没有新增业务规则，也没有把其他 Story 的未提交修改带进来。
 
 | 核查项 | 结果 |
 |---|---|
-| 最后一次 2110 是否基于 880 最新修订 | 是。`876dd437` 的父提交是 `e91aa291`。 |
+| 最后一次 2110 是否基于 880 最新修订 | 是。`876dd437` 的父提交是 `e91aa291`；本版进一步修复后续同步带来的审批流程回退。 |
 | 为什么两个交付目录的同名文件不同 | 两个目录是在不同时间生成的；旧 880 包仍保留后续已撤掉的 2110 分支与测试依赖。混用旧文件会重新引入旧逻辑。 |
 | 实际重叠的文件 | `UserExtensionData.java`、`verify_hth_code_approval.py`。本包各保留一份最终版本。 |
-| 880 专用实现是否被 2110 回退 | 没有。五个 880 专用生产 Java 文件与 `e91aa291` 完全一致。共享 `UserExtensionData` 中的“用户更新成功后才激活 Code”也仍保留。 |
+| 880 专用实现是否被 2110 回退 | 没有。880 行为已恢复；service 比 `e91aa291` 仅增加一条说明激活与通知位置的注释、减少一个空行。共享 `UserExtensionData` 中的“用户更新成功后才激活 Code”也仍保留。 |
 | 看起来恢复旧代码的部分 | 是按确认撤回的 2110 专用分支、线程标记和审批回调，不是撤回 880 的成功判断。 |
 
 ## 合并后保留的行为

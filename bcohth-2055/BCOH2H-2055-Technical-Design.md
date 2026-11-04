@@ -29,7 +29,7 @@ The existing public status enum remains unchanged: `SUCCESS`, `PROCESSING` and `
 3. Insert a payout row with `STATUS=Processing` before submitting to IPE. `IPE_TERMINAL` is initially null because no downstream finality result exists yet.
 4. If the insert fails or affects no row, return the existing service error `600000` and do not submit the payment. An external payment must have a durable local record for subsequent enquiry.
 5. Submit once through IPE `/credit-transfer`, retain existing status mapping, and save the response's `terminal` flag for CHATS.
-6. On a timeout, null response or inconclusive submission response, retain `Processing` so enquiry can reconcile the result. Do not automatically resubmit.
+6. On a timeout, null response or inconclusive submission response, the submission mapper retains `Processing` so enquiry can reconcile the result. Do not automatically resubmit. Following the 2065 scope review, legacy fee-cache handling is retained: when the cache is present, a null IPE result can still cause an exception after this mapping/persistence step. That separate cache defect is outside the approved change and prevents guaranteeing a Processing API response in that configuration.
 
 The submission update applies only to the untouched initial row: matching ID, `Processing` status, and null IPE status/finality. This prevents a slow submission response from overwriting a result already saved by a concurrent enquiry. If the post-submission database update fails, the existing pending row remains available for reconciliation.
 
@@ -109,9 +109,11 @@ UAT should review these business outcomes and AFT evidence. Unit tests validate 
 
 ## 9. Delivery
 
-Commit this story's code, tests, SQL and design to local Git. Synchronize changed code/tests/SQL beneath `/Users/devs/DWksp/mcdp-h5-demo/bcohth-2055/source/`, preserving repository-relative paths. Place this document at `bcohth-2055/BCOH2H-2055-Technical-Design.md`. Leave the 2065 delivery directory unchanged.
+Commit this story's code, tests, SQL and design to local Git. Synchronize changed code/tests/SQL beneath `/Users/devs/DWksp/mcdp-h5-demo-int/bcohth-2055/source/`, preserving repository-relative paths. Place this document at `bcohth-2055/BCOH2H-2055-Technical-Design.md`. Leave the 2065 delivery directory unchanged.
 
 ## 10. Local verification - 4 November 2026
+
+The results below describe the original commit `9495082`, before the subsequent 2065 scope correction. The revised shared CHATS source retains the 2055 lifecycle changes but restores the legacy account/name/cache behavior described in the updated 2065 design. See the appended scope-review verification for current test counts.
 
 Java 21/Maven compilation succeeded. No dependency or POM changes were required. The test run used the existing local dependency cache and a temporary reactor containing `hth-parent`, `hth-common`, `dsp-ms-support` and `hth-ms-support`.
 
@@ -142,3 +144,11 @@ mvn -o -f /path/to/verification-pom.xml -pl :hth-ms-support-svc -am \
 ```
 
 Database behavior is covered at the mapper/update-condition boundary. The Oracle DDL was not executed against a database; actual schema migration, AFT entries and downstream settlement/reversal require SIT.
+
+## 11. Verification after the 2065 scope review - 4 November 2026
+
+The shared CHATS source and submission tests now retain the legacy account-number, supplementary-name and fee-cache behavior per the review recorded in the 2065 design. The 2055 lifecycle implementation remains unchanged.
+
+The targeted Maven run passed all 92 tests: `ChatsPaymentServiceTest` 54, `ChatsPaymentEnquiryTest` 24, `PaymentCommonRoutingBuilderTest` 5 and `PaymentRoutingSubmitterTest` 9, with no failures, errors or skipped tests. Three tests tied to withdrawn 2065 changes were removed; the original 176-test broader regression above was not rerun. Fee-cache handling with a configured cache and a null IPE response remains outside this verification.
+
+The updated 2055 delivery contains the combined shared files. Apply the revised 2065 package first, then 2055; copying an older shared file afterward can restore withdrawn behavior or remove lifecycle changes.

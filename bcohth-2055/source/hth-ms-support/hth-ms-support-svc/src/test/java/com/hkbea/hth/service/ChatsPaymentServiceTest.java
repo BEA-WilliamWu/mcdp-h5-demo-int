@@ -392,7 +392,7 @@ class ChatsPaymentServiceTest {
         assertEquals("Y", chatsRemittance.getPrntAdvInd());
         assertEquals("y", chatsRemittance.getLmInd());
         assertEquals("CHATS BENEFICIARY", chatsRemittance.getDepositAccountName1());
-        assertNull(chatsRemittance.getDepositAccountName2());
+        assertEquals("6304357992232185", chatsRemittance.getDepositAccountName2());
 
         verify(scameterValidatorUtil).checkChats(any());
 
@@ -526,10 +526,9 @@ class ChatsPaymentServiceTest {
         assertEquals("BEASHKHHXXX", txn.at("/debtorAgent/financialInstitution/bicfi").asText());
         assertEquals("/IFT01/", txn.at("/purpose/proprietary").asText());
         assertTrue(txn.at("/purpose/code").isMissingNode());
-        assertEquals(DEBIT_ACCOUNT, txn.at("/debtorAccount/identification").asText());
         assertEquals(AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
                 txn.at("/debtorAccount/internalAccountNo").asText());
-        assertTrue(txn.at("/supplementaryData/chatsRemittance/depositAccountName2").isMissingNode());
+        assertEquals("6304357992232185", txn.at("/supplementaryData/chatsRemittance/depositAccountName2").asText());
     }
 
     @Test
@@ -634,7 +633,6 @@ class ChatsPaymentServiceTest {
 
         var txn = submitConvertedInstruction(payment).getTransactions().getFirst();
         assertEquals(new BigDecimal("999999999999999.99"), txn.getAmount().getSettlementAmount().getAmount());
-        assertEquals("015521680295051", txn.getDebtorAccount().getIdentification());
         assertEquals(AccountUtils.ext2intAccNo("015521680295051", "C"), txn.getDebtorAccount().getInternalAccountNo());
         assertEquals("ABSYHKH1XXX", txn.getCreditorAgent().getFinancialInstitution().getBicfi());
         assertEquals("D".repeat(140), txn.getDebtor().getName());
@@ -649,9 +647,8 @@ class ChatsPaymentServiceTest {
         assertEquals(4, txn.getRemittanceInformation().getUnstructured().size());
         assertTrue(txn.getRemittanceInformation().getUnstructured().stream().allMatch(s -> s.length() == 35));
         assertEquals(reference, String.join("", txn.getRemittanceInformation().getUnstructured()));
-        // The legacy duplicate is optional and only accepts 35 characters.
-        assertNull(txn.getSupplementaryData().getChatsRemittance().getDepositAccountName1());
-        assertNull(txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
+        // Legacy supplementary fields are unchanged; full-length downstream handling remains unconfirmed.
+        assertEquals("6304357992232185", txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
         ArgumentCaptor<PaymentPayoutRecord> record = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).insert(record.capture());
         assertEquals(txn.getPaymentIdentification().getEndToEndId(), record.getValue().getPaymentId());
@@ -707,24 +704,6 @@ class ChatsPaymentServiceTest {
         assertEquals(PaymentInformation.PaymentMethodEnum.CHATS, submitted.getPaymentInformation().getPaymentMethod());
         assertEquals("BEASHKHHXXX", submitted.getTransactions().getFirst().getDebtorAgent().getFinancialInstitution().getBicfi());
         assertEquals("/IFT01/", submitted.getTransactions().getFirst().getPurpose().getProprietary());
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = {35, 36})
-    void legacyNameLengthBoundary_preservesTheFullCanonicalName(int length) {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        String name = "N".repeat(length);
-        payment.getCreditor().setCreditorName(name);
-        var txn = submitConvertedInstruction(payment).getTransactions().getFirst();
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(length <= 35 ? name : null, txn.getSupplementaryData().getChatsRemittance().getDepositAccountName1());
-    }
-
-    @Test
-    void nullIpeResponse_remainsProcessingWithoutFeeCacheFailure() {
-        Payment response = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
-        assertEquals(Payment.StatusEnum.PROCESSING, response.getStatus());
-        verify(paymentPayoutRecordMapper).update(any(PaymentPayoutRecord.class), any());
     }
 
     private BatchRoutingCreditTransferRequest submitConvertedInstruction(LocalPayment source) {

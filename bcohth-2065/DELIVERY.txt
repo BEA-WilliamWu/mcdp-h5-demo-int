@@ -1,10 +1,17 @@
-BCOH2H-2065 delivery
-Source commit: 946d0190929a95583389ce4215d49d66f1c5c758
-Local commit only; no remote push.
+BCOH2H-2065 delivery - scope review, 4 November 2026
+Review commit: 36dbacc69547f28bf251c23590e35f412b011eca
+Source: 946d019 plus the reviewed scope correction; excludes 2055 lifecycle changes
+Targeted verification: 58 passed (44 CHATS submission + 5 common-routing + 9 routing-submitter); 0 failures/errors/skipped.
+Full regression, SIT/UAT and actual message transmission were not rerun.
+Legacy account-number mapping, depositAccountName1/2 and fee-cache handling are retained.
+Unconfirmed account/name handling and the existing null-cache limitation are documented.
+Apply the revised 2065 package before 2055; the 2055 shared files contain both stories.
+Target repository changes are left uncommitted for manual review.
 
-0a5f0110c9a59c37f8a2258514435965d15df0c2c13b4b56749c10da31673410  BCOH2H-2065-Technical-Design.md
-44b2813b50dea1e5f1a3cfcb7eb6eda94579c5ac2cd2f020c6a3e7f3ff344adf  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
-47ba6603e8c7fcdd1095eef70c474530df2e89dc4025c180c3f96ec8dd9deb66  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+Destination corrected to: /Users/devs/DWksp/mcdp-h5-demo-int
+Documentation commit: 94219bfee449dfb823d69e430cd13c5c13fe28da
 
-Test result: 112 run; 110 passed; 2 pre-existing PaymentServiceImplTest failures.
-All 61 CHATS/routing tests passed. Downstream SIT/UAT dependencies are listed in the design.
+SHA-256:
+8b882b68d86bfab08a241efd229bcbc6e7788679e418965ccc4ba0dc743791ac  BCOH2H-2065-Technical-Design.md
+45310e83ab5677f9e3d4baaea8eb61e754ac1a18bbc9c7d3e9de06de2b01e503  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+3e00e5d62769731f3d9676b735725bed2b44662feadeb3824d00245b620fb7ce  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java

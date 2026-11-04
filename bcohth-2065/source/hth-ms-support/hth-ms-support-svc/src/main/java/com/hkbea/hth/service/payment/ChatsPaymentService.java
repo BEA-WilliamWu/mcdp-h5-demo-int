@@ -64,9 +64,10 @@ public class ChatsPaymentService {
     //TODO Need to get the rate
     private static final BigDecimal CHATS_SERVICE_EXCHANGE_RATE = new BigDecimal("85.51068523");
     private static final String CHATS_LM_INDICATOR = "y";
+    //TODO DepositAc2 is bener address , if registered select from bco db DIGX_PY_DOMESTIC_PAYEE ADDRESS_LINE1
+    private static final String CHATS_DEPOSIT_ACCOUNT_NAME_2 = "6304357992232185";
     private static final String CHATS_DEBTOR_BANK_BIC = "BEASHKHHXXX";
     private static final String CHATS_PURPOSE = "/IFT01/";
-    private static final int LEGACY_DEPOSIT_NAME_MAX_LENGTH = 35;
 
     @Autowired
     private PayemtRoutApi payemtRoutApi;
@@ -154,7 +155,7 @@ public class ChatsPaymentService {
         }
         txn.getDebtor().setType(Debtor.TypeEnum.CORPORATE);
         txn.getDebtor().setName(payerName);
-        txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(debitExternalAccountNo,
+        txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(debitInternalAccountNo,
                 debitInternalAccountNo, null, PaymentConstants.PAYER_ACCOUNT_TYPE_CSA, debitCurrency,
                 PaymentRoutingPayload.parseCompanyCode(partyAccount == null ? null : partyAccount.getCompanyCode()),
                 productCode));
@@ -186,12 +187,8 @@ public class ChatsPaymentService {
         chatsRemittance.setChatAcTpCode(findPreDesignatedAccounts(localPayment.getPartyId(), localPayment.getToAccount().getId()));
         chatsRemittance.setPrntAdvInd(CHATS_PRINT_ADVICE_INDICATOR);
         chatsRemittance.setLmInd(CHATS_LM_INDICATOR);
-        // The canonical creditor block carries the complete name and address.
-        // This optional legacy duplicate accepts only 35 characters; do not
-        // truncate full-length names or put fabricated data into address fields.
-        if (creditorName.length() <= LEGACY_DEPOSIT_NAME_MAX_LENGTH) {
-            chatsRemittance.setDepositAccountName1(creditorName);
-        }
+        chatsRemittance.setDepositAccountName1(creditorName);
+        chatsRemittance.setDepositAccountName2(CHATS_DEPOSIT_ACCOUNT_NAME_2);
         chatsRemittance.setPinCnt(0);
 
         SupplementaryData supplementaryData = new SupplementaryData();
@@ -351,9 +348,6 @@ public class ChatsPaymentService {
     }
 
     private void savePaymentFee(TransferPaymentResultQueryResponse result) {
-        if (result == null) {
-            return;
-        }
         try {
             String messageId = headers.getMessageId();
             Cache cache = cacheManager.getCache(CacheConstants.OPCODE_MAPPING);

@@ -1,0 +1,131 @@
+package com.hkbea.hth.filter;
+
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.hkbea.common.exception.ParameterException;
+import com.hkbea.common.header.CommonHeader;
+import com.hkbea.common.toolkit.AccessTokenToolkit;
+import com.hkbea.hth.entity.Management;
+import com.hkbea.hth.exception.HTHSupportErrorMapping;
+import com.hkbea.hth.mapper.HthManagementApiMapper;
+import com.hkbea.hth.mapper.HthManagementMapper;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.UriInfo;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class CoarseEntitlementAuditLogTest {
+    @InjectMocks private CoarseEntitlementFilter filter;
+    @Mock private CommonHeader headers;
+    @Mock private HthManagementMapper managementMapper;
+    @Mock private HthManagementApiMapper apiMapper;
+    @Mock private ContainerRequestContext request;
+    @Mock private UriInfo uri;
+
+    @BeforeAll
+    static void initializeMetadata() {
+        new HTHSupportErrorMapping();
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "audit-test"), Management.class);
+    }
+
+    private void request(String path) {
+        when(request.getHeaderString(CommonHeader.CHANNEL)).thenReturn("HTH");
+        when(request.getUriInfo()).thenReturn(uri);
+        when(uri.getPath()).thenReturn(path);
+        when(headers.getAccessToken()).thenReturn("test-token");
+    }
+
+    private MockedStatic<AccessTokenToolkit> token() {
+        MockedStatic<AccessTokenToolkit> token = mockStatic(AccessTokenToolkit.class);
+        token.when(() -> AccessTokenToolkit.parseClientId("test-token")).thenReturn("test-client");
+        return token;
+    }
+
+    private void enabledCompany() {
+        Management management = new Management();
+        management.setId("test-management");
+        when(managementMapper.selectOne(any())).thenReturn(management);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"audit-log/v1", "/audit-log/v1"})
+    void enabledCompanyNeedsNoApiGrantOrMigration(String path) throws Exception {
+        request(path);
+        when(request.getMethod()).thenReturn("POST");
+        enabledCompany();
+        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
+            assertDoesNotThrow(() -> filter.filter(request));
+        }
+        verifyNoInteractions(apiMapper);
+        ArgumentCaptor<LambdaQueryWrapper<Management>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(managementMapper).selectOne(query.capture());
+        String sql = query.getValue().getSqlSegment().toUpperCase();
+        assertTrue(sql.contains("UAM_CLIENT_ID"));
+        assertTrue(sql.contains("HTH_STATUS"));
+        assertTrue(sql.contains("OBJECT_STATUS"));
+        assertTrue(query.getValue().getParamNameValuePairs().values().containsAll(List.of("test-client", "ENABLE", "A")));
+    }
+
+    @Test
+    void disabledOrUnknownCompanyStillRejected() {
+        request("audit-log/v1");
+        when(managementMapper.selectOne(any())).thenReturn(null);
+        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
+            ParameterException error = assertThrows(ParameterException.class, () -> filter.filter(request));
+            assertEquals(HTHSupportErrorMapping.CLIENT_ID_NOT_ENABLED_EXCEPTION, error.getErrCode());
+        }
+        verifyNoInteractions(apiMapper);
+    }
+
+    @Test
+    void malformedTokenStillRejectedBeforeCompanyLookup() {
+        request("audit-log/v1");
+        try (MockedStatic<AccessTokenToolkit> token = mockStatic(AccessTokenToolkit.class)) {
+            token.when(() -> AccessTokenToolkit.parseClientId("test-token")).thenThrow(new IllegalArgumentException());
+            assertThrows(ParameterException.class, () -> filter.filter(request));
+        }
+        verifyNoInteractions(managementMapper, apiMapper);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"operations/audit-log/v1/test-party", "audit-log/v1/other", "audit-log/v10", "payment/v1/transactions"})
+    void defaultPermissionDoesNotExtendToOtherEndpoints(String path) {
+        request(path);
+        when(request.getMethod()).thenReturn("POST");
+        enabledCompany();
+        when(apiMapper.selectApiUriByManagementId("test-management")).thenReturn(List.of());
+        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
+            ParameterException error = assertThrows(ParameterException.class, () -> filter.filter(request));
+            assertEquals(HTHSupportErrorMapping.CLIENT_NOT_PERMISSIONS_EXCEPTION, error.getErrCode());
+        }
+        verify(apiMapper).selectApiUriByManagementId("test-management");
+    }
+
+    @Test
+    void defaultPermissionDoesNotExtendToOtherHttpMethods() {
+        request("audit-log/v1");
+        when(request.getMethod()).thenReturn("DELETE");
+        enabledCompany();
+        when(apiMapper.selectApiUriByManagementId("test-management")).thenReturn(List.of());
+        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
+            assertThrows(ParameterException.class, () -> filter.filter(request));
+        }
+    }
+}

@@ -5,5 +5,8 @@ aeae14762cb31cb080ca6a512830f2cfaeda165d08a08a09cf8c984cf3fa7cf3  hhfi/consultin
 eee0188f748fa8b2ba614c8fc0b2996d922d7b3001d4b02414d1f046e1accdf0  hhfi/devtools/backend-compile/tests/verify_hth_1288.py
 d1e8af1e7afcf994e0e1e656b280f1d0b268664639f2613fa218a79c2ef316ef  hhfi/devtools/backend-compile/tests/verify_hth_881.py
 3afc4267a2ae907624ed9abd2daed80805a4fb7eb4d39b5144edb342ad2b6585  hhfi/devtools/frontend-tests/hth-881-management.test.js
-1808bfeb7717bdb7775e2aabd99d8bac329ab078e5c9f125dc02f2f0f62aaedc  hhfi/story/account/BCOH2H-881-TECHNICAL-DESIGN.md
+fcec2354ec643e75ebfdeca4f3c50e517f3a8c2ad6099871fa47f168feaba81b  hhfi/story/account/BCOH2H-881-TECHNICAL-DESIGN.md
 ed5ea260e7c587589446a4437e92b72d4b400ff5be26bfb71cf172e126b09495  hhfi/story/account/[#BCOH2H-881] BM - HTH Management - Removal of Corporate API Audit Log Service.pdf
+b2752afe3be805e37ff9b145ba36aa39806e7dd1278658dfa5c4ff7d6dfb2d1f  hth-dsp/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java
+35a693b5a36683e3c058dbe44a7cf30a217a3615d27e1571509f9749d9e7cca1  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/filter/CoarseEntitlementAuditLogTest.java
+ed9e059c34d5e088ca7a842c10ee81e100f9d44f675a895701229a852d1b670e  DSP-CHANGES.patch

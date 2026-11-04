@@ -1,0 +1,462 @@
+diff --git a/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java b/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java
+index 3fc384b..4b5f303 100644
+--- a/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java
++++ b/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java
+@@ -34,6 +34,7 @@ public class HTHSupportErrorMapping extends ErrorMapping {
+     public static final int INVALID_ACCESS_TOKEN_EXCEPTION = 500071;
+     public static final int INVALID_REQUEST_ENDPOINT_EXCEPTION = 500072;
+     public static final int INVALID_REQUEST_PARTID_EXCEPTION = 500073;
++    public static final int AUDIT_LOG_ACCESS_DENIED_EXCEPTION = 500074;
+ 
+     /** System excpetion: 7xxxxx */
+ 
+@@ -406,6 +407,8 @@ public class HTHSupportErrorMapping extends ErrorMapping {
+         MESSAGE_MAP.put(AUDIT_LOG_SYSTEM_ERROR, "Unable to retrieve audit log records at this time. Please try again later.");
+         MESSAGE_MAP.put(CLIENT_ID_NOT_ENABLED_EXCEPTION, "HTH API service is not enabled for the client's company");
+         MESSAGE_MAP.put(INVALID_ACCESS_TOKEN_EXCEPTION, "Invalid or expired access token.");
++        MESSAGE_MAP.put(AUDIT_LOG_ACCESS_DENIED_EXCEPTION,
++                "Access denied. You are authorized to view only your own audit logs.");
+         MESSAGE_MAP.put(SYSTEM_EXCEPTION, "Unexpected system error occurred while processing the request.");
+         MESSAGE_MAP.put(INVALID_ACCOUNT_TYPE_EXCEPTION, "Invalid account type. Please enter a valid account type.");
+         MESSAGE_MAP.put(INVALID_TRANSACTION_PERIOD_EXCEPTION, "Invalid transactionPeriod. Allowed values: TODAY, DATE_RANGE.");
+diff --git a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
+index cb95460..70fd2e3 100644
+--- a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
++++ b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
+@@ -72,13 +72,26 @@ public class AuditLogServiceImpl implements AuditLogApi {
+     @FmoEventLog(businessType = FmoBusinessType.AUDIT_ENQUIRY)
+     @CrmEventLog(eventActvTypeCode = CrmConstants.HTH_AUDIT)
+     public AuditLogResponse queryAuditLogs(AuditLogRequest auditLogRequest) {
++        if (auditLogRequest == null) {
++            throw new ParameterException("request", HTHSupportErrorMapping.PARAMETER_MISSED_EXCEPTION);
++        }
+         log.info("Received audit log query request: pageNo={}, pageSize={}, messageId={}, closeId={}, clientId={}, fromDateTime={}, toDateTime={}, lastNDays={}",
+                 auditLogRequest.getPageNumber(), auditLogRequest.getPageSize(),
+                 auditLogRequest.getMessageId(), auditLogRequest.getCloseId(), auditLogRequest.getClientId(),
+                 auditLogRequest.getFromDateTime(), auditLogRequest.getToDateTime(), auditLogRequest.getLastNDays());
+         String closeId = partyResolver.resolveCloseId();
+-        log.info("closeId is{}",closeId);
++        String clientId = partyResolver.resolveClientId();
++        // BCOH2H-876: reject an explicit foreign scope before binding both query keys to the token.
++        if ((!StringUtils.isBlank(auditLogRequest.getCloseId())
++                && !closeId.equals(auditLogRequest.getCloseId().trim()))
++                || (!StringUtils.isBlank(auditLogRequest.getClientId())
++                && !clientId.equals(auditLogRequest.getClientId().trim()))) {
++            throw new ParameterException(HTHSupportErrorMapping.AUDIT_LOG_ACCESS_DENIED_EXCEPTION);
++        }
++        // Also enforce company enablement when this service is invoked outside the HTH filter.
++        partyResolver.resolvePartyId();
+         auditLogRequest.setCloseId(closeId);
++        auditLogRequest.setClientId(clientId);
+         return processAuditLogQuery(auditLogRequest);
+     }
+ 
+diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
+index 4c6cf23..4858a66 100644
+--- a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
++++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
+@@ -64,6 +64,8 @@ class AuditLogServiceImplTest {
+     void setUp() {
+         MockitoAnnotations.openMocks(this);
+         when(partyResolver.resolveCloseId()).thenReturn("mockCloseId");
++        when(partyResolver.resolveClientId()).thenReturn("client2");
++        when(partyResolver.resolvePartyId()).thenReturn("test-party");
+         auditLogService.setMaxQueryPeriodDays(180); // Explicitly set for unit tests
+     }
+ 
+diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
+new file mode 100644
+index 0000000..8b1f0e4
+--- /dev/null
++++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
+@@ -0,0 +1,170 @@
++package com.hkbea.hth.service;
++
++import com.baomidou.mybatisplus.core.MybatisConfiguration;
++import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
++import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
++import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
++import com.hkbea.common.exception.ParameterException;
++import com.hkbea.common.exception.ServiceException;
++import com.hkbea.hth.entity.AuditLogRecord;
++import com.hkbea.hth.entity.Management;
++import com.hkbea.hth.exception.HTHSupportErrorMapping;
++import com.hkbea.hth.mapper.AuditLogMapper;
++import com.hkbea.hth.mapper.HthManagementMapper;
++import com.hkbea.hth.model.AuditLogRequest;
++import com.hkbea.hth.utils.PartyResolver;
++import org.apache.ibatis.builder.MapperBuilderAssistant;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.ValueSource;
++import org.mockito.ArgumentCaptor;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import java.util.List;
++
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.*;
++
++@ExtendWith(MockitoExtension.class)
++class AuditLogOwnScopeTest {
++    private static final String CLOSE_ID = "API01@TEST-PARTY";
++    private static final String CLIENT_ID = "test-client";
++    private static final String DENIED = "Access denied. You are authorized to view only your own audit logs.";
++    @InjectMocks private AuditLogServiceImpl service;
++    @Mock private PartyResolver resolver;
++    @Mock private AuditLogMapper auditMapper;
++    @Mock private HthManagementMapper managementMapper;
++
++    @BeforeAll
++    static void initializeMetadata() {
++        new HTHSupportErrorMapping();
++        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "audit-test");
++        TableInfoHelper.initTableInfo(assistant, AuditLogRecord.class);
++        TableInfoHelper.initTableInfo(assistant, Management.class);
++    }
++
++    @BeforeEach
++    void setUp() {
++        service.setMaxQueryPeriodDays(180);
++    }
++
++    private AuditLogRequest request() {
++        AuditLogRequest request = new AuditLogRequest();
++        request.setPageNumber(1);
++        request.setPageSize(10);
++        request.setLastNDays(7);
++        return request;
++    }
++
++    private void identity() {
++        when(resolver.resolveCloseId()).thenReturn(CLOSE_ID);
++        when(resolver.resolveClientId()).thenReturn(CLIENT_ID);
++    }
++
++    private void successfulQuery() {
++        Page<AuditLogRecord> empty = new Page<>(1, 10);
++        empty.setRecords(List.of());
++        when(auditMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(empty);
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = {"omitted", "blank", "own"})
++    void bindsEverySuccessfulQueryToTokenCompanyAndUser(String suppliedScope) {
++        identity();
++        when(resolver.resolvePartyId()).thenReturn("TEST-PARTY");
++        successfulQuery();
++        AuditLogRequest request = request();
++        request.setMessageId("test-message");
++        if ("blank".equals(suppliedScope)) {
++            request.setCloseId("  ");
++            request.setClientId("  ");
++        } else if ("own".equals(suppliedScope)) {
++            request.setCloseId(" " + CLOSE_ID + " ");
++            request.setClientId(" " + CLIENT_ID + " ");
++        }
++        assertEquals(0, service.queryAuditLogs(request).getTotalRecords());
++        assertEquals(CLOSE_ID, request.getCloseId());
++        assertEquals(CLIENT_ID, request.getClientId());
++        verify(resolver).resolvePartyId();
++        verifyNoInteractions(managementMapper);
++        ArgumentCaptor<LambdaQueryWrapper<AuditLogRecord>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
++        verify(auditMapper).selectPage(any(Page.class), query.capture());
++        String sql = query.getValue().getSqlSegment().toUpperCase();
++        assertTrue(sql.contains("CLOSE_ID ="));
++        assertTrue(sql.contains("CLIENT_ID ="));
++        assertTrue(sql.contains("MESSAGE_ID ="));
++        assertTrue(sql.contains("ORDER BY CREATE_TIME DESC"));
++        assertTrue(query.getValue().getParamNameValuePairs().values().containsAll(List.of(CLOSE_ID, CLIENT_ID, "test-message")));
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = {"API02@TEST-PARTY", "API01@OTHER-PARTY", "api01@TEST-PARTY"})
++    void explicitlyRequestingAnotherUserIsRejectedBeforeDatabaseAccess(String otherUser) {
++        identity();
++        AuditLogRequest request = request();
++        request.setCloseId(otherUser);
++        ParameterException error = assertThrows(ParameterException.class, () -> service.queryAuditLogs(request));
++        assertEquals(500074, error.getErrCode());
++        assertEquals(DENIED, error.getMessage());
++        assertEquals(otherUser, request.getCloseId(), "Do not silently rewrite an unauthorized request");
++        verifyNoInteractions(auditMapper, managementMapper);
++    }
++
++    @Test
++    void explicitlyRequestingAnotherClientIsRejected() {
++        identity();
++        AuditLogRequest request = request();
++        request.setClientId("other-client");
++        ParameterException error = assertThrows(ParameterException.class, () -> service.queryAuditLogs(request));
++        assertEquals(500074, error.getErrCode());
++        assertEquals(DENIED, error.getMessage());
++        verifyNoInteractions(auditMapper, managementMapper);
++    }
++
++    @Test
++    void missingTokenUserCannotBecomeAnUnscopedQuery() {
++        when(resolver.resolveCloseId()).thenThrow(new ServiceException(HTHSupportErrorMapping.INVALID_ACCESS_TOKEN_EXCEPTION));
++        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
++        verifyNoInteractions(auditMapper, managementMapper);
++    }
++
++    @Test
++    void missingTokenClientCannotBecomeAnUnscopedQuery() {
++        when(resolver.resolveCloseId()).thenReturn(CLOSE_ID);
++        when(resolver.resolveClientId()).thenThrow(new ServiceException(HTHSupportErrorMapping.INVALID_ACCESS_TOKEN_EXCEPTION));
++        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
++        verifyNoInteractions(auditMapper, managementMapper);
++    }
++
++    @Test
++    void disabledCompanyIsRejectedEvenWithoutTheHttpFilter() {
++        identity();
++        when(resolver.resolvePartyId()).thenThrow(new ServiceException(HTHSupportErrorMapping.CLIENT_ID_NOT_ENABLED_EXCEPTION));
++        assertThrows(ServiceException.class, () -> service.queryAuditLogs(request()));
++        verifyNoInteractions(auditMapper, managementMapper);
++    }
++
++    @Test
++    void missingBodyReturnsParameterError() {
++        assertThrows(ParameterException.class, () -> service.queryAuditLogs(null));
++        verifyNoInteractions(resolver, auditMapper, managementMapper);
++    }
++
++    @Test
++    void operationsQueryRetainsItsExistingPartyScope() {
++        Management management = new Management();
++        management.setUamClientId("operations-client");
++        when(managementMapper.selectOne(any())).thenReturn(management);
++        successfulQuery();
++        AuditLogRequest request = request();
++        assertDoesNotThrow(() -> service.queryAuditLogsByPartyId("operations-party", request));
++        assertEquals("operations-client", request.getClientId());
++        verifyNoInteractions(resolver);
++    }
++}
+diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogErrorResponseTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogErrorResponseTest.java
+new file mode 100644
+index 0000000..c77d47c
+--- /dev/null
++++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogErrorResponseTest.java
+@@ -0,0 +1,58 @@
++package com.hkbea.hth.service;
++
++import com.fasterxml.jackson.databind.ObjectMapper;
++import com.hkbea.common.client.CommonClient;
++import com.hkbea.common.exception.ExceptionConfig;
++import com.hkbea.common.exception.ExceptionEntity;
++import com.hkbea.common.exception.ExceptionResponseBuilder;
++import com.hkbea.common.exception.ParameterException;
++import com.hkbea.common.header.CommonHeader;
++import com.hkbea.hth.exception.HTHSupportErrorMapping;
++import feign.Request;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.ValueSource;
++import org.springframework.test.util.ReflectionTestUtils;
++
++import java.nio.charset.StandardCharsets;
++import java.util.Map;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++class AuditLogErrorResponseTest {
++    @ParameterizedTest
++    @ValueSource(booleans = {true, false})
++    void preservesAcMessageThroughExistingSupportResponseAndClientDecoder(boolean serializeType) throws Exception {
++        new HTHSupportErrorMapping();
++        ParameterException denied = new ParameterException(HTHSupportErrorMapping.AUDIT_LOG_ACCESS_DENIED_EXCEPTION);
++        ExceptionConfig config = new ExceptionConfig();
++        config.setSerializationType(serializeType);
++        ExceptionResponseBuilder builder = new ExceptionResponseBuilder();
++        ReflectionTestUtils.setField(builder, "exceptionConfig", config);
++        try (jakarta.ws.rs.core.Response response = builder.buildExceptionResponse(denied)) {
++            assertEquals(417, response.getStatus(), "Keep the existing DSP error transport contract");
++            ExceptionEntity entity = (ExceptionEntity) response.getEntity();
++            String body = new ObjectMapper().writeValueAsString(entity);
++            try (feign.Response wireResponse = feign.Response.builder()
++                    .status(response.getStatus()).reason("Application error")
++                    .request(Request.create(Request.HttpMethod.POST, "http://localhost/audit-log/v1",
++                            Map.of(), null, StandardCharsets.UTF_8, null))
++                    .body(body, StandardCharsets.UTF_8).build()) {
++                Exception decoded = new DecoderClient().decode(wireResponse);
++                ParameterException result = assertInstanceOf(ParameterException.class, decoded);
++                assertEquals(500074, result.getErrCode());
++                assertEquals("Access denied. You are authorized to view only your own audit logs.", result.getMessage());
++                assertEquals(denied.getReferenceCode(), result.getReferenceCode());
++            }
++        }
++    }
++
++    private static class DecoderClient extends CommonClient {
++        Exception decode(feign.Response response) {
++            return new MyErrorDecoder() { }.decode("AuditLogApi#queryAuditLogs", response);
++        }
++        @Override public void setServiceUrl(String url) { }
++        @Override public String getServiceUrl() { return "http://localhost"; }
++        @Override public void setCommonHeader(CommonHeader header) { }
++        @Override public CommonHeader getCommonHeader() { return null; }
++    }
++}
+diff --git a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java
+index 2b41fbf..c490a97 100644
+--- a/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java
++++ b/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java
+@@ -125,6 +125,14 @@ public class CoarseEntitlementFilter implements ContainerRequestFilter {
+ 
+             logger.debug("[Entitlement] Found managementId={}", management.getId());
+ 
++            // BCOH2H-881: own audit logs are available to every enabled HTH company.
++            // Keep token/company checks above; do not make this a public path or include operations APIs.
++            if ("POST".equals(requestContext.getMethod())
++                    && "/audit-log/v1".equals(withLeadingSlash(path))) {
++                logger.debug("[Entitlement] Default own audit log permission granted");
++                return;
++            }
++
+             // Retrieve authorized API list for the client
+             List<String> uriList =
+                     managementApiMapper.selectApiUriByManagementId(management.getId());
+diff --git a/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/filter/CoarseEntitlementAuditLogTest.java b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/filter/CoarseEntitlementAuditLogTest.java
+new file mode 100644
+index 0000000..e58bf0e
+--- /dev/null
++++ b/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/filter/CoarseEntitlementAuditLogTest.java
+@@ -0,0 +1,131 @@
++package com.hkbea.hth.filter;
++
++import com.baomidou.mybatisplus.core.MybatisConfiguration;
++import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
++import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
++import com.hkbea.common.exception.ParameterException;
++import com.hkbea.common.header.CommonHeader;
++import com.hkbea.common.toolkit.AccessTokenToolkit;
++import com.hkbea.hth.entity.Management;
++import com.hkbea.hth.exception.HTHSupportErrorMapping;
++import com.hkbea.hth.mapper.HthManagementApiMapper;
++import com.hkbea.hth.mapper.HthManagementMapper;
++import jakarta.ws.rs.container.ContainerRequestContext;
++import jakarta.ws.rs.core.UriInfo;
++import org.apache.ibatis.builder.MapperBuilderAssistant;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.ValueSource;
++import org.mockito.ArgumentCaptor;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import org.mockito.MockedStatic;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import java.util.List;
++
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.*;
++
++@ExtendWith(MockitoExtension.class)
++class CoarseEntitlementAuditLogTest {
++    @InjectMocks private CoarseEntitlementFilter filter;
++    @Mock private CommonHeader headers;
++    @Mock private HthManagementMapper managementMapper;
++    @Mock private HthManagementApiMapper apiMapper;
++    @Mock private ContainerRequestContext request;
++    @Mock private UriInfo uri;
++
++    @BeforeAll
++    static void initializeMetadata() {
++        new HTHSupportErrorMapping();
++        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "audit-test"), Management.class);
++    }
++
++    private void request(String path) {
++        when(request.getHeaderString(CommonHeader.CHANNEL)).thenReturn("HTH");
++        when(request.getUriInfo()).thenReturn(uri);
++        when(uri.getPath()).thenReturn(path);
++        when(headers.getAccessToken()).thenReturn("test-token");
++    }
++
++    private MockedStatic<AccessTokenToolkit> token() {
++        MockedStatic<AccessTokenToolkit> token = mockStatic(AccessTokenToolkit.class);
++        token.when(() -> AccessTokenToolkit.parseClientId("test-token")).thenReturn("test-client");
++        return token;
++    }
++
++    private void enabledCompany() {
++        Management management = new Management();
++        management.setId("test-management");
++        when(managementMapper.selectOne(any())).thenReturn(management);
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = {"audit-log/v1", "/audit-log/v1"})
++    void enabledCompanyNeedsNoApiGrantOrMigration(String path) throws Exception {
++        request(path);
++        when(request.getMethod()).thenReturn("POST");
++        enabledCompany();
++        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
++            assertDoesNotThrow(() -> filter.filter(request));
++        }
++        verifyNoInteractions(apiMapper);
++        ArgumentCaptor<LambdaQueryWrapper<Management>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
++        verify(managementMapper).selectOne(query.capture());
++        String sql = query.getValue().getSqlSegment().toUpperCase();
++        assertTrue(sql.contains("UAM_CLIENT_ID"));
++        assertTrue(sql.contains("HTH_STATUS"));
++        assertTrue(sql.contains("OBJECT_STATUS"));
++        assertTrue(query.getValue().getParamNameValuePairs().values().containsAll(List.of("test-client", "ENABLE", "A")));
++    }
++
++    @Test
++    void disabledOrUnknownCompanyStillRejected() {
++        request("audit-log/v1");
++        when(managementMapper.selectOne(any())).thenReturn(null);
++        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
++            ParameterException error = assertThrows(ParameterException.class, () -> filter.filter(request));
++            assertEquals(HTHSupportErrorMapping.CLIENT_ID_NOT_ENABLED_EXCEPTION, error.getErrCode());
++        }
++        verifyNoInteractions(apiMapper);
++    }
++
++    @Test
++    void malformedTokenStillRejectedBeforeCompanyLookup() {
++        request("audit-log/v1");
++        try (MockedStatic<AccessTokenToolkit> token = mockStatic(AccessTokenToolkit.class)) {
++            token.when(() -> AccessTokenToolkit.parseClientId("test-token")).thenThrow(new IllegalArgumentException());
++            assertThrows(ParameterException.class, () -> filter.filter(request));
++        }
++        verifyNoInteractions(managementMapper, apiMapper);
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = {"operations/audit-log/v1/test-party", "audit-log/v1/other", "audit-log/v10", "payment/v1/transactions"})
++    void defaultPermissionDoesNotExtendToOtherEndpoints(String path) {
++        request(path);
++        when(request.getMethod()).thenReturn("POST");
++        enabledCompany();
++        when(apiMapper.selectApiUriByManagementId("test-management")).thenReturn(List.of());
++        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
++            ParameterException error = assertThrows(ParameterException.class, () -> filter.filter(request));
++            assertEquals(HTHSupportErrorMapping.CLIENT_NOT_PERMISSIONS_EXCEPTION, error.getErrCode());
++        }
++        verify(apiMapper).selectApiUriByManagementId("test-management");
++    }
++
++    @Test
++    void defaultPermissionDoesNotExtendToOtherHttpMethods() {
++        request("audit-log/v1");
++        when(request.getMethod()).thenReturn("DELETE");
++        enabledCompany();
++        when(apiMapper.selectApiUriByManagementId("test-management")).thenReturn(List.of());
++        try (MockedStatic<AccessTokenToolkit> ignored = token()) {
++            assertThrows(ParameterException.class, () -> filter.filter(request));
++        }
++    }
++}

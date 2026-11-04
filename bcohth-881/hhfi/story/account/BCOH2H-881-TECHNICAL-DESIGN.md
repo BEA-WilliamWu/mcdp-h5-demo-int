@@ -1,8 +1,8 @@
 # BCOH2H-881 — BM 移除 Corporate API Audit Log 授权维护
 
-日期：2026-11-03
+日期：2026-11-03；DSP 补充：2026-11-04
 源码基线：`hth-application / b74c5d9f`
-范围：按用户确认，只修改 `hth-application`；不修改 `hth-dsp`。876 的 CM 实现另行交付。
+范围：BM 改动已交付；2026-11-04 经用户确认，补充 `hth-dsp` 公司默认日志权限。DSP 基线为 `e105c167`；876 的 CM 和 DSP 本人范围校验独立交付。
 
 ## 1. 需求和交付边界
 
@@ -13,10 +13,10 @@
 | AC | 需求 | 本次处理 |
 | --- | --- | --- |
 | AC1 | BM API Authorization List 不显示 Audit Log，不能维护 | 本仓库实现：查询、查看、编辑、全选、Review、提交及审批保存都排除 `AUDIT_LOG` |
-| AC2 | 新用户不需要额外授权即可查询本人日志 | BM 不再要求维护此项；实际默认访问由 HTH/DSP 查询服务提供，需要接口团队联调确认 |
-| AC3 | 仅返回当前 API 用户自己的日志 | HTH/DSP 查询接口责任；本次不修改、不宣称已完成 |
-| AC4 | 查询其他 API 用户的日志必须拒绝 | HTH/DSP 查询接口责任；联调时验证明确拒绝，不能仅覆盖请求用户后返回本人数据 |
-| AC5 | 已有公司、用户无需人工迁移权限，继续查询本人日志 | 不删除或批量修改历史授权。普通 BM Edit 保留已有有效 Audit Log 映射；从未授权过的旧用户默认可查询，仍需 HTH/DSP 配合验证 |
+| AC2 | 新用户不需要额外授权即可查询本人日志 | BM 已移除选项；本次 DSP 在公司启用检查后提供默认查询权限，配合 876 本人范围校验，待 UAT 联调 |
+| AC3 | 仅返回当前 API 用户自己的日志 | 由 876 DSP 改动将查询绑定 Token 公司/用户；联合测试通过，待 UAT 验证 |
+| AC4 | 查询其他 API 用户的日志必须拒绝 | 由 876 DSP 改动明确拒绝，返回 500074 和 AC 文案；联合测试通过，待 UAT 验证 |
+| AC5 | 已有公司、用户无需人工迁移权限，继续查询本人日志 | 不删除或批量修改历史授权。普通 BM Edit 保留已有有效 Audit Log 映射；本次 DSP 默认权限也覆盖从未授权过的公司，配合 876，待 UAT 验证 |
 
 这里移除的是 HTH 可维护服务项。普通 BCO 的 Audit Log Maintenance、791 的审计活动、审计历史和 API 日志数据继续保留。
 
@@ -26,7 +26,7 @@
 - `HostToHostManagement.fetchApiAuthorizations` 原先直接返回有效 Master，BM 因而能够选择该服务。
 - 前端详情页可以从服务器响应或上一步的 `flowState` 恢复列表；Checker Review 可以直接读取平台保存的 `transactionSnapshot`。仅过滤后端新查询，无法覆盖旧 pending 单和页面返回状态。
 - 保存原先会先停用公司全部有效 API 映射，再恢复本次选中的映射。界面隐藏 Audit Log 后如果仍沿用这一整表替换行为，普通 Edit 就可能停用原有 Audit Log 授权。
-- 本机 HTH/DSP 参考代码的公司权限过滤仍查询 `HTH_MANAGEMENT_API`。本次不修改该仓库，因此必须保留原有有效映射，不能把隐藏界面等同于停用功能。
+- 本机 HTH/DSP 参考代码的公司权限过滤仍查询 `HTH_MANAGEMENT_API`。最初只交付 BM 时采用保留映射兼容；本次 DSP 补充默认权限，见第 10 节。历史数据保存规则保持不变。
 
 ## 3. BM 后端设计
 
@@ -58,7 +58,7 @@
 
 公司 Disable 不属于可分配服务的单项移除。不能为“默认可查询”绕过公司停用。
 
-保留已有映射只是兼容措施，不代表补齐默认查询实现：新公司、从未分配 Audit Log 的旧公司，以及停用后重新启用的公司，都需要 HTH/DSP 的默认访问规则才能满足完整 AC。
+保留已有映射只是兼容措施，不代表补齐默认查询实现：新公司、从未分配 Audit Log 的旧公司，以及停用后重新启用的公司，由本次 DSP 默认访问规则与 876 的本人范围规则共同覆盖，仍需 UAT 验收。
 
 ## 4. BM 前端设计
 
@@ -95,10 +95,10 @@ ORDER BY a.LAST_UPDATE_DATE DESC;
 
 ## 6. BCO 影响及不包含内容
 
-- 改动仅在 BM HTH 服务及两个 HTH ViewModel，不改变普通 BCO 授权或 Audit Log 页面。
+- 应用侧改动仅在 BM HTH 服务及两个 HTH ViewModel；DSP 补充见第 10 节。不改变普通 BCO 授权或 Audit Log 页面。
 - 不改公共包、batch、通用审批 assembler、通知发送器和通知 SQL。
 - 不修改 CM 用户级服务分配；这一部分属于 876。
-- 不修改 HTH/DSP 鉴权、本人范围判断、错误码或网关路由。
+- 本次补充 HTH/DSP 默认权限，876 配套补本人范围和错误码；网关路由、公共认证流程不改。
 
 公司 API 选择的既有通知条件会继续使用当前及请求选项比较；隐藏 Audit Log 本身不能触发“API 权限有变”的通知判断。
 
@@ -107,9 +107,9 @@ ORDER BY a.LAST_UPDATE_DATE DESC;
 1. **只选过 Audit Log 的公司或旧 pending 单**：查看仍可打开，Audit Log 被隐藏。Enable/Edit 仍保留原先“至少一项业务 API”的要求；若过滤后没有业务 API，不能直接提交/批准。需要 BA 决定是否另行支持“仅默认日志服务”的公司；本次不扩大该原有业务规则。
 2. **接口默认权限**：HTH/DSP 应在认证和公司启用状态检查之后，让本人日志查询独立于 `HTH_MANAGEMENT_API` 及用户账户 API 授权；不能加入提前跳过检查的公共路径。
 3. **本人隔离**：查询条件应绑定 Token 中的公司和用户；请求明确指定其他用户时拒绝。876 还指定文案 `Access denied. You are authorized to view only your own audit logs.`。
-4. **路由**：本机参考 BFF 路径为 `/auditLog/v1/logs`，Support 路径为 `/audit-log/v1`；接口团队确认真实部署链路，不将运维查询接口一并放开。
+4. **路由**：本机参考 BFF 路径为 `/auditLog/v1/logs`，Support 路径为 `/audit-log/v1`；本次仅为 Support `POST /audit-log/v1` 增加默认权限，不将运维查询接口一并放开；真实部署路由仍需 UAT 核对。
 
-AC2–AC5 的最终验收需要接口团队提供验证结果；单独部署 BM 代码不能作为这些 AC 已完成的证据。
+AC2–AC5 已补充 DSP 本地实现和测试，但最终验收仍需 UAT；单独部署 BM 代码不足，需同时部署两个 story 的 DSP 文件。
 
 ## 8. 测试及上线
 
@@ -141,7 +141,7 @@ Python 检查需要设置 `JAVA_HOME`，并保留本地 OBDX 依赖和已有编�
 4. 联调新旧 API 用户、没有账户授权的用户及没有历史 Audit Log 授权的公司，验证默认查询只返回本人数据。
 5. 查询同公司其他用户、其他公司、公司停用及异常 Token，验证权限拒绝；回归普通 BCO 审计查询。
 
-本地测试不连接 Oracle、真实审批引擎或 DSP，不发送邮件/短信；UAT 端到端验收另行记录。
+上述应用侧测试不连接 Oracle、真实审批引擎或远程 DSP，不发送邮件/短信；DSP 本地测试见第 10 节，UAT 端到端验收另行记录。
 
 ## 9. 交付目录和回退
 
@@ -151,6 +151,7 @@ Python 检查需要设置 `JAVA_HOME`，并保留本地 OBDX 依赖和已有编�
 /Users/devs/DWksp/mcdp-h5-demo-int/
   bcohth-881/
     README.md
+    hth-dsp/                      # 881 DSP 默认权限及测试，保持 DSP 仓库相对路径
     hhfi/
       consulting/                  # 与源码 consulting 相同的相对目录，只含本次改动
       devtools/                    # 回归测试及测试装配改动
@@ -159,4 +160,33 @@ Python 检查需要设置 `JAVA_HOME`，并保留本地 OBDX 依赖和已有编�
 
 不写入 mcdp 根目录原有的 `consulting`、`devtools`、`story` 或 `hth`。
 
-部署时构建 HTH 模块 JAR，并发布两个修改后的前端组件。按既有方式刷新前端缓存，不执行数据迁移。回退使用上一版模块和两个前端组件，无本次 SQL 需要回滚。
+应用侧部署时构建 HTH 模块 JAR，并发布两个修改后的前端组件。按既有方式刷新前端缓存，不执行数据迁移。回退使用上一版模块和两个前端组件，无本次 SQL 需要回滚。
+
+## 10. DSP 补充实现（2026-11-04）
+
+本节补充默认权限实现，原 BM 生产代码不再修改。
+
+仅修改 `hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/filter/CoarseEntitlementFilter.java`：
+
+1. 保留原 HTH 通道、Token 解析和公司启用检查（`HTH_STATUS = ENABLE`、`OBJECT_STATUS = A`）。
+2. 检查通过后，客户本人查询 `POST /audit-log/v1` 默认允许，不再查 `HTH_MANAGEMENT_API` 是否分配过 Audit Log。
+3. 其他路径和 HTTP 方法继续走原 API 授权检查；不放开 `/operations/audit-log/v1/{partyId}`，不使用通配前缀，不加入 public-paths。
+4. 请求进入日志服务后，由 876 DSP 代码校验本人范围，并将 closeId/clientId 绑定 Token。公司启用校验也在该入口通过现有 PartyResolver 再次执行。
+
+这覆盖新公司、旧公司、无历史日志映射、停用后重新启用等情况，不需补权限数据，也不需人工迁移。账户关联或业务 API 的增删不影响本人日志查询；公司停用仍拒绝。
+
+交付仅含该生产文件及 `CoarseEntitlementAuditLogTest.java`，放在 `bcohth-881/hth-dsp/`，不复制 876 的服务/错误码文件。两个 story 的 DSP 文件需一起合入、构建和部署。只部署 881 时，旧日志服务尚不满足“指定他人必须明确拒绝”的 AC。
+
+### 验证与部署
+
+完整 Maven 编译通过；联合 62 项测试全部通过（0 failure、0 error、0 skipped），包括新默认权限 9 项、既有过滤器 14 项，以及 876 的本人范围、日志查询、错误响应、身份解析回归。测试使用内存边界替身，未连接 UAT/Oracle/APIC。
+
+内部依赖已构建后，在 DSP 根目录运行：
+
+```sh
+mvn -f hth-ms-support/pom.xml -pl hth-ms-support-svc -am test \
+  -Dtest=CoarseEntitlementFilterTest,CoarseEntitlementAuditLogTest \
+  -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.test.failure.ignore=false -Dexec.skip=true
+```
+
+合入 876 与 881 的 DSP 文件后重新构建 Support API/SVC 并部署 Support 服务。无 SQL，无配置修改；公共认证、其他 API 授权、BCO、通知和 batch 不改。UAT 验证本人查询（新旧公司/用户及无历史授权）、他人/其他公司拒绝、公司停用、无效/过期 Token，以及其他业务权限和运维查询。

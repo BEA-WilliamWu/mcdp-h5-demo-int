@@ -1,0 +1,17 @@
+BCOH2H-2055 delivery
+Source commit: 949508282e6db1b87f9c6c40f59dd85a30d52e17
+Local Git commit; no remote push.
+
+5380e9b50486904ba36b45afdb4b2b21f31712b42acfaaa3af2cb56b72e8e5e6  BCOH2H-2055-Technical-Design.md
+68aaba1a435a1a1243b53b3eb3725dd91f644a7e0de02da118788ac927aa0b90  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/entity/PaymentPayoutRecord.java
+893b89935b5b585f6eb0f44f6f2649228141827b1bb6cb057f1216a0c1483a9a  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+f2e0ba4a760e94894a60f928f68a781b1ce86bc3ce42ad7c8ada3de3a3993136  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+c0de3988f4e7d2d4d6f4fab9d5dd9c66933605c6fb46f897ea36a5aaaa32adcd  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentServiceSupport.java
+113cf672c862561b1a3050183f039ac582153da4e9604ad41bfa87a537581f31  source/hth-ms-support/hth-ms-support-svc/src/main/resources/sql/bcoh2h_2055_chats_ipe_terminal.sql
+43b46838b71ef273bc09ea74d7c37ecf44e5efc06ac5cf1a0b8ff1bb4ef8f4cf  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+f48a24bd61a7b71b4881964bc0b9e4ccf50ea309d6397dc6dbb74f4c913e3a8d  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentEnquiryTest.java
+
+Verification: 176 tests, 167 passed; 4 failures + 5 errors reproduced at baseline 946d019.
+All 95 CHATS/routing tests passed. 34 test executions added.
+Deploy bcoh2h_2055_chats_ipe_terminal.sql before the application. SQL was not executed locally.
+Fee mapping, host configuration and reversal rules remain integration items in the design.

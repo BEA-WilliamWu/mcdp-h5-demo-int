@@ -5,5 +5,11 @@ aa728217d302332722552c5d88519ceda4a6ff37d89f86796faff6d694f6c475  hhfi/consultin
 17a327c98527b8bd12733e9417e826a3640be2371a54b54a9dd1edc0de12139b  hhfi/devtools/backend-compile/tests/Hth876UserAccessTest.java
 0a0236a3b1f31e7b6384f57c5ac84fd398c0832ca3081ebd678694a322fbba2f  hhfi/devtools/backend-compile/tests/verify_hth_876.py
 110179a29b395eb55d299986bad3cc242df113b7b077117ede301c4adca44ef2  hhfi/devtools/frontend-tests/hth-876-user-access.test.js
-a045532640ef31ed4d093b24daa8cb8ac776707a7ef624c8b7f8e5cd2255c895  hhfi/story/account/BCOH2H-876-TECHNICAL-DESIGN.md
+3965e043b67ecc7a90347e81a4535dc30a2d387a715b3a556238c1dcd57f0f43  hhfi/story/account/BCOH2H-876-TECHNICAL-DESIGN.md
 a19b83a58f126b2a05257d80ed58a0bf26aa10dc4e5c939a9d6aa126b0820b4d  hhfi/story/account/[#BCOH2H-876] CM - HTH User Accounts & Service Access - Removal of User API Audit Log Service.pdf
+a3d2398e8bd68fe9e1e58717054e7f03b2c2253fc08547220b2489a9201e8eed  hth-dsp/hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/exception/HTHSupportErrorMapping.java
+3fc44c57194d64f224676bc5a0e0a64d992c5e3bf84aebbdb6a36b7a559addd2  hth-dsp/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/AuditLogServiceImpl.java
+0a861e6550790c179b12491ecee1edae9d514184fd93ae998a0d4d0a6420f93b  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java
+0eb3f3cf720dc0505b84e3db836a2f5ae6c07e0113dafe04a12a416969c31c4e  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogOwnScopeTest.java
+e9d23fcfc8e6538f6a47ba864b21a741aa40ea5edda92788d29330ba051b79f8  hth-dsp/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogErrorResponseTest.java
+db8addfc2918845a1b9c4a9b22c85390add4e495d58d587266d8694a656947aa  DSP-CHANGES.patch

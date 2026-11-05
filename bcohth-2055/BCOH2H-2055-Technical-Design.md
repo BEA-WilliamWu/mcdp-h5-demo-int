@@ -1,69 +1,72 @@
 # BCOH2H-2055 - HTH CHATS Payment Account Posting
 
-## 1. Minimal delivery scope
+## 1. Scope and baseline
 
-Revision: 5 November 2026. This revision replaces the earlier finality-based design.
+Revision: 5 November 2026. Baseline: synchronized source commit `a10fb5d` (`sync`). This delivery supersedes the earlier 2055 packages.
 
-Retain the existing HTH CHATS submission flow and database schema. Relative to the reviewed BCOH2H-2065 implementation, the only production change is to reuse the existing rejection-reason fallback in `ChatsPaymentService`:
+Apply the agreed minimum change without modifying the database: reuse the existing rejection-reason fallback in `ChatsPaymentService`:
 
 `errorMessage -> statusReason -> existing generic rejection message`
 
-The original IPE error code is preserved. No new public status, error code, posting API or fee mapping is introduced. This is a limited HTH change for initial integration, not evidence that all account-posting acceptance criteria are complete.
+Preserve the original IPE error code. The production diff is one line. This limited HTH delivery supports initial integration; it does not establish that all account-posting acceptance criteria are complete.
 
-## 2. Existing behavior retained
+## 2. Behavior
 
-- Validate the account, principal balance and matching debit/payment/credit currencies; preserve the instructed and settlement amounts.
-- Submit through the existing IPE `/credit-transfer` interface, using the existing HTH channel identity and the reviewed 2065 field mapping.
-- Map IPE `SUCCESS` to `Success`, `FAILED` to `Rejected`, and in-flight results to `Processing`. API acceptance alone does not establish successful EBK posting.
-- Save the submission result through the existing payout mapper. Retain the original initial-row state and database-failure behavior.
-- Refresh only `Processing` payments through the existing enquiry flow. This revision does not add subsequent refresh of successful payments, background polling or a callback.
-- Retain principal-balance error `500181`, which stops processing before insertion/submission. It does not create a queryable Rejected payment record.
-- Preserve existing fee-cache handling and fee placeholders. An over-charge result is not treated as the total Bank Charge. The existing null-result fee-cache limitation remains outside this scope.
+- Continue submitting CHATS payments through IPE `/credit-transfer` with the synchronized request mapping and HTH channel identity.
+- Retain IPE `SUCCESS -> Success`, `FAILED -> Rejected`, and in-flight results -> `Processing`. Submission acceptance alone is not proof of successful EBK posting.
+- For a rejected submission, preserve a nonblank `errorMessage`. Otherwise use a nonblank `statusReason`; if both are missing or blank, use `Rejected by payment engine (no detail returned)`. Return and persist the selected reason through the existing mapper.
+- Preserve the synchronized validation, limits, account handling, initial payout state, database-failure behavior and enquiry implementation. Enquiry still refreshes only Processing payments.
+- Retain same-currency checks and instructed/settlement amounts. Principal-balance pre-validation still returns `500181` before insertion/submission; it does not create a queryable Rejected payment record.
+- Retain the new baseline's `CacheHelperUtils.saveMtbInfo` calls and `MtbInfoDto` fee fields. Do not restore the old CacheManager/string writer or map over-charge amounts to the total Bank Charge.
 
-## 3. Removed from the earlier delivery
+No `IPE_TERMINAL` field, SQL, status-transition extension, new public error/status, direct posting API or reversal call is added. `PaymentPayoutRecord`, `PaymentServiceImpl` and `PaymentServiceSupport` remain exactly as synchronized; the old restoration copies are not part of this package.
 
-Remove the `IPE_TERMINAL` entity mapping, its SQL migration, CHATS-specific finality enquiry, conditional submission updates and related tests. Restore `PaymentPayoutRecord`, `PaymentServiceImpl` and `PaymentServiceSupport` to their pre-2055 implementation. Remove the new insert-failure blocking behavior and retain the existing unused FX constant; this revision does not perform unrelated cleanup.
+A later HKICL rejection after a saved Success is not picked up by the current enquiry flow. AC3 requires AFT original and reversal entries; any additional HTH transition must be agreed with the IPE status contract.
 
-No database change is required. If the earlier nullable column was already deployed, this application revision does not use it and requires no DROP COLUMN operation.
+## 3. Posting requirements pending integration
 
-The tradeoff is explicit: an HKICL rejection received after HTH has saved `Success` will not be picked up by the existing status-based enquiry flow. AC3 requires original and reversal entries in AFT; any additional HTH status-transition requirement must be agreed separately with the IPE status contract.
-
-## 4. Posting requirements and integration verification
-
-BCO source contains fee enquiry followed by `HTCC1`, `HTC02` and, when enabled, `OPY_CHATS`. HTH delegates payment execution to IPE; the IPE implementation and actual host posting were not verified in this delivery.
+BCO source contains service-fee enquiry followed by `HTCC1`, `HTC02` and, when enabled, `OPY_CHATS`. HTH delegates execution to IPE. Actual IPE/EBK posting and AFT results have not been verified by this delivery.
 
 | Requirement | Verification needed |
 | --- | --- |
-| Reuse BCO operating keys and posting channel | Compare actual AFT results with the story's examples: withdrawal key `H43`, Bank Charge key `183`, channel `CCB INTERNET`. Do not equate IPE `channel=HTH` with the host posting-channel field. |
-| Teller ID | Verify `CBSIPE1` as required by the story. The old BCO screenshot's `CBSEBK1` is not the required HTH value. |
-| No FX | Verify rate 1 and equal account/transaction principal amounts in EBK/AFT. Existing HTH same-currency validation is retained. |
-| Passbook and statement references | Verify all four reference fields against the existing BCO arrangement; HTH does not construct them directly. |
-| Bank Charge | Confirm IPE performs the equivalent of BCO's service-fee enquiry and passes the fee to posting. BCO distinguishes `SvcChrg` from `OvrChargeAmt`; the current HTH request omits the service-fee amount. |
-| AC1: successful posting/submission | Confirm what IPE `SUCCESS` means and verify the withdrawal and Bank Charge entries. No assumption is made about `terminal` at this stage. |
-| AC2: insufficient balance | Verify downstream rejection with no AFT posting, including fee-insufficient cases. Confirm whether local pre-validation failures also require a persisted Rejected record. |
-| AC3: HKICL rejection | Verify original posting and reversal entries in AFT, including principal/fee treatment and duplicate-event handling. HTH status updates do not perform a funds reversal. |
+| Operating keys and posting channel | Compare AFT results with the story examples: withdrawal `H43`, Bank Charge `183`, channel `CCB INTERNET`. IPE `channel=HTH` is not itself the host posting-channel field. |
+| Teller ID | Verify `CBSIPE1` as specified in the story, rather than the old BCO screenshot's `CBSEBK1`. |
+| No FX | Verify rate 1 and equal account/transaction principal amounts in EBK/AFT. Existing HTH same-currency controls remain. |
+| Transaction references | Verify Passbook Transaction Reference and Statement Transaction References 1/2/3 against the existing BCO arrangement. |
+| Bank Charge | Confirm who performs the equivalent of BCO's service-fee enquiry. BCO distinguishes `SvcChrg` from `OvrChargeAmt`; HTH currently omits the service-fee amount in the request. |
+| AC1 | Confirm IPE SUCCESS corresponds to successful EBK posting and CHATS submission; verify withdrawal and Bank Charge entries in AFT. |
+| AC2 | Verify insufficient principal and insufficient funds including charges: rejection with no AFT posting. Decide separately whether local pre-validation failures need a persisted Rejected record. |
+| AC3 | Verify original entries and principal/fee reversal in AFT after HKICL invalid-value-date rejection. Updating HTH status does not perform a funds reversal. |
 
-## 5. Code and tests
+## 4. Existing cache integration caveat
 
-- `ChatsPaymentService.java`: one production-line change from the reviewed 2065 baseline, selecting `ERROR_MESSAGE_WITH_FALLBACK`.
-- `ChatsPaymentServiceTest.java`: cover Processing and Rejected result persistence, original error-message/code precedence, missing rejection-reason fallback and the fee-mapping boundary. Retain existing 2065 mapping and same-currency regression coverage.
-- The three restored production files are included in the replacement delivery only to undo the earlier 2055 changes; they add no behavior relative to the pre-2055 baseline.
+The earlier cache writer passed fee information to CRM event enrichment using the message ID. In the synchronized code, payment services now write `MtbInfoDto` through `CacheHelperUtils`, while `PaymentCrmEventAdapter.getPaymentFee` still reads the old `OPCODE_MAPPING` cache as a colon-separated string. These paths are not shown to be connected by the current implementation; CRM fee population needs separate follow-up. Caching is not an additional requirement of this 2055 change.
 
-Java paths are under `hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/`; tests are under that module's `src/test/java/com/hkbea/hth/service/`.
+The existing null-IPE-result path can also fail when the real cache helper invokes a callback that dereferences the null result. This delivery preserves the baseline behavior. The new tests check the nonnull-result cache callbacks, not Redis/CRM integration.
+
+## 5. Changed files and tests
+
+| File | Change |
+| --- | --- |
+| `service/payment/ChatsPaymentService.java` | Select the existing `ERROR_MESSAGE_WITH_FALLBACK` policy. |
+| `src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java` | Add result/persistence regression tests and null, empty, space and tab rejection-reason cases; preserve original error precedence and the synchronized fee-cache callback behavior. |
+| `docs/BCOH2H-2055-Technical-Design.md` | Document the new baseline, minimum scope, integration boundaries and current verification. |
+
+Production Java paths are relative to `hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/`; the test path is relative to the same module. Test error codes prefixed `TEST-` are synthetic fixtures, not newly defined production errors.
 
 ## 6. Verification and delivery
 
-Java 21 and offline Maven verification passed all 78 targeted tests on 5 November 2026, using an isolated source snapshot excluding unrelated working-tree changes. No dependency or project POM changes were required.
+Java 21 and offline Maven verification passed all 65 targeted tests on 5 November 2026, using a fresh export of `a10fb5d` with only this delivery's two Java files overlaid. No dependency or project POM changes were required.
 
 | Test suite | Tests | Failures | Errors | Skipped |
 | --- | ---: | ---: | ---: | ---: |
-| ChatsPaymentServiceTest | 49 | 0 | 0 | 0 |
+| ChatsPaymentServiceTest | 36 | 0 | 0 | 0 |
 | PaymentCommonRoutingBuilderTest | 5 | 0 | 0 | 0 |
 | PaymentRoutingSubmitterTest | 9 | 0 | 0 | 0 |
 | PaymentServiceImplTest (enquiry methods only) | 15 | 0 | 0 | 0 |
 
-The full project regression was not run. SIT/UAT must verify the AFT outcomes in section 4; unit tests do not prove host posting or reversal. No database migration was run.
+The test selection was `ChatsPaymentServiceTest,PaymentCommonRoutingBuilderTest,PaymentRoutingSubmitterTest,PaymentServiceImplTest#enquire_*`, with test failures enforced. Full regression, Redis/CRM integration, SIT/UAT and host posting/reversal were not run.
 
-Synchronize the replacement package to `/Users/devs/DWksp/mcdp-h5-demo-int/bcohth-2055`, preserving source paths under `source/`. Apply it after the reviewed 2065 package. Keep the target Git repository uncommitted for manual submission.
+Deliver only the two changed Java files under `/Users/devs/DWksp/mcdp-h5-demo-int/bcohth-2055/source/`, preserving repository-relative paths. Put this design and `DELIVERY.txt` at the package root. Apply this package to baseline `a10fb5d` or its compatible successor; do not overlay older 2055/2065 source files onto the synchronized code.
 
-If the earlier 2055 package was already copied into a project, replace all supplied source files and remove the old `ChatsPaymentEnquiryTest.java` and `bcoh2h_2055_chats_ipe_terminal.sql`. No migration is executed or required by this revision. See `DELIVERY.txt` for the complete replacement/removal paths.
+No database migration is required or executed. No entity, shared-support or enquiry restoration file is supplied. If an earlier nullable IPE_TERMINAL column exists, this revision does not require dropping it. Commit the source changes locally; leave the mcdp repository uncommitted for manual submission.

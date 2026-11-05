@@ -34,24 +34,21 @@ import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.TxnAmount;
 import com.hkbea.hth.service.payment.ChatsPaymentService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
-import com.hkbea.hth.service.payment.PaymentCommonRoutingBuilder;
-import com.hkbea.hth.service.payment.PaymentInstructionConvert;
-import com.hkbea.hth.service.payment.PaymentRoutingSubmitter;
-import com.hkbea.hth.utils.AccountUtils;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.MockedStatic;
-import org.springframework.cache.CacheManager;
+import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.ScameterValidatorUtil;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -59,18 +56,13 @@ import org.mockito.quality.Strictness;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
-import static org.mockito.Mockito.mockStatic;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -115,16 +107,18 @@ class ChatsPaymentServiceTest {
     private CommonHeader headers;
     @Mock
     private PaymentCommonService paymentCommonService;
-
     @Mock
-    private CacheManager cacheManager;
-    private MockedStatic<LocalDateTime> serviceTime;
+    private CacheHelperUtils cacheHelperUtils;
+
+    private MockedStatic<LocalDateTime> localDateTimeMock;
 
     @BeforeEach
     void setUp() {
-        LocalDateTime businessTime = LocalDateTime.of(2026, 11, 4, 10, 0);
-        serviceTime = mockStatic(LocalDateTime.class, CALLS_REAL_METHODS);
-        serviceTime.when(LocalDateTime::now).thenReturn(businessTime);
+        // Mock LocalDateTime.now() to return a time within CHATS service window (Mon-Fri 9:00-17:00)
+        localDateTimeMock = Mockito.mockStatic(LocalDateTime.class, Mockito.CALLS_REAL_METHODS);
+        LocalDateTime fixedDateTime = LocalDateTime.of(2024, 1, 15, 10, 30); // Monday 10:30
+        localDateTimeMock.when(LocalDateTime::now).thenReturn(fixedDateTime);
+
         new HTHSupportErrorMapping();
         lenient().when(headers.getMessageId()).thenReturn(MESSAGE_ID);
         lenient().when(partyAccountMapper.selectProductCode(anyString(), anyString())).thenReturn("6802");
@@ -140,7 +134,9 @@ class ChatsPaymentServiceTest {
 
     @AfterEach
     void tearDown() {
-        serviceTime.close();
+        if (localDateTimeMock != null) {
+            localDateTimeMock.close();
+        }
     }
 
     // ===================== Validation =====================
@@ -506,239 +502,15 @@ class ChatsPaymentServiceTest {
         assertNull(insertCaptor.getValue().getPayeeId());
     }
 
-    // ===================== BCOH2H-2065 instruction fidelity =====================
-
-    @ParameterizedTest
-    @ValueSource(strings = {"ABSYHKH1", "ABSYHKH1XXX"})
-    void beneficiaryBic_isPreservedInSubmittedJson(String bic) {
-        LocalPayment payment = buildChatsPayment(Currency.CNY);
-        payment.getCreditorAgent().getFinancialInstitutionId().setClearingSystemMemberId(null);
-        payment.getCreditorAgent().getFinancialInstitutionId().setBicfi(bic);
-
-        BatchRoutingCreditTransferRequest submitted = submitConvertedInstruction(payment);
-        com.fasterxml.jackson.databind.JsonNode txn = new com.fasterxml.jackson.databind.ObjectMapper()
-                .findAndRegisterModules().valueToTree(submitted).path("transactions").get(0);
-
-        assertEquals(bic, txn.at("/creditorAgent/financialInstitution/bicfi").asText());
-        assertEquals("BEASHKHHXXX", txn.at("/debtorAgent/financialInstitution/bicfi").asText());
-        assertEquals("/IFT01/", txn.at("/purpose/proprietary").asText());
-        assertTrue(txn.at("/purpose/code").isMissingNode());
-        assertEquals(AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                txn.at("/debtorAccount/internalAccountNo").asText());
-        assertEquals("6304357992232185", txn.at("/supplementaryData/chatsRemittance/depositAccountName2").asText());
-    }
-
-    @Test
-    void memberIdOnly_doesNotInventABeneficiaryBic() {
-        var txn = submitConvertedInstruction(buildChatsPayment(Currency.HKD)).getTransactions().getFirst();
-        assertEquals("004", txn.getCreditorAgent().getFinancialInstitution().getMemberId());
-        assertNull(txn.getCreditorAgent().getFinancialInstitution().getBicfi());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"invalid", "ABSYHKH1XXXX", "ABSYHKH1XXX "})
-    void invalidBeneficiaryBic_isRejectedBeforeSubmission(String bic) {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.getCreditorAgent().getFinancialInstitutionId().setClearingSystemMemberId(null);
-        payment.getCreditorAgent().getFinancialInstitutionId().setBicfi(bic);
-        ParameterException exception = assertThrows(ParameterException.class,
-                () -> chatsPaymentService.processPayment(payment, buildRoutingRequest()));
-        assertEquals(HTHSupportErrorMapping.PAYEE_BIC_CODE_INVALID, exception.getErrCode());
-        verify(payemtRoutApi, never()).submit(any());
-        verify(paymentPayoutRecordMapper, never()).insert(any(PaymentPayoutRecord.class));
-    }
-
-    @Test
-    void bicAndMemberIdTogether_areRejectedBeforeSubmission() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.getCreditorAgent().getFinancialInstitutionId().setBicfi("ABSYHKH1XXX");
-        ParameterException exception = assertThrows(ParameterException.class,
-                () -> chatsPaymentService.processPayment(payment, buildRoutingRequest()));
-        assertEquals(HTHSupportErrorMapping.BIC_OR_MEMBER_ID_MISSING_OR_INVALID, exception.getErrCode());
-        verify(payemtRoutApi, never()).submit(any());
-    }
-
-    @Test
-    void missingBankIdentifier_isRejectedBeforeSubmission() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.setCreditorAgent(null);
-        ParameterException exception = assertThrows(ParameterException.class,
-                () -> chatsPaymentService.processPayment(payment, buildRoutingRequest()));
-        assertEquals(HTHSupportErrorMapping.BIC_OR_MEMBER_ID_MISSING_OR_INVALID, exception.getErrCode());
-        verify(payemtRoutApi, never()).submit(any());
-    }
-
-    @Test
-    void missingCategoryPurpose_usesBankOwnedChatsPurpose() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.setCategoryPurpose(null);
-        var txn = submitConvertedInstruction(payment).getTransactions().getFirst();
-        assertEquals("/IFT01/", txn.getPurpose().getProprietary());
-        assertNull(txn.getPurpose().getCode());
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = Currency.class, names = {"HKD", "CNY", "USD", "EUR"})
-    void amountCurrencyAndSettlementDate_arePreserved(Currency currency) {
-        LocalPayment payment = buildChatsPayment(currency);
-        payment.getTxnAmount().setAmount(new BigDecimal("1008.01"));
-        payment.setSettlementDate("2026-11-05");
-        BatchRoutingCreditTransferRequest submitted = submitConvertedInstruction(payment);
-        var amount = submitted.getTransactions().getFirst().getAmount();
-        assertNull(submitted.getTransactions().getFirst().getForeignExchangeDetails());
-        assertEquals(new BigDecimal("1008.01"), amount.getInstructedAmount().getAmount());
-        assertEquals(new BigDecimal("1008.01"), amount.getSettlementAmount().getAmount());
-        assertEquals(currency.toString(), amount.getInstructedAmount().getCurrency());
-        assertEquals(currency.toString(), amount.getSettlementAmount().getCurrency());
-        assertEquals(LocalDate.of(2026, 11, 5), submitted.getPaymentInformation().getRequestedExecutionDate());
-        assertEquals(new BigDecimal("1008.01"), submitted.getGroupHeader().getControlSum());
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = LocalPayment.ChargesOptionEnum.class, names = {"SHA", "OUR"})
-    void chargeBearer_keepsTheOneCharacterIpeContract(LocalPayment.ChargesOptionEnum bearer) {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.setChargesOption(bearer);
-        var txn = submitConvertedInstruction(payment).getTransactions().getFirst();
-        assertEquals(bearer == LocalPayment.ChargesOptionEnum.SHA ? "S" : "O",
-                txn.getCharges().getChargeBearer());
-    }
-
-    @Test
-    void fullLengthInstruction_preservesCanonicalFieldsWithoutTruncation() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        String name = "N".repeat(140);
-        String address1 = "A".repeat(70);
-        String address2 = "B".repeat(70);
-        String town = "T".repeat(35);
-        String reference = "R".repeat(140);
-        String endToEndId = "E".repeat(35);
-        payment.setTransactionID("C".repeat(35));
-        payment.getTxnAmount().setAmount(new BigDecimal("999999999999999.99"));
-        payment.getFromAccount().setAccountNumber("015521680295051");
-        payment.getCreditorAgent().getFinancialInstitutionId().setClearingSystemMemberId(null);
-        payment.getCreditorAgent().getFinancialInstitutionId().setBicfi("ABSYHKH1XXX");
-        payment.getCreditor().setCreditorName(name);
-        payment.getCreditor().getPostalAddress().setAddressLine1(address1);
-        payment.getCreditor().getPostalAddress().setAddressLine2(address2);
-        payment.getCreditor().getPostalAddress().setTownName(town);
-        payment.getCreditor().getPostalAddress().setCountry("CN");
-        payment.getToAccount().setAccountNumber("1".repeat(18));
-        payment.getPaymentIdentification().setEndToEndId(endToEndId);
-        payment.setRemittanceInformationUnstructured(reference);
-        when(partyPreferenceMapper.selectCustomerNameByPartyId(PARTY_ID)).thenReturn("D".repeat(140));
-
-        var txn = submitConvertedInstruction(payment).getTransactions().getFirst();
-        assertEquals(new BigDecimal("999999999999999.99"), txn.getAmount().getSettlementAmount().getAmount());
-        assertEquals(AccountUtils.ext2intAccNo("015521680295051", "C"), txn.getDebtorAccount().getInternalAccountNo());
-        assertEquals("ABSYHKH1XXX", txn.getCreditorAgent().getFinancialInstitution().getBicfi());
-        assertEquals("D".repeat(140), txn.getDebtor().getName());
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(name, txn.getCreditorAccount().getAccountName());
-        assertEquals(address1, txn.getCreditor().getPostalAddress().getAddressLine1());
-        assertEquals(address2, txn.getCreditor().getPostalAddress().getAddressLine2());
-        assertEquals(town, txn.getCreditor().getPostalAddress().getTownName());
-        assertEquals("CN", txn.getCreditor().getPostalAddress().getCountry());
-        assertEquals("CN", txn.getCreditorAccount().getCountry());
-        assertEquals("1".repeat(18), txn.getCreditorAccount().getIdentification());
-        assertEquals(4, txn.getRemittanceInformation().getUnstructured().size());
-        assertTrue(txn.getRemittanceInformation().getUnstructured().stream().allMatch(s -> s.length() == 35));
-        assertEquals(reference, String.join("", txn.getRemittanceInformation().getUnstructured()));
-        // Legacy supplementary fields are unchanged; full-length downstream handling remains unconfirmed.
-        assertEquals("6304357992232185", txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
-        ArgumentCaptor<PaymentPayoutRecord> record = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).insert(record.capture());
-        assertEquals(txn.getPaymentIdentification().getEndToEndId(), record.getValue().getPaymentId());
-        assertEquals(name, record.getValue().getCreditAccountName());
-        assertEquals(address2, record.getValue().getCreditAddressLine2());
-    }
-
-    @Test
-    void missingCustomerEndToEndId_doesNotReplaceTheUniqueIpeIdentifier() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.setPaymentIdentification(null);
-        BatchRoutingCreditTransferRequest submitted = submitConvertedInstruction(payment);
-        String ipeId = submitted.getTransactions().getFirst().getPaymentIdentification().getEndToEndId();
-        assertEquals(submitted.getGroupHeader().getMessageId(), ipeId);
-        assertNotEquals("NOTPROVIDED", ipeId);
-        ArgumentCaptor<PaymentPayoutRecord> record = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).insert(record.capture());
-        assertEquals(ipeId, record.getValue().getEndToEndId());
-        assertEquals(ipeId, record.getValue().getPaymentId());
-    }
-
-    @Test
-    void chatsEnrichment_preservesTrustedDebtorAddressAndRoutedIdentifiers() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.getFromAccount().setName("PAYER NAME");
-        BatchRoutingCreditTransferRequest routed = PaymentCommonRoutingBuilder
-                .prepareCommonRoutingRequest(payment, partyAccountMapper);
-        var txn = routed.getTransactions().getFirst();
-        var address = new com.hkbea.hth.ipe.model.PostalAddress();
-        address.setAddressLine1("TRUSTED CUSTOMER ADDRESS");
-        address.setCountry("HK");
-        txn.getDebtor().setPostalAddress(address);
-        String transactionId = txn.getPaymentIdentification().getEndToEndId();
-        String batchId = routed.getGroupHeader().getMessageId();
-        when(payemtRoutApi.submit(any())).thenReturn(buildSubmitResponse(
-                TransferPaymentResultQueryResponse.StatusEnum.SUCCESS));
-
-        Payment response = chatsPaymentService.processPayment(payment, routed);
-
-        verify(payemtRoutApi).submit(same(routed));
-        assertSame(address, txn.getDebtor().getPostalAddress());
-        assertEquals(transactionId, txn.getPaymentIdentification().getEndToEndId());
-        assertEquals(batchId, routed.getGroupHeader().getMessageId());
-        assertEquals(transactionId, response.getTxnRef());
-        assertEquals("E2E-CHATS", response.getOriginalEndtoendID());
-    }
-
-    @Test
-    void smartRoutingSelectedChats_appliesChatsBankAndPurpose() {
-        LocalPayment payment = buildChatsPayment(Currency.HKD);
-        payment.setPaymentType(LocalPayment.PaymentTypeEnum.OTHERS);
-        var submitted = submitConvertedInstruction(payment);
-        assertEquals(PaymentInformation.PaymentMethodEnum.CHATS, submitted.getPaymentInformation().getPaymentMethod());
-        assertEquals("BEASHKHHXXX", submitted.getTransactions().getFirst().getDebtorAgent().getFinancialInstitution().getBicfi());
-        assertEquals("/IFT01/", submitted.getTransactions().getFirst().getPurpose().getProprietary());
-    }
-
-    private BatchRoutingCreditTransferRequest submitConvertedInstruction(LocalPayment source) {
-        // Exercise both public-contract conversion and real routing construction.
-        var instruction = PaymentInstructionConvert.toPaymentInstructionRequest(source);
-        LocalPayment payment = PaymentInstructionConvert.toLocalPayment(instruction);
-        payment.setPartyId(PARTY_ID);
-        payment.getFromAccount().setName("PAYER NAME");
-        payment.setPaymentDetails(PaymentServiceImpl.splitPaymentDetails(
-                payment.getRemittanceInformationUnstructured()));
-        when(accountApi.enquireGenericBalance(any())).thenReturn(OverseasPaymentServiceTest
-                .buildBalanceResponse("999999999999999.99", payment.getTxnAmount().getCurrency()));
-        BatchRoutingCreditTransferRequest routed = PaymentCommonRoutingBuilder
-                .prepareCommonRoutingRequest(payment, partyAccountMapper);
-        when(payemtRoutApi.route(same(routed)))
-                .thenReturn(PaymentRoutingTestSupport.routeResponseForType("CHATS"));
-        payment.setPaymentType(PaymentRoutingSubmitter.route(payemtRoutApi, routed));
-        String ipeId = routed.getTransactions().getFirst().getPaymentIdentification().getEndToEndId();
-        when(payemtRoutApi.submit(same(routed)))
-                .thenReturn(buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS));
-
-        Payment response = chatsPaymentService.processPayment(payment, routed);
-
-        verify(payemtRoutApi).route(same(routed));
-        verify(payemtRoutApi).submit(same(routed));
-        assertEquals(ipeId, response.getTxnRef());
-        assertEquals(payment.getPaymentIdentification().getEndToEndId(), response.getOriginalEndtoendID());
-        assertEquals(Payment.StatusEnum.SUCCESS, response.getStatus());
-        return routed;
-    }
-
     // ===================== BCOH2H-2055 submission results =====================
 
     @Test
     void acceptedSubmission_remainsProcessing() {
-        var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.PROCESSING);
-        when(payemtRoutApi.submit(any())).thenReturn(response);
+        when(payemtRoutApi.submit(any())).thenReturn(buildSubmitResponse(
+                TransferPaymentResultQueryResponse.StatusEnum.PROCESSING));
+
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
+
         assertEquals(Payment.StatusEnum.PROCESSING, result.getStatus());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).updateById(update.capture());
@@ -746,15 +518,17 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void ebkInsufficientBalance_returnsAndPersistsRejected() {
+    void ipeInsufficientBalance_returnsAndPersistsOriginalRejection() {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.FAILED);
-        response.getData().setErrorCode("EBK-INSUFFICIENT-BALANCE");
+        response.getData().setErrorCode("TEST-INSUFFICIENT-BALANCE");
         response.getData().setErrorMessage("Insufficient balance including bank charges");
         response.getData().setStatusReason("HOST_REJECTED");
         when(payemtRoutApi.submit(any())).thenReturn(response);
+
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
+
         assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
-        assertEquals("EBK-INSUFFICIENT-BALANCE", result.getRejectCode());
+        assertEquals("TEST-INSUFFICIENT-BALANCE", result.getRejectCode());
         assertEquals("Insufficient balance including bank charges", result.getRejectMessage());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).updateById(update.capture());
@@ -762,32 +536,63 @@ class ChatsPaymentServiceTest {
         assertEquals(result.getRejectMessage(), update.getValue().getRejectMessage());
     }
 
-    @Test
-    void rejectionWithoutErrorMessage_fallsBackToStageReason() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t"})
+    void rejectionWithoutErrorMessage_fallsBackToStatusReason(String missingReason) {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.FAILED);
-        response.getData().setErrorMessage(" ");
+        response.getData().setErrorCode("TEST-IPE-REJECTED");
+        response.getData().setErrorMessage(missingReason);
         response.getData().setStatusReason("INVALID_VALUE_DATE");
         when(payemtRoutApi.submit(any())).thenReturn(response);
+
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
+
         assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
+        assertEquals("TEST-IPE-REJECTED", result.getRejectCode());
         assertEquals("INVALID_VALUE_DATE", result.getRejectMessage());
+        var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
+        verify(paymentPayoutRecordMapper).updateById(update.capture());
+        assertEquals(Payment.StatusEnum.REJECTED.value(), update.getValue().getStatus());
+        assertEquals("INVALID_VALUE_DATE", update.getValue().getRejectMessage());
     }
 
-    @Test
-    void rejectionWithoutAnyReason_usesExistingGenericFallback() {
-        when(payemtRoutApi.submit(any())).thenReturn(buildSubmitResponse(
-                TransferPaymentResultQueryResponse.StatusEnum.FAILED));
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t"})
+    void rejectionWithoutAnyReason_usesExistingGenericFallback(String missingReason) {
+        var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.FAILED);
+        response.getData().setErrorMessage(missingReason);
+        response.getData().setStatusReason(missingReason);
+        when(payemtRoutApi.submit(any())).thenReturn(response);
+
         Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
+
+        assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
+        assertNull(result.getRejectCode());
         assertEquals("Rejected by payment engine (no detail returned)", result.getRejectMessage());
+        var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
+        verify(paymentPayoutRecordMapper).updateById(update.capture());
+        assertEquals(result.getRejectMessage(), update.getValue().getRejectMessage());
     }
 
     @Test
-    void overCharge_isNotAssumedToBeTheTotalBankCharge() {
+    void overCharge_isCachedWithoutOverwritingServiceFee() {
         var response = buildSubmitResponse(TransferPaymentResultQueryResponse.StatusEnum.SUCCESS);
         response.getData().setOverChargeAmount(new BigDecimal("30.00"));
         response.getData().setOverChargeCcy("HKD");
         when(payemtRoutApi.submit(any())).thenReturn(response);
+        var mtbInfo = new com.hkbea.hth.dto.MtbInfoDto();
+        Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<com.hkbea.hth.dto.MtbInfoDto> updater = invocation.getArgument(0);
+            updater.accept(mtbInfo);
+            return null;
+        }).when(cacheHelperUtils).saveMtbInfo(any());
+
         chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest());
+
+        assertEquals("HKD", mtbInfo.getOverChargeCcy());
+        assertEquals(new BigDecimal("30.00"), mtbInfo.getOverChargeAmount());
         var update = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).updateById(update.capture());
         assertNull(update.getValue().getSvcAmount());
@@ -801,7 +606,6 @@ class ChatsPaymentServiceTest {
         fromAccount.setAccountNumber(DEBIT_ACCOUNT);
         fromAccount.setCurrency(currency.toString());
         fromAccount.setAccountType(BeaAccount.AccountTypeEnum.CUR);
-        fromAccount.setType("CUR");
 
         PaymentToAccount toAccount = new PaymentToAccount();
         toAccount.setId(BENEFICIARY_ACCOUNT);

@@ -1,44 +1,41 @@
-BCOH2H-2055 - minimal delivery, 5 November 2026
-Source commit: 304be3882bf1c5e4a0a2a30c0244657ab7129e50
-No database migration is required or executed.
-Compared with the reviewed 2065 baseline, the production change is one line:
-ChatsPaymentService selects ERROR_MESSAGE_WITH_FALLBACK.
-All existing 2065 field mappings are retained.
+BCOH2H-2055 - minimal delivery on synchronized source
+Date: 5 November 2026
+Baseline: a10fb5d (sync)
+Source commit: c6685aa29e4c32641380df2e0f02546806b7e902
 
-Replacement source files:
-- ChatsPaymentService.java: combined 2065 mapping plus minimal 2055 rejection fallback.
-- ChatsPaymentServiceTest.java: combined regression coverage.
-- PaymentPayoutRecord.java, PaymentServiceImpl.java and PaymentServiceSupport.java:
-  baseline restoration files, supplied to undo the previous 2055 delivery.
-  They add no behavior relative to the pre-2055 baseline.
+Apply to a10fb5d or a compatible successor, preserving source-relative paths.
+This package supersedes earlier 2055 deliveries. Do not overlay old 2055/2065
+source files onto the synchronized code.
 
-If the old 2055 delivery was applied, remove these files from that project:
-- hth-ms-support/hth-ms-support-svc/src/main/resources/sql/bcoh2h_2055_chats_ipe_terminal.sql
-- hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentEnquiryTest.java
+Production change: one line in ChatsPaymentService.java, selecting the existing
+ERROR_MESSAGE_WITH_FALLBACK policy. Preserve the original IPE error code.
+The latest CacheHelperUtils/MtbInfoDto integration, limits, account handling,
+shared support and payment enquiry are retained from the new baseline.
 
-Do not run the withdrawn SQL. If IPE_TERMINAL already exists in a database,
-leave it in place; this application version neither maps nor uses it.
-Apply the reviewed 2065 package first, then this entire replacement package.
-Copying an old 2055 file later can reintroduce a schema dependency.
+Contents:
+- source/.../service/payment/ChatsPaymentService.java
+- source/.../service/ChatsPaymentServiceTest.java
+- BCOH2H-2055-Technical-Design.md
+No old entity, shared-support or enquiry restoration copy is included.
+No SQL, schema change or new IPE_TERMINAL mapping is required.
 
-Verification: 78 targeted tests passed, 0 failures/errors/skipped:
-- ChatsPaymentServiceTest: 49
+Verification: Java 21 + offline Maven, 65 tests passed, 0 failures/errors/skipped.
+- ChatsPaymentServiceTest: 36
 - PaymentCommonRoutingBuilderTest: 5
 - PaymentRoutingSubmitterTest: 9
-- PaymentServiceImplTest, enquiry methods only: 15
-Built with Java 21 and offline Maven in an isolated source snapshot.
-Full project regression and SIT/UAT were not run.
+- PaymentServiceImplTest (enquiry methods only): 15
+Tests ran against a fresh a10fb5d snapshot with these two Java files overlaid.
+Full regression, Redis/CRM integration, SIT/UAT and AFT posting/reversal were not run.
 
-Limitations: successful payments retain the original no-refresh behavior.
-Late HKICL rejections are not added to HTH enquiry by this delivery.
-IPE/EBK posting, fees, references, teller/channel configuration and AFT reversal
-remain integration verification items; see the Technical Design.
-The mcdp Git repository is left uncommitted for manual submission.
+Boundaries:
+- SUCCESS-to-later-rejection enquiry refresh is not added.
+- IPE/EBK fees, posting keys/channel, teller, references and reversal need integration evidence.
+- The existing cache writer/CRM reader mismatch is documented, not changed by 2055.
+
+The source changes are committed locally. This mcdp repository is left
+uncommitted for manual submission. Only the story package was populated.
 
 SHA-256:
-3ed38eca255b156fe45ff48e0852a16bb57d3c5a523fc5d90a3754ab202a4e95  BCOH2H-2055-Technical-Design.md
-16baf7b1ad33002836de9dd04f3cce0fd55c2c784f8ac8d9bacadfec794d0dcb  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/entity/PaymentPayoutRecord.java
-35120963110b1629e392632c6d1ce6512496d738ef092ea25e7485fe1884df67  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
-66fcdc9be18e7b2beb1e3ae4df41f5146fa3cc2ae4e514a4afd45ca553e06811  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
-9c73ed188b626df22ebba89d64f1f163e0269cb0723d3ba0a7b28b7fc566806d  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentServiceSupport.java
-818fabb22e4ff2fede286244dab1430a772ccc4218fe27d8fc828a6a54aa0487  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+9f3433d8435374004b120c9531647d5ea9284798a814b5e25bd8e2d00ce1f9f4  BCOH2H-2055-Technical-Design.md
+0fb76faa3c8a9a8bd571e5c72a5a5db334790d2f62406d8f8cdb029a24dea5b5  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+f0eb3d1117ef8598701d05d7fcf63a345581339cc03f879b8ddb8eae9813ba2a  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java

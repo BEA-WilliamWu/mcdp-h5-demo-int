@@ -25,6 +25,7 @@ import com.hkbea.hth.mapper.PartyAccountMapper;
 import com.hkbea.hth.mapper.PartyPreferenceMapper;
 import com.hkbea.hth.model.*;
 import com.hkbea.hth.utils.AccountUtils;
+import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.CurrencyUtils;
 import com.hkbea.hth.utils.ScameterValidatorUtil;
 import com.hkbea.hth.constants.PaymentConstants;
@@ -88,7 +89,7 @@ public class ChatsPaymentService {
     @Autowired
     private PaymentCommonService paymentCommonService;
     @Autowired
-    private CacheManager cacheManager;
+    private CacheHelperUtils cacheHelperUtils;
 
     /**
      * CHATS payment flow: validate, enrich the routing request accepted by
@@ -108,8 +109,9 @@ public class ChatsPaymentService {
 
     /**
      * Writes the CHATS-specific blocks onto the routing request that was already
-     * validated by smart-routing. Preserve the customer instruction fields
-     * and enrich the bank-owned fields required for the outbound CHATS message.
+     * validated by smart-routing. Field values mirror the previous
+     * persistence-request mapping, including the remitter-name and payee-id
+     * lookups.
      */
     private void applyChatsRoutingDetails(BatchRoutingCreditTransferRequest routingRequest,
                                           LocalPayment localPayment) {
@@ -343,20 +345,9 @@ public class ChatsPaymentService {
         payment.setOriginalEndtoendID(chats.getPaymentIdentification().getEndToEndId());
         payment.setOriginalTransactionID(chats.getTransactionID());
         PaymentServiceSupport.updatePayoutRecord(paymentPayoutRecordMapper, log, CHATS_NETWORK, payoutId, payment, result);
-        savePaymentFee(result);
+        cacheHelperUtils.saveMtbInfo(mtbInfo -> mtbInfo.setOverChargeCcy(result.getOverChargeCcy()));
+        cacheHelperUtils.saveMtbInfo(mtbInfo -> mtbInfo.setOverChargeAmount(result.getOverChargeAmount()));
         return payment;
-    }
-
-    private void savePaymentFee(TransferPaymentResultQueryResponse result) {
-        try {
-            String messageId = headers.getMessageId();
-            Cache cache = cacheManager.getCache(CacheConstants.OPCODE_MAPPING);
-            if (cache != null) {
-                cache.put(messageId, result.getOverChargeCcy() + ":" + result.getOverChargeAmount());
-            }
-        } catch (Exception e) {
-            log.warn("Redis cache PUT failed for savePaymentFee messageId={}. OverCharge={}", result.getOverChargeCcy(), result.getOverChargeAmount());
-        }
     }
 
     /**

@@ -1,0 +1,18 @@
+Audit log test fixture fix
+Date: 5 November 2026
+Source baseline: c6685aa29e4c32641380df2e0f02546806b7e902
+The fix is a working-tree change, not a new Git commit.
+
+Change: add the missing PartyResolver.resolveClientId() mock returning "client2"
+in AuditLogServiceImplTest.setUp(). Production code is unchanged.
+This resolves the reproduced NullPointerException in
+queryAuditLogs_withPartialSearchCriteria.
+
+Verification: AuditLogServiceImplTest (15) and PartyResolverTest (10):
+25 passed, 0 failures, 0 errors, 0 skipped. Full regression was not run.
+
+Copy the file under source/ to the matching path in the destination project.
+The mcdp Git repository is left uncommitted for manual submission.
+
+SHA-256:
+03df24af2683b69ffafe578c5e0acec02a43d88976349661a9416ab2071a5e61  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/AuditLogServiceImplTest.java

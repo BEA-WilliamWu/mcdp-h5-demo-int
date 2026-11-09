@@ -1,0 +1,73 @@
+<!-- ko if: hthPageAllowed -->
+<!-- ko ifnot: updateConfirmFlag -->
+<div class="form-main-container users-update">
+  <!-- ko ifnot:updateReviewFlag -->
+  <oj-validation-group id="tracker" valid="{{validationTracker}}">
+    <div data-bind="template: { name: 'admin/update-panel'}">
+    </div>
+  </oj-validation-group>
+  <!-- /ko -->
+
+  <!-- ko if:updateReviewFlag -->
+  <div data-bind="template: { name: 'review-screen/review-banner-template', data: {header : $component.nls.generic.common.review , reviewHeader :$component.nls.info.addReviewHeaderMsg}}"></div>
+  <div data-bind="component: {name:'review-user-update' , params:{rootModel:$component}}"></div>
+  <div class="oj-flex oj-flex-items-pad button-container">
+    <oj-button class="action-button-primary" on-click="[[updateUser]]">
+      <span data-bind="text:$component.nls.common.confirm"></span>
+    </oj-button>
+    <oj-button class="action-button-secondary" on-click="[[$component.cancel]]">
+      <span data-bind="text:$component.nls.common.cancel"></span>
+    </oj-button>
+    <oj-button class="action-button-tertiary" on-click="[[backOnReview]]">
+      <span data-bind="text:$component.nls.common.back"></span>
+    </oj-button>
+  </div>
+  <!-- /ko -->
+</div>
+<!-- /ko -->
+
+<modal-window class="oj-flex oj-flex-items-pad message" base-model="[[$baseModel]]"
+    dashboard="[[$dashboard]]" dialog-id="[['pinResetWarning']]" close-handler="[[closePinResetWarning]]" header="[[$component.nls.info.warning]]">
+    <div class="modal-body">
+        <div class="oj-flex-item message-text label scroll" data-bind="text:$component.nls.info.validatePinWarning"></div>
+
+        <div class="message-btn button-container">
+            <oj-button id="okButton" class="action-button-primary" on-click=[[closePinResetWarning]]>
+                <span data-bind="text:nls.generic.common.ok"></span>
+            </oj-button>
+        </div>
+    </div>
+</modal-window>
+
+
+<modal-window class="oj-flex oj-flex-items-pad message" base-model="[[$baseModel]]"
+    dashboard="[[$dashboard]]" dialog-id="[['userGroupRejectNotification']]" close-handler="[[closeuserGroupNotification]]" header="[[$component.nls.info.warning]]">
+    <div class="modal-body">
+        <div class="oj-flex-item message-text label scroll" data-bind="text: $component.nls.info.checkApprovalNotification"></div>
+        <div class="message-btn button-container">
+            <oj-button id="yesButton" class="action-button-primary" on-click=[[reviewUpdateUser]]>
+                <span data-bind="text:nls.generic.common.yes"></span>
+            </oj-button>
+            <oj-button id="okButton" class="action-button-secondary" on-click=[[closeuserGroupNotification]]>
+              <span data-bind="text:nls.generic.common.no"></span>
+          </oj-button>
+        </div>
+    </div>
+</modal-window>
+
+<modal-window class="oj-flex oj-flex-items-pad message" base-model="[[$baseModel]]"
+    dashboard="[[$dashboard]]" dialog-id="[['suspendNotification']]" close-handler="[[closeSuspendNotification]]" header="[[$component.nls.info.warning]]">
+    <div class="modal-body">
+        <div class="oj-flex-item message-text label scroll" data-bind="text:$component.nls.info.suspendEmailNotification"></div>
+
+        <div class="message-btn button-container">
+            <oj-button id="yesButton" class="action-button-primary" on-click=[[sendSuspendEmailAlert]]>
+                <span data-bind="text:nls.generic.common.yes"></span>
+            </oj-button>
+            <oj-button id="okButton" class="action-button-secondary" on-click=[[closeSuspendNotification]]>
+              <span data-bind="text:nls.generic.common.no"></span>
+          </oj-button>
+        </div>
+    </div>
+</modal-window>
+<!-- /ko -->

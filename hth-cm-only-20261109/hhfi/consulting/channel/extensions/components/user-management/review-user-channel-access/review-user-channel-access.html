@@ -1,0 +1,83 @@
+<!-- ko if: hthPageAllowed -->
+<div class="form-main-container">
+  <!-- ko ifnot : approverReview -->
+  <div
+    data-bind="template: { name: 'review-screen/review-banner-template', data: {header : $component.nls.generic.common.review , reviewHeader :$component.nls.info.channelAccessReviewHeaderMsg}}">
+  </div>
+  <!-- /ko -->
+  <page-section>
+    <div>
+      <!-- ko if : dataLoaded -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.fullName]]"
+        value="[[$baseModel.format($component.nls.fieldname.displayFullName, {firstname:userSearchResponse().firstName, lastname: userSearchResponse().lastName})]]">
+      </obdx-row>
+      <!-- ko ifnot : isCorpAdmin -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.email]]"
+        value="[[userSearchResponse().emailId]]">
+      </obdx-row>
+      <!-- ko if : mobileflag -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.mobNumber]]"
+        value="[[$baseModel.format($component.nls.fieldname.mobileWithCode, {code:userExtensionData().mobileCode, mobileNo:userSearchResponse().mobileNumber})]]">
+      </obdx-row>
+      <!-- /ko -->
+      <!-- /ko -->
+
+      <!-- ko if : isCorpAdmin -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.email]]"
+        value="[[$component.userExtensionData().maskedEmailId]]" data-class="[['word-break-all']]">
+      </obdx-row>
+
+      <!-- ko if : mobileflag -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.mobNumber]]"
+        value="[[$component.userExtensionData().maskedMobileNo]]">
+      </obdx-row>
+      <!-- /ko -->
+      <!-- /ko -->
+
+
+
+      <!-- ko if: $component.userSearchResponse().partyId-->
+
+      <!-- ko if: $component.userSearchResponse().partyId.value !== null -->
+      <obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.nls.fieldname.partyId]]"
+        value="[[userSearchResponse().partyId.displayValue]]">
+      </obdx-row> <!-- /ko -->
+      <!-- /ko -->
+      <div class="oj-flex oj-flex-items-pad">
+        <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+          <oj-label for="lockstatus">
+            <span data-bind="text:$component.nls.header.channelAccess"></span></oj-label>
+        </div>
+        <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+          <oj-switch id="lockstatus" value="{{$component.channelAccessValue}}" disabled="[[true]]"></oj-switch>
+          <span data-bind="text: $component.userChannelAccess()"></span>
+        </div>
+      </div>
+
+      <div class="oj-flex oj-flex-items-pad">
+        <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+          <oj-label for="lockstatus">
+            <span data-bind="text:$component.nls.header.reason"></span></oj-label>
+        </div>
+        <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+          <span data-bind="text:  $component.deleteReason()"></span>
+        </div>
+      </div>
+      <!-- /ko -->
+    </div>
+  </page-section>
+
+  <!-- ko if: $component.transactionId === undefined -->
+  <div class="oj-flex button-container">
+    <oj-button id="submit" class="action-button-primary" on-click="[[$component.confirm]]">
+      <span data-bind="text:$component.nls.buttons.confirm"></span>
+    </oj-button>
+    <oj-button id="cancel" class="action-button-secondary" on-click="[[$dashboard.switchModule.bind($data,true)]]">
+      <span data-bind="text:$component.nls.buttons.cancel"></span>
+    </oj-button>
+    <oj-button id="back" class="action-button-tertiary" on-click="[[$component.back]]">
+      <span data-bind="text:$component.nls.buttons.back"></span>
+    </oj-button>
+  </div> <!-- /ko -->
+</div>
+<!-- /ko -->

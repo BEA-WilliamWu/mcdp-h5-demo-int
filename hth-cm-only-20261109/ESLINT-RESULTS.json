@@ -1,0 +1,100 @@
+[
+  {
+    "file": "consulting/channel/extensions/components/user-management/users-create/users-create.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/user-search-list/user-search-list.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/user-read/user-read.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/users-update/users-update.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/review-user-create/review-user-create.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/review-user-update/review-user-update.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/account-access-management/validation/validation.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/common/user-list-details/user-list-details.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/account-access-management/summary/summary.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/account-access-management/hth-account-linkage/hth-account-linkage.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/account-access-management/hth-api-service-mapping/hth-api-service-mapping.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/account-access-management/review-hth-user-access/review-hth-user-access.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/review-user-status/review-user-status.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  },
+  {
+    "file": "consulting/channel/extensions/components/user-management/review-user-channel-access/review-user-channel-access.js",
+    "before": 0,
+    "after": 0,
+    "added": [],
+    "newMessages": []
+  }
+]

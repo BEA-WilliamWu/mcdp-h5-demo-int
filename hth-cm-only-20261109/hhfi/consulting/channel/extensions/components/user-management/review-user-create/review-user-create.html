@@ -1,0 +1,456 @@
+<!-- ko if: hthPageAllowed -->
+<page-section>
+  <div>
+
+    <!-- ko ifnot : propagatedData.userType === "administrator" ||	 $parent.userType === "administrator" -->
+    <!-- ko ifnot : $component.isCorpAdmin -->
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-3 oj-lg-3">
+        <oj-label for="cdcId"><span data-bind="text:$component.resourceBundle.fieldname.cdcId"></span></oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+        <span
+          data-bind="text:propagatedData.partyId.displayValue !== null ? propagatedData.partyId.displayValue:propagatedData.partyId "></span>
+      </div>
+    </div>
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-3 oj-lg-3">
+        <oj-label for="companyName"><span data-bind="text:$component.resourceBundle.fieldname.companyName"></span></oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+        <span data-bind="text:propagatedData.partyName"></span>
+      </div>
+    </div>
+    <!-- /ko -->
+    <!-- /ko -->
+
+    <!-- ko if: propagatedData.userType === "administrator" || $parent.userType === "administrator"-->
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+        <oj-label for="organizationName"><span data-bind="text:$component.resourceBundle.fieldname.organization"></span>
+        </oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+        <span data-bind="text:propagatedData.organization"></span>
+      </div>
+    </div>
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+        <oj-label for="manager"><span data-bind="text:$component.resourceBundle.fieldname.manager"></span></oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+        <span data-bind="text:propagatedData.manager"></span>
+      </div>
+    </div>
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+        <oj-label for="employeeNumber"><span data-bind="text:$component.resourceBundle.fieldname.empno"></span>
+        </oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+        <span data-bind="text:propagatedData.employeeNumber"></span>
+      </div>
+    </div>
+    <!-- /ko -->
+  </div>
+</page-section>
+<page-section heading="[[$component.resourceBundle.headers.profileinfo]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 ">
+    <oj-label for="userName"><span data-bind="text:$component.resourceBundle.fieldname.username"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.username.split('@')[0]"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 ">
+    <oj-label for="documentType"><span data-bind="text:$component.resourceBundle.fieldname.documentType"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getDocumentTypeResource(propagatedData.documentType)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 ">
+    <oj-label for="documentCountry"><span data-bind="text:$component.resourceBundle.fieldname.documentCountry"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.documentCountry"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 ">
+    <oj-label for="documentId"><span data-bind="text:$component.resourceBundle.fieldname.documentId"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.documentID"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="title">
+      <span data-bind="text:$component.resourceBundle.fieldname.title"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.resourceBundle.fieldname[propagatedData.title]"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="fullName"><span data-bind="text:$component.resourceBundle.fieldname.fullName"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9 break-word word-break-all">
+    <span data-bind="text:propagatedData.firstName"></span>
+  </div>
+</div>
+
+<page-section heading="[[$component.resourceBundle.headers.contactDetails]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="emailid"><span data-bind="text:$component.resourceBundle.fieldname.emailid"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9 break-word word-break-all">
+    <span data-bind="text:propagatedData.emailId"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="mobile"><span data-bind="text:$component.resourceBundle.fieldname.contactmobile"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$baseModel.format($component.nls.fieldname.mobileWithCode, {code:propagatedData.mobileCode, mobileNo:propagatedData.mobileNumber})"></span>
+  </div>
+</div>
+
+<!-- ko if: propagatedData.userType === "administrator" || $parent.userType === "administrator"-->
+<page-section heading="[[$component.resourceBundle.fieldname.role]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-3 oj-lg-3">
+    <oj-label for="userRole"><span data-bind="text:$component.resourceBundle.fieldname.role"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+
+    <!-- ko if: childRoleEnumsLoaded -->
+    <oj-checkboxset class="oj-choice-direction-row" aria-labelledby="mainlabelid" disabled="[[true]]"
+      value="{{selectedChildRole}}">
+
+      <!-- ko foreach: childRoleEnums -->
+      <oj-option value="{{applicationRoleId}}" :id="[['rolesadmin_'+ $index()]]"><span
+          data-bind="text:applicationRoleName , attr : {'for' :'rolesadmin_' + $index()}"></span></oj-option>
+      <!-- /ko -->
+    </oj-checkboxset> <!-- /ko -->
+  </div>
+</div>
+<!-- /ko -->
+
+<!-- ko ifnot: propagatedData.userType === "administrator" || $parent.userType === "administrator"-->
+<page-section heading="[[$component.resourceBundle.headers.limitnRoles]]">
+</page-section>
+
+<!-- ko if : propagatedData.userType === "corporateuser" ||	 $parent.userType === "corporateuser" -->
+<!-- ko if: hthAvailable -->
+<obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]"
+  label="[[$component.resourceBundle.fieldname.userChannelType]]"
+  value="[[propagatedData.userChannelType]]">
+</obdx-row>
+<!-- /ko -->
+<!-- ko if: propagatedData.userChannelType === 'HTH' && propagatedData.hthApiPasswordCodeId -->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label><span data-bind="text:$component.resourceBundle.fieldname.hthApiPasswordCode"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <oj-label class="code-label">
+      <span class="code fs14" data-bind="text: $component.hthApiPasswordCodeVisible() ? $component.hthApiPasswordCode() : $component.resourceBundle.fieldname.hthApiPasswordCodeMask"></span>
+      <a href="javascript:void(0);" class="switch-button" data-bind="click:$component.toggleHthApiPasswordCodeVisible">
+        <span class="icon login-pin-reset-code-eyecon" data-bind="css:{'icon-eye': $component.hthApiPasswordCodeVisible(), 'icon-eye-slash': !$component.hthApiPasswordCodeVisible()}"></span>
+      </a>
+    </oj-label>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad" style="margin-bottom: 16px;">
+  <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+    <span class="label" data-bind="text:$baseModel.format($component.resourceBundle.info.hthExpiryAfterApproval, {0: 24})"></span>
+  </div>
+</div>
+<!-- /ko -->
+<!-- ko if: propagatedData.userGroupDTOs.length === 0 -->
+<obdx-row base-model="[[$baseModel]]" dashboard="[[$dashboard]]" label="[[$component.resourceBundle.headers.userGroup]]"
+  value="[[$component.resourceBundle.headers.noUserGroupAssigned]]">
+</obdx-row> <!-- /ko -->
+
+<!-- ko if: propagatedData.userGroupDTOs.length > 0 -->
+<!-- ko if: showUserGroup -->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+    <oj-label :for="[['usergrouplist']]"><span data-bind="text:$component.resourceBundle.headers.userGroup"></span>
+    </oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+    <oj-select-many id="usergrouplist" value="{{selectedUserGroupValues}}" readonly
+      placeholder="{{$component.resourceBundle.headers.selectUserGroup}}">
+
+      <!-- ko foreach:$component.userGroupValues  -->
+      <!-- ko ifnot : text === $component.defaultUserGroup() -->
+      <oj-option value="{{object}}"><span data-bind="text:text"></span></oj-option>
+       <!-- /ko  -->
+      <!-- /ko -->
+    </oj-select-many>
+  </div>
+</div>
+
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 ">
+    <!-- <oj-label for="defaultRole"><span data-bind="text:$component.nls.fieldname.defaultRole"></span></oj-label> -->
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$baseModel.format($component.nls.fieldname.defaultGroupSelection, {group:defaultUserGroup()})"></span>
+  </div>
+</div>
+<!-- /ko -->
+<!-- /ko -->
+<!-- /ko -->
+
+<!-- ko ifnot: $component.noLimitsHomeEntity-->
+
+<!-- ko foreach: homeEntityLimitPackage -->
+
+<!-- ko if: $data.selectedLimitPackage-->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="userlimit"><span data-bind="text:$data.description"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$data.selectedLimitPackage()"></span>
+  </div>
+</div>
+<!-- /ko -->
+<!-- /ko -->
+<!-- /ko -->
+
+<!-- ko if: propagatedData.userType === "retailuser" || $parent.userType === "retailuser"-->
+
+<!-- ko if: $data.selectedSegmentCode-->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3 label">
+    <oj-label for="segmentName"><span data-bind="text:$component.resourceBundle.fieldname.segment"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-4 label">
+    <span data-bind="text:$component.selectedSegmentName"></span>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-5 pull-left">
+    <div class="tooltip-section">
+      <div class="tooltip message-text" id="segmentRoles_toolTip">
+
+        <!-- ko	if:isSegmentContainsRole -->
+        <oj-label class="span-label">
+          <span data-bind="text:$component.resourceBundle.common.segmentRoles"></span>
+        </oj-label>
+
+        <!-- ko foreach: selectedSegmentRoles -->
+        <oj-label>
+          <li><span data-bind="text:appRoleId"></span></li>
+        </oj-label> <!-- /ko -->
+        <!-- /ko -->
+
+        <!-- ko	ifnot:isSegmentContainsRole -->
+        <oj-label class="span-label">
+          <span data-bind="text: $component.resourceBundle.common.segmentNoRole"></span>
+        </oj-label> <!-- /ko -->
+      </div>
+      <span class="icon-help" id="tool-tip-holder-segment-role" aria-hidden="true"
+        data-bind="event: { mouseover: $component.showToolTip.bind($data,'segmentRoles_toolTip','tool-tip-holder-segment-role'), mouseout: $component.hideToolTip.bind($data,'segmentRoles_toolTip') }"></span>
+    </div>
+  </div>
+</div> <!-- /ko -->
+<!-- /ko -->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-3 oj-lg-3">
+    <oj-label for="userRole"><span data-bind="text:$component.resourceBundle.fieldname.role"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+
+    <!-- ko if: childRoleEnumsLoaded -->
+    <oj-checkboxset class="oj-choice-direction-row" aria-labelledby="mainlabelid" disabled="[[true]]"
+      value="{{selectedChildRole}}">
+
+      <!-- ko foreach: childRoleEnums -->
+      <oj-option value="{{applicationRoleId}}" :id="[['roles_'+ $index()]]"><span
+          data-bind="text:applicationRoleName , attr : {'for' :'roles_' + $index()}"></span></oj-option> <!-- /ko -->
+    </oj-checkboxset> <!-- /ko -->
+  </div>
+</div>
+<!-- /ko -->
+
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="companyActivityLog"><span data-bind="text:$component.resourceBundle.fieldname.companyActivityLog"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <oj-checkboxset id="companyActivityLog" value="{{propagatedData.companyActivityLog}}">
+      <oj-option id="companyActivityLogTrue" value="true" disabled="[['true']]"></oj-option>
+    </oj-checkboxset>
+  </div>
+</div>
+
+<!-- ko ifnot : $component.isCorpAdmin -->
+<page-section heading="[[$component.resourceBundle.internalAccessPoints.internalAccessPoints.internalAccessPoints]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+    <oj-label><span
+        data-bind="text:$component.resourceBundle.internalAccessPoints.internalAccessPoints.selectedAccessPoints"></span>
+    </oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-9">
+
+    <!-- ko if: isAccessPointFetched -->
+    <oj-checkboxset id="accessPoint" labelled-by="accessPoint" class="oj-choice-direction-row"
+      value="{{selectedAccessPoint}}" disabled="[[true]]">
+
+      <!-- ko foreach: accessPoint -->
+      <oj-option value="[[value]]">
+        <span data-bind="text:text"></span>
+      </oj-option> <!-- /ko -->
+      <oj-checkboxset>
+      </oj-checkboxset>
+    </oj-checkboxset> <!-- /ko -->
+  </div>
+</div>
+<!-- /ko -->
+
+<!-- ko if: $dashboard.userData.userProfile.accessibleEntities.length > 1 -->
+
+<!-- ko if: !$dashboard.userData.userProfile.partyId.value -->
+<page-section heading="[[$component.resourceBundle.accessibleEntity.accessibleEntity.accessibleEntities]]">
+  <div>
+
+    <!-- ko if: templateLoaded -->
+
+    <!-- ko foreach: $component.accessibleEntityTemplate-->
+    <div data-bind="template: { name: 'admin/review-accessible-entity'}"></div> <!-- /ko -->
+    <!-- /ko -->
+  </div>
+</page-section> <!-- /ko -->
+<!-- /ko -->
+<page-section heading="[[$component.resourceBundle.headers.loginId]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="loginId"><span data-bind="text:$component.resourceBundle.fieldname.loginId"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.loginID"></span>
+  </div>
+</div>
+<!-- ko if : propagatedData.loginPinReferenceNo && !$component.isCorpAdmin -->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="loginPinReferenceNo"><span data-bind="text:$component.resourceBundle.fieldname.currentPinReferenceNo"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.loginPinReferenceNo"></span>
+  </div>
+</div>
+<!-- /ko -->
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="loginPinstatus"><span data-bind="text:$component.resourceBundle.fieldname.currentPinStatus"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getPinStatusResource(propagatedData.loginPinstatus)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="loginHoldStatus"><span data-bind="text:$component.resourceBundle.fieldname.currentHoldStatus"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getHoldStatusResource(propagatedData.loginHoldStatus)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="loginHoldReason"><span data-bind="text:$component.resourceBundle.fieldname.currentHoldReason"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getHoldReasonResource(propagatedData.loginHoldReason)"></span>
+  </div>
+</div>
+
+<!-- ko ifnot : $component.isCorpAdmin -->
+<page-section heading="[[$component.resourceBundle.headers.signerId]]">
+</page-section>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="signerID"><span data-bind="text:$component.resourceBundle.fieldname.signerId"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.signerID"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="signerPinReferenceNo"><span data-bind="text:$component.resourceBundle.fieldname.currentPinReferenceNo"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:propagatedData.signerPinReferenceNo"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="signerPinstatus"><span data-bind="text:$component.resourceBundle.fieldname.currentPinStatus"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getPinStatusResource(propagatedData.signerPinstatus)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="signerHoldStatus"><span data-bind="text:$component.resourceBundle.fieldname.currentHoldStatus"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getHoldStatusResource(propagatedData.signerHoldStatus)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="signerHoldReason"><span data-bind="text:$component.resourceBundle.fieldname.currentHoldReason"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <span data-bind="text:$component.getHoldReasonResource(propagatedData.signerHoldReason)"></span>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="idDocumentSubmitted"><span data-bind="text:$component.resourceBundle.fieldname.idDocumentSubmitted"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <oj-checkboxset id="idDocSubmitted" value="{{propagatedData.idDocSubmitted}}">
+      <oj-option id="docTrue" value="true" disabled="[['true']]"></oj-option>
+    </oj-checkboxset>
+  </div>
+</div>
+<div class="oj-flex oj-flex-items-pad">
+  <div class="oj-flex-item oj-sm-12 oj-md-6 oj-lg-3">
+    <oj-label for="isAuthorisedPerson"><span data-bind="text:$component.resourceBundle.fieldname.authorizedPerson"></span></oj-label>
+  </div>
+  <div class="oj-flex-item oj-sm-12 oj-md-9 oj-lg-9">
+    <oj-checkboxset id="authorizedPerson" value="{{propagatedData.isAuthorisedPerson}}">
+      <oj-option id="authTrue" value="true" disabled="[['true']]"></oj-option>
+    </oj-checkboxset>
+  </div>
+</div>
+<!-- /ko -->
+<!-- ko if : $component.isCorpAdmin -->
+<div class="oj-flex oj-flex-items-pad corporate-disclaimer">
+  <div class="oj-flex-item oj-sm-12 oj-md-12 oj-lg-12">
+      <span data-bind="text:$component.resourceBundle.info.createDisclaimer"></span>
+  </div>
+</div>
+<!-- /ko -->
+<!-- /ko -->

@@ -50,6 +50,26 @@ assert 'ROLLBACK TO HTH_PASSWORD_SUCCESS_TMPL;' in SQL
 assert not re.search(r'(?im)^\s*(INSERT|DELETE|COMMIT)\b', SQL)
 assert re.findall(r'(?im)^\s*UPDATE\s+(\w+)', SQL) == ['DIGX_EP_MSG_TMPL_B']
 print('PASS: exact v81 Features 7/8 raw email and EN/TC/SC SMS; no demo text/placeholders; template-only DML')
+# Keep a single outer execution block: a local procedure in DECLARE was split at
+# its END by DBeaver's Oracle script parser, leaving the main BEGIN in a second query.
+code = re.sub(r"q'~.*?~'", "''", SQL, flags=re.S)
+code = re.sub(r"'(?:''|[^'])*'", "''", code)
+code = re.sub(r'--[^\n]*', '', code)
+assert not re.search(r'\b(?:PROCEDURE|FUNCTION)\b', code, re.I)
+assert len(re.findall(r'(?m)^BEGIN\s*$', code)) == 1
+assert len(re.findall(r'(?m)^END;\s*$', code)) == 1
+assert code.rstrip().endswith('END;')
+route_matrix = re.search(r'CURSOR c_routes IS\s*(SELECT .*?);', SQL, re.S).group(1)
+with sqlite3.connect(':memory:') as matrix_db:
+    matrix_db.executescript("CREATE TABLE DUAL(dummy); INSERT INTO DUAL VALUES ('X');")
+    actual = matrix_db.execute(route_matrix).fetchall()
+expected = {(op, event, channel, locale)
+    for op, event in [('setup', 'HTH_API_PASSWORD_SETUP_SUCCESS'), ('reset', 'HTH_API_PASSWORD_RESET_SUCCESS')]
+    for channel in ['EMAIL', 'SMS'] for locale in ['en', 'zh-Hant', 'zh-Hans-CN']}
+assert len(actual) == 12 and set(actual) == expected
+assert SQL.index('FOR route IN c_routes LOOP') < SQL.index('UPDATE DIGX_EP_MSG_TMPL_B')
+print('PASS: one outer anonymous block; actual route cursor covers all 12 success/channel/locale combinations')
+
 
 # Run the actual binding selection, external-reference guard and UPDATE predicate.
 bindings = re.search(r'CURSOR c_bindings IS\s*(SELECT .*?);', SQL, re.S).group(1)

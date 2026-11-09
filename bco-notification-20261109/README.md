@@ -25,7 +25,7 @@ Use current repository DTO/dependency sources when building. The verification sc
 Locales: `en`, `zh-Hant`, `zh-Hans-CN`. Actual installed IDs can differ. The new update follows the event bindings, including alternate template IDs, rather than relying on these names.
 
 1. In `hhfi/consulting/db/branch_change_history/20261109_BCOH2H-1332_1333/`, run **2_Verify_Password_Success_Templates.sql** first. Export Q1 as the original subject/body backup. Q2 should return no missing/invalid primary bindings. Q3 lists the BCO templates reused by 865/1334.
-2. Run **1_Update_Password_Success_Templates.sql** as one complete PL/SQL block in the OBDX configuration schema using UTF-8. It changes existing setup/reset template content only. It does not create missing configuration or update routes. On missing/conflicting configuration, the whole block stops/rolls back with the actual event/ID in its error.
+2. Disable auto-commit. Run **1_Update_Password_Success_Templates.sql** as one complete PL/SQL block in the OBDX configuration schema using UTF-8. In DBeaver, stop the failed script, open this revised file, select from `DECLARE` through the final `END;`, and use **Execute SQL Statement (Ctrl+Enter)**. For SQL*Plus/SQLcl, enter `/` on a separate line after the block. It changes existing setup/reset template content only. It does not create missing configuration or update routes. On missing/conflicting configuration, the whole block stops/rolls back with the actual event/ID in its error.
 3. Re-run verification and inspect raw subjects/bodies, then COMMIT. Refresh notification configuration through the existing environment process if needed. A repeat execution of unchanged content does not update rows again.
 4. New environments must first install the original setup/reset notification configuration. Apply this delta AFTER old notification/template scripts, as those scripts contain superseded wording.
 5. Use Q4 around a fresh test transaction to verify recipients, channels, content and response status. Check actual inbox/handset receipt separately.
@@ -38,6 +38,7 @@ Locales: `en`, `zh-Hant`, `zh-Hans-CN`. Actual installed IDs can differ. The new
 - Current modified Java classes compile against repository dependencies for Java 8.
 - Existing setup/reset notification routing regression passes.
 - Existing approval lifecycle regression passes.
+- DBeaver parsing fix: the previous local procedure caused the installed Oracle script parser to split the block into two statements, producing an end-of-file error. The revised file has no local procedure and is parsed as one complete statement. All 12 event/channel/locale combinations remain covered.
 - SQL raw text matches v81 template cells. Actual selection/update predicates pass local relational fixtures for renamed/alternate IDs, unrelated references, reruns and other business units.
 
 Oracle PL/SQL execution and real approval/MNG delivery still require UAT. Local relational fixtures are not an Oracle database run.

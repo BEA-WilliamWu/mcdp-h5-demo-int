@@ -52,13 +52,14 @@ No new tables, template IDs, events, recipient rows, source mappings, batch job 
 
 - `verify_hth_notifications.py`: existing setup/reset target-only routing, missing contacts and notification failure containment; inspect successful-call/replay boundaries.
 - `verify_hth_success_template_update.py`: exact reviewed raw cells; actual SQL binding/update predicates with renamed and alternate IDs, unrelated references and rerun fixtures.
+- DBeaver parser regression: the previous local procedure was split from the main block. The revised single anonymous block is parsed as one complete statement; its route cursor covers all 12 event/channel/locale combinations.
 - No production password Java changes. Local tests do not execute Oracle PL/SQL or establish actual delivery.
 - UAT: successful setup sends the configured email/SMS only to the target profile; failed setup generates no success notice; repeat-request handling does not generate another success event. Verify all three locales and content.
 
 ## Deployment and rollback
 
 1. Run Q1 of `2_Verify_Password_Success_Templates.sql` and export current raw template rows as a backup. Q2 should return zero missing/invalid primary bindings.
-2. Existing environments: execute the whole new update block. New environments: first install the original setup/reset notification scripts, then this delta. Re-running the older scripts later can restore old wording, so always apply the delta last.
+2. Existing environments: disable auto-commit and execute the whole new update block. In DBeaver, stop the failed script, open the revised file, select from `DECLARE` through the final `END;`, and use **Execute SQL Statement (Ctrl+Enter)**. Do not execute only the cursor position or a partial selection. For SQL*Plus/SQLcl, enter `/` on a separate line after the block. New environments: first install the original setup/reset notification scripts, then this delta. Re-running the older scripts later can restore old wording, so always apply the delta last.
 3. Re-run verification and inspect subject/body, then COMMIT. Follow the existing environment process to refresh notification configuration caches if necessary.
 4. Reconcile a new transaction with Q4. Record event, recipient, channel, response status and rendered content; do not infer delivery from a total row count alone.
 5. Before commit, use ROLLBACK to abandon the change. After commit, restore only the backed-up template subject/body values for the same IDs/unit through the normal deployment process.

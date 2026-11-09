@@ -1,5 +1,9 @@
 -- BCOH2H-1333 / BCOH2H-1332: update existing SETUP/RESET success templates only.
--- Execute this entire DECLARE...END block in the OBDX configuration schema (UTF-8).
+-- DBeaver: stop the failed script, open this whole file, disable auto-commit.
+-- Select from DECLARE through the final END; and use Execute SQL Statement (Ctrl+Enter).
+-- SQL*Plus/SQLcl: enter / on a separate line after this block to execute it.
+-- One anonymous block, no local procedure: avoid client splitting inside declarations.
+-- Use the OBDX configuration schema (UTF-8).
 -- Run AFTER the original 6_HTH_API_Password_Notification.sql and
 -- 8_HTH_API_Password_Reset_Notification.sql when initializing an environment.
 -- Existing environments: run 2_Verify_Password_Success_Templates.sql first and export
@@ -65,21 +69,46 @@ DECLARE
   c_sms_tc CONSTANT VARCHAR2(1000) := q'~貴公司已成功設定東亞銀行H2H API密碼。如欲了解更多詳情，請登入你的賬戶或致電(852) 2211 1321。~';
   c_sms_sc CONSTANT VARCHAR2(1000) := q'~贵公司已成功设置东亚银行H2H API密码。如欲了解更多详情，请登陆你的账户或致电(852) 2211 1321。~';
 
-  PROCEDURE collect_templates(p_operation VARCHAR2, p_event VARCHAR2,
-      p_destination VARCHAR2, p_locale VARCHAR2, p_subject VARCHAR2, p_body CLOB) IS
-    v_count NUMBER;
-    v_destination DIGX_EP_MSG_TMPL_B.DESTINATION_TYPE%TYPE;
-    v_seen BOOLEAN;
-    CURSOR c_bindings IS
-      SELECT COD_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
-       WHERE COD_ACT_ID=c_base || p_operation AND COD_EVENT_ID=p_event
-         AND COD_ACTION_ID='A' AND TXT_DEST_TYP=p_destination AND LOCALE=p_locale
-      UNION
-      SELECT UNSECURE_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
-       WHERE COD_ACT_ID=c_base || p_operation AND COD_EVENT_ID=p_event
-         AND COD_ACTION_ID='A' AND TXT_DEST_TYP=p_destination AND LOCALE=p_locale
-         AND TRIM(UNSECURE_MSG_TMPL_ID) IS NOT NULL;
-  BEGIN
+  p_operation VARCHAR2(10);
+  p_event VARCHAR2(100);
+  p_destination VARCHAR2(10);
+  p_locale VARCHAR2(20);
+  p_subject DIGX_EP_MSG_TMPL_B.TXT_SUBJECT_TMPL%TYPE;
+  p_body CLOB;
+  v_count NUMBER;
+  v_destination DIGX_EP_MSG_TMPL_B.DESTINATION_TYPE%TYPE;
+  v_seen BOOLEAN;
+  CURSOR c_bindings IS
+    SELECT COD_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
+     WHERE COD_ACT_ID=c_base || p_operation AND COD_EVENT_ID=p_event
+       AND COD_ACTION_ID='A' AND TXT_DEST_TYP=p_destination AND LOCALE=p_locale
+    UNION
+    SELECT UNSECURE_MSG_TMPL_ID AS template_id FROM DIGX_EP_EVT_REC_B
+     WHERE COD_ACT_ID=c_base || p_operation AND COD_EVENT_ID=p_event
+       AND COD_ACTION_ID='A' AND TXT_DEST_TYP=p_destination AND LOCALE=p_locale
+       AND TRIM(UNSECURE_MSG_TMPL_ID) IS NOT NULL;
+  CURSOR c_routes IS
+    SELECT op.operation, op.event_id, channel.destination, lang.locale
+      FROM (SELECT 'setup' operation, 'HTH_API_PASSWORD_SETUP_SUCCESS' event_id FROM DUAL
+            UNION ALL SELECT 'reset', 'HTH_API_PASSWORD_RESET_SUCCESS' FROM DUAL) op
+      CROSS JOIN (SELECT 'EMAIL' destination FROM DUAL UNION ALL SELECT 'SMS' FROM DUAL) channel
+      CROSS JOIN (SELECT 'en' locale FROM DUAL UNION ALL SELECT 'zh-Hant' FROM DUAL
+                  UNION ALL SELECT 'zh-Hans-CN' FROM DUAL) lang;
+BEGIN
+  SAVEPOINT HTH_PASSWORD_SUCCESS_TMPL;
+  -- Collect all 12 route variants and validate every change BEFORE writing.
+  FOR route IN c_routes LOOP
+    p_operation := route.operation;
+    p_event := route.event_id;
+    p_destination := route.destination;
+    p_locale := route.locale;
+    IF p_destination='EMAIL' THEN
+      p_subject := CASE p_operation WHEN 'setup' THEN c_setup_subject ELSE c_reset_subject END;
+      p_body := CASE p_operation WHEN 'setup' THEN c_setup_body ELSE c_reset_body END;
+    ELSE
+      p_subject := NULL;
+      p_body := TO_CLOB(CASE p_locale WHEN 'en' THEN c_sms_en WHEN 'zh-Hant' THEN c_sms_tc ELSE c_sms_sc END);
+    END IF;
     SELECT COUNT(*) INTO v_count FROM DIGX_EP_EVT_REC_B
      WHERE COD_ACT_ID=c_base || p_operation AND COD_EVENT_ID=p_event
        AND COD_ACTION_ID='A' AND TXT_DEST_TYP=p_destination AND LOCALE=p_locale;
@@ -125,19 +154,6 @@ DECLARE
         v_changes(v_size).body := p_body;
       END IF;
     END LOOP;
-  END;
-BEGIN
-  SAVEPOINT HTH_PASSWORD_SUCCESS_TMPL;
-  -- Collect and validate every change BEFORE writing. EMAIL is the reviewed bilingual
-  -- body in all three locales; SMS uses the corresponding EN/TC/SC text.
-  FOR lang IN (SELECT 'en' locale FROM DUAL UNION ALL SELECT 'zh-Hant' FROM DUAL
-               UNION ALL SELECT 'zh-Hans-CN' FROM DUAL) LOOP
-    collect_templates('setup','HTH_API_PASSWORD_SETUP_SUCCESS','EMAIL',lang.locale,c_setup_subject,c_setup_body);
-    collect_templates('reset','HTH_API_PASSWORD_RESET_SUCCESS','EMAIL',lang.locale,c_reset_subject,c_reset_body);
-    collect_templates('setup','HTH_API_PASSWORD_SETUP_SUCCESS','SMS',lang.locale,NULL,
-      TO_CLOB(CASE lang.locale WHEN 'en' THEN c_sms_en WHEN 'zh-Hant' THEN c_sms_tc ELSE c_sms_sc END));
-    collect_templates('reset','HTH_API_PASSWORD_RESET_SUCCESS','SMS',lang.locale,NULL,
-      TO_CLOB(CASE lang.locale WHEN 'en' THEN c_sms_en WHEN 'zh-Hant' THEN c_sms_tc ELSE c_sms_sc END));
   END LOOP;
   FOR i IN 1..v_size LOOP
     -- SMS has no reviewed subject. Keep its existing subject/metadata unchanged.

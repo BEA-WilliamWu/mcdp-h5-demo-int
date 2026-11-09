@@ -140,7 +140,7 @@ BEGIN
         IF v_changes(i).template_id=r.template_id THEN
           v_seen := TRUE;
           IF v_changes(i).destination<>p_destination
-             OR (p_destination='EMAIL' AND v_changes(i).subject<>p_subject)
+             OR (p_destination='EMAIL' AND DBMS_LOB.COMPARE(v_changes(i).subject,p_subject)<>0)
              OR DBMS_LOB.COMPARE(v_changes(i).body,p_body)<>0 THEN
             RAISE_APPLICATION_ERROR(-20333, 'Shared template requires different content: ' || r.template_id);
           END IF;
@@ -156,6 +156,7 @@ BEGIN
     END LOOP;
   END LOOP;
   FOR i IN 1..v_size LOOP
+    -- Subject is CLOB in the deployed schema: compare full LOB contents, not SQL <>.
     -- SMS has no reviewed subject. Keep its existing subject/metadata unchanged.
     UPDATE DIGX_EP_MSG_TMPL_B
        SET TXT_MSG_TMPL=v_changes(i).body,
@@ -167,7 +168,7 @@ BEGIN
        AND DESTINATION_TYPE=v_changes(i).destination
        AND (TXT_MSG_TMPL IS NULL OR DBMS_LOB.COMPARE(TXT_MSG_TMPL,v_changes(i).body)<>0
          OR (v_changes(i).destination='EMAIL'
-           AND (TXT_SUBJECT_TMPL IS NULL OR TXT_SUBJECT_TMPL<>v_changes(i).subject)));
+           AND (TXT_SUBJECT_TMPL IS NULL OR DBMS_LOB.COMPARE(TXT_SUBJECT_TMPL,v_changes(i).subject)<>0)));
     v_updated := v_updated+SQL%ROWCOUNT;
   END LOOP;
   DBMS_OUTPUT.PUT_LINE('1333/1332: bound templates=' || v_size || ', content updated=' || v_updated

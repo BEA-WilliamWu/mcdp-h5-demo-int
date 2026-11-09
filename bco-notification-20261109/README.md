@@ -39,9 +39,11 @@ Locales: `en`, `zh-Hant`, `zh-Hans-CN`. Actual installed IDs can differ. The new
 - Existing setup/reset notification routing regression passes.
 - Existing approval lifecycle regression passes.
 - DBeaver parsing fix: the previous local procedure caused the installed Oracle script parser to split the block into two statements, producing an end-of-file error. The revised file has no local procedure and is parsed as one complete statement. All 12 event/channel/locale combinations remain covered.
+- CLOB comparison fix: SQL cannot use `<>` on the deployed CLOB subject. Both subject comparisons now use `DBMS_LOB.COMPARE`; raw content and recipients are unchanged.
+- Complete block executed in disposable Oracle Free 23.26.3 with CLOB subject/body columns: 12 route combinations plus an alternate template updated (13 rows), rerun updated zero rows, null/empty/changed/long subjects repaired, SMS subjects and other-unit/BCO rows preserved. The old predicate reproduces the CLOB comparison compile error in this database.
 - SQL raw text matches v81 template cells. Actual selection/update predicates pass local relational fixtures for renamed/alternate IDs, unrelated references, reruns and other business units.
 
-Oracle PL/SQL execution and real approval/MNG delivery still require UAT. Local relational fixtures are not an Oracle database run.
+Execution against the UAT schema and real approval/MNG delivery still require UAT verification. The disposable Oracle test uses synthetic data; Python relational fixtures are not an Oracle database run.
 
 ## Checksums and rollback
 

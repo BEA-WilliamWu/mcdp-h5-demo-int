@@ -76,6 +76,10 @@ bindings = re.search(r'CURSOR c_bindings IS\s*(SELECT .*?);', SQL, re.S).group(1
 external = re.search(r'SELECT COUNT\(\*\) INTO v_count FROM DIGX_EP_EVT_REC_B\s+WHERE \(COD_MSG_TMPL_ID=r.template_id.*?;', SQL, re.S).group(0)
 external = external.replace(' INTO v_count', '').rstrip(';')
 update = re.search(r'    UPDATE DIGX_EP_MSG_TMPL_B\s+SET .*?;', SQL, re.S).group(0).strip().rstrip(';')
+# Oracle rejects direct SQL comparisons on CLOB subjects (ORA-00932); SQLite
+# accepts them, so keep this type-specific guard in addition to the fixtures.
+assert not re.search(r'\bTXT_SUBJECT_TMPL\s*(?:<>|!=|=)\s*v_changes', update)
+assert 'DBMS_LOB.COMPARE(TXT_SUBJECT_TMPL,v_changes(i).subject)' in update
 
 
 def portable(query):
@@ -125,8 +129,22 @@ assert db.execute(portable(update), params).rowcount == 0
 assert snapshot == list(db.execute('SELECT * FROM DIGX_EP_MSG_TMPL_B'))
 assert routes == list(db.execute('SELECT * FROM DIGX_EP_EVT_REC_B'))
 assert db.execute("SELECT TXT_MSG_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE DETERMINANT_VALUE='OTHER_BU'").fetchone()[0] == 'old-body'
+# A changed/null subject must update even when the body already matches.
+for old_subject in ['different subject', None, values['c_setup_subject'] + 'X' * 5000]:
+    db.execute("UPDATE DIGX_EP_MSG_TMPL_B SET TXT_SUBJECT_TMPL=? WHERE COD_TMPL_ID='renamed-template' AND DETERMINANT_VALUE='OBDX_BU'", (old_subject,))
+    assert db.execute(portable(update), params).rowcount == 1
+    assert db.execute("SELECT TXT_SUBJECT_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID='renamed-template' AND DETERMINANT_VALUE='OBDX_BU'").fetchone()[0] == params['subject']
+    assert db.execute(portable(update), params).rowcount == 0
+# Compare beyond 4K as well; truncating both sides to VARCHAR2 would miss this.
+long_subject = 'X' * 5000
+db.execute("UPDATE DIGX_EP_MSG_TMPL_B SET TXT_SUBJECT_TMPL=? WHERE COD_TMPL_ID='renamed-template' AND DETERMINANT_VALUE='OBDX_BU'", (long_subject + 'A',))
+long_params = dict(params, subject=long_subject + 'B')
+assert db.execute(portable(update), long_params).rowcount == 1
+assert db.execute(portable(update), long_params).rowcount == 0
 db.execute("INSERT INTO DIGX_EP_MSG_TMPL_B VALUES ('SMS-template','OBDX_BU','SMS','keep-sms-subject','old',NULL,NULL,1)")
 assert db.execute(portable(update), dict(params, template_id='SMS-template', destination='SMS', subject=None, body=values['c_sms_tc'])).rowcount == 1
 assert db.execute("SELECT TXT_SUBJECT_TMPL FROM DIGX_EP_MSG_TMPL_B WHERE COD_TMPL_ID='SMS-template'").fetchone()[0] == 'keep-sms-subject'
+assert db.execute(portable(update), dict(params, template_id='SMS-template', destination='SMS', subject=None, body=values['c_sms_tc'])).rowcount == 0
 print('PASS: actual SQL selects renamed/alternate IDs; detects foreign references; content update is rerunnable; other unit, routes and SMS subject unchanged')
+print('PASS: full-LOB subject comparison; changed/null/long subject with matching body; repeat email/SMS update changes zero rows')
 print('NOTE: Oracle PL/SQL execution, server cache and actual email/SMS delivery require UAT verification')

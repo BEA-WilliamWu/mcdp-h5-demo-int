@@ -44,7 +44,7 @@ The two success stories share one atomic script: `consulting/db/branch_change_hi
 2. Validate all required bindings and template rows before any write. Stop on missing rows, wrong channel or IDs used by unrelated events/actions/channels.
 3. If the same ID requires different text across routes/locales, stop instead of overwriting one language or event with another.
 4. Update only `DIGX_EP_MSG_TMPL_B` subject/body and change metadata in `OBDX_BU`. Keep all routes and SMS subjects. Existing rows in other units are untouched.
-5. Roll back the block on error. Re-running unchanged content performs no content update. No automatic commit.
+5. Compare CLOB subject/body content with `DBMS_LOB.COMPARE`, including the SQL update predicate. Direct SQL `<>` on a CLOB subject fails at compilation; do not truncate the subject to work around this. Roll back the block on error. Re-running unchanged content performs no content update. No automatic commit.
 
 No new tables, template IDs, events, recipient rows, source mappings, batch job or shared-package changes.
 
@@ -53,7 +53,8 @@ No new tables, template IDs, events, recipient rows, source mappings, batch job 
 - `verify_hth_notifications.py`: existing setup/reset target-only routing, missing contacts and notification failure containment; inspect successful-call/replay boundaries.
 - `verify_hth_success_template_update.py`: exact reviewed raw cells; actual SQL binding/update predicates with renamed and alternate IDs, unrelated references and rerun fixtures.
 - DBeaver parser regression: the previous local procedure was split from the main block. The revised single anonymous block is parsed as one complete statement; its route cursor covers all 12 event/channel/locale combinations.
-- No production password Java changes. Local tests do not execute Oracle PL/SQL or establish actual delivery.
+- CLOB regression: the complete block compiles and runs in a disposable Oracle Free 23.26.3 database with CLOB subject/body columns. All 12 route combinations plus one alternate template update successfully; a second run updates zero rows. Null/empty/changed/long subjects are repaired with matching bodies; SMS subjects, other units and unrelated BCO rows are preserved. The old predicate reproduces the CLOB comparison compile failure (ORA-22848 in this Oracle version; UAT reports ORA-00932).
+- No production password Java changes. The Python relational fixtures alone do not validate Oracle types. The disposable Oracle test is separate from UAT and does not establish actual notification delivery.
 - UAT: successful reset sends the configured email/SMS only to the target profile; failed reset generates no success notice; repeat-request handling does not generate another success event. Verify all three locales and content.
 
 ## Deployment and rollback

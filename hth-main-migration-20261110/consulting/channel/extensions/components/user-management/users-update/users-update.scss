@@ -1,0 +1,187 @@
+.users-update {
+    .icon-delete:before {
+        font-size: 1.2rem;
+    }
+    padding: 0;
+    .bypass-switch-container {
+        .pt6 {
+            padding-top: 6px;
+        }
+        .label {
+            position: relative;
+            bottom: 4px;
+            right: 14px;
+        }
+    }
+    .login-pin-reset-code-message {
+        color: var(--base-text-secondary);
+        font-size: var(--base-font-size-medium);
+        font-weight: 600;
+        &.corp-admin {
+            color: var(--form-foreground-color);
+            font-size: var(--form-font-size);
+            font-weight: var(--form-font-weight);
+        }
+        .pt05 {
+            padding-top: 0.5rem;
+        }
+        .fs14 {
+            font-size: 0.875rem;
+        }
+        .bypass-switch {
+            display: flex;
+            align-items: center;
+            &.corp-admin {
+                .oj-switch {
+                    margin-bottom: 0.5rem!important;
+                }
+            }
+            .label {
+                position: relative;
+                bottom: 4px;
+                right: 14px;
+            }
+        }
+        .code-label {
+            .code {
+                display: inline-block;
+                width: 56px;
+            }
+            .switch-button {
+                min-width: 2rem!important;
+                .login-pin-reset-code-eyecon {
+                    padding: 0!important;
+                }
+            }
+        }
+    }
+    .oj-switch:not(.oj-disabled) {
+        cursor: pointer;
+    }
+    
+    .reminder-message-dialog {
+        .modal-header {
+            text-align: center;
+        }
+        .button-container {
+            justify-content: center;
+        }
+        .mb10 {
+            margin-bottom: 10px;
+        }
+        .code {
+            text-align: center;
+            color: red;
+        }
+    }
+}
+
+// BCOH2H-787: HTH API Password Information section styles
+.hth-api-password-section {
+    padding-bottom: 1.5rem;
+
+    // Title divider
+    .page-section-header {
+        border-bottom: 1px solid var(--form-input-border-color, #d1d5db);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    // Description text
+    .label {
+        font-size: 0.875rem;
+        color: var(--text-secondary-color, #6b7280);
+    }
+
+    // Description margin
+    .hth-description-margin {
+        margin-bottom: 1.5rem;
+    }
+
+    // Password code display area
+    .code-display {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 10px 0;
+        margin-bottom: 0.5rem;
+        height: 40px;
+
+        .code {
+            font-size: 1rem;
+            font-family: monospace;
+            letter-spacing: 0.1em;
+            color: var(--text-primary-color, #111827);
+        }
+
+        .switch-button {
+            padding: 0;
+            min-width: auto;
+            text-decoration: none;
+            border: none;
+            outline: none;
+            background: transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+
+            &:hover,
+            &:focus,
+            &:active {
+                text-decoration: none;
+                outline: none;
+                border: none;
+            }
+
+            .icon {
+                font-size: 1.25rem;
+                color: var(--base-color-primary, #2563eb);
+            }
+        }
+    }
+
+    // Validity text
+    .validity-text {
+        display: block;
+        text-align: center;
+        padding: 0.75rem 0;
+        font-size: 0.875rem;
+        color: var(--text-secondary-color, #6b7280);
+    }
+
+    // Generate button
+    .generate-btn {
+        margin-left: 0;
+    }
+}
+
+.corporate-disclaimer {
+    background-color: var(--notes-background-color);
+    border-radius: var(--notes-border-radius);
+    padding: 1rem 0.375rem;
+    font-size: var(--notes-font-size);
+    font-weight: var(--notes-font-weight);
+    color: var(--notes-font-color);
+    margin: 0 10px 2rem 10px;
+    word-break: normal;
+    &-title {
+        font-size: var(--notes-title-size);
+        font-weight: var(--notes-title-weight);
+        color: var(--notes-title-color);
+        margin-bottom: 0.5rem;
+    }
+    &-content {
+        font-size: var(--notes-content-font-size);
+        font-weight: var(--notes-content-font-weight);
+        color: var(--notes-content-font-color);
+        &-emphasis {
+            font-weight: 600;
+            text-decoration: underline;
+        }
+    }
+}
+
+.word-break-all {
+    word-break: break-all;
+}

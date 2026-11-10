@@ -1,0 +1,83 @@
+{
+    "module": [{
+            "Name": "OnBoarding",
+            "transactionDetails": [{
+                "name": "accountProfile",
+                "img": "account-profile.svg",
+                "module": "customer-preference",
+                "component": "preference-base"
+
+            }, {
+                "name": "PartyAccountAccess",
+                "img": "accounts-and-service-access.svg",
+                "module": "account-access-management",
+                "component": "access-management-base"
+
+            }]
+        }, {
+            "Name": "Approvals",
+            "transactionDetails": [{
+                "name": "UserManagement",
+                "img": "user-management.svg",
+                "module": "user-management",
+                "component": "users"
+
+            }, {
+                "name": "UserAccountAccess",
+                "img": "user-accounts-and-services-access.svg",
+                "module": "account-access-management",
+                "component": "user-access-management-base"
+
+            }]
+        },
+
+        {
+            "Name": "AccountAccess",
+            "transactionDetails": [{
+                "name": "IdMainenanceCreate",
+                "img": "id-maintenance-create.svg",
+                "module": "user-id-maintenance",
+                "component": "user-id-validate"
+            }, {
+                "name": "ApprovalRules",
+                "img": "approval-rule-management.svg",
+                "module": "approvals",
+                "component": "rule-type",
+                "type": "Rules"
+            }]
+        },
+        {
+            "Name": "ResourceAccess",
+            "transactionDetails": [{
+                "name": "activationLetterOnline",
+                "img": "generate-online-activation-letter.svg",
+                "module": "activation-letter",
+                "component": "activation-letter-generate-online"
+            }, {
+                "name": "manageBeneficiaries",
+                "img": "manage-beneficiaries.svg",
+                "component": "payee-account-selection",
+                "module": "customer-preference"
+            }, {
+                "name": "hostToHostManagement",
+                "img": "host-to-host.svg",
+                "component": "host-to-host-management",
+                "module": "host-to-host"
+            }]
+        },
+        {
+            "Name": "ResourceAccess",
+            "transactionDetails": [{
+                "name": "activationLetterOffline",
+                "img": "generate-offline-activation-letter.svg",
+                "component": "activation-letter-generate-offline",
+                "module": "activation-letter"
+            }, {
+                "name": "statementAdvicePrefSettings",
+                "img": "statement-advice-preferernce-settings.svg",
+                "component": "acc-pref-setting-search",
+                "module": "e-statement"
+            }]
+        }
+    ]
+}

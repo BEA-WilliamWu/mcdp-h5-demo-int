@@ -1,0 +1,60 @@
+{
+    "module": [{
+            "Name": "OnBoarding",
+            "transactionDetails": [{
+                "name": "UserManagement",
+                "img": "user-management.svg",
+                "module": "user-management",
+                "component": "users"
+
+            }]
+        }, {
+            "Name": "Approvals",
+            "transactionDetails": [{
+                "name": "UserAccountAccess",
+                "img": "user-account-access.svg",
+                "module": "account-access-management",
+                "component": "user-access-management-base",
+                "targetComponent": "USER"
+            }]
+        },
+        {
+            "Name": "AccountAccess",
+            "transactionDetails": [{
+                "name": "userRegistryInquiry",
+                "img": "user-registry-inquiry.svg",
+                "module": "e-statement",
+                "component": "user-reg-inquiry",
+                "targetComponent": "PARTY"
+            }]
+        },
+        {
+            "Name": "FileUpload",
+            "transactionDetails": [{
+                "name": "dailyTransactionLimitMaintenance",
+                "img": "limit-maintenance.svg",
+                "component": "corp-host-limit",
+                "module": "limits",
+                "componentType": "flow"
+            }]
+        },
+        {
+            "Name": "FileUpload",
+            "transactionDetails": [{
+                "name": "manageBeneficiaries",
+                "img": "manage-beneficiaries.svg",
+                "component": "payee-list",
+                "module": "payee"
+            }]
+        },
+        {
+            "Name": "FileUpload",
+            "transactionDetails": [{
+                "name": "hostToHostCertificate",
+                "img": "host-to-host.svg",
+                "component": "host-to-host-certificate-management",
+                "module": "corporate-host-to-host"
+            }]
+        }
+    ]
+}

@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-mappings xmlns="http://www.eclipse.org/eclipselink/xsds/persistence/orm" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.eclipse.org/eclipselink/xsds/persistence/orm http://www.eclipse.org/eclipselink/xsds/eclipselink_orm_2_4.xsd">
+	<named-query name="GetExtensionDetails">
+		<query>
+			select A FROM UserExtensionData A WHERE A.cdcNo = :cdcNo and A.mobileNo = :mobileNo and A.isAuthorisedPerson = :isAP
+		</query>
+	</named-query>
+	<named-query name="GetUserExtensionDetails">
+		<query>
+			select A FROM UserExtensionData A WHERE A.cdcNo = :cdcNo and A.userID in :userID
+		</query>
+	</named-query>
+	<named-query name="GetSignerExtensionDetails">
+		<query>
+			select A FROM UserExtensionData A WHERE A.userID in :userID and A.signerID is not null
+		</query>
+	</named-query>
+	<named-query name="GetLoginExtensionDetails">
+		<query>
+			select A FROM UserExtensionData A WHERE A.userID in :userID and A.loginID is not null
+		</query>
+	</named-query>
+	<named-query name="GetAPUserData">
+		<query>
+			select A FROM UserExtensionData A WHERE A.cdcNo = :cdcNo and A.signerID is not null
+		</query>
+	</named-query>
+	<named-native-query name="ListResetLoginPinUserByCDCId">
+		<query>
+			select a.user_id,a.login_id,'Login Pin',b.firstname,a.login_pin_ref,a.last_updated_date,dept.dep_code,a.CREATED_BY
+			from DIGX_CZ_UM_EXTENSIONDATA a , DIGX_UM_USERPROFILE b ,
+			digx_cz_user_id_maintenance aa,
+			(select distinct user_name,dep_code from digx_cz_fw_hostusersession) dept
+			where a.user_id=b.u_name
+			and a.login_pin_status in ('Inactive','Being Reset')
+			and cdc_no = #cdc_no
+			and cdc_no=aa.party_id(+)
+			and a.login_id=aa.id(+)
+			and a.login_pin_ref=aa.pin_ref_no(+)
+			and aa.last_updated_by=dept.user_name(+)
+		</query>
+	</named-native-query>
+	<named-native-query name="ListResetSignerPinUserByCDCId">
+		<query>
+			select a.user_id,a.signer_id,'Signer Pin',b.firstname,a.signer_pin_ref,a.last_updated_date,dept.dep_code,a.CREATED_BY
+			from DIGX_CZ_UM_EXTENSIONDATA a , DIGX_UM_USERPROFILE b ,
+			digx_cz_user_id_maintenance aa,
+			(select distinct user_name,dep_code from digx_cz_fw_hostusersession) dept
+			where a.user_id=b.u_name
+			and a.signer_pin_status  in ('Inactive','Being Reset')
+			and a.signer_id is not NULL
+			and cdc_no = #cdc_no
+			and cdc_no=aa.party_id(+)
+			and a.login_id=aa.id(+)
+			and a.login_pin_ref=aa.pin_ref_no(+)
+			and aa.last_updated_by=dept.user_name(+)
+		</query>
+	</named-native-query>
+	<named-native-query name="ListResetPhonePinUserByCDCId">
+		<query>
+			select USERNAME,ID,PIN_REF_NO,'Phone Banking',LAST_UPDATED_DATE,dept.dep_code
+			from DIGX_CZ_USER_ID_MAINTENANCE,
+			(select distinct user_name,dep_code from digx_cz_fw_hostusersession) dept
+			where party_id = #cdc_no
+			and id_type = '03'
+			and pin_status in ('Inactive','Being Reset')
+			and last_updated_by=dept.user_name(+)		
+		</query>
+	</named-native-query>
+	<named-native-query name="ListResetLoginPinByCDCId">
+		<query>
+			select ID,'Login Pin',PIN_REF_NO,LAST_UPDATED_DATE,dept.dep_code
+			from DIGX_CZ_USER_ID_MAINTENANCE,
+			(select distinct user_name,dep_code from digx_cz_fw_hostusersession) dept
+			where username is null 
+			and id_type='02' 
+			and pin_status in ('Inactive','Being Reset') 
+			and party_id = #cdc_no
+			and last_updated_by=dept.user_name(+)		
+		</query>
+	</named-native-query>
+	
+	<named-native-query name="listUsersData">
+		<query>
+			select a.firstname,a.u_name,b.delete_status,b.lock_status,c.is_Ap,c.signer_id,c.cdc_no,a.mobileno,a.email,
+			case when h.close_id is not null then 'HTH' else 'BCO' end as user_channel_type,
+			h.close_id as close_id
+			from digx_um_userprofile a
+			join users b on a.u_name=b.u_name
+			join digx_cz_um_extensiondata c on a.u_name=c.user_id
+			left join HTH_BEA.HTH_USER_PROFILE h on h.party_id=c.cdc_no and h.close_id=c.user_id
+			where c.cdc_no like #partyId and a.firstname like #firstName and a.email like #emailID and a.mobileno like #mobileNo and c.user_id like #userName ESCAPE '\'
+		</query>
+	</named-native-query>
+	<named-query name="GET_DUPLICATE_TXN">
+		<query>SELECT t from Transaction t JOIN t.entityIdentifiers e WHERE t.approvalDetails.status = :approvalStatus and t.transactionName = :transactionName</query>
+	</named-query>
+	<named-native-query name="UpdateSignerHoldStatus">
+		<query>
+			update digx_cz_um_extensiondata set signer_hold_reason='Retry Count Exceeded', signer_hold_status='No Activity Allowed' where user_id  = #userID and cdc_no = #partyId
+		</query>
+	</named-native-query>
+	<named-query name="updatePasswordExpiryDate">
+		<query>UPDATE Users a set a.pwdExpiryDate = :pwd_expiry_date WHERE a.key.userName = :u_name</query>
+	</named-query>
+	<named-query name="updatePasswordExpiryDateAndForceChangePassword">
+		<query>UPDATE Users a set a.pwdExpiryDate = :pwd_expiry_date, a.forceChangePassword = :forceChangePassword WHERE a.key.userName = :u_name</query>
+	</named-query>
+	
+	<named-query name="SEARCH_USERGROUP_BY_CUSTOMER">
+		<query>SELECT a from UserGroup a where a.name =:name and a.determinantValue = :determinantValue and a.partyId = :partyid</query>
+	</named-query>
+	<named-query name="fetchUserGroupListByUsername">
+		<query>SELECT a from UserGroupUser a where a.entity.value = :username</query>
+	</named-query>
+	<named-query name="fetchGroupIdByName">
+		<query>SELECT a from UserGroup a where a.name = :groupName</query>
+	</named-query>
+	<named-native-query name="ListSignerByPartyId">
+		<query>
+		select distinct user_id from DIGX_CZ_UM_EXTENSIONDATA where cdc_no = #partyId and is_ap = '1'
+		</query>
+	</named-native-query>
+	<named-query name="deleteUserFromGroup">
+		<query>DELETE FROM UserGroupUser a WHERE a.entity.value = :username and a.key.id = :id</query>
+	</named-query>
+	<named-query name="updateUserLocale">
+        <query>UPDATE UserExtensionData a set a.userLocale = :userLocale WHERE a.userID = :username and a.cdcNo = :cdcId</query>
+    </named-query>
+	<named-query name="UpdateSignerHoldStatusAndAttempts">
+		<query>
+			UPDATE UserExtensionData a set a.signerPinstatus = 'Inactive', a.signerHoldReason = 'Retry Count Exceeded',  a.signerHoldStatus = 'No Activity Allowed', a.signerAttempts = :attemptNumber where a.userID = :userID and a.cdcNo = :partyId
+		</query>
+	</named-query>
+	<named-query name="UpdateSignerAttempts">
+		<query>
+			UPDATE UserExtensionData a set  a.signerAttempts = :attemptNumber where a.userID = :userID and a.cdcNo = :partyId
+		</query>
+	</named-query>
+	<named-native-query name="preLastLoginDeteForUserId">
+		<query>
+			select u_name, pre_last_loggedin_datetime from digx_um_userprofile where u_name = #userId
+		</query>
+	</named-native-query>
+
+	<named-native-query name="UpdateMigrationStatus">
+		<query>
+			update digx_cz_um_extensiondata set migration_status=#migrationStatus where user_id=#userId
+		</query>
+	</named-native-query>
+
+	<named-native-query name="getFileContentCCBAudit">
+		<query>
+			select FILE_NAME, FILE_CONTENT from MIG_AUDIT_LOGS where CCB_PARTYID = #partyId
+		</query>
+	</named-native-query>
+
+	<named-native-query name="getFileContentCCBSystemAudit">
+		<query>
+			select FILE_NAME, FILE_CONTENT from CCB_SYSTEM_AUDIT_LOGS where CCB_PARTYID = #partyId
+		</query>
+	</named-native-query>
+	<named-query name="listNonDeletedUsersByParty">
+		<query>select a from UserExtensionData a , Users b where a.userID = b.key.userName and b.deleteStatus = :deleteStatus and a.cdcNo  = :cdcNo</query>
+	</named-query>
+	<named-native-query name="getPartyIDForAccount">
+		<query>
+			select partyid from digx_pi_party_accounts where account_number = #accountId and parent_party_id = #partyId 
+		</query>
+	</named-native-query>
+	<named-native-query name="getProductCodeForMasterAccount">
+		<query>
+			select product_code from digx_pi_party_accounts where master_account_number = #masterAccountNumber  
+		</query>
+	</named-native-query>
+	<named-native-query name="getPartyNameInformation">
+		<query>
+			select customername from digx_pi_party_preferences where partyid = #partyId
+		</query>
+	</named-native-query>
+	<named-native-query name="getRelatedPartyInformation">
+		<query>
+			select related_party_first_name from digx_pi_partytoparty_relation where party_id = #partyId and related_party_id = #relatedPartyId 
+		</query>
+	</named-native-query>
+	<named-native-query name="readTimerJvmID">
+		<query>
+			select jvm_id from digx_cm_timer where timer_id = #id  
+		</query>
+	</named-native-query>
+	<named-query name="ListUserExtensionData">
+		<query>
+			select A FROM UserExtensionData A WHERE A.userID like :userID
+		</query>
+	</named-query>
+</entity-mappings>

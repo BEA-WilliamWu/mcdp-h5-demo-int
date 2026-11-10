@@ -1,0 +1,40 @@
+<div class="host-to-host-certificate-management-container">
+  <div class="hth-certificate-confirm-details">
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.labels.accountNumber]]"
+              value="[[$component.params.confirmScreenExtensions.record.accountNumber]]"></obdx-row>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.labels.companyName]]"
+              value="[[$component.params.confirmScreenExtensions.record.companyName]]"></obdx-row>
+
+    <div class="hth-certificate-confirm-file">
+      <div class="label">
+        <oj-label>
+          <span data-bind="text: $component.params.confirmScreenExtensions.resourceBundle.labels.certificateUpload"></span>
+          <span class="info-text-small" data-bind="text: $component.params.confirmScreenExtensions.resourceBundle.labels.pemFormatOnly"></span>
+        </oj-label>
+      </div>
+      <div>
+        <!-- ko foreach: $component.params.confirmScreenExtensions.record.certificates -->
+        <div class="hth-certificate-confirmation-file">
+          <a href="#"
+             class="form-button-link"
+             data-bind="text: name, click: $component.params.confirmScreenExtensions.downloadCertificate"></a>
+          <a href="#"
+             class="form-button-link hth-certificate-download-link"
+             data-bind="attr: { 'aria-label': $component.params.confirmScreenExtensions.resourceBundle.labels.downloadCertificate, title: $component.params.confirmScreenExtensions.resourceBundle.labels.downloadCertificate }, click: $component.params.confirmScreenExtensions.downloadCertificate">
+            <span class="icons icon-download"></span>
+          </a>
+        </div>
+        <!-- /ko -->
+      </div>
+    </div>
+
+    <div class="oj-flex oj-flex-items-pad notes notes-invert-margin hth-certificate-upload-hint">
+      <div class="oj-flex-item oj-sm-12 notes-content"
+           data-bind="text: $component.params.confirmScreenExtensions.resourceBundle.uploadHint"></div>
+    </div>
+  </div>
+</div>

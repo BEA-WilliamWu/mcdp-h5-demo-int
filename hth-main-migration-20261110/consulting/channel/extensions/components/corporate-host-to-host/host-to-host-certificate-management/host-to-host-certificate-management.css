@@ -1,0 +1,240 @@
+.host-to-host-certificate-management-container .hth-certificate-screen {
+    align-items: flex-start;
+    min-height: 33rem;
+    padding: 1.55rem 1.25rem 4.05rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-screen obdx-row {
+    display: block;
+    margin-bottom: 4.15rem;
+    max-width: 32rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-screen .row-container .corp-custom-css.row {
+    margin-bottom: 0;
+}
+
+[dir='rtl'] .host-to-host-certificate-management-container .hth-certificate-main-panel {
+    padding-left: 3rem;
+}
+
+[dir='ltr'] .host-to-host-certificate-management-container .hth-certificate-main-panel {
+    padding-right: 3rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-row {
+    margin-top: 0.35rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-row .label {
+    padding-bottom: 0.8rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-picker {
+    display: block;
+    max-width: 30rem;
+    width: 100%;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button,
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button-button {
+    width: 100%;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button-button {
+    justify-content: center;
+    min-height: 2.75rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button.oj-button-full-chrome span.icons.oj-button-icon,
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button.oj-button-half-chrome span.icons.oj-button-icon,
+.host-to-host-certificate-management-container .hth-certificate-upload-picker span.icons.oj-button-icon {
+    color: inherit;
+    font-size: var(--button-font-size-icon) !important;
+    margin-top: 0;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-picker .oj-button-button .oj-button-icon.oj-start.hth-certificate-upload-icon {
+    margin-inline-end: 0.75rem;
+    margin-inline-start: 0;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-icon {
+    display: inline-block;
+    font-size: var(--base-font-size-default);
+    line-height: 1;
+}
+
+[dir='rtl'] .host-to-host-certificate-management-container .hth-certificate-download-link {
+    margin-right: 0.35rem;
+}
+
+[dir='ltr'] .host-to-host-certificate-management-container .hth-certificate-download-link {
+    margin-left: 0.35rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-file-row {
+    align-items: center;
+    margin-top: 0.8rem;
+    max-width: 30rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-file-card {
+    align-items: center;
+    background-color: var(--base-background-secondary);
+    border-radius: var(--form-input-border-radius);
+    box-sizing: border-box;
+    justify-content: space-between;
+    min-height: 2.25rem;
+    padding: 0.6rem 0.75rem;
+    width: 19rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-file-status {
+    flex: 0 0 auto;
+    height: 1rem;
+    width: 1rem;
+}
+
+[dir='rtl'] .host-to-host-certificate-management-container .hth-certificate-file-status {
+    margin-right: 0.75rem;
+}
+
+[dir='ltr'] .host-to-host-certificate-management-container .hth-certificate-file-status {
+    margin-left: 0.75rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-delete-link {
+    align-self: center;
+}
+
+[dir='rtl'] .host-to-host-certificate-management-container .hth-certificate-delete-link {
+    margin-right: 0.8rem;
+}
+
+[dir='ltr'] .host-to-host-certificate-management-container .hth-certificate-delete-link {
+    margin-left: 0.8rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-hint-panel {
+    margin-top: 0.9rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-upload-hint {
+    align-items: center;
+    box-sizing: border-box;
+    min-height: 3.25rem;
+    width: 100%;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-help-panel {
+    padding-top: 0;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-help-panel .help-panel {
+    margin: 0;
+    max-width: 27.75rem;
+    min-height: 17.25rem;
+    top: 0;
+    width: 100%;
+}
+
+[dir='rtl'] .host-to-host-certificate-management-container .hth-certificate-help-panel .help-panel {
+    margin-right: auto;
+}
+
+[dir='ltr'] .host-to-host-certificate-management-container .hth-certificate-help-panel .help-panel {
+    margin-left: auto;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-actions {
+    margin-top: 3.2rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-actions.button-container {
+    padding-bottom: 0;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-screen {
+    min-height: 38rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-screen obdx-row {
+    margin-bottom: 3.35rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-banner {
+    margin: 0 0 1.75rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-details {
+    max-width: 32rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-file {
+    margin-bottom: 3.4rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-file .label {
+    padding-bottom: 0.45rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-confirmation-file + .hth-certificate-confirmation-file {
+    margin-top: 0.55rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-next-actions {
+    margin-top: 0.5rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-next-title {
+    font-weight: var(--base-font-weight-bold);
+    margin-bottom: 0.9rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-next-list {
+    display: flex;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-next-list li {
+    max-width: 8rem;
+    text-align: center;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-next-list img {
+    display: block;
+    height: 3.8rem;
+    margin: 0 auto 0.5rem;
+    width: 3.8rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-success-actions {
+    margin-top: 2.35rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-confirm-details {
+    max-width: 63rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-confirm-details obdx-row {
+    display: block;
+    margin-bottom: 3.35rem;
+    max-width: 32rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-confirm-file {
+    margin-bottom: 1.25rem;
+}
+
+.host-to-host-certificate-management-container .hth-certificate-confirm-file .label {
+    padding-bottom: 0.45rem;
+}

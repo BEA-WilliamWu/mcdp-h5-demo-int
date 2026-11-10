@@ -1,0 +1,171 @@
+<div class="user-list-details oj-sm-margin-2x-horizontal">
+
+    <!-- ko if: $component.paginationDataSource -->
+    <page-section heading="[[nls.header.userList]]">
+        <div>
+
+            <!-- ko if: noStatus && partyData -->
+            <div id="pagingControlAll" class="full-width">
+                <oj-table id="table_noStatus" :aria-label="[[$component.nls.header.ariaLabel]]" columns="[[[{headerText:nls.header.fullName,field:'ID'},{headerText:nls.header.partyData,field:'partyName'},{headerText:nls.header.userName,field:'emailId'},{headerText:nls.header.authPerson,field:'emailId'}]]]" columns-default="[[{sortable:'enabled'}]]"
+                    selection-mode="[[{row:'multiple',column:'multiple'}]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('userlist_template', true)]]" data="[[paginationDataSource]]">
+                </oj-table>
+                <oj-paging-control id="paging" slot="bottom" :page-size="[[10]]" data="[[paginationDataSource]]"></oj-paging-control>
+            </div>
+            <!-- /ko -->
+
+            <!-- ko ifnot: noStatus && partyData -->
+            <div id="pagingControlAll" class="full-width">
+                <oj-table id="table" :aria-label="[[$component.nls.header.details]]" columns="[[dynamicCols]]" columns-default="[[{sortable:'enabled'}]]" selection-mode="[[{row:'multiple',column:'multiple'}]]" row-renderer="[[$oj.KnockoutTemplateUtils.getRenderer('userlist_template',true)]]"
+                    data="[[paginationDataSource]]">
+                </oj-table>
+                <oj-paging-control id="paging" slot="bottom" :page-size="[[10]]" data="[[paginationDataSource]]"></oj-paging-control>
+            </div>
+            <!-- /ko -->
+            <script type="text/html" id="userlist_template">
+                <tr class="record">
+                    <td>
+                        <span data-bind="text:firstName"></span>
+                    </td>
+                    <!-- ko if: $component.partyData -->
+                    <td>
+                        <span data-bind="text:partyId.displayValue"></span>
+                    </td>
+                    <!-- /ko -->
+                    <td>
+                        <a href="#" data-bind="text:username.split('@')[0],click:$component.showUserDetails.bind($data)"></a>
+                    </td>
+                    <td>
+                        <!-- ko if: userExtendedType=== 'User' -->
+                        <span data-bind="text:$component.nls.header.User"></span>
+                        <!-- /ko -->
+                        <!-- ko if: userExtendedType=== 'Signer' -->
+                        <span data-bind="text:$component.nls.header.Signer"></span>
+                        <!-- /ko -->
+                        <!-- ko if: userExtendedType=== 'AuthorisedPerson' -->
+                        <span data-bind="text:$component.nls.header.AuthorisedPerson"></span>
+                        <!-- /ko -->
+                    </td>
+
+                    <!-- ko ifnot: $component.noStatus -->
+                    <td>
+
+                        <!-- ko if: $data.lockStatus === 'UNLOCK' -->
+                        <span class="user-unlocked" data-bind="text: $component.nls.header.unlock"></span>
+
+                        <!-- ko if: $component.authenticator !== 'IDCSAuthenticator' -->
+                        <!-- ko if: $data.updatable -->
+                        <a href="#" data-bind="click: $component.edit" alt="$component.nls.header.status">
+                            <span class="oj-lg-3 oj-flex-item icon icon-remarks"></span>
+                        </a>
+                        <!-- /ko -->
+                        <!-- ko ifnot: $data.updatable -->
+                        <span class="oj-lg-3 oj-flex-item icon icon-remarks disabled-icon"></span>
+                        <!-- /ko -->
+                        <!-- /ko -->
+                        <!-- /ko -->
+
+                        <!-- ko if: $data.lockStatus === 'LOCK' -->
+                        <span class="user-locked" data-bind="text: $component.nls.header.locked"></span>
+                        <!-- ko if: $data.updatable -->
+                        <a href="#" data-bind="click: $component.edit" alt="$component.nls.header.status">
+                            <span class="oj-lg-3 oj-flex-item icon icon-remarks"></span>
+                        </a>
+                        <!-- /ko -->
+                        <!-- ko ifnot: $data.updatable -->
+                        <span class="oj-lg-3 oj-flex-item icon icon-remarks disabled-icon"></span>
+                        <!-- /ko -->
+                        <!-- /ko -->
+                    </td>
+
+                    <td>
+                        <span data-bind="text:$data.deleteStatus === undefined || !($data.deleteStatus) ? $component.nls.header.alreadyGranted : $component.nls.header.revoked"></span>
+                        <!-- ko if: $data.isDeleteAllowed -->
+                        <a href="#" data-bind="click: $component.editChannelAccess" alt="$component.nls.header.channelAccess">
+                            <span class="oj-lg-3 oj-flex-item icon icon-remarks"></span>
+                        </a>
+                        <!-- /ko -->
+                        <!-- ko ifnot: $data.isDeleteAllowed -->
+                        <span class="oj-lg-3 oj-flex-item icon icon-remarks disabled-icon"></span>
+                        <!-- /ko -->
+                    </td>
+                    <td>
+                        <span data-bind="text:$data.userChannelType === 'HTH' && $data.closeId ? 'HTH (' + $data.closeId + ')' : $data.userChannelType"></span>
+                    </td>
+                    <!-- /ko -->
+                </tr>
+            </script>
+            <script type="text/html" id="name_template">
+            </script>
+        </div>
+    </page-section>
+    <!-- /ko -->
+    <div class="button-container">
+        <!-- ko ifnot: cancelButtonFlag -->
+        <oj-button class="action-button-secondary" on-click="[[$component.cancel]]">
+            <span data-bind="text:$component.nls.buttons.cancel"></span>
+        </oj-button>
+        <!-- /ko -->
+    </div>
+</div>
+<modal-window dashboard="[[$dashboard]]" base-model="[[$baseModel]]" dialog-id="[['statusDialog']]" header="[[$component.nls.header.userStatus]]">
+    <div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+                <label for="lockstatus" data-bind="text: $component.nls.header.status">
+        </label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <oj-switch id="lockstatus" value="{{$component.statusOptionValueNew}}" on-value-changed="[[$component.statusOptionChangeHandler]]" disabled="[[$component.isLockToggleDisabled()]]"></oj-switch>
+                <span data-bind="text: $component.statusOptionValue() === 'UNLOCK' || $component.statusOptionValue() === $component.unlock ? $component.nls.header.unlock : $component.nls.header.lock"></span>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+                <label for="reason" data-bind="text: $component.nls.header.reason">
+        </label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <oj-text-area id="reason" disabled="[[reasonArea]]" value="{{reason}}"></oj-text-area>
+            </div>
+        </div>
+        <div class="oj-flex button-container">
+            <oj-button id="submitLock" class="action-button-primary" on-click="[[$component.submit]]">
+                <span data-bind="text:$component.nls.buttons.submit"></span>
+            </oj-button>
+            <oj-button id="cancelLock" class="action-button-secondary" on-click="[[$component.cancelModal]]">
+                <span data-bind="text:$component.nls.buttons.cancel"></span>
+            </oj-button>
+        </div>
+    </div>
+</modal-window>
+<modal-window dashboard="[[$dashboard]]" base-model="[[$baseModel]]" dialog-id="[['channelAccessDialog']]" header="[[$component.nls.header.userChannelAccess]]">
+    <div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+                <label for="deleteStatus" data-bind="text: $component.nls.header.channelAccess">
+        </label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <oj-switch id="deleteStatus" value="{{$component.deleteStatus}}" on-value-changed="[[$component.channelAccessChangeHandler]]"></oj-switch>
+                <span data-bind="text: $component.deleteStatusVal()"></span>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3 label">
+                <label for="deleteReason" data-bind="text: $component.nls.header.reason">
+        </label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <oj-text-area id="deleteReason" disabled="[[reasonArea]]" value="{{reason}}"></oj-text-area>
+            </div>
+        </div>
+        <div class="oj-flex button-container">
+            <oj-button id="submitDelete" class="action-button-primary" on-click="[[$component.submitLockStatus]]">
+                <span data-bind="text:$component.nls.buttons.submit"></span>
+            </oj-button>
+            <oj-button id="cancelDelete" class="action-button-secondary" on-click="[[$component.cancelModal]]">
+                <span data-bind="text:$component.nls.buttons.cancel"></span>
+            </oj-button>
+        </div>
+    </div>
+</modal-window>

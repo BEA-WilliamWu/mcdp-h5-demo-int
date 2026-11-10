@@ -1,0 +1,121 @@
+<div class="form-main-container">
+    <!-- ko ifnot: $component.approvalMode() -->
+    <div data-bind="template: { name: 'review-screen/review-banner-template', data: $component.reviewTransactionMessage}"></div>
+    <!-- /ko -->
+
+    <page-section>
+        <div>
+            <obdx-row base-model="[[$baseModel]]"
+                      dashboard="[[$dashboard]]"
+                      label="[[$component.nls.PageHeading.AccountNumber]]"
+                      value="[[detailAccountNumber]]"></obdx-row>
+            <obdx-row base-model="[[$baseModel]]"
+                      dashboard="[[$dashboard]]"
+                      label="[[$component.nls.PageHeading.AccountName]]"
+                      value="[[detailAccountName]]"></obdx-row>
+            <obdx-row base-model="[[$baseModel]]"
+                      dashboard="[[$dashboard]]"
+                      label="[[$component.nls.PageHeading.CINNumber]]"
+                      value="[[detailCinNumber]]"></obdx-row>
+        </div>
+    </page-section>
+
+    <page-section heading="[[$component.nls.PageHeading.HostToHostManagementSection]]">
+        <div class="oj-flex oj-flex-items-pad oj-sm-flex-items-initial oj-sm-align-items-center">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                <oj-label>
+                    <span data-bind="text: $component.nls.PageHeading.HostToHostApiChannel"></span>
+                </oj-label>
+            </div>
+            <div class="oj-flex-item oj-sm-flex-initial">
+                <oj-switch value="{{hostToHostApiChannelEnabled}}" disabled="[[true]]"></oj-switch>
+            </div>
+            <div class="oj-flex-item oj-sm-flex-initial oj-sm-padding-2x-start">
+                <span data-bind="text: hostToHostApiChannelStatusLabel"></span>
+            </div>
+        </div>
+        <oj-bind-if test="[[!disableMode()]]">
+        <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                <oj-label>
+                    <span data-bind="text: $component.nls.PageHeading.CorrelateUamClientId"></span>
+                </oj-label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <span data-bind="text: correlateUamClientId"></span>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3"></div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <div class="oj-sm-padding-2x-top">
+                    <span data-bind="text: $component.nls.descriptions.correlateUamClientId"></span>
+                </div>
+            </div>
+        </div>
+        </oj-bind-if>
+    </page-section>
+
+    <oj-bind-if test="[[!disableMode()]]">
+    <page-section heading="[[$component.nls.PageHeading.ApiAuthorizations]]">
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12">
+                <span data-bind="text: $component.nls.descriptions.apiAuthorizationIntro"></span>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                <oj-label>
+                    <span data-bind="text: $component.nls.PageHeading.ApiApprovalFlowType"></span>
+                </oj-label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <span data-bind="text: apiApprovalFlowTypeLabel"></span>
+                <div class="oj-sm-padding-2x-top">
+                    <span data-bind="text: approvalFlowDescription"></span>
+                </div>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad oj-sm-align-items-center">
+            <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+                <oj-label>
+                    <span data-bind="text: $component.nls.PageHeading.ChargeAccount"></span>
+                </oj-label>
+            </div>
+            <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+                <span data-bind="text: chargeAccountDisplay"></span>
+            </div>
+        </div>
+        <div class="oj-flex oj-flex-items-pad">
+            <div class="oj-flex-item oj-sm-12">
+                <div class="hth-api-list hth-api-list--review">
+                    <div class="hth-api-list__header">
+                        <div class="hth-api-list__header-text">
+                            <span data-bind="text: $component.nls.PageHeading.ApiName"></span>
+                        </div>
+                    </div>
+                    <!-- ko foreach: selectedApis -->
+                    <div class="hth-api-list__row">
+                        <span data-bind="text: apiName"></span>
+                    </div>
+                    <!-- /ko -->
+                </div>
+            </div>
+        </div>
+    </page-section>
+    </oj-bind-if>
+
+    <!-- ko ifnot: $component.approvalMode() -->
+    <div class="button-container">
+        <oj-button class="action-button-primary" on-click="[[$component.onConfirm]]" disabled="[[$component.isConfirming]]">
+            <span data-bind="text: nls.PageHeading.Confirm"></span>
+        </oj-button>
+        <oj-button class="action-button-secondary" on-click="[[$component.onCancel]]">
+            <span data-bind="text: nls.PageHeading.Cancel"></span>
+        </oj-button>
+        <oj-button class="action-button-tertiary" on-click="[[$component.onBack]]">
+            <span data-bind="text: nls.PageHeading.Back"></span>
+        </oj-button>
+    </div>
+    <!-- /ko -->
+</div>

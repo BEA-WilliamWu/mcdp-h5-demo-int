@@ -1,0 +1,125 @@
+<page-section heading="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.HostToHostManagementSection]]">
+  <div>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.AccountNumber]]"
+              value="[[$component.params.confirmScreenExtensions.record.accountNumber]]"></obdx-row>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.AccountName]]"
+              value="[[$component.params.confirmScreenExtensions.record.accountName]]"></obdx-row>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.CINNumber]]"
+              value="[[$component.params.confirmScreenExtensions.record.cinNumber]]"></obdx-row>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.HostToHostApiChannel]]"
+              value="[[$component.params.confirmScreenExtensions.record.hostToHostApiChannelEnabled ? $component.params.confirmScreenExtensions.resourceBundle.PageHeading.Enable : $component.params.confirmScreenExtensions.resourceBundle.PageHeading.Disable]]"></obdx-row>
+    <!-- ko if: $component.params.confirmScreenExtensions.record.hostToHostApiChannelEnabled -->
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.CorrelateUamClientId]]"
+              value="[[$component.params.confirmScreenExtensions.record.correlateUamClientId]]"></obdx-row>
+    <obdx-row base-model="[[$baseModel]]"
+              dashboard="[[$dashboard]]"
+              label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ApiApprovalFlowType]]"
+              value="[[$component.params.confirmScreenExtensions.record.apiApprovalFlowType === 'MAKER_CHECKER' ? $component.params.confirmScreenExtensions.resourceBundle.PageHeading.WithMakerChecker : $component.params.confirmScreenExtensions.resourceBundle.PageHeading.StraightThrough]]"></obdx-row>
+    <div class="oj-flex oj-flex-items-pad">
+      <div class="oj-flex-item oj-sm-12 oj-md-4 oj-lg-3">
+        <oj-label>
+          <span data-bind="text:$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ApiName"></span>
+        </oj-label>
+      </div>
+      <div class="oj-flex-item oj-sm-12 oj-md-8 oj-lg-8">
+        <!-- ko foreach: ($component.params.confirmScreenExtensions.record.apiAuthorizations || []).filter(function(item){ return !!item.selected; }) -->
+        <div class="oj-sm-padding-1x-vertical">
+          <span data-bind="text: apiName"></span>
+        </div>
+        <!-- /ko -->
+      </div>
+    </div>
+    <!-- /ko -->
+  </div>
+</page-section>
+
+<!-- Approval response fields -->
+<!-- Maker flow: transactionResponse is set directly -->
+<!-- ko if: $component.params.transactionResponse -->
+<page-section heading="[['']]">
+  <!-- ko if: $component.params.transactionResponse.transactionReferenceNo -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.TransactionReferenceNumber]]"
+            value="[[$component.params.transactionResponse.transactionReferenceNo]]"></obdx-row>
+  <!-- /ko -->
+  <!-- ko if: $component.params.transactionResponse.referenceNumber -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ReferenceNumber]]"
+            value="[[$component.params.transactionResponse.referenceNumber]]"></obdx-row>
+  <!-- /ko -->
+  <!-- ko if: $component.params.transactionResponse.status && $component.params.transactionResponse.status.result -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.Status]]"
+            value="[[$component.params.transactionResponse.status.result]]"></obdx-row>
+  <!-- /ko -->
+  <!-- ko if: $component.params.transactionResponse.approvalComment -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ApprovalComment]]"
+            value="[[$component.params.transactionResponse.approvalComment]]"></obdx-row>
+  <!-- /ko -->
+</page-section>
+<!-- /ko -->
+
+<!-- Checker/Approval flow: data comes from jqXHR.responseJSON and hostReferenceNumber -->
+<!-- ko ifnot: $component.params.transactionResponse -->
+<page-section heading="[['']]">
+  <!-- Transaction Reference Number: from transactionDTO.transactionId -->
+  <!-- ko if: $component.params.jqXHR && $component.params.jqXHR.responseJSON && $component.params.jqXHR.responseJSON.transactionAction && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.transactionId -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.TransactionReferenceNumber]]"
+            value="[[$component.params.jqXHR.responseJSON.transactionAction.transactionDTO.transactionId]]"></obdx-row>
+  <!-- /ko -->
+  <!-- Reference Number: prefer hostReferenceNumber (externalReferenceNumber), fallback to status.referenceNumber -->
+  <!-- ko if: $component.params.hostReferenceNumber -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ReferenceNumber]]"
+            value="[[$component.params.hostReferenceNumber]]"></obdx-row>
+  <!-- /ko -->
+  <!-- ko ifnot: $component.params.hostReferenceNumber -->
+  <!-- ko if: $component.params.jqXHR && $component.params.jqXHR.responseJSON && $component.params.jqXHR.responseJSON.status && $component.params.jqXHR.responseJSON.status.referenceNumber -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ReferenceNumber]]"
+            value="[[$component.params.jqXHR.responseJSON.status.referenceNumber]]"></obdx-row>
+  <!-- /ko -->
+  <!-- /ko -->
+  <!-- Status: from status.result or processingDetails.status -->
+  <!-- ko if: $component.params.jqXHR && $component.params.jqXHR.responseJSON && $component.params.jqXHR.responseJSON.status && $component.params.jqXHR.responseJSON.status.result -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.Status]]"
+            value="[[$component.params.jqXHR.responseJSON.status.result]]"></obdx-row>
+  <!-- /ko -->
+  <!-- ko ifnot: $component.params.jqXHR && $component.params.jqXHR.responseJSON && $component.params.jqXHR.responseJSON.status && $component.params.jqXHR.responseJSON.status.result -->
+  <!-- ko if: $component.params.jqXHR && $component.params.jqXHR.responseJSON && $component.params.jqXHR.responseJSON.transactionAction && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO && $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.processingDetails -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.Status]]"
+            value="[[$component.params.jqXHR.responseJSON.transactionAction.transactionDTO.processingDetails.status === 'S' ? 'Success' : $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.processingDetails.status === 'F' ? 'Failed' : $component.params.jqXHR.responseJSON.transactionAction.transactionDTO.processingDetails.status]]"></obdx-row>
+  <!-- /ko -->
+  <!-- /ko -->
+  <!-- Approval Comment: from remarks -->
+  <!-- ko if: $component.params.remarks -->
+  <obdx-row base-model="[[$baseModel]]"
+            dashboard="[[$dashboard]]"
+            label="[[$component.params.confirmScreenExtensions.resourceBundle.PageHeading.ApprovalComment]]"
+            value="[[$component.params.remarks]]"></obdx-row>
+  <!-- /ko -->
+</page-section>
+<!-- /ko -->

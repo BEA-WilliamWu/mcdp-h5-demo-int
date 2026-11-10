@@ -1,0 +1,25 @@
+{
+    "modules": [{
+        "moduleName": "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostManagement",
+        "components": [{
+            "componentName": "host-to-host-management",
+            "service": "read",
+            "perform": "host-to-host-search#party-validate#host-to-host-details"
+        }, {
+            "componentName": "host-to-host-management",
+            "service": "submit",
+            "perform": "host-to-host-review",
+            "approve": "host-to-host-review"
+        }, {
+            "componentName": "host-to-host-management",
+            "service": "edit",
+            "perform": "host-to-host-review",
+            "approve": "host-to-host-review"
+        }, {
+            "componentName": "host-to-host-management",
+            "service": "disable",
+            "perform": "host-to-host-review",
+            "approve": "host-to-host-review"
+        }]
+    }]
+}

@@ -1,0 +1,29 @@
+{
+    "modules": [{
+        "moduleName": "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostUserAccess",
+        "components": [{
+            "componentName": "host-to-host-user-access",
+            "service": "search",
+            "perform": "validation#user-list-details#summary"
+        }, {
+            "componentName": "host-to-host-user-access",
+            "service": "accounts",
+            "perform": "mapping-modules#hth-account-linkage#hth-api-service-mapping"
+        }, {
+            "componentName": "host-to-host-user-access",
+            "service": "submit",
+            "perform": "review-hth-user-access",
+            "approve": "review-hth-user-access"
+        }, {
+            "componentName": "host-to-host-user-access",
+            "service": "edit",
+            "perform": "review-hth-user-access",
+            "approve": "review-hth-user-access"
+        }, {
+            "componentName": "host-to-host-user-access",
+            "service": "delete",
+            "perform": "review-hth-user-access",
+            "approve": "review-hth-user-access"
+        }]
+    }]
+}

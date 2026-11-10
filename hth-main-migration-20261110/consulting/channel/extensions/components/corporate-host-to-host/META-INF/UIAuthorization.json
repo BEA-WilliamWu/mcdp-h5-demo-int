@@ -1,0 +1,19 @@
+{
+    "modules": [{
+        "moduleName": "com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostCertificateManagement",
+        "components": [{
+            "componentName": "host-to-host-certificate-management",
+            "service": "search",
+            "perform": "host-to-host-certificate-management"
+        }, {
+            "componentName": "host-to-host-certificate-management",
+            "service": "submit",
+            "perform": "host-to-host-certificate-management",
+            "approve": "host-to-host-certificate-management"
+        }, {
+            "componentName": "host-to-host-certificate-management",
+            "service": "download",
+            "perform": "host-to-host-certificate-management"
+        }]
+    }]
+}

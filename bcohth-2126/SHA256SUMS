@@ -1,0 +1,8 @@
+7f224f72f1d32532973fd413ac10115f99136ed9123008c7acd3283c9df36299  BCOH2H-2126-Technical-Design.md
+323cef3de71c306c345b7456f48cd526d8f5727180c7de50d3bd3488e37ad515  DELIVERY.txt
+b6d88114229317db83f7ae21c002ce8d60edb5f46976355355316335ff44c789  source/hth-ms-bff/hth-ms-bff-api/src/main/resources/api/hth-bff-local-payment.0.0.openapi.yaml
+36947975ffba2ab4e657112801ae03e5d40294c687ed4e69098f09338a58f9cb  source/hth-ms-bff/hth-ms-bff-svc/src/test/java/com/hkbea/hth/bff/maintenance/filter/MaintenanceWindowFilterTest.java
+5e9bac1782b48f91bd6f1b6bbcd1215d97bb1b376b1264d41288b0618b848a0b  source/hth-ms-bff/hth-ms-bff-svc/src/test/java/com/hkbea/hth/bff/service/PaymentEnquiryBffTest.java
+773b72dfb7f5b4fd5566fbf33e39548f97076baeb03423c17a3832909494c97a  source/hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-local-payment.0.0.openapi.yaml
+85c237e7986835166a5e28acdc82546662e3a2afe3839f296dd3b34500a752c4  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+cd23f5884b5c1532bdbf7652b71b511355f828ef1dab2317bda5ce1827ddd1b0  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java

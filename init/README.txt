@@ -1,3 +1,43 @@
+HTH audit dropdown toggles and DSP Client ID existence — 2026-11-12
+Source: bco-applicaion-main 5e7c6ed3c91f9e6d2a08c4c03e0e18148ae676f8 (branch hth-integration-20261110).
+
+This update includes six Java files and one regression script, with their original
+repository paths under bco-applicaion-main/. FILES.tsv lists every delivered file.
+- Audit activity and high-risk dropdowns read the existing ENABLE_HTH_CM_ONBOARDING
+  and ENABLE_HTH_BM_ONBOARDING flags. Only the explicit HTH onboarding task IDs are
+  filtered; existing BCO and released Inquiry tasks remain available.
+- resourceTasks filtering applies only to aspects=audit&view=list in the existing
+  CZTaskExt.postList extension. The high-risk endpoint uses the same visibility rule.
+- BM Client ID validation now calls POST /client/v1/exists, with body clientId.
+  Boolean exists is mapped to the existing validUamClientId response. True proceeds
+  to the existing local Client ID binding check; false means not available in DSP.
+  HTTP/UAM errors and missing/malformed exists are service failures.
+- The original DSP SDK transport, DSP.* base URL and APIC headers are retained.
+  The API declaration is caller-side because the bundled SDK predates /exists.
+
+Update the prior init by EITHER copying the seven files named in the latest
+SOURCE_COMMITS.json supplemental_changes entry OR applying
+UPDATE_AUDIT_TOGGLE_DSP_EXISTS_20261112.patch
+at the application repository root. Run git apply --check before applying.
+The patch is verified against both 2ecf4c62 and prior init CM source
+d56fd460; it contains only this change. The previous summary patch remains separate.
+For cumulative installation, apply the existing 1955 package, then the summary
+update, then this patch. Packaged full files contain the latest combined content
+for those paths; the older cumulative patches retain their documented base/scope.
+
+Rebuild and deploy the common module, hosttohost module and extxface.app.impl module
+through the normal application build. This update adds no SQL or DSP server change.
+Existing onboarding toggle configuration and the BCO CZTaskExt registration apply.
+The APIC route for /client/v1/exists must be available at the configured DSP base URL.
+
+Validation passed: Java 8 production compilation; 349 audit assertions; 20 local
+HTTPS requests / 179 DSP assertions; existing password transport regression.
+Run the new regression with JAVA_HOME set to JDK 21:
+  python3 consulting/tests/hth_onboarding/verify_audit_dropdowns_and_client_exists.py
+It uses local test fixtures and HTTPS only; UAT connectivity/deployment is unverified.
+
+Earlier delivery notes (BM Client ID validation is superseded by the update above):
+
 HTH account access summary update — 2026-11-12
 Source: bco-applicaion-main 2ecf4c62b2ca611529164e8448fd845eaf378ddb (branch hth-integration-20261110).
 

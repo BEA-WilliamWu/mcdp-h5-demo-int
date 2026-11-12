@@ -1,8 +1,9 @@
 98d73ebf30f9d4980654ce1a3fd8ff20b3ad65e013635dea9039a9aa521c0d68  DELETED_FILES.txt
-e099d4c4def1ff0081ba40f2bd0bf346e39e15a4be0b488491f8321c62754983  FILES.tsv
-cb79ba4d8c13caf5859d7375342ba9e76bc7bab6a8b6ed4b4e2d333c8e2fa1e7  README.txt
+a685a37c23e845f6a69f99000cdc0dd72909f845a46f4383b6d68436e5b15a2e  FILES.tsv
+a27a699cc0f4ec13f2a35efa4e1f27221c9491e79005b8b3a7b1b25c7d2ffaa8  README.txt
 64f5dac0d5ab3f8a5169a345f8b62c517b194361096e7a74feff72e5d6245f7d  REMOVED_FROM_PREVIOUS_INIT.txt
-47d60601b7dc2a57aed3ea0d1e578bcbbbd6ea51a205169c420801ed6ceaf919  SOURCE_COMMITS.json
+7a00be1e5ac94a80d67edfa9cf2f79495addfa040056163424eb1442d1a8a43a  SOURCE_COMMITS.json
+08c64b0f0db0884447ab9c57d731f0a184fb180eb77f62d43255362bcbc522e7  UPDATE_AUDIT_TOGGLE_DSP_EXISTS_20261112.patch
 10a8b0302dde1f0e65560f6c3e16f5e31d9801e05f7348cb08d51720284c2789  UPDATE_DSP_FROM_PREVIOUS_INIT.patch
 3522e314db1af3508d8016e65cfce0840713da73badc66e26198ea73b5f39657  UPDATE_FROM_PREVIOUS_INIT.patch
 65767cc6140a20773fd8b890bc55fa33e33d3038e075bce718a024f6f56f3df7  UPDATE_SUMMARY_20261112.patch
@@ -24,10 +25,15 @@ d573c8952a45a46ecbe0fe350c6e3b42abd820c2b5e43f56f31df2e30290f9be  bco-applicaion
 488c36972baecd264848688737df02a704bdbf1e84c99cd98d41bacf5737652d  bco-applicaion-main/consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java
 b5ed34541644f2c7b3cbed844bc4b67449a4a5c3f92f557671ba7ba865f3ec28  bco-applicaion-main/consulting/middleware/projects/endpoint/com.ofss.digx.cz.bea.appx.service.rest/src/com/ofss/digx/cz/bea/appx/hosttohost/service/HostToHostApiPassword.java
 03e6928f56f33e307d6a23f30d7cb5ca3eec2bb9a134c33f1708d5b2bfcd7497  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
-86423db5ec5667aaf03262064821194177cd3c563f132be8d45f226c29ee91a7  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
+dacce8129df796a7fea14024731881fa21d02ac05edeb540d804948e5475917f  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
+e3144f95939322498afd5a44bbbf5c31c1c41a11d9d3b9cafbfaec47b46ed783  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspClientExistenceApi.java
 677b09c572200bf06bb9b61ae2402e778edeb0bd63b1b2b3c61c36352d76b75c  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java
 bb99e41a03e69fe51fcea70ff24bcffe122a9cb7da834975dcb6e6f2944c487f  bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
+034363fced25d3d9acd048f4b7ab9ae8e3c005d7936451798875a70342d05183  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/helper/HthAuditTaskVisibility.java
+1d5c13f1661c87abf31c49b1854bb7cf6e0d3b03c2042dfbea584087523a1143  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/resource/task/service/ext/CZTaskExt.java
+6cbc8b68bb4bd75c3277f700b0d15ea279f1401fa1af7a4cb06216daf9e1e041  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/service/transactionlist/TransactionList.java
 8390ede76b2f0021174182f3a9244d9ecc9a115d2394b2ddbf4c127bb6996636  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
+9c03290fd26122c2f75795e9c6577850725d122d343bf084d30576a5e1e04182  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostManagement.java
 33540d02e6d8161a8bae91b6658ccc21264a63bc143bd3c44e344b23a4a9ed37  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordTransport.java
 10a829f87ed0f0bbd3c4436257c842a4f06fca26f99e3bc5f042d09c60267111  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/HthApiPasswordCodeRepository.java
 023c3bdeb088f19f846757c5760f1c1ac87e03e460759386150b13e5d80ea5d7  bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/HthApiPasswordStateRepository.java
@@ -38,6 +44,7 @@ e062e73220314b0a8a7b58392cf4f7c1da3c8b40faa151d5e38a515bf64c93ec  bco-applicaion
 6ff9917450b5d7f3dd818e249d00b04423ad933eeb8b425abca4884b7deb7c31  bco-applicaion-main/consulting/tests/hth1955/verify_apic_transport.py
 80dd1ecbdc12dde78621fd044f5a3f25ee5f8aff0261c5e5889f4261e61d92ac  bco-applicaion-main/consulting/tests/hth1955/verify_code_lifecycle.py
 f29d14f6fe536cd3d79a6e9cea812283bfc66abff7e51f6b3bd69de24ca8ba83  bco-applicaion-main/consulting/tests/hth1955/verify_contract_guard.py
+0910697c673fb5b15447b4c0233c9904c8a5334a19359a31cade0bd9c47acc0e  bco-applicaion-main/consulting/tests/hth_onboarding/verify_audit_dropdowns_and_client_exists.py
 c8b8f89ce2cab7dbed4af18e4903458756936c9e4c00d4f417bad55a7907bca3  bco-applicaion-main.patch
 10809a6edb4e1952967653ecd67304f20355b0d741a3d9fe7b0672000efc3f54  hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
 630282ef92a1cf84cfe17462f6de872f702a04d9309a6afda43aa7c40554f45c  hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java

@@ -3,6 +3,7 @@ package com.ofss.digx.cz.bea.extxface.microservice.api.dsp;
 import com.hkbea.dsp.client.DspSupportClient;
 import com.hkbea.common.header.CommonHeader;
 import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.api.DspPasswordApi;
+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.api.DspClientExistenceApi;
 import feign.Feign;
 import feign.Logger;
 import feign.Request;
@@ -17,6 +18,11 @@ import okhttp3.logging.HttpLoggingInterceptor;
 /** Uses the DSP SDK transport and the application trust store without bypassing TLS checks. */
 public class DspClient extends DspSupportClient {
     private volatile DspPasswordApi passwordApi;
+
+    /** Use the same SDK transport, APIC base URL and headers as the old client API. */
+    public DspClientExistenceApi clientExistenceApi() {
+        return getFeignConfig(DspClientExistenceApi.class);
+    }
 
     /** CM-side API declaration until the provider SDK includes PasswordApi. */
     public DspPasswordApi passwordApi() {

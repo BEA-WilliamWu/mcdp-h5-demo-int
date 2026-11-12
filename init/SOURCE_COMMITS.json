@@ -14,6 +14,22 @@
         "paths": [
           "consulting/channel/extensions/components/account-access-management/summary/summary.js"
         ]
+      },
+      {
+        "name": "audit-toggle-dsp-client-exists-20261112",
+        "commit": "5e7c6ed3c91f9e6d2a08c4c03e0e18148ae676f8",
+        "base": "2ecf4c62b2ca611529164e8448fd845eaf378ddb",
+        "compatible_previous_init_commit": "d56fd4607cc8204f592ed11ec11c295d4c6f2811",
+        "patch": "UPDATE_AUDIT_TOGGLE_DSP_EXISTS_20261112.patch",
+        "paths": [
+          "consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java",
+          "consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspClientExistenceApi.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/helper/HthAuditTaskVisibility.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/resource/task/service/ext/CZTaskExt.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/service/transactionlist/TransactionList.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostManagement.java",
+          "consulting/tests/hth_onboarding/verify_audit_dropdowns_and_client_exists.py"
+        ]
       }
     ]
   },

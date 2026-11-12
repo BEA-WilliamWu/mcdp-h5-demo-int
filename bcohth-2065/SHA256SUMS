@@ -1,0 +1,6 @@
+7d5f592853bcbf90b5d96e28c6743b15c5206da937432e32855e5c6a0655f603  BCOH2H-2065-Technical-Design.md
+a1e3f394fd8b740ab3e15b246a55746218831e3c835307310b504a26623c5910  DELIVERY.txt
+3b44763c038219f59ea466b45edc80f527f5704a403647b2bda2ef227aa94498  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+279ef9fc7d11acb2a7708df10c791caf2c9fa2358f717de89f1e03e1e5450d85  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+f7ca9bb7c3b75bd399072bdfa4f808d3078bf1824572d300cc7147d5d6b16186  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentValidationSupport.java
+0e8a6709d231eafc1a3ebec3a46a0c87c053831a1214c9335f78979138dfdc6d  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentIpeContractTest.java

@@ -1,0 +1,34 @@
+BCOH2H-2065 - Minimal IPE validation correction
+Date: 2026-11-12
+Source repository: /Users/devs/CProj/hth-dsp
+Baseline: 576d6fc0df94abc7029836de07611363296a51ef
+Local DSP commit: 759675cb5073185d1ea2450ef18b11ae8f36f874
+
+Contents: three production Java files, one new active unit-test file,
+and the updated English technical design. Java files are complete files
+from the stated commit, preserving repository-relative paths under source/.
+They include the latest baseline; do not apply them as older isolated story snapshots.
+
+Changes:
+- CHATS optional addressLine1/addressLine2/townName: maximum 70 characters.
+- Supplied country: exactly two uppercase letters.
+- Trusted debtor name: nonblank, maximum 140 characters.
+- Explicit CHATS checks before IPE routing; selected CHATS checks before submission.
+- Absent creditor address no longer causes mapping failure or skips payout insertion.
+- Existing error codes, other payment-type rules, database schema and legacy mappings retained.
+
+Verification: Java 21 / Maven, targeted reactor BUILD SUCCESS.
+ChatsPaymentIpeContractTest: 41 passed.
+PaymentCommonRoutingBuilderTest: 5 passed.
+PaymentRoutingSubmitterTest: 9 passed.
+PaymentEnquiryServiceTest: 40 passed.
+Total: 95 tests, 0 failures, 0 errors, 0 skipped.
+Local log: /tmp/hth-2065-verification/test.log
+No actual IPE, database integration or pacs.008 SIT/UAT execution.
+
+Still pending: 140-character creditor name versus 35-character
+ depositAccountName1; debtor address source; downstream account/customer-ID,
+agent and charge mappings; remittance schema clarification and message verification.
+See the technical design for details. depositAccountName2 is preserved.
+
+Only local DSP Git was committed. No remote push or mcdp Git commit performed.

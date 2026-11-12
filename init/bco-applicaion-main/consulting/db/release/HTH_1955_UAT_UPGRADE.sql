@@ -50,5 +50,6 @@ WHEN NOT MATCHED THEN INSERT
  VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
 COMMIT;
 UNDEFINE DSP_PUBLIC_KEY_URL DSP_MODIFICATION_URL DSP_PASSWORD_CLIENT_ID DSP_PASSWORD_CLIENT_SECRET
--- Deploy DSP's CM protocol before CM. Verify setup/reset and reconcile IN_PROGRESS/UNKNOWN Codes.
+-- Caller-only correction: DSP is unchanged. Setup/reset remain blocked pending the provider contract.
+-- Do not run the retirement script until end-to-end support and existing credentials are verified.
 -- Only after that, run HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql.

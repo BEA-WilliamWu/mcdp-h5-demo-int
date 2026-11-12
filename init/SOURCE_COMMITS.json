@@ -1,12 +1,14 @@
 [
   {
     "repository": "bco-applicaion-main",
-    "commit": "e0a344364cc969826bede0df246d5193fdea2f92",
-    "base": "1df981ede1638452cbc85a17dcce018a4f4cd05f"
+    "commit": "b88515012326293794a1a2496d21b418583bacdd",
+    "base": "1df981ede1638452cbc85a17dcce018a4f4cd05f",
+    "previous_init_commit": "e0a344364cc969826bede0df246d5193fdea2f92"
   },
   {
     "repository": "hth-dsp",
-    "commit": "fa8b143a44d55efc65d1c7386784739f909a733d",
-    "base": "b5e5eecca0ad6c35993ce3c2c1e6ad66593ab712"
+    "commit": "576d6fc0df94abc7029836de07611363296a51ef",
+    "base": "b5e5eecca0ad6c35993ce3c2c1e6ad66593ab712",
+    "delivery": "NONE - original provider tree restored; no DSP files or patch included"
   }
 ]

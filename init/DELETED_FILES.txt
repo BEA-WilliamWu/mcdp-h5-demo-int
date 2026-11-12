@@ -1,4 +1,4 @@
-需从对应目标源码仓库移除的旧文件（完整补丁已经包含这些删除）：
+需从 CM 目标源码移除的旧文件（完整补丁已包含删除）：
 
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredential.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredentialKey-embeddable.orm.xml

@@ -7,81 +7,69 @@ import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteExc
 import com.ofss.digx.infra.exceptions.Exception;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.logging.Logger;
 import javax.ws.rs.core.Response;
 
-/** Strict internal APIC contract: only HTTP 200 / status 000000 confirms DSP success. */
+/** Caller of the provider-owned DSP contract; no private DSP protocol extensions. */
 public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
-  private static final String PROTOCOL = "CM_SHA256_BASE64_V1";
+  private static final Logger LOGGER = Logger.getLogger(HthDspApiCredentialAdapter.class.getName());
   private final DspApiPasswordClient client;
   public HthDspApiCredentialAdapter() { this(new DspApiPasswordClient()); }
   HthDspApiCredentialAdapter(DspApiPasswordClient client) { this.client = client; }
 
   public String getStatus(String clientId, String closeId) throws Exception {
-    Map<String, Object> request = request(clientId, closeId, UUID.randomUUID().toString());
-    request.put("queryOnly", Boolean.TRUE);
-    request.put("hashValue", "0000000000000000000000000000000000000000000000000000000000000000");
-    JsonNode result = send(request, false);
-    String state = result.path("credentialStatus").asText();
-    if (!PROTOCOL.equals(result.path("protocol").asText())
-        || (!STATUS_ACTIVE.equals(state) && !STATUS_NOT_SETUP.equals(state) && !STATUS_LOCKED.equals(state))) {
-      throw new HthApiCredentialWriteException(false);
-    }
-    return state;
+    // Neither published endpoint queries credential existence. A key response is not a status response.
+    // Do not infer NOT_SETUP from no local record or issue a trial password write.
+    LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE");
+    return STATUS_UNKNOWN;
   }
 
-  public String publicKey(String clientId, String closeId, String requestId, String nonceHash) throws Exception {
-    Map<String, Object> request = request(clientId, closeId, requestId);
-    request.put("hashValue", nonceHash);
-    request.put("queryOnly", Boolean.FALSE);
-    JsonNode result = send(request, false);
-    String key = result.path("publicKey").asText();
-    if (!PROTOCOL.equals(result.path("protocol").asText()) || key.isEmpty()) {
+  public void requireWriteSupported(String operation) throws Exception {
+    // 1955 requires an encrypted password hash. The available provider implementation hashes
+    // the decrypted value again; its M function also requires the actual old password.
+    // No switch enables this until the provider supplies the agreed contract.
+    if ("RESET".equals(operation)) {
+      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED");
+    } else {
+      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED");
+    }
+    throw new HthApiCredentialWriteException(false);
+  }
+
+  public String publicKey(String nonceHash) throws Exception {
+    if (nonceHash == null || !nonceHash.matches("[0-9a-f]{64}")) {
       throw new HthApiCredentialWriteException(false);
     }
+    Map<String, Object> request = new LinkedHashMap<String, Object>();
+    request.put("hashValue", nonceHash);
+    JsonNode result = sendPublicKey(request);
+    String key = result.path("publicKey").asText();
+    if (key.isEmpty()) { throw new HthApiCredentialWriteException(false); }
     return key;
   }
 
-  public void modify(String clientId, String closeId, String requestId, String function,
+  public void modify(String clientId, String closeId, String requestId, String operation,
       String encryptedHash, String randomNumber) throws Exception {
-    Map<String, Object> request = request(clientId, closeId, requestId);
-    request.put("function", function);
-    request.put("newEncryptedPassword", encryptedHash);
-    request.put("randomNumber", randomNumber);
-    send(request, true);
+    // Defence in depth for direct callers. Do not send the hash into a plaintext-password API,
+    // invent function R, use A to overwrite an existing credential, or fake an old password.
+    requireWriteSupported(operation);
   }
 
-  private Map<String, Object> request(String clientId, String closeId, String requestId) {
-    Map<String, Object> request = new LinkedHashMap<String, Object>();
-    request.put("protocol", PROTOCOL);
-    request.put("clientId", clientId);
-    request.put("closeId", closeId);
-    request.put("requestId", requestId);
-    return request;
-  }
-
-  private JsonNode send(Map<String, Object> request, boolean modification) throws Exception {
+  private JsonNode sendPublicKey(Map<String, Object> request) throws Exception {
     Response response = null;
     try {
-      response = client.send(request, modification);
-      int status = response.getStatus();
-      if (status != 200) {
-        // A proxy timeout or server failure can occur after commit; never release that Code.
-        throw new HthApiCredentialWriteException(modification && status != 400 && status != 401 && status != 403
-            && status != 404 && status != 405 && status != 422);
-      }
+      response = client.send(request, false);
+      if (response.getStatus() != 200) { throw new HthApiCredentialWriteException(false); }
       JsonNode body = new ObjectMapper().readTree(response.readEntity(String.class));
       if (body == null || !"000000".equals(body.path("status").asText())) {
-        throw new HthApiCredentialWriteException(modification);
+        throw new HthApiCredentialWriteException(false);
       }
       return body;
     } catch (HthApiCredentialWriteException failure) {
       throw failure;
-    } catch (DspApiPasswordClient.TransportException failure) {
-      throw new HthApiCredentialWriteException(modification && "POST".equals(failure.getStage()));
     } catch (java.lang.Exception failure) {
-      // Do not propagate bodies or transport exception messages containing credentials.
-      throw new HthApiCredentialWriteException(modification);
+      // No password write occurred; never include response bodies, headers or causes in logs.
+      throw new HthApiCredentialWriteException(false);
     } finally { if (response != null) { response.close(); } }
   }
 }

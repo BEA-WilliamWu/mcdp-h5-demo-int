@@ -1,78 +1,84 @@
-BCOH2H-1955 — DSP-only API password deployment
+BCOH2H-1955 — CM caller-only correction (2026-11-12)
 
-Implementation
-- CM no longer creates, reads or writes HTH_API_PASSWORD_CREDENTIAL, HTH_API_PASSWORD_STATE or HTH_API_PASSWORD_OPERATION.
-- HTH_API_PASSWORD_CODE stays: approval, 24-hour validity, failed attempts, purpose, reservation and consumption.
-- REMOTE_CLIENT_ID on the Code row binds its request to the business DSP client. It is not a password/state cache.
-- Status and SETUP/RESET Code purpose are determined by DSP for clientId + full closeId (USER@PARTY).
-- Browser: Base64(raw SHA256(UTF8(password))) -> RSA-2048 OAEP (SHA256 digest AND MGF1 SHA256, empty label) -> Base64 ciphertext.
-- CM never receives the plaintext password/hash. Its separate session RSA envelope contains Code, request ID, operation and a digest binding the DSP ciphertext.
-- DSP stores the decrypted Base64 digest as-is in its existing DSP_AUTH_CREDENTIAL table.
-- The customer's token signature must cover that same Base64 digest string, not its hex representation.
+Release state
+This delivery corrects the previous out-of-scope DSP changes. It is NOT a completed setup/reset release.
+The provider-owned DSP source is restored to b5e5eec. No DSP application/configuration changes are delivered.
+The CM code does not invent protocol, queryOnly, credentialStatus, requestId fields or function R on DSP APIs.
+SETUP/RESET and automatic Code-purpose selection remain unavailable pending the provider contract.
+This is intentional, agreed with the requester: deliver the correction and list the gaps first.
+Do not bypass the guard or interpret the local tests as a successful UAT setup/reset integration.
 
-Two internal APIC endpoints (POST)
-- .../dsp/api/password/v1/public-key
-- .../dsp/api/password/v1/modification
-The configured URL may include the environment-specific internal APIC prefix.
-CM sends X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO and a new UUID Message-Id.
-Payload protocol=CM_SHA256_BASE64_V1 prevents accidental use against the incompatible older API contract.
-Public-key requests include clientId, closeId, requestId, hashValue=lowercase-hex SHA256(six-digit nonce).
-queryOnly=true reads credentialStatus without allocating a key. The nonce is unrelated to the AP Code.
-Modification uses function A for setup and R for approved-Code reset, plus the same identity/requestId, randomNumber and newEncryptedPassword.
-DSP's existing legacy A/M path remains available when protocol is omitted. CM R cannot use that path.
-Only HTTP 200 with status=000000 is success. Redirects/retries and empty-response success are disabled.
+Implemented caller behaviour
+- POST .../dsp/api/password/v1/public-key sends only {"hashValue":"lowercase hex SHA256(six-digit nonce)"}.
+- The provider stores the key against that hash; its modification API receives the original randomNumber.
+- CM retains clientId, full closeId and requestId binding locally in the authenticated session.
+  They are not added to the provider's public-key request.
+- Internal APIC headers remain X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO, UUID Message-Id.
+- Only HTTP 200 with status=000000 and nonempty publicKey is accepted for key retrieval.
+- HTTPS certificate/host checks stay enabled; no redirect or automatic retry.
+- The low-level HTTP transport retains the configured .../password/v1/modification endpoint.
+  The business adapter does NOT invoke it until the hash/reset contract is supplied.
+- Status returns UNKNOWN with resetAllowed=false. It does not return NOT_SETUP/ACTIVE based on local history.
+- Both setup/reset reject with DIGX_CZ_HTH_API_PASSWORD_009 before Code lookup/reservation/write/notification,
+  including requests that would previously have been treated as USED replays.
+- Code generation cannot safely auto-select SETUP/RESET; UNKNOWN fails with the same availability error.
+- Opening the password form with UNKNOWN status shows the existing AC failure panel.
+- Passwords/hashes are never logged or stored in CM. The three retired local password stores stay removed.
+- HTH_API_PASSWORD_CODE remains for approval, 24-hour expiry and Code lifecycle; it is not a password-state cache.
 
-Deployment order
-1. DSP: deploy dsp-ms-support-api + dsp-ms-support-svc together, including the updated mapper XML and API specification.
-   Configure CM_PASSWORD_APIC_CLIENT_ID and CM_PASSWORD_APIC_CLIENT_SECRET from the dedicated internal APIC subscription.
-   Empty credentials disable the CM protocol. The service verifies both headers and Channel=BCO.
-   APIC must forward these authenticated headers, strip spoofed/injected alternatives, and expose the CM protocol only on the internal product.
-   Keep the service behind internal APIC/network controls; Channel alone is not authorization.
-   DSP HTTP debug logging is headers-only, with APIC credentials and authentication/cookie headers redacted.
-   Confirm the existing DSP_AUTH_CREDENTIAL schema enforces a single active credential per clientId/closeId.
-2. CM database:
-   New production (BCO + released Inquiry, no HTH tables): execute HTH_FIRST_DEPLOY.sql only.
-   Existing UAT: execute HTH_1955_UAT_UPGRADE.sql once. It adds the Code client binding and configures the two API URLs and credentials.
-   Do not rerun the first-install script on existing UAT. These DDL scripts are not repeatable upgrades.
-3. CM: deploy the frontend component/resources, module, ext-xface, DTO, endpoint and updated cz-hosttohost.cfg.xml together.
-   Remove the retired entity and key mapping files from the deployed configuration (do not only overlay old files).
-   Refresh configuration caches/restart according to the normal BCO deployment process. Browser requires HTTPS (localhost is accepted for development).
-4. Verify UAT setup/reset, wrong and expired Code, DSP failure and latest-hash token authentication.
-5. Existing UAT only: back up the retired tables, reconcile pending/unknown writes, verify passwords exist in DSP,
-   then execute HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql to drop the three old tables and obsolete configurations.
-   This retirement script is destructive and was NOT executed by the implementation work.
-   Local PBKDF2 hashes cannot be converted to DSP hashes. Users whose credentials existed only locally must set up again.
+Provider gaps — must be resolved before enabling setup/reset
+1. Hash payload/storage (DSP owner + architect)
+   AC and confirmed requirement: browser computes Base64(raw SHA256(UTF8(password))), encrypts it with DSP's key,
+   and DSP stores the decrypted hash as-is.
+   Existing PasswordApiServiceImpl.newPassword/modifyPassword instead call HashUtils.sha256(decrypted).
+   HashUtils.sha256 returns lowercase HEX. Sending our Base64 hash would double-hash and change representation.
+   Required: confirm the released hash-accepting API/version and exact hash encoding; do not change CM to transmit
+   plaintext, re-hash again, or silently switch to hex to make the old endpoint appear to work.
+2. Approved-Code reset (DSP owner + BA/architect)
+   Existing A creates only when no active row exists. Existing M requires oldEncryptedPassword and validates it.
+   CM reset has an approved Code and new password, not the old password.
+   Required: provider-confirmed reset contract and authorization; do not use A as upsert, fabricate old credentials,
+   add R ourselves or add an old-password UI field without an approved requirement change.
+3. Credential status (DSP owner + architect)
+   Neither of the two published endpoints returns whether clientId/full closeId already has a password.
+   Required: supported status source/API for initial popup, SETUP/RESET Code purpose and reset availability.
+   Code USED history, empty local tables and public-key success are not authoritative status.
+4. Exact RSA OAEP parameters (DSP owner)
+   Browser preparation currently uses SHA-256 for both OAEP and MGF1, empty label, RSA-2048.
+   Provider code initializes Cipher with a transformation string only; MGF1 therefore depends on its provider default.
+   Required: explicit OAEP digest + MGF1 digest + label and a non-production interop test vector.
+   This delivery does not change shared DSP cryptography or claim existing-provider decrypt compatibility.
+5. Internal APIC publication (DSP/APIC owner)
+   Confirm the environment URLs/subscription and that the final provider contract is available there.
+   Keep APIC credentials in environment configuration, separate from the business clientId.
 
-Failure and recovery
-- Wrong Code is checked before expiry reporting, and attempt limits still apply.
-- DSP explicit pre-write rejection releases the reservation to ACTIVE; no success notification is issued.
-- Timeout, malformed success response, system error or local consume/commit uncertainty holds the Code IN_PROGRESS/UNKNOWN.
-  Do not retry automatically or manually switch UNKNOWN to ACTIVE without reconciling the DSP result.
-- USED plus matching request/owner/purpose/client returns the earlier success without another DSP write or notification.
-- UNKNOWN recovery is manual; no new local operation table or background retry was introduced.
-- AC failure UI: Fail / Password synchronization failed. Please try again later. / Go to Dashboard.
-- Password complexity checks remain in the browser. With a hash-only contract neither CM nor DSP can verify plaintext complexity.
-  Do not claim server-side complexity enforcement for this protocol; any stronger requirement needs an agreed protocol change.
+Diagnostic logs (no input values)
+HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE
+HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED
+HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED
 
-Validation completed locally
-- 39 DSP tests: existing API regression, real RSA, actual browser transport -> DSP decrypt, exact Base64 storage,
-  real MyBatis mapper + H2 setup/reset writes, expiry/binding/replay/caller rejection and failed persistence.
-- Jersey JSON boundary: both endpoints, setup/reset, explicit 400/403, safe 500 and HTTP log redaction.
-- Existing token flow reads the real H2 credential row: the old-hash signature fails after reset, the new-hash signature passes.
-  RSA signature checking is real; the remote Cypher HTTP boundary and UAM token issuance use test fixtures.
-- CM production client against local HTTPS: both endpoints, headers, A/R, strict response contract, no redirect/retry, timeout classification.
-- Production Code method bodies and SQL with H2: reserve/consume/replay, confirmed failure release, UNKNOWN retention,
-  mismatch-before-expiry, lockout, purpose and session RSA isolation. OBDX bootstrap/session boundaries are fixtures.
-- 60 localized UI error cases, including AC synchronization failure handling.
-- CM whole-source compilation still has the four previously identified unrelated EnumerationConstants errors.
-  Isolated test compilation using temporary baseline dependency fixtures succeeds; no baseline fixes were committed.
-- UAT/Oracle/WebLogic/internal APIC/live token authentication have NOT been exercised by these local tests.
+SQL and packaging
+- Production first install: HTH_FIRST_DEPLOY.sql remains the consolidated schema/configuration script.
+  It does not create HTH_API_PASSWORD_CREDENTIAL/STATE/OPERATION. Do not treat it as an upgrade or re-run it on UAT.
+- Existing UAT: HTH_1955_UAT_UPGRADE.sql adds REMOTE_CLIENT_ID once and updates APIC configuration.
+  If already applied, do not repeat ADD COLUMN. This correction introduces no additional DDL.
+- HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql remains a separate destructive cleanup, NOT to run now:
+  first resolve provider gaps, verify real setup/reset and token authentication, back up and reconcile existing data.
+  Local PBKDF2 credentials cannot be converted to the DSP password hash without the original password.
+- Remove retired CM Java/ORM files using the deletion manifest as well as copying updated files.
+- init replaces the previous delivery in place. Remove its old hth-dsp/ and hth-dsp.patch; they are no longer part of delivery.
+- If the previous DSP patch was already applied elsewhere, revert that exact change in the DSP source with its owner;
+  do not replace unrelated provider changes with a full project copy. This work does not deploy or alter remote services.
 
-Re-run local tests
-CM: JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
-CM: JAVA_HOME=<JDK21> H2_JAR=<h2 jar> python3 consulting/tests/hth1955/verify_code_lifecycle.py
-CM: node consulting/tests/hth1955/ui-errors.cjs
-DSP: after building the hth-common modules, run dsp-ms-support Maven tests with
-     -Dtest=CmPasswordServiceTest,PasswordApiServiceImplTest,PasswordAppServiceTest,DspAuthCredentialRepoServiceTest
-     -Dsurefire.failIfNoSpecifiedTests=false -Dbco.repo=<CM repository> -Dnode.bin=<node executable>
-The browser interoperability test requires bco.repo; it is marked skipped if that property is absent.
+Validation for this correction
+- Local HTTPS fixture: exact provider public-key JSON, APIC headers, strict response validation, no retry/redirect.
+- Documented A/M low-level transport uses synthetic fixture data only; CM adapter blocks both business setup/reset paths.
+- Production service guard tests verify no Code reservation/consumption, DSP write or success notification occurs.
+- UI tests verify UNKNOWN blocks the form, plus existing localized AC error messages.
+- Previous 39-test DSP results exercised the withdrawn custom protocol and are NOT evidence for the original provider APIs.
+- No UAT/Oracle/WebLogic/APIC deployment or real password setup/reset success is claimed.
+
+Tests
+JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
+JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_contract_guard.py
+node consulting/tests/hth1955/ui-errors.cjs

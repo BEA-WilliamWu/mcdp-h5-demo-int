@@ -111,7 +111,7 @@ define([
             params.dashboard.switchModule();
         };
 
-        // Client feedback uses the API policy; the service also validates every submission.
+        // Client feedback uses the API policy. Unsupported DSP writes are rejected by the service.
         self.matchesPolicy = function (password) {
             const policy = self.policy(),
                 minimumLength = Number(policy.minLength || 0),
@@ -156,6 +156,10 @@ define([
         };
 
         self.submit = function () {
+            if (self.showSyncFailure()) {
+                return;
+            }
+
             let synchronizationAttempted = false;
             const tracker = document.getElementById("hthApiPasswordTracker"),
                 password = self.newPassword() || "",
@@ -227,6 +231,11 @@ define([
         };
 
         Model.status().then(function (data) {
+            if (data && data.setupState === "UNKNOWN") {
+                self.clearSecrets();
+                self.showSyncFailure(true);
+            }
+
             if (data && data.passwordPolicy) {
                 self.policy(data.passwordPolicy);
             }

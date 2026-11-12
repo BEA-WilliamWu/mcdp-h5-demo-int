@@ -1,0 +1,626 @@
+diff --git a/consulting/channel/extensions/components/host-to-host/api-password/api-password.js b/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
+index 4e7deba89d9149e259f96d682f251ec6b04c8e95..da10fe35e9d725ab1df01d1b8624135c9b4d1e03 100644
+--- a/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
++++ b/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
+@@ -111,7 +111,7 @@ define([
+             params.dashboard.switchModule();
+         };
+ 
+-        // Client feedback uses the API policy; the service also validates every submission.
++        // Client feedback uses the API policy. Unsupported DSP writes are rejected by the service.
+         self.matchesPolicy = function (password) {
+             const policy = self.policy(),
+                 minimumLength = Number(policy.minLength || 0),
+@@ -156,6 +156,10 @@ define([
+         };
+ 
+         self.submit = function () {
++            if (self.showSyncFailure()) {
++                return;
++            }
++
+             let synchronizationAttempted = false;
+             const tracker = document.getElementById("hthApiPasswordTracker"),
+                 password = self.newPassword() || "",
+@@ -227,6 +231,11 @@ define([
+         };
+ 
+         Model.status().then(function (data) {
++            if (data && data.setupState === "UNKNOWN") {
++                self.clearSecrets();
++                self.showSyncFailure(true);
++            }
++
+             if (data && data.passwordPolicy) {
+                 self.policy(data.passwordPolicy);
+             }
+diff --git a/consulting/db/release/HTH_1955_DEPLOYMENT.txt b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
+index 48b0f3ed27ffad41fd300859f58e378560919da7..e7f2ed4158e75382d586b2781ac029a20bff13f2 100644
+--- a/consulting/db/release/HTH_1955_DEPLOYMENT.txt
++++ b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
+@@ -1,78 +1,84 @@
+-BCOH2H-1955 — DSP-only API password deployment
++BCOH2H-1955 — CM caller-only correction (2026-11-12)
+ 
+-Implementation
+-- CM no longer creates, reads or writes HTH_API_PASSWORD_CREDENTIAL, HTH_API_PASSWORD_STATE or HTH_API_PASSWORD_OPERATION.
+-- HTH_API_PASSWORD_CODE stays: approval, 24-hour validity, failed attempts, purpose, reservation and consumption.
+-- REMOTE_CLIENT_ID on the Code row binds its request to the business DSP client. It is not a password/state cache.
+-- Status and SETUP/RESET Code purpose are determined by DSP for clientId + full closeId (USER@PARTY).
+-- Browser: Base64(raw SHA256(UTF8(password))) -> RSA-2048 OAEP (SHA256 digest AND MGF1 SHA256, empty label) -> Base64 ciphertext.
+-- CM never receives the plaintext password/hash. Its separate session RSA envelope contains Code, request ID, operation and a digest binding the DSP ciphertext.
+-- DSP stores the decrypted Base64 digest as-is in its existing DSP_AUTH_CREDENTIAL table.
+-- The customer's token signature must cover that same Base64 digest string, not its hex representation.
++Release state
++This delivery corrects the previous out-of-scope DSP changes. It is NOT a completed setup/reset release.
++The provider-owned DSP source is restored to b5e5eec. No DSP application/configuration changes are delivered.
++The CM code does not invent protocol, queryOnly, credentialStatus, requestId fields or function R on DSP APIs.
++SETUP/RESET and automatic Code-purpose selection remain unavailable pending the provider contract.
++This is intentional, agreed with the requester: deliver the correction and list the gaps first.
++Do not bypass the guard or interpret the local tests as a successful UAT setup/reset integration.
+ 
+-Two internal APIC endpoints (POST)
+-- .../dsp/api/password/v1/public-key
+-- .../dsp/api/password/v1/modification
+-The configured URL may include the environment-specific internal APIC prefix.
+-CM sends X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO and a new UUID Message-Id.
+-Payload protocol=CM_SHA256_BASE64_V1 prevents accidental use against the incompatible older API contract.
+-Public-key requests include clientId, closeId, requestId, hashValue=lowercase-hex SHA256(six-digit nonce).
+-queryOnly=true reads credentialStatus without allocating a key. The nonce is unrelated to the AP Code.
+-Modification uses function A for setup and R for approved-Code reset, plus the same identity/requestId, randomNumber and newEncryptedPassword.
+-DSP's existing legacy A/M path remains available when protocol is omitted. CM R cannot use that path.
+-Only HTTP 200 with status=000000 is success. Redirects/retries and empty-response success are disabled.
++Implemented caller behaviour
++- POST .../dsp/api/password/v1/public-key sends only {"hashValue":"lowercase hex SHA256(six-digit nonce)"}.
++- The provider stores the key against that hash; its modification API receives the original randomNumber.
++- CM retains clientId, full closeId and requestId binding locally in the authenticated session.
++  They are not added to the provider's public-key request.
++- Internal APIC headers remain X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO, UUID Message-Id.
++- Only HTTP 200 with status=000000 and nonempty publicKey is accepted for key retrieval.
++- HTTPS certificate/host checks stay enabled; no redirect or automatic retry.
++- The low-level HTTP transport retains the configured .../password/v1/modification endpoint.
++  The business adapter does NOT invoke it until the hash/reset contract is supplied.
++- Status returns UNKNOWN with resetAllowed=false. It does not return NOT_SETUP/ACTIVE based on local history.
++- Both setup/reset reject with DIGX_CZ_HTH_API_PASSWORD_009 before Code lookup/reservation/write/notification,
++  including requests that would previously have been treated as USED replays.
++- Code generation cannot safely auto-select SETUP/RESET; UNKNOWN fails with the same availability error.
++- Opening the password form with UNKNOWN status shows the existing AC failure panel.
++- Passwords/hashes are never logged or stored in CM. The three retired local password stores stay removed.
++- HTH_API_PASSWORD_CODE remains for approval, 24-hour expiry and Code lifecycle; it is not a password-state cache.
+ 
+-Deployment order
+-1. DSP: deploy dsp-ms-support-api + dsp-ms-support-svc together, including the updated mapper XML and API specification.
+-   Configure CM_PASSWORD_APIC_CLIENT_ID and CM_PASSWORD_APIC_CLIENT_SECRET from the dedicated internal APIC subscription.
+-   Empty credentials disable the CM protocol. The service verifies both headers and Channel=BCO.
+-   APIC must forward these authenticated headers, strip spoofed/injected alternatives, and expose the CM protocol only on the internal product.
+-   Keep the service behind internal APIC/network controls; Channel alone is not authorization.
+-   DSP HTTP debug logging is headers-only, with APIC credentials and authentication/cookie headers redacted.
+-   Confirm the existing DSP_AUTH_CREDENTIAL schema enforces a single active credential per clientId/closeId.
+-2. CM database:
+-   New production (BCO + released Inquiry, no HTH tables): execute HTH_FIRST_DEPLOY.sql only.
+-   Existing UAT: execute HTH_1955_UAT_UPGRADE.sql once. It adds the Code client binding and configures the two API URLs and credentials.
+-   Do not rerun the first-install script on existing UAT. These DDL scripts are not repeatable upgrades.
+-3. CM: deploy the frontend component/resources, module, ext-xface, DTO, endpoint and updated cz-hosttohost.cfg.xml together.
+-   Remove the retired entity and key mapping files from the deployed configuration (do not only overlay old files).
+-   Refresh configuration caches/restart according to the normal BCO deployment process. Browser requires HTTPS (localhost is accepted for development).
+-4. Verify UAT setup/reset, wrong and expired Code, DSP failure and latest-hash token authentication.
+-5. Existing UAT only: back up the retired tables, reconcile pending/unknown writes, verify passwords exist in DSP,
+-   then execute HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql to drop the three old tables and obsolete configurations.
+-   This retirement script is destructive and was NOT executed by the implementation work.
+-   Local PBKDF2 hashes cannot be converted to DSP hashes. Users whose credentials existed only locally must set up again.
++Provider gaps — must be resolved before enabling setup/reset
++1. Hash payload/storage (DSP owner + architect)
++   AC and confirmed requirement: browser computes Base64(raw SHA256(UTF8(password))), encrypts it with DSP's key,
++   and DSP stores the decrypted hash as-is.
++   Existing PasswordApiServiceImpl.newPassword/modifyPassword instead call HashUtils.sha256(decrypted).
++   HashUtils.sha256 returns lowercase HEX. Sending our Base64 hash would double-hash and change representation.
++   Required: confirm the released hash-accepting API/version and exact hash encoding; do not change CM to transmit
++   plaintext, re-hash again, or silently switch to hex to make the old endpoint appear to work.
++2. Approved-Code reset (DSP owner + BA/architect)
++   Existing A creates only when no active row exists. Existing M requires oldEncryptedPassword and validates it.
++   CM reset has an approved Code and new password, not the old password.
++   Required: provider-confirmed reset contract and authorization; do not use A as upsert, fabricate old credentials,
++   add R ourselves or add an old-password UI field without an approved requirement change.
++3. Credential status (DSP owner + architect)
++   Neither of the two published endpoints returns whether clientId/full closeId already has a password.
++   Required: supported status source/API for initial popup, SETUP/RESET Code purpose and reset availability.
++   Code USED history, empty local tables and public-key success are not authoritative status.
++4. Exact RSA OAEP parameters (DSP owner)
++   Browser preparation currently uses SHA-256 for both OAEP and MGF1, empty label, RSA-2048.
++   Provider code initializes Cipher with a transformation string only; MGF1 therefore depends on its provider default.
++   Required: explicit OAEP digest + MGF1 digest + label and a non-production interop test vector.
++   This delivery does not change shared DSP cryptography or claim existing-provider decrypt compatibility.
++5. Internal APIC publication (DSP/APIC owner)
++   Confirm the environment URLs/subscription and that the final provider contract is available there.
++   Keep APIC credentials in environment configuration, separate from the business clientId.
+ 
+-Failure and recovery
+-- Wrong Code is checked before expiry reporting, and attempt limits still apply.
+-- DSP explicit pre-write rejection releases the reservation to ACTIVE; no success notification is issued.
+-- Timeout, malformed success response, system error or local consume/commit uncertainty holds the Code IN_PROGRESS/UNKNOWN.
+-  Do not retry automatically or manually switch UNKNOWN to ACTIVE without reconciling the DSP result.
+-- USED plus matching request/owner/purpose/client returns the earlier success without another DSP write or notification.
+-- UNKNOWN recovery is manual; no new local operation table or background retry was introduced.
+-- AC failure UI: Fail / Password synchronization failed. Please try again later. / Go to Dashboard.
+-- Password complexity checks remain in the browser. With a hash-only contract neither CM nor DSP can verify plaintext complexity.
+-  Do not claim server-side complexity enforcement for this protocol; any stronger requirement needs an agreed protocol change.
++Diagnostic logs (no input values)
++HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE
++HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED
++HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED
+ 
+-Validation completed locally
+-- 39 DSP tests: existing API regression, real RSA, actual browser transport -> DSP decrypt, exact Base64 storage,
+-  real MyBatis mapper + H2 setup/reset writes, expiry/binding/replay/caller rejection and failed persistence.
+-- Jersey JSON boundary: both endpoints, setup/reset, explicit 400/403, safe 500 and HTTP log redaction.
+-- Existing token flow reads the real H2 credential row: the old-hash signature fails after reset, the new-hash signature passes.
+-  RSA signature checking is real; the remote Cypher HTTP boundary and UAM token issuance use test fixtures.
+-- CM production client against local HTTPS: both endpoints, headers, A/R, strict response contract, no redirect/retry, timeout classification.
+-- Production Code method bodies and SQL with H2: reserve/consume/replay, confirmed failure release, UNKNOWN retention,
+-  mismatch-before-expiry, lockout, purpose and session RSA isolation. OBDX bootstrap/session boundaries are fixtures.
+-- 60 localized UI error cases, including AC synchronization failure handling.
+-- CM whole-source compilation still has the four previously identified unrelated EnumerationConstants errors.
+-  Isolated test compilation using temporary baseline dependency fixtures succeeds; no baseline fixes were committed.
+-- UAT/Oracle/WebLogic/internal APIC/live token authentication have NOT been exercised by these local tests.
++SQL and packaging
++- Production first install: HTH_FIRST_DEPLOY.sql remains the consolidated schema/configuration script.
++  It does not create HTH_API_PASSWORD_CREDENTIAL/STATE/OPERATION. Do not treat it as an upgrade or re-run it on UAT.
++- Existing UAT: HTH_1955_UAT_UPGRADE.sql adds REMOTE_CLIENT_ID once and updates APIC configuration.
++  If already applied, do not repeat ADD COLUMN. This correction introduces no additional DDL.
++- HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql remains a separate destructive cleanup, NOT to run now:
++  first resolve provider gaps, verify real setup/reset and token authentication, back up and reconcile existing data.
++  Local PBKDF2 credentials cannot be converted to the DSP password hash without the original password.
++- Remove retired CM Java/ORM files using the deletion manifest as well as copying updated files.
++- init replaces the previous delivery in place. Remove its old hth-dsp/ and hth-dsp.patch; they are no longer part of delivery.
++- If the previous DSP patch was already applied elsewhere, revert that exact change in the DSP source with its owner;
++  do not replace unrelated provider changes with a full project copy. This work does not deploy or alter remote services.
+ 
+-Re-run local tests
+-CM: JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
+-CM: JAVA_HOME=<JDK21> H2_JAR=<h2 jar> python3 consulting/tests/hth1955/verify_code_lifecycle.py
+-CM: node consulting/tests/hth1955/ui-errors.cjs
+-DSP: after building the hth-common modules, run dsp-ms-support Maven tests with
+-     -Dtest=CmPasswordServiceTest,PasswordApiServiceImplTest,PasswordAppServiceTest,DspAuthCredentialRepoServiceTest
+-     -Dsurefire.failIfNoSpecifiedTests=false -Dbco.repo=<CM repository> -Dnode.bin=<node executable>
+-The browser interoperability test requires bco.repo; it is marked skipped if that property is absent.
++Validation for this correction
++- Local HTTPS fixture: exact provider public-key JSON, APIC headers, strict response validation, no retry/redirect.
++- Documented A/M low-level transport uses synthetic fixture data only; CM adapter blocks both business setup/reset paths.
++- Production service guard tests verify no Code reservation/consumption, DSP write or success notification occurs.
++- UI tests verify UNKNOWN blocks the form, plus existing localized AC error messages.
++- Previous 39-test DSP results exercised the withdrawn custom protocol and are NOT evidence for the original provider APIs.
++- No UAT/Oracle/WebLogic/APIC deployment or real password setup/reset success is claimed.
++
++Tests
++JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
++JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_contract_guard.py
++node consulting/tests/hth1955/ui-errors.cjs
+diff --git a/consulting/db/release/HTH_1955_UAT_UPGRADE.sql b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
+index e0a02f1f03e2b47243c49a5bd44f58f318051a58..807143d4e9408a4e5099475cb1051696d4564f56 100644
+--- a/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
++++ b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
+@@ -50,5 +50,6 @@ WHEN NOT MATCHED THEN INSERT
+  VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
+ COMMIT;
+ UNDEFINE DSP_PUBLIC_KEY_URL DSP_MODIFICATION_URL DSP_PASSWORD_CLIENT_ID DSP_PASSWORD_CLIENT_SECRET
+--- Deploy DSP's CM protocol before CM. Verify setup/reset and reconcile IN_PROGRESS/UNKNOWN Codes.
++-- Caller-only correction: DSP is unchanged. Setup/reset remain blocked pending the provider contract.
++-- Do not run the retirement script until end-to-end support and existing credentials are verified.
+ -- Only after that, run HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql.
+diff --git a/consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java b/consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java
+index 18d347f585e0193afc1c20733cffa3f39739a0c6..4621e07130cb75b6373c4dfa8427e9a0010b5d3f 100644
+--- a/consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java
++++ b/consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java
+@@ -9,7 +9,9 @@ public interface IHthApiCredentialAdapter {
+   String STATUS_LOCKED = "LOCKED";
+   String STATUS_UNKNOWN = "UNKNOWN";
+   String getStatus(String clientId, String closeId) throws Exception;
+-  String publicKey(String clientId, String closeId, String requestId, String nonceHash) throws Exception;
+-  void modify(String clientId, String closeId, String requestId, String function,
++  /** Reject unsupported writes before reserving or consuming an approval Code. */
++  void requireWriteSupported(String operation) throws Exception;
++  String publicKey(String nonceHash) throws Exception;
++  void modify(String clientId, String closeId, String requestId, String operation,
+       String encryptedHash, String randomNumber) throws Exception;
+ }
+diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
+index 5254c2be722ecbb1754bc44ee7c86b9ab50c0374..2dc61b5e61b00c9a9f92cae8291d4cad687b7e17 100644
+--- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
++++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
+@@ -7,81 +7,69 @@ import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteExc
+ import com.ofss.digx.infra.exceptions.Exception;
+ import java.util.LinkedHashMap;
+ import java.util.Map;
+-import java.util.UUID;
++import java.util.logging.Logger;
+ import javax.ws.rs.core.Response;
+ 
+-/** Strict internal APIC contract: only HTTP 200 / status 000000 confirms DSP success. */
++/** Caller of the provider-owned DSP contract; no private DSP protocol extensions. */
+ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
+-  private static final String PROTOCOL = "CM_SHA256_BASE64_V1";
++  private static final Logger LOGGER = Logger.getLogger(HthDspApiCredentialAdapter.class.getName());
+   private final DspApiPasswordClient client;
+   public HthDspApiCredentialAdapter() { this(new DspApiPasswordClient()); }
+   HthDspApiCredentialAdapter(DspApiPasswordClient client) { this.client = client; }
+ 
+   public String getStatus(String clientId, String closeId) throws Exception {
+-    Map<String, Object> request = request(clientId, closeId, UUID.randomUUID().toString());
+-    request.put("queryOnly", Boolean.TRUE);
+-    request.put("hashValue", "0000000000000000000000000000000000000000000000000000000000000000");
+-    JsonNode result = send(request, false);
+-    String state = result.path("credentialStatus").asText();
+-    if (!PROTOCOL.equals(result.path("protocol").asText())
+-        || (!STATUS_ACTIVE.equals(state) && !STATUS_NOT_SETUP.equals(state) && !STATUS_LOCKED.equals(state))) {
+-      throw new HthApiCredentialWriteException(false);
++    // Neither published endpoint queries credential existence. A key response is not a status response.
++    // Do not infer NOT_SETUP from no local record or issue a trial password write.
++    LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE");
++    return STATUS_UNKNOWN;
++  }
++
++  public void requireWriteSupported(String operation) throws Exception {
++    // 1955 requires an encrypted password hash. The available provider implementation hashes
++    // the decrypted value again; its M function also requires the actual old password.
++    // No switch enables this until the provider supplies the agreed contract.
++    if ("RESET".equals(operation)) {
++      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED");
++    } else {
++      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED");
+     }
+-    return state;
++    throw new HthApiCredentialWriteException(false);
+   }
+ 
+-  public String publicKey(String clientId, String closeId, String requestId, String nonceHash) throws Exception {
+-    Map<String, Object> request = request(clientId, closeId, requestId);
+-    request.put("hashValue", nonceHash);
+-    request.put("queryOnly", Boolean.FALSE);
+-    JsonNode result = send(request, false);
+-    String key = result.path("publicKey").asText();
+-    if (!PROTOCOL.equals(result.path("protocol").asText()) || key.isEmpty()) {
++  public String publicKey(String nonceHash) throws Exception {
++    if (nonceHash == null || !nonceHash.matches("[0-9a-f]{64}")) {
+       throw new HthApiCredentialWriteException(false);
+     }
++    Map<String, Object> request = new LinkedHashMap<String, Object>();
++    request.put("hashValue", nonceHash);
++    JsonNode result = sendPublicKey(request);
++    String key = result.path("publicKey").asText();
++    if (key.isEmpty()) { throw new HthApiCredentialWriteException(false); }
+     return key;
+   }
+ 
+-  public void modify(String clientId, String closeId, String requestId, String function,
++  public void modify(String clientId, String closeId, String requestId, String operation,
+       String encryptedHash, String randomNumber) throws Exception {
+-    Map<String, Object> request = request(clientId, closeId, requestId);
+-    request.put("function", function);
+-    request.put("newEncryptedPassword", encryptedHash);
+-    request.put("randomNumber", randomNumber);
+-    send(request, true);
+-  }
+-
+-  private Map<String, Object> request(String clientId, String closeId, String requestId) {
+-    Map<String, Object> request = new LinkedHashMap<String, Object>();
+-    request.put("protocol", PROTOCOL);
+-    request.put("clientId", clientId);
+-    request.put("closeId", closeId);
+-    request.put("requestId", requestId);
+-    return request;
++    // Defence in depth for direct callers. Do not send the hash into a plaintext-password API,
++    // invent function R, use A to overwrite an existing credential, or fake an old password.
++    requireWriteSupported(operation);
+   }
+ 
+-  private JsonNode send(Map<String, Object> request, boolean modification) throws Exception {
++  private JsonNode sendPublicKey(Map<String, Object> request) throws Exception {
+     Response response = null;
+     try {
+-      response = client.send(request, modification);
+-      int status = response.getStatus();
+-      if (status != 200) {
+-        // A proxy timeout or server failure can occur after commit; never release that Code.
+-        throw new HthApiCredentialWriteException(modification && status != 400 && status != 401 && status != 403
+-            && status != 404 && status != 405 && status != 422);
+-      }
++      response = client.send(request, false);
++      if (response.getStatus() != 200) { throw new HthApiCredentialWriteException(false); }
+       JsonNode body = new ObjectMapper().readTree(response.readEntity(String.class));
+       if (body == null || !"000000".equals(body.path("status").asText())) {
+-        throw new HthApiCredentialWriteException(modification);
++        throw new HthApiCredentialWriteException(false);
+       }
+       return body;
+     } catch (HthApiCredentialWriteException failure) {
+       throw failure;
+-    } catch (DspApiPasswordClient.TransportException failure) {
+-      throw new HthApiCredentialWriteException(modification && "POST".equals(failure.getStage()));
+     } catch (java.lang.Exception failure) {
+-      // Do not propagate bodies or transport exception messages containing credentials.
+-      throw new HthApiCredentialWriteException(modification);
++      // No password write occurred; never include response bodies, headers or causes in logs.
++      throw new HthApiCredentialWriteException(false);
+     } finally { if (response != null) { response.close(); } }
+   }
+ }
+diff --git a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
+index e955547217d4b491be06c4fd1cb657afd1e8883a..f4c4e386ca7d1f96fc60185f646dc85e385ecfca 100644
+--- a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
++++ b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
+@@ -230,6 +230,8 @@ public class HostToHostApiPassword extends AbstractApplication
+       Identity identity = identity(sessionContext, true);
+       String closeId = identity.userId + "@" + identity.partyId;
+       audit.put("partyId", identity.partyId).put("targetUserId", closeId);
++      stage = "DSP_CONTRACT";
++      dspAdapter().requireWriteSupported(operation);
+       stage = "CODE_REQUEST_LOOKUP";
+       String previous = findCodeRequest(request.getRequestId(), identity, operation);
+       boolean replay = "USED".equals(previous);
+@@ -256,7 +258,7 @@ public class HostToHostApiPassword extends AbstractApplication
+         stage = "DSP_WRITE";
+         try {
+           dspAdapter().modify(identity.uamClientId, closeId, request.getRequestId(),
+-              SETUP.equals(operation) ? "A" : "R", request.getDspEncryptedPassword(), material.getRandomNumber());
++              operation, request.getDspEncryptedPassword(), material.getRandomNumber());
+         } catch (Exception failure) {
+           boolean uncertain = !(failure instanceof com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException)
+               || ((com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException) failure).isUncertain();
+@@ -493,7 +495,7 @@ public class HostToHostApiPassword extends AbstractApplication
+       StringBuilder hex = new StringBuilder();
+       for (byte value : hash) { hex.append(String.format(Locale.ROOT, "%02x", value & 255)); }
+       KeyMaterial material = HthApiPasswordTransport.create(context.getUserId(), System.currentTimeMillis());
+-      String key = dspAdapter().publicKey(identity.uamClientId, closeId, requestId, hex.toString());
++      String key = dspAdapter().publicKey(hex.toString());
+       material.bindDsp(identity.uamClientId, closeId, requestId, nonce, key);
+       return material;
+     } catch (Exception failure) { throw failure; }
+@@ -776,7 +778,7 @@ public class HostToHostApiPassword extends AbstractApplication
+     } else if (IHthApiCredentialAdapter.STATUS_NOT_SETUP.equals(state)) {
+       purpose = SETUP;
+     } else {
+-      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
++      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
+     }
+     if (requested != null && !requested.equals(purpose)) {
+       throw new Exception("DIGX_CZ_HTH_PW_009");
+diff --git a/consulting/tests/hth1955/ui-errors.cjs b/consulting/tests/hth1955/ui-errors.cjs
+index 961d5953532d50eee330c20e6b5ea08fe628e5ba..60df24ef1a0cddc824ff12f17c18127e811cfea4 100644
+--- a/consulting/tests/hth1955/ui-errors.cjs
++++ b/consulting/tests/hth1955/ui-errors.cjs
+@@ -49,3 +49,38 @@ for (const [file, locale] of [['hth-api-password.js', 'en'], ['zh-CN/hth-api-pas
+     }
+ }
+ console.log('PASS: ' + cases + ' localized response cases, AC wording, SQL alignment and fallbacks');
++
++// Execute the full view model: UNKNOWN must not present a usable form or start encryption/write.
++(async function () {
++    for (const state of ['UNKNOWN', 'REQUIRED', 'ACTIVE']) {
++        let ViewModel, encryptionCalls = 0, writes = 0, validations = 0;
++        const observable = initial => {
++            let value = initial;
++            return function (next) { if (arguments.length) { value = next; } return value; };
++        };
++        const Model = {
++            status: () => Promise.resolve({setupState: state}),
++            setup: () => { writes++; }, reset: () => { writes++; }
++        };
++        vm.runInNewContext(source, {
++            define: (_, factory) => { ViewModel = factory({observable}, Model, () => { encryptionCalls++; }, {}); },
++            window: {crypto: require('node:crypto').webcrypto},
++            document: {getElementById: () => null}, Promise, Uint8Array
++        });
++        const form = new ViewModel({data: {embedded: true}, baseModel: {
++            showComponentValidationErrors: () => { validations++; return true; }
++        }});
++        await new Promise(resolve => setImmediate(resolve));
++        assert.equal(form.showSyncFailure(), state === 'UNKNOWN');
++        assert.equal(form.showConfirmation(), false);
++        if (state === 'UNKNOWN') {
++            form.submit();
++            await new Promise(resolve => setImmediate(resolve));
++            assert.equal(encryptionCalls, 0);
++            assert.equal(writes, 0);
++            assert.equal(validations, 0);
++            assert.equal(form.newPassword(), null);
++        }
++    }
++    console.log('PASS: UNKNOWN status shows failure and blocks submission; known-status rendering unchanged');
++})().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/consulting/tests/hth1955/verify_apic_transport.py b/consulting/tests/hth1955/verify_apic_transport.py
+index b9e29e498d23cd91b75f09fa8aca297f5717d39a..84da6cc5cac55fdcc2e9a94fc3679bfb409f72aa 100644
+--- a/consulting/tests/hth1955/verify_apic_transport.py
++++ b/consulting/tests/hth1955/verify_apic_transport.py
+@@ -1,6 +1,4 @@
+ from pathlib import Path
+-import base64
+-import hashlib
+ import os
+ import subprocess
+ import tempfile
+@@ -85,7 +83,11 @@ public class DspTransportTest {
+         check("fixture-id".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Id")),"Missing subscription ID");
+         check("fixture-secret".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Secret")),"Missing subscription secret");
+         request.set(MAPPER.readTree(exchange.getRequestBody()));
+-        check("CM_SHA256_BASE64_V1".equals(request.get().path("protocol").asText()),"Wrong protocol");
++        check(!request.get().has("protocol") && !request.get().has("queryOnly")
++            && !request.get().has("requestId"),"Private DSP protocol leaked");
++        if (exchange.getRequestURI().getPath().endsWith("/public-key")) {
++          check(request.get().size()==1 && request.get().has("hashValue"),"Unexpected public-key field");
++        }
+         check(!request.get().has("password") && !request.get().has("passwordHash"),"CM leaked password/hash to HTTP body");
+         if(delay.get()>0)Thread.sleep(delay.get());
+         byte[] bytes=response.get().getBytes(StandardCharsets.UTF_8);
+@@ -105,36 +107,49 @@ public class DspTransportTest {
+       config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
+       DspApiPasswordClient client=new DspApiPasswordClient(http,config);
+       HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
+-      response.set("{\"status\":\"000000\",\"protocol\":\"CM_SHA256_BASE64_V1\",\"credentialStatus\":\"NOT_SETUP\"}");
+-      check("NOT_SETUP".equals(adapter.getStatus("business-client","USER@PARTY")),"Status not read from DSP");
+-      check(request.get().path("queryOnly").asBoolean(),"Status must not allocate key");
+-      response.set("{\"status\":\"000000\",\"protocol\":\"CM_SHA256_BASE64_V1\",\"publicKey\":\"test-public-key\"}");
+-      check("test-public-key".equals(adapter.publicKey("business-client","USER@PARTY",UUID.randomUUID().toString(),"nonce-hash")),"Key missing");
+-      check(!request.get().path("queryOnly").asBoolean(),"Key request wrong");
+-      response.set("{\"status\":\"000000\"}");
+-      for(String function:new String[]{"A","R"}){
+-        adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),function,"synthetic-ciphertext","314159");
+-        check(function.equals(request.get().path("function").asText()),"Wrong setup/reset function");
+-        check("business-client".equals(request.get().path("clientId").asText()),"Business ID confused with APIC ID");
++      int initial=calls.get();
++      check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
++      for(String operation:new String[]{"SETUP","RESET"}){
++        fails(()->adapter.requireWriteSupported(operation),false);
++        fails(()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),operation,
++              "synthetic-ciphertext","314159"),false);
+       }
+-      Attempt write=()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),"R","synthetic-ciphertext","314159");
+-      for(int code:new int[]{400,401,403,404,405,422,408,470,490,500,502,302}){
+-        status.set(code);int before=calls.get();
+-        fails(write,code==408||code==470||code==490||code>=500||code==302);
++      check(calls.get()==initial,"Unsupported operation issued an HTTP request");
++      String nonceHash="77d803e4073d578f460f6b48b1c755285b0766a4fb5fae39e510b68005d88c57";
++      response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
++      check("test-public-key".equals(adapter.publicKey(nonceHash)),"Key missing");
++      check(request.get().size()==1 && nonceHash.equals(request.get().path("hashValue").asText()),"Nonce hash changed");
++      int before=calls.get();
++      fails(()->adapter.publicKey("invalid"),false);
++      check(calls.get()==before,"Invalid nonce hash sent");
++      Attempt query=()->adapter.publicKey(nonceHash);
++      for(int code:new int[]{400,401,403,404,405,422,450,460,470,490,500,502,302}){
++        status.set(code);before=calls.get();fails(query,false);
+         check(calls.get()==before+1,"Unexpected redirect or retry");
+       }
+       status.set(200);
+-      for(String malformed:new String[]{"{}","","not-json","{\"status\":\"SUCCESS\"}"}){
+-        response.set(malformed);fails(write,true);
++      for(String malformed:new String[]{"{}","","not-json","{\"status\":\"SUCCESS\"}","{\"status\":\"000000\"}"}){
++        response.set(malformed);fails(query,false);
+       }
+-      response.set("{\"status\":\"000000\"}");
+-      int before=calls.get();config.put(PREFIX+"MODIFICATION_URL","http://localhost/password/v1/modification");
+-      fails(write,false); check(calls.get()==before,"Insecure URL invoked");
+-      config.put(PREFIX+"MODIFICATION_URL",url+"/password/v1/modification");
+-      config.put(PREFIX+"READ_TIMEOUT_MS","100");delay.set(400);fails(write,true);
++      response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
++      before=calls.get();config.put(PREFIX+"PUBLIC_KEY_URL","http://localhost/password/v1/public-key");
++      fails(query,false); check(calls.get()==before,"Insecure URL invoked");
++      config.put(PREFIX+"PUBLIC_KEY_URL",url+"/password/v1/public-key");
++      config.put(PREFIX+"READ_TIMEOUT_MS","100");delay.set(400);fails(query,false);
+       check(calls.get()==before+1,"Timeout retried");
++      // Low-level APIC plumbing for the documented A/M endpoint only. Not a CM password write:
++      // synthetic data is sent to this local fixture; the CM adapter remains blocked above.
++      config.put(PREFIX+"READ_TIMEOUT_MS","15000");delay.set(0);response.set("{\"status\":\"000000\"}");
++      for(String function:new String[]{"A","M"}){
++        Map<String,Object> body=new LinkedHashMap<>();body.put("function",function);
++        body.put("newEncryptedPassword","fixture-ciphertext");body.put("randomNumber","314159");
++        body.put("clientId","business-client");body.put("closeId","USER@PARTY");
++        if("M".equals(function))body.put("oldEncryptedPassword","fixture-old-ciphertext");
++        try(Response result=client.send(body,true)){check(result.getStatus()==200,"Modification route transport failed");}
++        check(function.equals(request.get().path("function").asText()),"Documented function changed");
++      }
+       check(assertion.get()==null,"Server request assertion failed");
+-      System.out.println("PASS: internal APIC HTTPS contracts, caller headers, A/R, strict success, rejection/uncertainty, no retry or redirect");
++      System.out.println("PASS: provider public-key contract, APIC headers, A/M transport fixture, strict response, no retry/redirect; UNKNOWN status and SETUP/RESET blocked without HTTP writes");
+     }finally{http.close();server.stop(0);executor.shutdownNow();}
+   }
+ }
+@@ -171,13 +186,12 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
+     # The local HTTPS harness uses the JDK httpserver test module; production remains Java 8.
+     checked([str(JAVA / 'javac'), '-proc:none', '-encoding', 'UTF-8',
+                     '-cp', temporary + os.pathsep + CP, '-d', temporary, str(harness)])
+-    expected = base64.b64encode(hashlib.sha256(b'Example1234').digest()).decode('ascii')
+     try:
+         result = subprocess.run([str(JAVA / 'java'), '-Djavax.net.ssl.trustStore=' + str(store),
+                              '-Djavax.net.ssl.trustStorePassword=test-store-only',
+                              '-cp', temporary + os.pathsep + RUNTIME_CP,
+                              'com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.DspTransportTest',
+-                             str(store), expected], capture_output=True, text=True, timeout=40)
++                             str(store)], capture_output=True, text=True, timeout=40)
+     except subprocess.TimeoutExpired as failure:
+         print(((failure.stdout or b'') + (failure.stderr or b'')).decode('utf-8', errors='replace')[-5000:])
+         raise SystemExit('DSP transport test timed out')
+diff --git a/consulting/tests/hth1955/verify_contract_guard.py b/consulting/tests/hth1955/verify_contract_guard.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..198f2f36539d6868a3388ff4de1380a32aa328a3
+--- /dev/null
++++ b/consulting/tests/hth1955/verify_contract_guard.py
+@@ -0,0 +1,79 @@
++"""Compile the production change() body and actual DSP adapter; fixture only OBDX boundaries.
++Proves unsupported setup/reset cannot reserve a Code, issue a password write or report replay success.
++"""
++from pathlib import Path
++import os, re, subprocess, tempfile
++ROOT=Path(__file__).resolve().parents[3]
++JAVA=Path(os.environ['JAVA_HOME'])/'bin'
++LIB=ROOT/'consulting/middleware/lib'
++preferred=[LIB/'OBDX_FW_LIB/jakarta.ws.rs-api-2.1.6.jar'] + [LIB/'thirdparty'/('jackson-'+name+'-2.19.4.jar') for name in ('core','annotations','databind')]
++CP=os.pathsep.join(str(p) for p in preferred+sorted(set(LIB.rglob('*.jar'))-set(preferred)))
++SOURCE=ROOT/'consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl'
++COMMON=ROOT/'consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter'
++service=(ROOT/'consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java').read_text()
++body=re.search(r'  private HostToHostApiPasswordResponseDTO change\(.*?\n  }',service,re.S)[0]
++HARNESS=r'''
++package com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl;
++import com.ofss.digx.infra.exceptions.Exception;
++import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
++class Base {void checkAccessPolicy(Object... args){} void checkResponsePolicy(Object... args){} }
++public class ContractGuardTest extends Base {
++ static final String SETUP="SETUP",RESET="RESET";
++ int lookups,reserves,completes,releases,successes,rejections,notifications;
++ String phase;
++ static class SessionContext {String getUserId(){return "USER@PARTY";}}
++ static class HostToHostApiPasswordRequestDTO {
++  String encrypted="synthetic-code-envelope",password="synthetic-dsp-cipher";
++  String getRequestId(){return "request";}String getDspEncryptedPassword(){return password;}
++  void setEncryptedCredentials(String value){encrypted=value;}void setDspEncryptedPassword(String value){password=value;}
++ }
++ static class Status {void setReferenceNumber(String value){}void setExternalReferenceNumber(String value){} }
++ static class HostToHostApiPasswordResponseDTO {
++  Status getStatus(){return new Status();}void setSetupState(String value){}void setResetAllowed(boolean value){}
++ }
++ static class HthOnboardingAudit {static class Entry {Entry put(String key,Object value){return this;} }}
++ static class Identity {String userId="USER",partyId="PARTY",uamClientId="client",profileUserId="USER@PARTY";}
++ static class Interaction {static int begins,closes;static void begin(SessionContext c){begins++;}static void close(){closes++;}}
++ static class ThreadAttribute {static Object get(String key){return null;}}
++ static class HthApiPasswordTransport {static String THREAD_ATTRIBUTE="fixture";}
++ static class KeyMaterial {String getRandomNumber(){return "314159";}}
++ boolean isFeatureEnabled(){return true;}void validateRequest(HostToHostApiPasswordRequestDTO r){}
++ Identity identity(SessionContext c,boolean required){return new Identity();}
++ HostToHostApiPasswordResponseDTO response(){return new HostToHostApiPasswordResponseDTO();}
++ IHthApiCredentialAdapter dspAdapter(){return new HthDspApiCredentialAdapter((DspApiPasswordClient)null);}
++ String findCodeRequest(String id,Identity identity,String operation){lookups++;return "USED";}
++ String credentialState(Identity i,boolean unknown){return "NOT_SETUP";}
++ String decryptCode(HostToHostApiPasswordRequestDTO r,String user,String operation,Identity i){return "314159";}
++ String validateAndReserveCode(String party,String user,String operation,String code,String request,String client){reserves++;return "CODE";}
++ void fail(String user,String request,String code,boolean unknown) throws Exception{releases++;}
++ void complete(String user,String request,String code) throws Exception{completes++;}
++ void recordCRM(SessionContext c,String operation,boolean success,Identity i){if(success)successes++;else rejections++;}
++ void notifySetupSuccess(SessionContext c,Identity i){notifications++;}void notifyResetSuccess(SessionContext c,Identity i){notifications++;}
++ void logPhaseFailure(String stage,java.lang.Exception e){phase=stage;}
++ BODY
++ static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
++ public static void main(String[] args) throws java.lang.Exception {
++  for(String operation:new String[]{SETUP,RESET}){
++   ContractGuardTest service=new ContractGuardTest();HostToHostApiPasswordRequestDTO request=new HostToHostApiPasswordRequestDTO();
++   try{service.change(new SessionContext(),request,operation,"service",new HthOnboardingAudit.Entry());throw new AssertionError("Unsupported flow returned success");}
++   catch(Exception e){check("DIGX_CZ_HTH_API_PASSWORD_009".equals(e.getMessage()),"Wrong unavailable error");}
++   check("DSP_CONTRACT".equals(service.phase),"Guard did not reject before Code handling");
++   check(service.lookups==0 && service.reserves==0 && service.completes==0 && service.releases==0,"Code lifecycle touched");
++   check(service.successes==0 && service.notifications==0 && service.rejections==1,"Wrong success/audit behaviour");
++   check(request.encrypted==null && request.password==null,"Request secrets not cleared");
++  }
++  check(Interaction.begins==2 && Interaction.closes==2,"Interaction not closed");
++  System.out.println("PASS: production setup/reset guard rejects before USED replay, Code lookup/reserve/consume and success notification; request buffers cleared");
++ }
++}
++'''.replace('BODY',body)
++with tempfile.TemporaryDirectory(prefix='hth1955-guard-') as directory:
++ tmp=Path(directory)
++ exception=tmp/'Exception.java'
++ exception.write_text('package com.ofss.digx.infra.exceptions; public class Exception extends java.lang.Exception { public Exception(String code) { super(code); } }')
++ harness=tmp/'ContractGuardTest.java';harness.write_text(HARNESS)
++ subprocess.run([str(JAVA/'javac'),'--release','8','-proc:none','-encoding','UTF-8','-cp',CP,'-d',directory,
++  str(exception),str(COMMON/'IHthApiCredentialAdapter.java'),str(COMMON/'HthApiCredentialWriteException.java'),
++  str(SOURCE/'DspApiPasswordClient.java'),str(SOURCE/'HthDspApiCredentialAdapter.java'),str(harness)],check=True)
++ subprocess.run([str(JAVA/'java'),'-cp',directory+os.pathsep+CP,
++  'com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.ContractGuardTest'],check=True)

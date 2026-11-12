@@ -9,7 +9,9 @@ public interface IHthApiCredentialAdapter {
   String STATUS_LOCKED = "LOCKED";
   String STATUS_UNKNOWN = "UNKNOWN";
   String getStatus(String clientId, String closeId) throws Exception;
-  String publicKey(String clientId, String closeId, String requestId, String nonceHash) throws Exception;
-  void modify(String clientId, String closeId, String requestId, String function,
+  /** Reject unsupported writes before reserving or consuming an approval Code. */
+  void requireWriteSupported(String operation) throws Exception;
+  String publicKey(String nonceHash) throws Exception;
+  void modify(String clientId, String closeId, String requestId, String operation,
       String encryptedHash, String randomNumber) throws Exception;
 }

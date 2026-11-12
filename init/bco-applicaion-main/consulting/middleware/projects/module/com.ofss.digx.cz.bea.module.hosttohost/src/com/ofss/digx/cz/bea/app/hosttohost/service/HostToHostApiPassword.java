@@ -230,6 +230,8 @@ public class HostToHostApiPassword extends AbstractApplication
       Identity identity = identity(sessionContext, true);
       String closeId = identity.userId + "@" + identity.partyId;
       audit.put("partyId", identity.partyId).put("targetUserId", closeId);
+      stage = "DSP_CONTRACT";
+      dspAdapter().requireWriteSupported(operation);
       stage = "CODE_REQUEST_LOOKUP";
       String previous = findCodeRequest(request.getRequestId(), identity, operation);
       boolean replay = "USED".equals(previous);
@@ -256,7 +258,7 @@ public class HostToHostApiPassword extends AbstractApplication
         stage = "DSP_WRITE";
         try {
           dspAdapter().modify(identity.uamClientId, closeId, request.getRequestId(),
-              SETUP.equals(operation) ? "A" : "R", request.getDspEncryptedPassword(), material.getRandomNumber());
+              operation, request.getDspEncryptedPassword(), material.getRandomNumber());
         } catch (Exception failure) {
           boolean uncertain = !(failure instanceof com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException)
               || ((com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException) failure).isUncertain();
@@ -493,7 +495,7 @@ public class HostToHostApiPassword extends AbstractApplication
       StringBuilder hex = new StringBuilder();
       for (byte value : hash) { hex.append(String.format(Locale.ROOT, "%02x", value & 255)); }
       KeyMaterial material = HthApiPasswordTransport.create(context.getUserId(), System.currentTimeMillis());
-      String key = dspAdapter().publicKey(identity.uamClientId, closeId, requestId, hex.toString());
+      String key = dspAdapter().publicKey(hex.toString());
       material.bindDsp(identity.uamClientId, closeId, requestId, nonce, key);
       return material;
     } catch (Exception failure) { throw failure; }
@@ -776,7 +778,7 @@ public class HostToHostApiPassword extends AbstractApplication
     } else if (IHthApiCredentialAdapter.STATUS_NOT_SETUP.equals(state)) {
       purpose = SETUP;
     } else {
-      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_006");
+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
     }
     if (requested != null && !requested.equals(purpose)) {
       throw new Exception("DIGX_CZ_HTH_PW_009");

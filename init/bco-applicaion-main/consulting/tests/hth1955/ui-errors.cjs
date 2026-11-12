@@ -49,3 +49,38 @@ for (const [file, locale] of [['hth-api-password.js', 'en'], ['zh-CN/hth-api-pas
     }
 }
 console.log('PASS: ' + cases + ' localized response cases, AC wording, SQL alignment and fallbacks');
+
+// Execute the full view model: UNKNOWN must not present a usable form or start encryption/write.
+(async function () {
+    for (const state of ['UNKNOWN', 'REQUIRED', 'ACTIVE']) {
+        let ViewModel, encryptionCalls = 0, writes = 0, validations = 0;
+        const observable = initial => {
+            let value = initial;
+            return function (next) { if (arguments.length) { value = next; } return value; };
+        };
+        const Model = {
+            status: () => Promise.resolve({setupState: state}),
+            setup: () => { writes++; }, reset: () => { writes++; }
+        };
+        vm.runInNewContext(source, {
+            define: (_, factory) => { ViewModel = factory({observable}, Model, () => { encryptionCalls++; }, {}); },
+            window: {crypto: require('node:crypto').webcrypto},
+            document: {getElementById: () => null}, Promise, Uint8Array
+        });
+        const form = new ViewModel({data: {embedded: true}, baseModel: {
+            showComponentValidationErrors: () => { validations++; return true; }
+        }});
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(form.showSyncFailure(), state === 'UNKNOWN');
+        assert.equal(form.showConfirmation(), false);
+        if (state === 'UNKNOWN') {
+            form.submit();
+            await new Promise(resolve => setImmediate(resolve));
+            assert.equal(encryptionCalls, 0);
+            assert.equal(writes, 0);
+            assert.equal(validations, 0);
+            assert.equal(form.newPassword(), null);
+        }
+    }
+    console.log('PASS: UNKNOWN status shows failure and blocks submission; known-status rendering unchanged');
+})().catch(error => { console.error(error); process.exitCode = 1; });

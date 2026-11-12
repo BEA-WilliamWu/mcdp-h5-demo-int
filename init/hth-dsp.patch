@@ -1,0 +1,993 @@
+diff --git a/dsp-ms-support/CM_PASSWORD_1955.txt b/dsp-ms-support/CM_PASSWORD_1955.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..b436ddaa5b39745aa787ca07a68924ab43d9f30a
+--- /dev/null
++++ b/dsp-ms-support/CM_PASSWORD_1955.txt
+@@ -0,0 +1,12 @@
++CM_SHA256_BASE64_V1 is the opt-in BCOH2H-1955 protocol on the two existing password endpoints.
++Contract: dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
++Runtime: password.cm.client-id / password.cm.client-secret, mapped from CM_PASSWORD_APIC_CLIENT_ID / CM_PASSWORD_APIC_CLIENT_SECRET.
++Only the dedicated internal APIC subscription with Channel=BCO may invoke it. Both credential headers must reach DSP.
++Deploy api + svc + mapper XML together. Old A/M requests without protocol retain the legacy behavior.
++CM uses A=create and R=reset after approval Code validation, and queryOnly=true for DSP credential status.
++The CM protocol decrypts and validates Base64(SHA256(password)); it does not hash again.
++No changes are made to the shared cryptography defaults, Login PIN, batch or token-signature validation.
++The token signature must cover the stored Base64 hash string. Validate this with the customer API caller in UAT.
++See the CM repository consulting/db/release/HTH_1955_DEPLOYMENT.txt for SQL sequencing and full test limits.
++
++DSP HTTP debug logging now excludes payloads and redacts authentication/cookie/APIC headers. CM exceptions log only stage and exception type.
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
+index f2b1f3400929ae940bd35c6d91813e566e5eb158..029db2202f3a265b2b14ae65a08eaef0d43e174c 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
+@@ -14,7 +14,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
+ public class PasswordModificationRequest   {
+   public enum FunctionEnum {
+ 
+-    A(String.valueOf("A")), M(String.valueOf("M"));
++    A(String.valueOf("A")), M(String.valueOf("M")), R(String.valueOf("R"));
+ 
+ 
+     private String value;
+@@ -66,6 +66,18 @@ public class PasswordModificationRequest   {
+   private String closeId;
+   private String clientId;
+ 
++  private String protocol;
++  @JsonProperty("protocol")
++  public String getProtocol() { return protocol; }
++  @JsonProperty("protocol")
++  public void setProtocol(String value) { protocol = value; }
++
++  private String requestId;
++  @JsonProperty("requestId")
++  public String getRequestId() { return requestId; }
++  @JsonProperty("requestId")
++  public void setRequestId(String value) { requestId = value; }
++
+   public PasswordModificationRequest() {
+   }
+ 
+@@ -227,9 +239,9 @@ public class PasswordModificationRequest   {
+     sb.append("class PasswordModificationRequest {\n");
+     
+     sb.append("    function: ").append(toIndentedString(function)).append("\n");
+-    sb.append("    oldEncryptedPassword: ").append(toIndentedString(oldEncryptedPassword)).append("\n");
+-    sb.append("    newEncryptedPassword: ").append(toIndentedString(newEncryptedPassword)).append("\n");
+-    sb.append("    randomNumber: ").append(toIndentedString(randomNumber)).append("\n");
++    sb.append("    oldEncryptedPassword: ").append("[REDACTED]").append("\n");
++    sb.append("    newEncryptedPassword: ").append("[REDACTED]").append("\n");
++    sb.append("    randomNumber: ").append("[REDACTED]").append("\n");
+     sb.append("    closeId: ").append(toIndentedString(closeId)).append("\n");
+     sb.append("    clientId: ").append(toIndentedString(clientId)).append("\n");
+     sb.append("}");
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryRequest.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryRequest.java
+index b334a338fcc5a4b939e9d0f020d0ff5169de16c8..88256a4937dd1b06502f06df651b2a8aec39acf4 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryRequest.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryRequest.java
+@@ -44,6 +44,36 @@ public class PublicKeyQueryRequest   {
+   }
+ 
+ 
++  private String protocol;
++  @JsonProperty("protocol")
++  public String getProtocol() { return protocol; }
++  @JsonProperty("protocol")
++  public void setProtocol(String value) { protocol = value; }
++
++  private String clientId;
++  @JsonProperty("clientId")
++  public String getClientId() { return clientId; }
++  @JsonProperty("clientId")
++  public void setClientId(String value) { clientId = value; }
++
++  private String closeId;
++  @JsonProperty("closeId")
++  public String getCloseId() { return closeId; }
++  @JsonProperty("closeId")
++  public void setCloseId(String value) { closeId = value; }
++
++  private String requestId;
++  @JsonProperty("requestId")
++  public String getRequestId() { return requestId; }
++  @JsonProperty("requestId")
++  public void setRequestId(String value) { requestId = value; }
++
++  private Boolean queryOnly;
++  @JsonProperty("queryOnly")
++  public Boolean getQueryOnly() { return queryOnly; }
++  @JsonProperty("queryOnly")
++  public void setQueryOnly(Boolean value) { queryOnly = value; }
++
+   @Override
+   public boolean equals(Object o) {
+     if (this == o) {
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryResponse.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryResponse.java
+index 5a38c49eb0a29d8901c8bc85bca63d55a7fd6a17..91a03ee1186a32e8a35120d0dade9a31a26c89ba 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryResponse.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryResponse.java
+@@ -21,7 +21,7 @@ public class PublicKeyQueryResponse   {
+   @JsonCreator
+   public PublicKeyQueryResponse(
+     @JsonProperty(required = true, value = "status") String status,
+-    @JsonProperty(required = true, value = "publicKey") String publicKey
++    @JsonProperty("publicKey") String publicKey
+   ) {
+     this.status = status;
+     this.publicKey = publicKey;
+@@ -55,17 +55,29 @@ public class PublicKeyQueryResponse   {
+   }
+ 
+   
+-  @JsonProperty(required = true, value = "publicKey")
++  @JsonProperty("publicKey")
+   public String getPublicKey() {
+     return publicKey;
+   }
+ 
+-  @JsonProperty(required = true, value = "publicKey")
++  @JsonProperty("publicKey")
+   public void setPublicKey(String publicKey) {
+     this.publicKey = publicKey;
+   }
+ 
+ 
++  private String credentialStatus;
++  @JsonProperty("credentialStatus")
++  public String getCredentialStatus() { return credentialStatus; }
++  @JsonProperty("credentialStatus")
++  public void setCredentialStatus(String value) { credentialStatus = value; }
++
++  private String protocol;
++  @JsonProperty("protocol")
++  public String getProtocol() { return protocol; }
++  @JsonProperty("protocol")
++  public void setProtocol(String value) { protocol = value; }
++
+   @Override
+   public boolean equals(Object o) {
+     if (this == o) {
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+index f6091dec79a2e23d2c26669af63e0f24ae1e86b8..78f0739f55af75b02859a3ae1fc0c9929a3afce6 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+@@ -52,6 +52,10 @@ paths:
+                   hashValue: "ABC123XYZ456"
+ 
+       responses:
++        '400':
++          description: CM protocol rejected before write (invalid context, key expiry, ciphertext or credential state).
++        '403':
++          description: CM protocol caller is not the configured internal APIC subscription.
+ 
+         '200':
+           description: Public key query completed.
+@@ -194,6 +198,10 @@ paths:
+                   clientId: "CLIENT001"
+ 
+       responses:
++        '400':
++          description: CM protocol rejected before write (invalid context, key expiry, ciphertext or credential state).
++        '403':
++          description: CM protocol caller is not the configured internal APIC subscription.
+ 
+         '200':
+           description: Password modification completed.
+@@ -283,18 +291,44 @@ components:
+       required:
+         - hashValue
+       properties:
++        protocol:
++          type: string
++          enum: [CM_SHA256_BASE64_V1]
++          description: Optional internal CM protocol; absent preserves the existing A/M protocol.
++        clientId:
++          type: string
++          maxLength: 64
++          description: Required for CM. Business client ID from HTH management, not the APIC subscription ID.
++        closeId:
++          type: string
++          maxLength: 128
++          description: Required for CM. Full user ID including @partyId.
++        requestId:
++          type: string
++          format: uuid
++          description: Required for CM; binds the key to this request and identity.
++        queryOnly:
++          type: boolean
++          default: false
++          description: CM status lookup only; returns credentialStatus without generating a key.
+         hashValue:
+           type: string
+           minLength: 1
+-          description: Hash value in UTF-8 format.
++          description: For CM, lowercase hex SHA256(UTF8(six-digit randomNumber)); ignored for queryOnly.
+           example: "ABC123XYZ456"
+ 
+     PublicKeyQueryResponse:
+       type: object
+       required:
+         - status
+-        - publicKey
+       properties:
++        protocol:
++          type: string
++          description: CM_SHA256_BASE64_V1 for internal CM responses.
++        credentialStatus:
++          type: string
++          enum: [NOT_SETUP, ACTIVE]
++          description: DSP authoritative credential existence for the specified client and close ID; CM only.
+ 
+         status:
+           type: string
+@@ -304,7 +338,7 @@ components:
+ 
+         publicKey:
+           type: string
+-          description: RSA public key encoded in Base64 format.
++          description: Base64 DER SPKI RSA-2048 public key; omitted for CM queryOnly. Valid for five minutes.
+           example: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A..."
+ 
+     PasswordModificationRequest:
+@@ -317,18 +351,29 @@ components:
+         - clientId
+ 
+       properties:
++        protocol:
++          type: string
++          enum: [CM_SHA256_BASE64_V1]
++          description: Optional internal CM protocol. Requires dedicated internal APIC subscription and Channel BCO.
++        requestId:
++          type: string
++          format: uuid
++          description: Required for CM and must match public-key request.
+ 
+         function:
+           type: string
+           enum:
+             - A
+             - M
++            - R
+           description: |
+             Password operation type.
+ 
+             A - Add password
+ 
+-            M - Modify password
++            M - Legacy change with old password verification.
++
++            R - CM reset after CM validates and reserves the approval Code; internal CM protocol only.
+           example: "M"
+ 
+         oldEncryptedPassword:
+@@ -351,7 +396,12 @@ components:
+ 
+             RSA/ECB/OAEPWithSHA-256AndMGF1Padding
+ 
+-            Password must first be converted to UTF-8 bytes.
++            Legacy protocol: password converted to UTF-8 bytes (unchanged).
++
++            CM_SHA256_BASE64_V1: encrypt UTF8(Base64(SHA256(UTF8(password))));
++            OAEP digest SHA-256, MGF1 SHA-256, empty label, RSA-2048.
++            DSP stores the decrypted canonical Base64 digest without hashing again.
++            CM A creates only; CM R replaces only an existing active credential.
+ 
+             Base64 encoded encrypted bytes.
+           example: "AexEfs8Fef..."
+diff --git a/dsp-ms-support/dsp-ms-support-svc/pom.xml b/dsp-ms-support/dsp-ms-support-svc/pom.xml
+index 4ae8d749d6a5bc5d5e567a850ebedc851ee26a02..51aedef2ea3b106eb6cf0e495c0f9fc3e843c9c4 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/pom.xml
++++ b/dsp-ms-support/dsp-ms-support-svc/pom.xml
+@@ -77,6 +77,11 @@
+             <groupId>org.springframework.boot</groupId>
+             <artifactId>spring-boot-starter-actuator</artifactId>
+         </dependency>
++        <dependency>
++            <groupId>com.h2database</groupId>
++            <artifactId>h2</artifactId>
++            <scope>test</scope>
++        </dependency>
+         <!-- dependency for test -->
+         <dependency>
+             <groupId>org.mockito</groupId>
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/JerseyConfig.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/JerseyConfig.java
+index afc63bc3344466c46188596f64f333ec59953215..4415317d39fc003118b592feb7a3aa17ab410e67 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/JerseyConfig.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/JerseyConfig.java
+@@ -1,22 +1,26 @@
+-package com.hkbea.dsp;
+-
+-import com.hkbea.common.exception.DefaultExceptionMapper;
+-import com.hkbea.common.filter.RequestHeaderFilter;
+-import com.hkbea.common.filter.ResponseHeaderFilter;
+-import com.hkbea.dsp.service.CorporateTokenServiceImpl;
+-import org.glassfish.jersey.logging.LoggingFeature;
+-import org.glassfish.jersey.server.ResourceConfig;
+-import org.springframework.context.annotation.Configuration;
+-
+-@Configuration
+-public class JerseyConfig extends ResourceConfig {
+-
+-    public JerseyConfig() {
+-        register(LoggingFeature.class);
+-        register(RequestHeaderFilter.class);
+-        register(ResponseHeaderFilter.class);
+-
+-        packages(DefaultExceptionMapper.class.getPackageName());
+-        packages(CorporateTokenServiceImpl.class.getPackageName());
+-    }
+-}
++package com.hkbea.dsp;
++
++import com.hkbea.common.exception.DefaultExceptionMapper;
++import com.hkbea.common.filter.RequestHeaderFilter;
++import com.hkbea.common.filter.ResponseHeaderFilter;
++import com.hkbea.dsp.service.CorporateTokenServiceImpl;
++import org.glassfish.jersey.logging.LoggingFeature;
++import org.glassfish.jersey.server.ResourceConfig;
++import org.springframework.context.annotation.Configuration;
++
++@Configuration
++public class JerseyConfig extends ResourceConfig {
++
++    public JerseyConfig() {
++        // Password traffic must not expose ciphertext, keys or APIC credentials in HTTP debug logs.
++        property(LoggingFeature.LOGGING_FEATURE_VERBOSITY_SERVER, LoggingFeature.Verbosity.HEADERS_ONLY);
++        property(LoggingFeature.LOGGING_FEATURE_REDACT_HEADERS_SERVER,
++                "Authorization;X-IBM-Client-Id;X-IBM-Client-Secret;Cookie;Set-Cookie");
++        register(LoggingFeature.class);
++        register(RequestHeaderFilter.class);
++        register(ResponseHeaderFilter.class);
++
++        packages(DefaultExceptionMapper.class.getPackageName());
++        packages(CorporateTokenServiceImpl.class.getPackageName());
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordExceptionMapper.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordExceptionMapper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b3408c49a0a87873957ce6cc9ec61b3b7d7000d2
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordExceptionMapper.java
+@@ -0,0 +1,16 @@
++package com.hkbea.dsp.service;
++
++import jakarta.ws.rs.core.Response;
++import jakarta.ws.rs.ext.ExceptionMapper;
++import jakarta.ws.rs.ext.Provider;
++import org.springframework.stereotype.Component;
++
++/** Preserve explicit pre-write rejections; do not route them through the general 490 mapper. */
++@Component
++@Provider
++public class CmPasswordExceptionMapper implements ExceptionMapper<CmPasswordService.Rejected> {
++    @Override
++    public Response toResponse(CmPasswordService.Rejected failure) {
++        return failure.getResponse();
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordService.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordService.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..208e3f0cd1d480deb345c8e3e963c5b8129fa35f
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordService.java
+@@ -0,0 +1,199 @@
++package com.hkbea.dsp.service;
++
++import com.hkbea.common.cache.CacheConfig;
++import com.hkbea.dsp.entity.DspAuthCredential;
++import com.hkbea.dsp.model.PasswordModificationRequest;
++import com.hkbea.dsp.model.PasswordModificationResponse;
++import com.hkbea.dsp.model.PublicKeyQueryRequest;
++import com.hkbea.dsp.model.PublicKeyQueryResponse;
++import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
++import com.hkbea.dsp.utils.HashUtils;
++import jakarta.ws.rs.WebApplicationException;
++import jakarta.ws.rs.core.HttpHeaders;
++import jakarta.ws.rs.core.Response;
++import java.nio.charset.StandardCharsets;
++import java.security.KeyFactory;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.security.MessageDigest;
++import java.security.spec.MGF1ParameterSpec;
++import java.security.spec.PKCS8EncodedKeySpec;
++import java.time.LocalDateTime;
++import java.util.Base64;
++import java.util.Map;
++import java.util.UUID;
++import javax.crypto.Cipher;
++import javax.crypto.spec.OAEPParameterSpec;
++import javax.crypto.spec.PSource;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.cache.Cache;
++import org.springframework.cache.CacheManager;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++/** Internal CM protocol. Legacy public A/M callers continue through PasswordApiServiceImpl. */
++@Service
++public class CmPasswordService {
++    public static final String PROTOCOL = "CM_SHA256_BASE64_V1";
++    private static final long KEY_TTL = 5 * 60 * 1000L;
++    private static final OAEPParameterSpec OAEP = new OAEPParameterSpec(
++            "SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT);
++    @Autowired private DspAuthCredentialRepoService credentials;
++    @Autowired private CacheManager cacheManager;
++    // Dedicated internal APIC subscription; never accept Channel alone as authorization.
++    @Value("${password.cm.client-id:}") private String cmClientId;
++    @Value("${password.cm.client-secret:}") private String cmClientSecret;
++
++    public PublicKeyQueryResponse query(PublicKeyQueryRequest request, HttpHeaders headers) {
++        authorize(request.getProtocol(), headers);
++        validateIdentity(request.getClientId(), request.getCloseId(), request.getRequestId());
++        DspAuthCredential row = credentials.queryWithStatus(request.getCloseId(), request.getClientId(), "A");
++        PublicKeyQueryResponse result = new PublicKeyQueryResponse();
++        result.setStatus("000000");
++        result.setProtocol(PROTOCOL);
++        result.setCredentialStatus(row == null ? "NOT_SETUP" : "ACTIVE");
++        if (!Boolean.TRUE.equals(request.getQueryOnly())) {
++            if (request.getHashValue() == null || !request.getHashValue().matches("[0-9a-f]{64}")) {
++                throw rejected("INVALID_KEY_REQUEST");
++            }
++            String cacheKey = cacheKey(request.getClientId(), request.getCloseId(), request.getRequestId(), request.getHashValue());
++            try {
++                KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
++                generator.initialize(2048);
++                KeyPair pair = generator.generateKeyPair();
++                KeyEntry entry = new KeyEntry();
++                entry.setPrivateKey(Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded()));
++                entry.setExpiresAt(System.currentTimeMillis() + KEY_TTL);
++                cache().put(cacheKey, entry);
++                result.setPublicKey(Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
++            } catch (java.security.GeneralSecurityException failure) {
++                throw rejected("KEY_GENERATION_FAILED");
++            }
++        }
++        return result;
++    }
++
++    @Transactional
++    public PasswordModificationResponse modify(PasswordModificationRequest request, HttpHeaders headers) {
++        authorize(request.getProtocol(), headers);
++        validateIdentity(request.getClientId(), request.getCloseId(), request.getRequestId());
++        boolean setup = request.getFunction() == PasswordModificationRequest.FunctionEnum.A;
++        if (!setup && request.getFunction() != PasswordModificationRequest.FunctionEnum.R) {
++            throw rejected("INVALID_FUNCTION");
++        }
++        if (request.getRandomNumber() == null || !request.getRandomNumber().matches("[0-9]{6}")) {
++            throw rejected("INVALID_KEY_REQUEST");
++        }
++        String key = cacheKey(request.getClientId(), request.getCloseId(), request.getRequestId(),
++                HashUtils.sha256(request.getRandomNumber()));
++        KeyEntry entry = cache().get(key, KeyEntry.class);
++        if (entry == null || entry.getExpiresAt() <= System.currentTimeMillis()) {
++            cache().evict(key);
++            throw rejected("TRANSPORT_KEY_EXPIRED");
++        }
++        String hash = decryptHash(entry.getPrivateKey(), request.getNewEncryptedPassword());
++        DspAuthCredential row = credentials.queryWithStatus(request.getCloseId(), request.getClientId(), "A");
++        if (setup == (row != null)) { throw rejected("CREDENTIAL_STATE_CONFLICT"); }
++        // CM verified and reserved the approval Code before calling R. No plaintext password is sent.
++        cache().evict(key);
++        LocalDateTime now = LocalDateTime.now();
++        if (setup) {
++            row = new DspAuthCredential();
++            row.setClientId(request.getClientId());
++            row.setCloseId(request.getCloseId());
++            row.setObjectStatus("A");
++            row.setCreatedBy("CM");
++            row.setCreationDate(now);
++        }
++        row.setPasswordHash(hash); // Already Base64(SHA256(UTF8(password))); do not hash again.
++        row.setLastUpdatedBy("CM");
++        row.setLastUpdateDate(now);
++        if (setup) { credentials.insert(row); } else { credentials.updatePassword(row); }
++        PasswordModificationResponse result = new PasswordModificationResponse();
++        result.setStatus("000000");
++        result.setMessage(setup ? "password created." : "password updated.");
++        return result;
++    }
++
++    private void authorize(String protocol, HttpHeaders headers) {
++        if (!PROTOCOL.equals(protocol) || headers == null
++                || !"BCO".equals(headers.getHeaderString("Channel"))
++                || !matches(cmClientId, headers.getHeaderString("X-IBM-Client-Id"))
++                || !matches(cmClientSecret, headers.getHeaderString("X-IBM-Client-Secret"))) {
++            throw new Rejected(403, "CM_CALLER_REJECTED");
++        }
++    }
++
++    private static boolean matches(String expected, String actual) {
++        return expected != null && !expected.isBlank() && actual != null
++                && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
++    }
++
++    private static void validateIdentity(String clientId, String closeId, String requestId) {
++        try {
++            if (clientId == null || clientId.isBlank() || clientId.length() > 64
++                    || closeId == null || !closeId.matches("[^@\\s]+@[^@\\s]+") || closeId.length() > 128
++                    || requestId == null || !UUID.fromString(requestId).toString().equals(requestId)) {
++                throw new IllegalArgumentException();
++            }
++        } catch (IllegalArgumentException failure) { throw rejected("INVALID_IDENTITY"); }
++    }
++
++    private Cache cache() {
++        Cache result = cacheManager.getCache(CacheConfig.VARIABLE);
++        if (result == null) { throw rejected("KEY_CACHE_UNAVAILABLE"); }
++        return result;
++    }
++
++    private static String cacheKey(String clientId, String closeId, String requestId, String hash) {
++        // Length-delimited identity prevents ambiguous concatenations; UUID avoids six-digit nonce collisions.
++        return "cmPassword:" + HashUtils.sha256(clientId.length() + ":" + clientId + closeId.length()
++                + ":" + closeId + ":" + requestId + ":" + hash);
++    }
++
++    static String decryptHash(String privateKey, String ciphertext) {
++        byte[] clear = null;
++        try {
++            if (ciphertext == null || ciphertext.length() > 344) { throw new IllegalArgumentException(); }
++            byte[] encrypted = Base64.getDecoder().decode(ciphertext);
++            if (encrypted.length != 256) { throw new IllegalArgumentException(); }
++            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
++            cipher.init(Cipher.DECRYPT_MODE, KeyFactory.getInstance("RSA").generatePrivate(
++                    new PKCS8EncodedKeySpec(Base64.getDecoder().decode(privateKey))), OAEP);
++            clear = cipher.doFinal(encrypted);
++            String hash = new String(clear, StandardCharsets.US_ASCII);
++            byte[] digest = Base64.getDecoder().decode(hash);
++            if (digest.length != 32 || !Base64.getEncoder().encodeToString(digest).equals(hash)) {
++                throw new IllegalArgumentException();
++            }
++            return hash;
++        } catch (java.security.GeneralSecurityException | IllegalArgumentException failure) {
++            throw rejected("INVALID_ENCRYPTED_HASH");
++        } finally { if (clear != null) { java.util.Arrays.fill(clear, (byte) 0); } }
++    }
++
++    private static Rejected rejected(String stage) {
++        // Safe stage only; no input, ciphertext, key or decrypted hash in exception/logging.
++        return new Rejected(400, stage);
++    }
++
++    public static final class Rejected extends WebApplicationException {
++        private static final long serialVersionUID = 1L;
++        Rejected(int status, String stage) {
++            super(Response.status(status).type("application/json").entity(Map.of("status", stage)).build());
++        }
++    }
++
++    /** Serializable cache payload; absolute expiry also applies to the local cache fallback. */
++    public static class KeyEntry {
++        private String privateKey;
++        private long expiresAt;
++        public KeyEntry() { }
++        public String getPrivateKey() { return privateKey; }
++        public void setPrivateKey(String value) { privateKey = value; }
++        public long getExpiresAt() { return expiresAt; }
++        public void setExpiresAt(long value) { expiresAt = value; }
++        @Override public String toString() { return "CmPasswordKey[REDACTED]"; }
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+index 7e31f3e97de334d84b58b5dcd278551a3ab479ab..c9bce8c25bb8231f557f86ca856ce1ed20b3301e 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+@@ -69,8 +69,23 @@ public class PasswordApiServiceImpl implements PasswordApi {
+      * @return System Exception.  Possible Error Codes: - **700000**: System process exception.
+      * @return Other / General Exception.  Possible Error Codes: - **900000**: General exception.
+      */
++    @Autowired
++    private CmPasswordService cmPasswordService;
++
++    @jakarta.ws.rs.core.Context
++    private jakarta.ws.rs.core.HttpHeaders requestHeaders;
++
+     @Override
+     public PublicKeyQueryResponse queryPublicKey(PublicKeyQueryRequest publicKeyQueryRequest) {
++        if (publicKeyQueryRequest != null && publicKeyQueryRequest.getProtocol() != null) {
++            try {
++                return cmPasswordService.query(publicKeyQueryRequest, requestHeaders);
++            } catch (CmPasswordService.Rejected rejected) {
++                throw rejected;
++            } catch (RuntimeException failure) {
++                throw cmSystemFailure("PUBLIC_KEY", failure);
++            }
++        }
+         checkPublicKeyQueryRequest(publicKeyQueryRequest);
+ 
+         String hashValue = publicKeyQueryRequest.getHashValue();
+@@ -82,6 +97,12 @@ public class PasswordApiServiceImpl implements PasswordApi {
+         return response;
+     }
+ 
++    private static CmPasswordService.Rejected cmSystemFailure(String stage, RuntimeException failure) {
++        // Do not pass the cause: SQL or downstream exception text can contain credential material.
++        LOGGER.error("CM_PASSWORD stage={} exceptionType={}", stage, failure.getClass().getName());
++        return new CmPasswordService.Rejected(500, "CM_PASSWORD_SYSTEM_FAILURE");
++    }
++
+     private void checkPublicKeyQueryRequest(PublicKeyQueryRequest publicKeyQueryRequest) {
+         if (publicKeyQueryRequest == null) {
+             LOGGER.error("request missed or is empty");
+@@ -107,6 +128,15 @@ public class PasswordApiServiceImpl implements PasswordApi {
+      */
+     @Override
+     public PasswordModificationResponse modifyPassword(PasswordModificationRequest passwordModificationRequest) {
++        if (passwordModificationRequest != null && passwordModificationRequest.getProtocol() != null) {
++            try {
++                return cmPasswordService.modify(passwordModificationRequest, requestHeaders);
++            } catch (CmPasswordService.Rejected rejected) {
++                throw rejected;
++            } catch (RuntimeException failure) {
++                throw cmSystemFailure("MODIFICATION", failure);
++            }
++        }
+         validateRequestForPasswordModify(passwordModificationRequest);
+ 
+         // get hash
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..9b24916ef93e3194b1505631ce1bdad747ebdd14 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+@@ -87,4 +87,9 @@ management:
+     livenessstate:
+       enabled: true
+     readinessstate:
+-      enabled: true
+\ No newline at end of file
++      enabled: true
++# BCOH2H-1955: dedicated internal APIC subscription. Empty values disable the CM protocol.
++password:
++  cm:
++    client-id: ${CM_PASSWORD_APIC_CLIENT_ID:}
++    client-secret: ${CM_PASSWORD_APIC_CLIENT_SECRET:}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
+index fea8feef58ef4ac288f8b00f54308821ec346bfa..53fee755ef2722afc1e3f202c5670e9cbfed618e 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+-<mapper namespace="com.hkbea.dsp.entity.DspAuthCredential">
++<mapper namespace="com.hkbea.dsp.mapper.DspAuthCredentialMapper">
+ 
+     <update id="updatePassword">
+         UPDATE DSP_AUTH_CREDENTIAL
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordServiceTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordServiceTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..822b2c7475493d90fd2d692ddb6d2f46f97e7880
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordServiceTest.java
+@@ -0,0 +1,330 @@
++package com.hkbea.dsp.service;
++
++import com.baomidou.mybatisplus.core.MybatisConfiguration;
++import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
++import com.hkbea.common.cache.CacheConfig;
++import com.hkbea.dsp.entity.DspAuthCredential;
++import com.hkbea.dsp.mapper.DspAuthCredentialMapper;
++import com.hkbea.dsp.model.*;
++import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
++import com.hkbea.dsp.utils.HashUtils;
++import jakarta.ws.rs.WebApplicationException;
++import jakarta.ws.rs.core.HttpHeaders;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Path;
++import java.security.KeyFactory;
++import java.security.MessageDigest;
++import java.security.spec.MGF1ParameterSpec;
++import java.security.spec.X509EncodedKeySpec;
++import java.sql.Connection;
++import java.util.Base64;
++import java.util.UUID;
++import javax.crypto.Cipher;
++import javax.crypto.spec.OAEPParameterSpec;
++import javax.crypto.spec.PSource;
++import org.apache.ibatis.builder.xml.XMLMapperBuilder;
++import org.apache.ibatis.mapping.Environment;
++import org.apache.ibatis.session.SqlSession;
++import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
++import org.h2.jdbcx.JdbcDataSource;
++import org.junit.jupiter.api.*;
++import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++
++/** Real RSA, MyBatis mapper XML and H2 writes; only caller headers are fixtures. */
++class CmPasswordServiceTest {
++    private CmPasswordService service;
++    private DspAuthCredentialRepoService repo;
++    private ConcurrentMapCacheManager cache;
++    private HttpHeaders headers;
++    private SqlSession session;
++    private String requestId;
++    private String publicKey;
++    private static final String NONCE = "314159";
++    private static final String CLIENT = "test-client";
++    private static final String CLOSE = "USER@PARTY";
++
++    @BeforeEach void init() throws Exception {
++        JdbcDataSource ds = new JdbcDataSource();
++        ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=Oracle;DB_CLOSE_DELAY=-1");
++        try (Connection connection = ds.getConnection()) {
++            connection.createStatement().execute("CREATE TABLE DSP_AUTH_CREDENTIAL (ID BIGINT PRIMARY KEY, "
++                + "PASSWORD_HASH VARCHAR(255), CLOSE_ID VARCHAR(128), CLIENT_ID VARCHAR(64), OBJECT_STATUS CHAR(1), "
++                + "CREATION_DATE TIMESTAMP, CREATED_BY VARCHAR(100), LAST_UPDATE_DATE TIMESTAMP, LAST_UPDATED_BY VARCHAR(100), "
++                + "UNIQUE(CLIENT_ID,CLOSE_ID,OBJECT_STATUS))");
++        }
++        MybatisConfiguration config = new MybatisConfiguration();
++        config.setEnvironment(new Environment("test", new JdbcTransactionFactory(), ds));
++        config.addMapper(DspAuthCredentialMapper.class);
++        try (var stream = getClass().getResourceAsStream("/mapper/DspAuthCredentialMapper.xml")) {
++            new XMLMapperBuilder(stream, config, "mapper/DspAuthCredentialMapper.xml", config.getSqlFragments()).parse();
++        }
++        session = new MybatisSqlSessionFactoryBuilder().build(config).openSession(true);
++        repo = new DspAuthCredentialRepoService();
++        field(repo, "dspAuthCredentialMapper", session.getMapper(DspAuthCredentialMapper.class));
++        service = new CmPasswordService();
++        cache = new ConcurrentMapCacheManager();
++        field(service, "credentials", repo); field(service, "cacheManager", cache);
++        field(service, "cmClientId", "fixture-id"); field(service, "cmClientSecret", "fixture-secret");
++        headers = mock(HttpHeaders.class);
++        when(headers.getHeaderString("Channel")).thenReturn("BCO");
++        when(headers.getHeaderString("X-IBM-Client-Id")).thenReturn("fixture-id");
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("fixture-secret");
++        requestId = UUID.randomUUID().toString();
++    }
++    @AfterEach void close() { session.close(); }
++    static void field(Object object, String name, Object value) throws Exception {
++        var field = object.getClass().getDeclaredField(name); field.setAccessible(true); field.set(object,value);
++    }
++    PublicKeyQueryRequest query(boolean only) {
++        PublicKeyQueryRequest request = new PublicKeyQueryRequest();
++        request.setProtocol(CmPasswordService.PROTOCOL); request.setClientId(CLIENT); request.setCloseId(CLOSE);
++        request.setRequestId(requestId); request.setHashValue(HashUtils.sha256(NONCE)); request.setQueryOnly(only);
++        return request;
++    }
++    void key() { publicKey = service.query(query(false), headers).getPublicKey(); }
++    static String hash(String password) throws Exception {
++        return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256")
++            .digest(password.getBytes(StandardCharsets.UTF_8)));
++    }
++    String encrypt(String value, MGF1ParameterSpec mgf) throws Exception {
++        Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
++        cipher.init(Cipher.ENCRYPT_MODE, KeyFactory.getInstance("RSA").generatePublic(
++            new X509EncodedKeySpec(Base64.getDecoder().decode(publicKey))),
++            new OAEPParameterSpec("SHA-256", "MGF1", mgf, PSource.PSpecified.DEFAULT));
++        return Base64.getEncoder().encodeToString(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)));
++    }
++    PasswordModificationRequest write(String operation, String encrypted) {
++        PasswordModificationRequest request = new PasswordModificationRequest();
++        request.setProtocol(CmPasswordService.PROTOCOL); request.setRequestId(requestId);
++        request.setClientId(CLIENT); request.setCloseId(CLOSE); request.setRandomNumber(NONCE);
++        request.setFunction(PasswordModificationRequest.FunctionEnum.fromValue(operation));
++        request.setNewEncryptedPassword(encrypted); return request;
++    }
++    String stored() { DspAuthCredential row = repo.queryWithStatus(CLOSE, CLIENT, "A"); return row == null ? null : row.getPasswordHash(); }
++    void setup() throws Exception { key(); service.modify(write("A", encrypt(hash("First123"), MGF1ParameterSpec.SHA256)), headers); }
++
++    @Test void setupAndResetPersistExactBase64HashThroughRealMapper() throws Exception {
++        assertEquals("NOT_SETUP", service.query(query(true),headers).getCredentialStatus());
++        setup(); assertEquals(hash("First123"), stored());
++        assertEquals("ACTIVE", service.query(query(true),headers).getCredentialStatus());
++        requestId = UUID.randomUUID().toString(); key();
++        assertEquals("000000", service.modify(write("R",encrypt(hash("Second456"),MGF1ParameterSpec.SHA256)),headers).getStatus());
++        assertEquals(hash("Second456"),stored()); assertNotEquals(hash("First123"),stored());
++    }
++    @Test void setupCannotOverwriteAndResetRequiresExistingCredential() throws Exception {
++        key(); assertThrows(WebApplicationException.class,()->service.modify(write("R",encrypt(hash("First123"),MGF1ParameterSpec.SHA256)),headers));
++        assertNull(stored()); setup(); key();
++        assertThrows(WebApplicationException.class,()->service.modify(write("A",encrypt(hash("Second456"),MGF1ParameterSpec.SHA256)),headers));
++        assertEquals(hash("First123"),stored());
++    }
++    @Test void plaintextAndHexDigestAreRejectedWithoutWrite() throws Exception {
++        for (String invalid : new String[]{"First123", HashUtils.sha256("First123"), Base64.getEncoder().encodeToString(new byte[31])}) {
++            key(); assertThrows(WebApplicationException.class,()->service.modify(write("A",encrypt(invalid,MGF1ParameterSpec.SHA256)),headers));
++            assertNull(stored());
++        }
++    }
++    @Test void mismatchedOaepCiphertextIsRejected() throws Exception {
++        key(); assertThrows(WebApplicationException.class,()->service.modify(write("A",encrypt(hash("First123"),MGF1ParameterSpec.SHA1)),headers));
++        assertNull(stored());
++    }
++    @Test void nonceIdentityRequestAndExpiryAreBound() throws Exception {
++        key(); String cipher = encrypt(hash("First123"), MGF1ParameterSpec.SHA256);
++        for (String part : new String[]{"nonce","client","close","request"}) {
++            PasswordModificationRequest request=write("A",cipher);
++            if (part.equals("nonce")) request.setRandomNumber("271828");
++            if (part.equals("client")) request.setClientId("other-client");
++            if (part.equals("close")) request.setCloseId("OTHER@PARTY");
++            if (part.equals("request")) request.setRequestId(UUID.randomUUID().toString());
++            assertThrows(WebApplicationException.class,()->service.modify(request,headers));
++        }
++        var entries=(java.util.concurrent.ConcurrentMap<?,?>)cache.getCache(CacheConfig.VARIABLE).getNativeCache();
++        entries.values().forEach(value->((CmPasswordService.KeyEntry)value).setExpiresAt(0));
++        assertThrows(WebApplicationException.class,()->service.modify(write("A",cipher),headers)); assertNull(stored());
++    }
++    @Test void usedKeyCannotBeReplayed() throws Exception {
++        key(); PasswordModificationRequest request=write("A",encrypt(hash("First123"),MGF1ParameterSpec.SHA256));
++        service.modify(request,headers);
++        assertThrows(WebApplicationException.class,()->service.modify(request,headers));
++        assertEquals(hash("First123"),stored());
++    }
++    @Test void internalCallerIsRequiredAndLegacyModifyCannotBypassOldPassword() throws Exception {
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("wrong");
++        assertEquals(403,assertThrows(WebApplicationException.class,()->service.query(query(true),headers)).getResponse().getStatus());
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("fixture-secret");
++        when(headers.getHeaderString("Channel")).thenReturn("HTH");
++        assertThrows(WebApplicationException.class,()->service.query(query(true),headers));
++        when(headers.getHeaderString("Channel")).thenReturn("BCO"); key();
++        assertThrows(WebApplicationException.class,()->service.modify(write("M",encrypt(hash("First123"),MGF1ParameterSpec.SHA256)),headers));
++        assertNull(stored());
++    }
++    @Test void dspPersistenceFailureIsNotReportedAsSuccess() throws Exception {
++        DspAuthCredentialRepoService failing=mock(DspAuthCredentialRepoService.class);
++        doThrow(new IllegalStateException("fixture database unavailable")).when(failing).insert(any());
++        field(service,"credentials",failing); key();
++        assertThrows(IllegalStateException.class,()->service.modify(write("A",encrypt(hash("First123"),MGF1ParameterSpec.SHA256)),headers));
++        assertNull(stored());
++    }
++    @Test void browserTransportHashCanBeDecryptedAndStoredByDsp() throws Exception {
++        String bco=System.getProperty("bco.repo");
++        Assumptions.assumeTrue(bco!=null,"Set -Dbco.repo to run the actual CM browser transport interoperability test");
++        key();
++        Process process=new ProcessBuilder(System.getProperty("node.bin","node"),
++            Path.of(bco,"consulting/tests/hth1955/browser-interop.cjs").toString(), publicKey).start();
++        String json=new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8);
++        assertEquals(0,process.waitFor(),new String(process.getErrorStream().readAllBytes(),StandardCharsets.UTF_8));
++        var payload=new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
++        service.modify(write("A",payload.path("dspEncryptedPassword").asText()),headers);
++        assertEquals(hash("Browser123"),stored());
++    }
++    @Test void jerseyJsonBoundaryPreservesProtocolAndDefiniteRejections() throws Exception {
++        PasswordApiServiceImpl resource = new PasswordApiServiceImpl();
++        field(resource, "cmPasswordService", service);
++        org.springframework.context.support.GenericApplicationContext spring =
++                new org.springframework.context.support.GenericApplicationContext();
++        spring.getBeanFactory().registerSingleton("passwordApiService", resource);
++        spring.getBeanFactory().registerSingleton("cmPasswordService", service);
++        spring.getBeanFactory().registerSingleton("dspAuthCredentialRepoService", repo);
++        spring.getBeanFactory().registerSingleton("passwordAppService", mock(PasswordAppService.class));
++        spring.getBeanFactory().registerSingleton("cmPasswordExceptionMapper", new CmPasswordExceptionMapper());
++        var fallback = new com.hkbea.common.exception.DefaultExceptionMapper();
++        spring.getBeanFactory().registerSingleton("defaultExceptionMapper", fallback);
++        spring.getBeanFactory().registerSingleton("exceptionResponseBuilder",
++                mock(com.hkbea.common.exception.ExceptionResponseBuilder.class));
++        spring.refresh();
++        StringBuilder httpLog = new StringBuilder();
++        var httpLogger = java.util.logging.Logger.getLogger("cm-password-test-" + UUID.randomUUID());
++        httpLogger.setUseParentHandlers(false); httpLogger.setLevel(java.util.logging.Level.ALL);
++        var handler = new java.util.logging.Handler() {
++            public void publish(java.util.logging.LogRecord record) { httpLog.append(record.getMessage()); }
++            public void flush() { }
++            public void close() { }
++        };
++        httpLogger.addHandler(handler);
++        var productionConfig = new com.hkbea.dsp.JerseyConfig();
++        org.glassfish.jersey.server.ResourceConfig config = new org.glassfish.jersey.server.ResourceConfig()
++                .property("contextConfig", spring)
++                .register(PasswordApiServiceImpl.class).register(CmPasswordExceptionMapper.class)
++                .register(com.hkbea.common.exception.DefaultExceptionMapper.class)
++                .register(org.glassfish.jersey.jackson.JacksonFeature.class)
++                .register(org.glassfish.jersey.logging.LoggingFeature.class)
++                .property(org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_LOGGER_NAME_SERVER, httpLogger.getName())
++                .property(org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_VERBOSITY_SERVER,
++                        productionConfig.getProperty(org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_VERBOSITY_SERVER))
++                .property(org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_REDACT_HEADERS_SERVER,
++                        productionConfig.getProperty(org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_REDACT_HEADERS_SERVER))
++                .property("jersey.config.server.disableAutoDiscovery", true);
++        org.glassfish.jersey.server.ApplicationHandler app = new org.glassfish.jersey.server.ApplicationHandler(config);
++        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
++        try {
++            for (String secret : new String[]{"fixture-secret", "wrong"}) {
++                postJson(app, "public-key", query(true), secret,
++                        secret.equals("fixture-secret") ? 200 : 403,
++                        secret.equals("fixture-secret") ? "000000" : "CM_CALLER_REJECTED");
++            }
++            for (String operation : new String[]{"A", "R"}) {
++                requestId = UUID.randomUUID().toString();
++                publicKey = postJson(app, "public-key", query(false), "fixture-secret", 200, "000000")
++                        .path("publicKey").asText();
++                String expected = hash(operation.equals("A") ? "First123" : "Second456");
++                PasswordModificationRequest change = write(operation, encrypt(expected, MGF1ParameterSpec.SHA256));
++                postJson(app, "modification", change, "fixture-secret", 200, "000000");
++                assertEquals(expected, stored());
++                postJson(app, "modification", change, "fixture-secret", 400, "TRANSPORT_KEY_EXPIRED");
++            }
++            assertTrue(httpLog.length() > 0);
++            assertFalse(httpLog.toString().contains("fixture-secret"));
++            assertFalse(httpLog.toString().contains("fixture-id"));
++            assertFalse(httpLog.toString().contains("newEncryptedPassword"));
++            assertFalse(httpLog.toString().contains(publicKey));
++        } finally {
++            httpLogger.removeHandler(handler);
++            spring.close();
++        }
++    }
++
++    private com.fasterxml.jackson.databind.JsonNode postJson(org.glassfish.jersey.server.ApplicationHandler app,
++            String endpoint, Object value, String secret, int status, String result) throws Exception {
++        var input = new org.glassfish.jersey.server.ContainerRequest(java.net.URI.create("http://localhost/dsp/api/"),
++                java.net.URI.create("http://localhost/dsp/api/password/v1/" + endpoint), "POST", null,
++                new org.glassfish.jersey.internal.MapPropertiesDelegate());
++        input.getHeaders().putSingle("Content-Type", "application/json");
++        input.getHeaders().putSingle("Channel", "BCO");
++        input.getHeaders().putSingle("X-IBM-Client-Id", "fixture-id");
++        input.getHeaders().putSingle("X-IBM-Client-Secret", secret);
++        var json = new com.fasterxml.jackson.databind.ObjectMapper();
++        input.setEntityStream(new java.io.ByteArrayInputStream(json.writeValueAsBytes(value)));
++        var output = new java.io.ByteArrayOutputStream();
++        var response = app.apply(input, output).get();
++        assertEquals(status, response.getStatus());
++        var body = json.readTree(output.toByteArray());
++        assertEquals(result, body.path("status").asText());
++        return body;
++    }
++
++    @Test void cmResourceSanitizesUnexpectedPersistenceAndCommitFailures() throws Exception {
++        PasswordApiServiceImpl resource = new PasswordApiServiceImpl();
++        CmPasswordService failing = mock(CmPasswordService.class);
++        field(resource, "cmPasswordService", failing);
++        field(resource, "requestHeaders", headers);
++        when(failing.modify(any(), any())).thenThrow(new IllegalStateException("sensitive fixture SQL"));
++        when(failing.query(any(), any())).thenThrow(new IllegalStateException("sensitive fixture SQL"));
++        for (Runnable call : new Runnable[]{() -> resource.queryPublicKey(query(true)),
++                () -> resource.modifyPassword(write("A", "fixture"))}) {
++            CmPasswordService.Rejected failure = assertThrows(CmPasswordService.Rejected.class, call::run);
++            assertEquals(500, failure.getResponse().getStatus());
++            assertNull(failure.getCause());
++            assertEquals(java.util.Map.of("status", "CM_PASSWORD_SYSTEM_FAILURE"), failure.getResponse().getEntity());
++        }
++    }
++    @Test void tokenValidationUsesOnlyLatestDspHashAfterReset() throws Exception {
++        setup();
++        var token = new CorporateTokenServiceImpl();
++        field(token, "dspAuthCredentialMapper", session.getMapper(DspAuthCredentialMapper.class));
++        field(token, "clientAssertionType", "fixture-type");
++        field(token, "grantType", "fixture-grant");
++        var signingKey = new com.nimbusds.jose.jwk.gen.RSAKeyGenerator(2048).generate();
++        var cypher = mock(com.hkbea.dsp.api.CypherApi.class);
++        when(cypher.validateSignature(any())).thenAnswer(invocation -> {
++            SignatureValidationParam input = invocation.getArgument(0);
++            assertEquals(CLIENT, input.getKeySubject());
++            var verifier = java.security.Signature.getInstance("SHA256withRSA");
++            verifier.initVerify(signingKey.toRSAPublicKey());
++            verifier.update(input.getContent().getBytes(StandardCharsets.UTF_8));
++            ValidationResult result = new ValidationResult();
++            result.setValid(verifier.verify(Base64.getDecoder().decode(input.getSignature())));
++            return result;
++        });
++        field(token, "cypherApi", cypher);
++        var uam = mock(com.hkbea.dsp.uam.api.UamService.class);
++        var access = new com.hkbea.dsp.uam.model.GetTokenResult();
++        access.setAccessToken("fixture-access-token"); access.setTokenType("Bearer");
++        when(uam.getAccessToken(anyString(), anyString(), anyString())).thenReturn(access);
++        field(token, "uamService", uam);
++        var claims = new com.nimbusds.jwt.JWTClaimsSet.Builder().issuer(CLIENT).subject(CLIENT)
++                .claim("close-id", CLOSE).audience("fixture-audience").jwtID(UUID.randomUUID().toString())
++                .issueTime(new java.util.Date(System.currentTimeMillis() - 1000))
++                .expirationTime(new java.util.Date(System.currentTimeMillis() + 60000)).build();
++        var assertion = new com.nimbusds.jwt.SignedJWT(new com.nimbusds.jose.JWSHeader(
++                com.nimbusds.jose.JWSAlgorithm.RS256), claims);
++        assertion.sign(new com.nimbusds.jose.crypto.RSASSASigner(signingKey));
++        CorporateTokenParam request = new CorporateTokenParam();
++        request.setClientAssertion(assertion.serialize());
++        request.setPasswordSignature(signHash(signingKey.toRSAPrivateKey(), hash("First123")));
++        assertEquals("fixture-access-token", token.getCorporateToken(request).getAccessToken());
++        requestId = UUID.randomUUID().toString(); key();
++        service.modify(write("R", encrypt(hash("Second456"), MGF1ParameterSpec.SHA256)), headers);
++        assertThrows(com.hkbea.common.exception.ParameterException.class, () -> token.getCorporateToken(request));
++        request.setPasswordSignature(signHash(signingKey.toRSAPrivateKey(), hash("Second456")));
++        assertEquals("fixture-access-token", token.getCorporateToken(request).getAccessToken());
++        verify(uam, times(2)).getAccessToken(anyString(), anyString(), anyString());
++    }
++
++    private static String signHash(java.security.PrivateKey key, String hash) throws Exception {
++        var signer = java.security.Signature.getInstance("SHA256withRSA");
++        signer.initSign(key); signer.update(hash.getBytes(StandardCharsets.UTF_8));
++        return Base64.getEncoder().encodeToString(signer.sign());
++    }
++
++}

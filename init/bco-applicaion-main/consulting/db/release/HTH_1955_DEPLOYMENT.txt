@@ -1,0 +1,78 @@
+BCOH2H-1955 — DSP-only API password deployment
+
+Implementation
+- CM no longer creates, reads or writes HTH_API_PASSWORD_CREDENTIAL, HTH_API_PASSWORD_STATE or HTH_API_PASSWORD_OPERATION.
+- HTH_API_PASSWORD_CODE stays: approval, 24-hour validity, failed attempts, purpose, reservation and consumption.
+- REMOTE_CLIENT_ID on the Code row binds its request to the business DSP client. It is not a password/state cache.
+- Status and SETUP/RESET Code purpose are determined by DSP for clientId + full closeId (USER@PARTY).
+- Browser: Base64(raw SHA256(UTF8(password))) -> RSA-2048 OAEP (SHA256 digest AND MGF1 SHA256, empty label) -> Base64 ciphertext.
+- CM never receives the plaintext password/hash. Its separate session RSA envelope contains Code, request ID, operation and a digest binding the DSP ciphertext.
+- DSP stores the decrypted Base64 digest as-is in its existing DSP_AUTH_CREDENTIAL table.
+- The customer's token signature must cover that same Base64 digest string, not its hex representation.
+
+Two internal APIC endpoints (POST)
+- .../dsp/api/password/v1/public-key
+- .../dsp/api/password/v1/modification
+The configured URL may include the environment-specific internal APIC prefix.
+CM sends X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO and a new UUID Message-Id.
+Payload protocol=CM_SHA256_BASE64_V1 prevents accidental use against the incompatible older API contract.
+Public-key requests include clientId, closeId, requestId, hashValue=lowercase-hex SHA256(six-digit nonce).
+queryOnly=true reads credentialStatus without allocating a key. The nonce is unrelated to the AP Code.
+Modification uses function A for setup and R for approved-Code reset, plus the same identity/requestId, randomNumber and newEncryptedPassword.
+DSP's existing legacy A/M path remains available when protocol is omitted. CM R cannot use that path.
+Only HTTP 200 with status=000000 is success. Redirects/retries and empty-response success are disabled.
+
+Deployment order
+1. DSP: deploy dsp-ms-support-api + dsp-ms-support-svc together, including the updated mapper XML and API specification.
+   Configure CM_PASSWORD_APIC_CLIENT_ID and CM_PASSWORD_APIC_CLIENT_SECRET from the dedicated internal APIC subscription.
+   Empty credentials disable the CM protocol. The service verifies both headers and Channel=BCO.
+   APIC must forward these authenticated headers, strip spoofed/injected alternatives, and expose the CM protocol only on the internal product.
+   Keep the service behind internal APIC/network controls; Channel alone is not authorization.
+   DSP HTTP debug logging is headers-only, with APIC credentials and authentication/cookie headers redacted.
+   Confirm the existing DSP_AUTH_CREDENTIAL schema enforces a single active credential per clientId/closeId.
+2. CM database:
+   New production (BCO + released Inquiry, no HTH tables): execute HTH_FIRST_DEPLOY.sql only.
+   Existing UAT: execute HTH_1955_UAT_UPGRADE.sql once. It adds the Code client binding and configures the two API URLs and credentials.
+   Do not rerun the first-install script on existing UAT. These DDL scripts are not repeatable upgrades.
+3. CM: deploy the frontend component/resources, module, ext-xface, DTO, endpoint and updated cz-hosttohost.cfg.xml together.
+   Remove the retired entity and key mapping files from the deployed configuration (do not only overlay old files).
+   Refresh configuration caches/restart according to the normal BCO deployment process. Browser requires HTTPS (localhost is accepted for development).
+4. Verify UAT setup/reset, wrong and expired Code, DSP failure and latest-hash token authentication.
+5. Existing UAT only: back up the retired tables, reconcile pending/unknown writes, verify passwords exist in DSP,
+   then execute HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql to drop the three old tables and obsolete configurations.
+   This retirement script is destructive and was NOT executed by the implementation work.
+   Local PBKDF2 hashes cannot be converted to DSP hashes. Users whose credentials existed only locally must set up again.
+
+Failure and recovery
+- Wrong Code is checked before expiry reporting, and attempt limits still apply.
+- DSP explicit pre-write rejection releases the reservation to ACTIVE; no success notification is issued.
+- Timeout, malformed success response, system error or local consume/commit uncertainty holds the Code IN_PROGRESS/UNKNOWN.
+  Do not retry automatically or manually switch UNKNOWN to ACTIVE without reconciling the DSP result.
+- USED plus matching request/owner/purpose/client returns the earlier success without another DSP write or notification.
+- UNKNOWN recovery is manual; no new local operation table or background retry was introduced.
+- AC failure UI: Fail / Password synchronization failed. Please try again later. / Go to Dashboard.
+- Password complexity checks remain in the browser. With a hash-only contract neither CM nor DSP can verify plaintext complexity.
+  Do not claim server-side complexity enforcement for this protocol; any stronger requirement needs an agreed protocol change.
+
+Validation completed locally
+- 39 DSP tests: existing API regression, real RSA, actual browser transport -> DSP decrypt, exact Base64 storage,
+  real MyBatis mapper + H2 setup/reset writes, expiry/binding/replay/caller rejection and failed persistence.
+- Jersey JSON boundary: both endpoints, setup/reset, explicit 400/403, safe 500 and HTTP log redaction.
+- Existing token flow reads the real H2 credential row: the old-hash signature fails after reset, the new-hash signature passes.
+  RSA signature checking is real; the remote Cypher HTTP boundary and UAM token issuance use test fixtures.
+- CM production client against local HTTPS: both endpoints, headers, A/R, strict response contract, no redirect/retry, timeout classification.
+- Production Code method bodies and SQL with H2: reserve/consume/replay, confirmed failure release, UNKNOWN retention,
+  mismatch-before-expiry, lockout, purpose and session RSA isolation. OBDX bootstrap/session boundaries are fixtures.
+- 60 localized UI error cases, including AC synchronization failure handling.
+- CM whole-source compilation still has the four previously identified unrelated EnumerationConstants errors.
+  Isolated test compilation using temporary baseline dependency fixtures succeeds; no baseline fixes were committed.
+- UAT/Oracle/WebLogic/internal APIC/live token authentication have NOT been exercised by these local tests.
+
+Re-run local tests
+CM: JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
+CM: JAVA_HOME=<JDK21> H2_JAR=<h2 jar> python3 consulting/tests/hth1955/verify_code_lifecycle.py
+CM: node consulting/tests/hth1955/ui-errors.cjs
+DSP: after building the hth-common modules, run dsp-ms-support Maven tests with
+     -Dtest=CmPasswordServiceTest,PasswordApiServiceImplTest,PasswordAppServiceTest,DspAuthCredentialRepoServiceTest
+     -Dsurefire.failIfNoSpecifiedTests=false -Dbco.repo=<CM repository> -Dnode.bin=<node executable>
+The browser interoperability test requires bco.repo; it is marked skipped if that property is absent.

@@ -1,58 +1,49 @@
-BCOH2H-1955 — SQL 新目录与首次部署文件更新
-交付日期：2026-11-12。原 init 原位更新；本次源代码提交 e39009d4。
+BCOH2H-1955 — DSP 密码接口移除重复 APIC 校验
+交付日期：2026-11-12。原 init 目录原位更新。
+源提交：DSP a366c89；CM 部署说明 d56fd460。
 
-本次更新
-- 随源仓库将 consulting/db/release 下六个文件迁到 consulting/db/branch_change_history/hosttohost。
-- 首次部署入口改为 hth_onboarding.sql，已补齐 API Password 的最新最终结构。
-- 不创建 HTH_API_PASSWORD_CREDENTIAL / STATE / OPERATION 三张旧表；不保存密码或 Hash。
-- HTH_USER_PROFILE 包含四个 API_PASSWORD_* 状态字段，Code 表包含 REMOTE_CLIENT_ID。
-- 删除旧 credentials/persist 配置，只使用原 BM DSP.*；已有 DSP.* 配置不覆盖。
-- story/20261112-BCOHTH-1955 保留已有 UAT 的字段升级、旧表退役脚本及最新部署说明。
-- story/20261111-BCOHTH-1442&1950 保留 UI 开关脚本，内容沿用用户同步版。
-- 本次没有修改 Java、前端业务逻辑或 DSP 源码；两个现有测试脚本改为读取新的 SQL 路径。
+本次修改
+- 删除 CmPasswordCallerGuard 和它的测试，移除两条密码接口中的 Guard 调用。
+- 删除 DSP 的 dsp.password.cm-client-id / cm-client-secret 配置。
+- DSP 不再比较 X-IBM-Client-Id / X-IBM-Client-Secret，也不再要求重复的 HTH_CM_APIC_* 环境配置。
+- 调用方认证及接口授权由 internal APIC 负责；CM 仍携带原 BM DSP.* 凭据请求 APIC。
+- DSP 沿用既有公共请求头处理，CM 仍发送 Message-Id 和 Channel=BCO。
+- Body 的 clientId 是业务用户所属的 DSP clientId，仍必填，用于定位密码记录。
+- 原 BM 校验及公共代码未改，密码加解密、Hash 格式、Code 校验和状态处理保持原实现。
 
-应用方式
-CM：首次应用 1955 使用 bco-applicaion-main.patch（base 见 SOURCE_COMMITS.json）；
-    已应用上一版 init/9fc7fe9a，使用 UPDATE_FROM_PREVIOUS_INIT.patch。二选一，不叠加。
-    增量同时包含用户已提交的目录迁移和本次 SQL 修正。
-DSP：本次与上一版 c603fd2 完全相同，无需重新应用或部署。
-     新安装仍使用从提供方 f9378da 开始的 hth-dsp.patch。旧 DSP 增量补丁已从本包移除，避免误用。
-补丁先 git apply --check，再 git apply；只适用于相应基线。
-手工复制使用各仓库同名子目录，保留原路径，并按 DELETED_FILES.txt 清理旧源码/旧 SQL 文件。
-旧 release 目录下的六个文件要删除，避免继续执行旧入口；这些删除只是文件清理，不是数据库删除。
-FILES.tsv 的 RESTORE 行也必须复制覆盖：原 BM DSPApiClientFactory.java 仍交付，不能删除。
-application.yaml 仍只交付 .patch，请合并配置而非覆盖环境原文件。
-PATCH_ONLY 行的校验值对应 .patch；FILE 行对应完整文件。
-本包是 1955 累计改动，依赖已有 HTH 迁移基线；其他交付目录未改。
+更新上一版 init
+- CM 以 e39009d4 为起点，使用 UPDATE_FROM_PREVIOUS_INIT.patch；本次仅更新部署说明。
+- DSP 以 c603fd2 为起点，使用 UPDATE_DSP_FROM_PREVIOUS_INIT.patch。
+- 补丁先 git apply --check，再 git apply；环境配置有本地差异时按补丁逐项合并。
+- 手工复制时必须删除 DSP 的 CmPasswordCallerGuard.java 和 CmPasswordCallerGuardTest.java，
+  同时删除 application.yaml 中的 dsp.password.cm-client-id / cm-client-secret 两项。
+- 使用 clean 编译再打包，避免旧 Guard class 残留在部署产物中。
+- 本次不需要重新执行 SQL，也不需要改变 CM 的 DSP.* 配置。
 
-数据库执行入口（二选一）
-1. 首次生产部署：consulting/db/branch_change_history/hosttohost/hth_onboarding.sql。
-   适用只有 BCO + Inquiry、没有 HTH 表的数据库。包含全部最终结构，不再叠加 story 字段升级脚本。
-   脚本不是可重复执行的 UAT 升级；失败时先核查已执行的 DDL。
-2. 已有 UAT：按 story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt 执行。
-   缺少四个状态字段时执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次；已存在勿重复执行。
-   仅 Code 表缺 REMOTE_CLIENT_ID 时执行 HTH_1955_UAT_UPGRADE.sql 一次。
-   已有 profile 保持 UNKNOWN，按实际 DSP 数据核对为 ACTIVE/NOT_SETUP 并绑定业务 clientId。
-   HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 仅在备份、核对及清理旧操作后单独执行，不能用于首次部署。
+首次应用累计 1955 改动
+- CM 使用 bco-applicaion-main.patch，基线 1df981ed；DSP 使用 hth-dsp.patch，基线 f9378da。
+- 累计补丁和对应的上一版增量补丁二选一，不叠加。准确基线见 SOURCE_COMMITS.json。
+- 手工复制使用各仓库同名子目录并保留原路径，按 DELETED_FILES.txt 清理旧源码/旧 SQL 文件。
+- FILES.tsv 的 RESTORE 行也必须复制覆盖：原 BM DSPApiClientFactory.java 仍保留，不能删除。
+- application.yaml 仅交付累计 .patch，合并配置而非覆盖环境原文件。
+  该累计补丁面向原提供方版本；升级上一版时请使用 DSP 增量补丁删除旧 Guard 配置。
+- PATCH_ONLY 行校验值对应 .patch，FILE 行对应完整文件，DELETE 行列明须删除的文件。
+- 本包依赖已有 HTH 迁移基线；其他交付目录未改。
 
-沿用上一版的运行配置与功能
-- BM Client ID 校验及两条密码接口共用 DSPApiAdapterImplConfig：DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、
-  DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（默认 BCO）；密码接口不读取 H2H.*。
-- 原 BM 工厂已经恢复原 QTES2 实现，BM 业务服务和页面未改。
-- Code reset 无需旧密码；浏览器传 Base64(raw SHA-256(UTF-8(password))) 的 RSA-OAEP 密文。
-- DSP 解密后原样保存 Hash，A 首次创建、M 重设；HTH 仅保留状态和 Code。
-- DSP 成功才完成 Code 和状态；UNKNOWN/IN_PROGRESS 阻止不确定结果的自动重试。
-- 两个密码路径需加入原 BM 的内部 APIC 订阅；DSP 注入 HTH_CM_APIC_CLIENT_ID / HTH_CM_APIC_CLIENT_SECRET，
-  与 BM DSP.* 对应凭据相同。空配置拒绝调用，网关须校验并转发身份，Channel 为 BCO。
-- 密码调用关闭敏感报文日志、自动重试和重定向。
+数据库入口沿用上一版
+- 首次生产部署：consulting/db/branch_change_history/hosttohost/hth_onboarding.sql。
+  仅用于只有 BCO + Inquiry、没有 HTH 表的首次部署，不叠加 story 字段升级脚本。
+- 已有 UAT：按 story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt，按需执行缺失字段的升级。
+- HTH_USER_PROFILE 四列保存状态，Code 表保留 REMOTE_CLIENT_ID；CM 不保存密码或 Hash。
+- HTH_API_PASSWORD_CREDENTIAL / STATE / OPERATION 三张旧表不再创建。
+- 已有 profile 的 UNKNOWN 状态需按 DSP 实际记录核对；退役旧表需单独按部署说明处理。
 
-验证
-- 从新 hth_onboarding.sql 提取实际建表语句，Code/状态/并发、本地事务、SETUP/RESET 回归通过。
-- 60 个多语言错误提示、SQL 文案一致性及 UNKNOWN 页面门控通过。
-- 已核对 13 张 HTH 表、必需字段、退役表/配置移除，以及 DSP 配置只补缺失项。
-- 完整/增量补丁经临时 Git 索引验证可重建对应源提交；文件及 SHA256 校验一致。
-- 未执行 UAT/生产数据库，未连接真实 Oracle、Redis、WebLogic、APIC 或 UAM。
-- 前版真实 DSP 本地服务、存储及签名验证证据保留在部署说明中；仍需 UAT 端到端验收。
+验证与部署
+- clean 编译通过，18 项本地密码回归全部通过，无失败、错误或跳过。
+- 测试不注入 APIC 请求头或重复凭据配置，验证公钥、setup/reset、真实 MyBatis/H2 持久化及失败回滚。
+- 实际 CM 浏览器加密与 DSP 解密互通；重设后原密码签名失败、新密码签名通过，UAM 发 token 使用测试替身。
+- 无效参数、密文、密钥、重复 setup 和不存在密码的 reset 仍会被拒绝。
+- 完整/增量补丁经临时 Git 索引验证可重建源提交；交付文件与源码及 SHA256 清单一致。
+- 本次未部署 UAT，未执行数据库，未验证真实 internal APIC/UAM 环境。
 
 完整部署说明：bco-applicaion-main/consulting/db/branch_change_history/hosttohost/story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt
-SOURCE_COMMITS.json 记录源提交和补丁基线；SHA256SUMS 校验交付文件。

@@ -1,4 +1,4 @@
-需从 CM 目标源码清理的旧文件（不存在可忽略）。
+需从 CM / DSP 目标源码清理的旧文件（不存在可忽略）。
 恢复原 BM 的 DSPApiClientFactory.java 必须复制覆盖，不能删除。
 
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredential.orm.xml
@@ -35,3 +35,5 @@ bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.m
 bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordCredentialRepositoryAdapter.java
 bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordOperationRepositoryAdapter.java
 bco-applicaion-main/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordStateRepositoryAdapter.java
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java

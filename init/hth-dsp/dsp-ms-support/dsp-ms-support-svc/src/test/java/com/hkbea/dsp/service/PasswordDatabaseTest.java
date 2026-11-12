@@ -9,7 +9,6 @@ import com.hkbea.dsp.model.PasswordModificationRequest;
 import com.hkbea.dsp.model.PublicKeyQueryRequest;
 import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
 import com.hkbea.dsp.utils.HashUtils;
-import jakarta.ws.rs.core.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.*;
@@ -59,14 +58,9 @@ class PasswordDatabaseTest {
         SqlSessionTemplate template=new SqlSessionTemplate(new MybatisSqlSessionFactoryBuilder().build(config));
         mapper=template.getMapper(DspAuthCredentialMapper.class);
         repo=new DspAuthCredentialRepoService();ReflectionTestUtils.setField(repo,"dspAuthCredentialMapper",mapper);
-        keys=new Keys();CmPasswordCallerGuard guard=new CmPasswordCallerGuard();
-        ReflectionTestUtils.setField(guard,"clientId","fixture-id");ReflectionTestUtils.setField(guard,"clientSecret","fixture-secret");
-        HttpHeaders headers=mock(HttpHeaders.class);
-        when(headers.getHeaderString("Channel")).thenReturn("BCO");
-        when(headers.getHeaderString("X-IBM-Client-Id")).thenReturn("fixture-id");
-        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("fixture-secret");
+        keys=new Keys();
+        // APIC authenticates upstream; exercise the actual service without APIC headers or credential settings.
         PasswordApiServiceImpl target=new PasswordApiServiceImpl();
-        ReflectionTestUtils.setField(target,"headers",headers);ReflectionTestUtils.setField(target,"callerGuard",guard);
         ReflectionTestUtils.setField(target,"passwordAppService",keys);ReflectionTestUtils.setField(target,"dspAuthCredentialRepoService",repo);
         ProxyFactory proxy=new ProxyFactory(target);proxy.setProxyTargetClass(true);
         proxy.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(data),new AnnotationTransactionAttributeSource()));
@@ -83,7 +77,7 @@ class PasswordDatabaseTest {
             .randomNumber(NONCE).newEncryptedPassword(Base64.getEncoder().encodeToString(cipher.doFinal(hash(password).getBytes(StandardCharsets.US_ASCII))));
     }
     String stored() { DspAuthCredential row=repo.queryWithStatus("USER@PARTY","client","A");return row==null?null:row.getPasswordHash(); }
-    @Test void setupAndResetPersistExactHashWithRealMapper() throws Exception {
+    @Test void setupAndResetPersistExactHashWithoutApicHeaders() throws Exception {
         service.modifyPassword(request("A","First123"));assertEquals(hash("First123"),stored());
         service.modifyPassword(request("M","Second456"));assertEquals(hash("Second456"),stored());assertNotEquals(hash("First123"),stored());
     }

@@ -13,8 +13,6 @@ import com.hkbea.dsp.model.PublicKeyQueryResponse;
 import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
 import com.hkbea.dsp.utils.HashUtils;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,12 +55,6 @@ public class PasswordApiServiceImpl implements PasswordApi {
 
     private static final Pattern PATTERN = Pattern.compile(String.format("^\\d{%d}$", VALID_RANDOM_DIGITS));
 
-    @Context
-    private HttpHeaders headers;
-
-    @Autowired
-    private CmPasswordCallerGuard callerGuard;
-
     /**
      * no need use spring to inject this
      */
@@ -84,7 +76,6 @@ public class PasswordApiServiceImpl implements PasswordApi {
      */
     @Override
     public PublicKeyQueryResponse queryPublicKey(PublicKeyQueryRequest publicKeyQueryRequest) {
-        callerGuard.check(headers);
         checkPublicKeyQueryRequest(publicKeyQueryRequest);
 
         String hashValue = publicKeyQueryRequest.getHashValue();
@@ -125,7 +116,6 @@ public class PasswordApiServiceImpl implements PasswordApi {
     @Override
     @Transactional
     public PasswordModificationResponse modifyPassword(PasswordModificationRequest passwordModificationRequest) {
-        callerGuard.check(headers);
         validateRequestForPasswordModify(passwordModificationRequest);
 
         // get hash

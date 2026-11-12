@@ -1,11 +1,9 @@
-本次迁移 SQL 目录并补齐 API Password 最终结构。
-旧 release 文件按 DELETED_FILES.txt 从目标源码删除，数据库无需因此删除。
-DSP 与上一版一致，旧 UPDATE_DSP_FROM_PREVIOUS_INIT.patch 已移除，无需 DSP 增量。
-RESTORE 行的 BM 工厂仍须保留。
+本次移除 DSP 密码接口重复的 APIC 调用方校验。
+必须从目标 DSP 源码删除 CmPasswordCallerGuard.java 及其测试文件；见 DELETED_FILES.txt。
+重新 clean 编译后再打包，避免残留旧 Guard class。
+原有 SQL 目录迁移和 BM 工厂恢复保持不变。
 
 本次从交付文件包移除：
-bco-applicaion-main/consulting/db/release/HTH_1955_DEPLOYMENT.txt
-bco-applicaion-main/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql
-bco-applicaion-main/consulting/db/release/HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql
-bco-applicaion-main/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
-bco-applicaion-main/consulting/db/release/HTH_FIRST_DEPLOY.sql
+bco-applicaion-main/consulting/db/branch_change_history/hosttohost/story/.DS_Store
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java

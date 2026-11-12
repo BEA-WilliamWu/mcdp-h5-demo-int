@@ -1,13 +1,13 @@
 [
   {
     "repository": "bco-applicaion-main",
-    "commit": "e39009d444fb48ffa683e870787c34e2684475c4",
+    "commit": "d56fd4607cc8204f592ed11ec11c295d4c6f2811",
     "base": "1df981ede1638452cbc85a17dcce018a4f4cd05f",
-    "previous_init_commit": "9fc7fe9a108abcac94534fccb5501fe4fb4f5500"
+    "previous_init_commit": "e39009d444fb48ffa683e870787c34e2684475c4"
   },
   {
     "repository": "hth-dsp",
-    "commit": "c603fd2125530cfc034cfa87086698a76bbce4e6",
+    "commit": "a366c89ce7ced88804f956ef3b74d331222cf488",
     "base": "f9378dac0baf5f58713360722819b5932bf6c359",
     "previous_init_commit": "c603fd2125530cfc034cfa87086698a76bbce4e6"
   }

@@ -21,11 +21,12 @@ BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码
 
 授权与部署配置
 - 无旧密码重设只能供受信任 CM 后端调用。CM 负责校验当前会话、目标用户权限及已审批 Code。
-- DSP 的两个密码接口额外验证 BCO Channel 和受信任 CM 的 APIC client ID/secret。
-  不能仅凭调用方可自行填写的 Channel=BCO 就允许重设。
-- 在 DSP 部署环境注入 HTH_CM_APIC_CLIENT_ID、HTH_CM_APIC_CLIENT_SECRET。
-  值使用原 BM DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET 对应的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
-  这两个值为空时接口拒绝请求。API 网关必须校验并向 DSP 转发相应凭据，或由网关维护等价可信身份。
+- 调用方认证及接口授权由 internal APIC 负责，与原 BM Client ID 校验的调用方式一致。
+- CM 继续使用原 BM DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET 向 APIC 发起请求。
+  DSP 的两个密码服务不再重复校验这些请求头，不再配置 HTH_CM_APIC_CLIENT_ID / HTH_CM_APIC_CLIENT_SECRET。
+  已删除 CmPasswordCallerGuard；不要求网关将 APIC secret 转发给密码服务用于比较。
+- DSP 沿用既有公共请求头处理；CM 仍发送 Message-Id 和 Channel=BCO。
+  Body 的 clientId 是业务用户所属的 DSP clientId，仍必填，与 APIC 调用方 ID 不同。
 - APIC 路由继续复用原 BM DSP.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
 - DSP application.yaml 对密码接口排除通用请求体审计日志；应用日志只记阶段、结果及异常类型。
   部署配置不得另行打开这两个接口的 HTTP body 调试日志。
@@ -73,7 +74,7 @@ HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本�
 
 发布顺序
 1. 数据库升级并核对已有 UAT 状态。
-2. 部署 DSP（API + service），注入上述已有 APIC 凭据；确认内部路由及权限。
+2. 部署 DSP（API + service），确认 internal APIC 的路由及订阅权限；DSP 无需再注入重复的 APIC 凭据。
 3. 部署 CM 的 HTH module 和 ext-xface 实现，保留先前 1955 前端加密组件；清除旧客户端缓存/重启。
 4. 在 UAT 测试首次 setup、Code reset、错误/过期/已用 Code，验证 DSP 记录与 HTH 状态一致。
 5. 获取 token 的客户端必须使用相同 Base64 SHA-256 Hash 生成签名；旧 hex Hash 记录不会被本次 SQL 批量转换。
@@ -88,7 +89,8 @@ HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本�
 - 本地 HTTPS：共用原 BM DSP 配置（测试同时提供不同的 H2H 配置，确认不读取它）、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
 - DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
   新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
-  DSP 本次共 17 项测试通过（无失败、无跳过）。
+  移除重复 APIC 校验后，DSP 本地密码回归共 18 项通过（无失败、无跳过）。
+  实际密码服务不注入 APIC 请求头或重复凭据配置，公钥、setup/reset、持久化及事务测试仍通过。
 这些是本地集成测试；没有连接 UAT 的 Oracle、Redis、WebLogic 或 APIC，也没有宣称实际 UAT token 已验证。
 
 AC 核对及验收边界

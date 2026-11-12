@@ -1,6 +1,7 @@
 package com.hkbea.dsp.service;
 
 import com.hkbea.common.exception.ServiceException;
+import com.hkbea.common.exception.ParameterException;
 import com.hkbea.dsp.dto.CryptKeyDto;
 import com.hkbea.dsp.entity.DspAuthCredential;
 import com.hkbea.dsp.model.PasswordModificationRequest;
@@ -32,7 +33,6 @@ class PasswordApiServiceImplTest {
     @InjectMocks private PasswordApiServiceImpl service;
     @Mock private PasswordAppService keys;
     @Mock private DspAuthCredentialRepoService repo;
-    @Mock private CmPasswordCallerGuard guard;
     private KeyPair pair;
     private CryptKeyDto key;
     private static final String NONCE = "314159";
@@ -60,7 +60,7 @@ class PasswordApiServiceImplTest {
         cached(); String digest = hash("Setup1234");
         assertEquals("000000", service.modifyPassword(request("A", encrypt(digest))).getStatus());
         verify(repo).insert(argThat(row -> digest.equals(row.getPasswordHash())));
-        verify(keys).removeCryptoKeyDto(HashUtils.sha256(NONCE)); verify(guard).check(null);
+        verify(keys).removeCryptoKeyDto(HashUtils.sha256(NONCE));
     }
     @Test void resetDoesNotRequireOldPassword() throws Exception {
         cached(); DspAuthCredential existing = new DspAuthCredential(); existing.setPasswordHash(hash("Old12345"));
@@ -97,11 +97,25 @@ class PasswordApiServiceImplTest {
         assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
         verifyNoInteractions(repo);
     }
-    @Test void queryUsesHashOfNonceExactlyOnce() {
+    @Test void queryWithoutApicHeadersUsesHashOfNonceExactlyOnce() {
         String hash = HashUtils.sha256(NONCE); when(keys.getCryptoKeyDto(hash)).thenReturn(key);
         PublicKeyQueryRequest request = new PublicKeyQueryRequest(); request.setHashValue(hash);
         assertEquals(key.getPublicKey(), service.queryPublicKey(request).getPublicKey());
         verify(keys).getCryptoKeyDto(hash);
+    }
+    @Test void invalidPublicKeyRequestsStillFailBeforeKeyGeneration() {
+        assertThrows(ServiceException.class, () -> service.queryPublicKey(null));
+        PublicKeyQueryRequest invalid = new PublicKeyQueryRequest();
+        invalid.setHashValue("not-a-sha256-digest");
+        assertThrows(ParameterException.class, () -> service.queryPublicKey(invalid));
+        verifyNoInteractions(keys, repo);
+    }
+    @Test void businessClientAndCloseIdRemainMandatory() {
+        assertThrows(ParameterException.class,
+                () -> service.modifyPassword(request("M", "encrypted-fixture").clientId(" ")));
+        assertThrows(ParameterException.class,
+                () -> service.modifyPassword(request("M", "encrypted-fixture").closeId(" ")));
+        verifyNoInteractions(keys, repo);
     }
     @Test void databaseFailureIsNotReportedAsSuccess() throws Exception {
         cached(); doThrow(new IllegalStateException()).when(repo).insert(any());

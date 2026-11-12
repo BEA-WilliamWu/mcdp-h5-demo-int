@@ -1,3 +1,25 @@
+HTH frontend ESLint build-error fix — 2026-11-13
+Source: bco-applicaion-main c1cfe1323bd9854339fc902c8acd654ddc83d118 (base 5e7c6ed3).
+
+Eight JavaScript files only; no behavior, template wording, SQL or backend change.
+- api-password.js: insert the required blank line after the if statement.
+- transport.js: put RSA-OAEP importKey object properties on separate lines.
+- Six channel NLS files: remove unnecessary quotes from added property names.
+
+Apply after the earlier init updates: copy the eight files listed in the latest
+SOURCE_COMMITS.json entry, preserving original paths, OR apply
+UPDATE_FRONTEND_ESLINT_20261113.patch at the application repository root.
+Run git apply --check first. This patch is validated on 5e7c6ed3; deployments with
+other changes should merge the formatting hunks rather than overwrite custom work.
+Earlier cumulative patches retain their earlier contents; apply this fix last.
+
+Validation: 57 changed channel JS files checked with BCO ESLint 5.16.0 and custom
+rules: 0 errors, 6 pre-existing BCO warnings. Equivalent JavaScript ASTs verified
+for all eight edits; existing UI error tests passed. Full frontend build and UAT
+have not been run. See FRONTEND_ESLINT_VALIDATION_20261113.txt for details.
+
+Earlier delivery notes:
+
 HTH audit dropdown toggles and DSP Client ID existence — 2026-11-12
 Source: bco-applicaion-main 5e7c6ed3c91f9e6d2a08c4c03e0e18148ae676f8 (branch hth-integration-20261110).
 

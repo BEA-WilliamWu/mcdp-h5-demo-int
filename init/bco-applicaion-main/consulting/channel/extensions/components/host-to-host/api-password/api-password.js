@@ -199,6 +199,7 @@ define([
                     self.isSetup ? "SETUP" : "RESET");
             }).catch(function (error) {
                 if (error && error.responseJSON) { throw error; }
+
                 throw { hthInputError: self.nls.encryptionError };
             }).then(function (encrypted) {
                 const payload = JSON.stringify({

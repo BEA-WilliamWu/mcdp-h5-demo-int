@@ -1,0 +1,51 @@
+Frontend ESLint validation — 2026-11-13
+
+Source: bco-applicaion-main c1cfe1323bd9854339fc902c8acd654ddc83d118 (base 5e7c6ed3).
+Toolchain: local BCO OBDX build ESLint 5.16.0, the supplied .eslintrc.json,
+all three configured plugins, and obdx-eslint-custom-rules. No rules disabled.
+The BCO build configuration matches the local hth-application 2 copy by SHA-256:
+d739ef336ca27c29508015409f4960578ff58cac447a7fafe8cf9564fc361c25
+
+Results:
+- Before fix: screenshot's api-password.js:202 padding-line-between-statements
+  and transport.js:42 object-property-newline errors reproduced exactly.
+- Also corrected 65 quote-props errors in six channel NLS files. All six files
+  pass with zero errors in the original BCO baseline 2974edbf; errors are in
+  properties added since that baseline.
+- After fix: 57 changed channel JS files, zero errors, six warnings.
+- The six no-mixed-operators warnings are already present in baseline 2974edbf:
+  users-create.js (2), users-update.js (4). Kept unchanged.
+- All eight edited files have equivalent normalized JavaScript ASTs; only
+  whitespace / equivalent property-key quoting changed. CRLF preserved.
+- Existing ui-errors.cjs passed: 60 localized response cases, status rendering,
+  UNKNOWN submission guard, SQL wording alignment and fallback behavior.
+- Incremental patch applied to an isolated index at 5e7c6ed3; resulting file
+  bytes match the delivered full files. FILES.tsv and SHA256SUMS verified.
+
+Scope: changed consulting/channel JavaScript files since baseline 2974edbf.
+This is not a full frontend build or a UAT/browser deployment verification.
+Raw consulting/translations sources are outside the build eslint.js scan paths;
+separate exploratory checks found legacy/style diagnostics there. They have
+not been reformatted in this channel build-error fix.
+
+To reproduce in the deployed frontend checkout, use that checkout's _build
+installation and call ESLint directly so OBDX_REPOSITORY / cached results cannot
+silently skip validation. From consulting/channel/_build run:
+
+node - <<'JS'
+const cp = require("child_process");
+const path = require("path");
+const CLIEngine = require("eslint").CLIEngine;
+const root = cp.execFileSync("git", ["rev-parse", "--show-toplevel"], {encoding:"utf8"}).trim();
+// Set BASE to the available pre-HTH baseline in the target repository.
+const base = process.env.BASE || "2974edbf";
+const files = cp.execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", base, "--", "consulting/channel"],
+    {cwd:root, encoding:"utf8"}).trim().split("\n").filter(p => p.endsWith(".js")).map(p => path.join(root,p));
+if (!files.length) throw new Error("No JavaScript files selected");
+const cli = new CLIEngine({configFile:path.resolve(".eslintrc.json"), useEslintrc:false,
+    rulePaths:[path.resolve("obdx-eslint-custom-rules")], cache:false, fix:false});
+const report = cli.executeOnFiles(files);
+console.log(CLIEngine.getFormatter("stylish")(report.results));
+console.log({files:report.results.length, errors:report.errorCount, warnings:report.warningCount});
+process.exitCode = report.errorCount ? 1 : 0;
+JS

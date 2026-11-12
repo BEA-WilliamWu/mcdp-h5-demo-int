@@ -1,7 +1,7 @@
 repository	action	delivery	path	sha256
 bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.html	ab3ca4bf66f8171c761d2933fd106e2f919684adcf40bad7fcb915d542b657d7
-bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.js	94f2fc35c97a7680b3b69b185253ea1010133ee1ad89b12fe8e79af23e73e5ce
-bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/transport.js	e8e83bc5652571fbdc55f55684cbcd679cdfcf35eda4935213fc7dff862529c0
+bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.js	dd26cc0be2bd6417861eb21cb643d1b7ec4ca476c997cc5355fecdab2c18687f
+bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/transport.js	8fa5e2c6e947de517241564b576ad70c1da5378ed8de4022a4a0c5542c8087b7
 bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/hth-api-password.js	e6bc47ba7a20e6e6ce0bd05bed541fe05d626831e0f1342923842ad4aa671d62
 bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/zh-CN/hth-api-password.js	c0ba19eca383d56b298347be9b14280b0731ca8242cc666afe9223d3d28c577a
 bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/zh-Hant/hth-api-password.js	505f79d75c34c27fdddfe2340be546091fba6d00ed6131f40b6dd9a3076e5aa5
@@ -82,3 +82,9 @@ bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.c
 bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/service/transactionlist/TransactionList.java	6cbc8b68bb4bd75c3277f700b0d15ea279f1401fa1af7a4cb06216daf9e1e041
 bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostManagement.java	9c03290fd26122c2f75795e9c6577850725d122d343bf084d30576a5e1e04182
 bco-applicaion-main	A	FILE	consulting/tests/hth_onboarding/verify_audit_dropdowns_and_client_exists.py	0910697c673fb5b15447b4c0233c9904c8a5334a19359a31cade0bd9c47acc0e
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/access-management.js	9adabb76675bef61e5c53af478e48909244ef960cb37fd4669e93b6ee60dc5a0
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/security-menu.js	073c01d18d06be487ae97e24d71d3d341a160f9ad1f611738ffa2f3ac21c9eaf
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/user-management-headers.js	8d46854a104020d2902379bd6cd88584d6d35f113af7546346666e7f5d8eef40
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/user-management.js	b631f171bf909cc7e97516f7dfd9cf0010deb833d91c72d53f22ffc22ee4e7e6
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/user-read.js	9fcb51a14aa03a5ef80343bf68f3cfa5cc12054ef4a2dc1cf0f8a1e7072b73fa
+bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/user-search-list.js	65177766f8788d111670718f508e75820b435b069e3c3059ec790570ba3dd510

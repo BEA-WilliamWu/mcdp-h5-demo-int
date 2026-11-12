@@ -39,7 +39,10 @@ define([
             });
 
             return Promise.all([
-                crypto.subtle.importKey("spki", publicBytes, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]),
+                crypto.subtle.importKey("spki", publicBytes, {
+                    name: "RSA-OAEP",
+                    hash: "SHA-256"
+                }, false, ["encrypt"]),
                 crypto.subtle.digest("SHA-256", encoder.encode(password))
             ]).then(function (values) {
                 if (values[0].algorithm.modulusLength !== 2048) {

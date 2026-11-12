@@ -30,6 +30,22 @@
           "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostManagement.java",
           "consulting/tests/hth_onboarding/verify_audit_dropdowns_and_client_exists.py"
         ]
+      },
+      {
+        "name": "frontend-eslint-20261113",
+        "base": "5e7c6ed3c91f9e6d2a08c4c03e0e18148ae676f8",
+        "patch": "UPDATE_FRONTEND_ESLINT_20261113.patch",
+        "paths": [
+          "consulting/channel/extensions/components/host-to-host/api-password/api-password.js",
+          "consulting/channel/extensions/components/host-to-host/api-password/transport.js",
+          "consulting/channel/extensions/resources/nls/access-management.js",
+          "consulting/channel/extensions/resources/nls/security-menu.js",
+          "consulting/channel/extensions/resources/nls/user-management-headers.js",
+          "consulting/channel/extensions/resources/nls/user-management.js",
+          "consulting/channel/extensions/resources/nls/user-read.js",
+          "consulting/channel/extensions/resources/nls/user-search-list.js"
+        ],
+        "commit": "c1cfe1323bd9854339fc902c8acd654ddc83d118"
       }
     ]
   },

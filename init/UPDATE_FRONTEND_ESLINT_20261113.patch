@@ -1,0 +1,273 @@
+diff --git a/consulting/channel/extensions/components/host-to-host/api-password/api-password.js b/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
+index da10fe35e9d725ab1df01d1b8624135c9b4d1e03..c28d198b8b25450bbd3bd14dad39ee7400afcb10 100644
+--- a/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
++++ b/consulting/channel/extensions/components/host-to-host/api-password/api-password.js
+@@ -199,6 +199,7 @@ define([
+                     self.isSetup ? "SETUP" : "RESET");
+             }).catch(function (error) {
+                 if (error && error.responseJSON) { throw error; }
++
+                 throw { hthInputError: self.nls.encryptionError };
+             }).then(function (encrypted) {
+                 const payload = JSON.stringify({
+diff --git a/consulting/channel/extensions/components/host-to-host/api-password/transport.js b/consulting/channel/extensions/components/host-to-host/api-password/transport.js
+index c8ff0ab2df786446b2d773d69cd7e2774f783027..c9cb83db82dd078b33e9a07ecb7b66d839f2c653 100644
+--- a/consulting/channel/extensions/components/host-to-host/api-password/transport.js
++++ b/consulting/channel/extensions/components/host-to-host/api-password/transport.js
+@@ -39,7 +39,10 @@ define([
+             });
+ 
+             return Promise.all([
+-                crypto.subtle.importKey("spki", publicBytes, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]),
++                crypto.subtle.importKey("spki", publicBytes, {
++                    name: "RSA-OAEP",
++                    hash: "SHA-256"
++                }, false, ["encrypt"]),
+                 crypto.subtle.digest("SHA-256", encoder.encode(password))
+             ]).then(function (values) {
+                 if (values[0].algorithm.modulusLength !== 2048) {
+diff --git a/consulting/channel/extensions/resources/nls/access-management.js b/consulting/channel/extensions/resources/nls/access-management.js
+index 03ebf6b0ccad2760cec7ae38f266a05d81606ae9..aee98a7e30937ccb3636852eb86a327bd9283246 100644
+--- a/consulting/channel/extensions/resources/nls/access-management.js
++++ b/consulting/channel/extensions/resources/nls/access-management.js
+@@ -5,8 +5,8 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
+         return {
+             root: {
+                 pageTitle: {
+-                "hthUserAccess": "HTH – User Accounts & Services Access",
+-                "bcoUserAccess": "BCO - User Accounts & Service Access",
++                hthUserAccess: "HTH – User Accounts & Services Access",
++                bcoUserAccess: "BCO - User Accounts & Service Access",
+                     accessManagement: "{user} Accounts & Services Access",
+                     accessManagementParty: "Accounts and Services Access",
+                     delete: "User Accounts & Services Access - Delete"
+@@ -32,25 +32,25 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
+                     LON: "Trade & Loans"
+                 },
+                 info: {
+-                "hthDiscardChanges": "Discard the unsaved HTH account and API changes?",
+-                "hthDeleteWarning": "This will remove all account and API access in this company context after approval.",
+-                "hthReviewMessage": "Review the selected HTH accounts and API services before submitting for approval.",
+-                "hthSubmitFailed": "The HTH user access request could not be submitted.",
+-                "hthSelectApi": "Select at least one API service for every selected account.",
+-                "hthSelectAccount": "Select at least one Current and Savings or Time Deposit account.",
+-                "hthMaintenanceLoadError": "The HTH account and service access could not be loaded. Please try again.",
+-                "hthLinkageRequires595": "HTH account linkage maintenance is not available in this deployment.",
+-                "hthSelectAssociatedCompany": "Please select an associated company.",
+-                "hthToLink": "To link",
+-                "hthPendingDetail": "Pending {action}. Reference: {reference}",
+-                "hthNotSetup": "Not set up",
+-                "hthPendingApproval": "Pending Approval",
+-                "hthActive": "Active",
+-                "hthDisabled": "Host to Host API Channel is not enabled for this company.",
+-                "hthSummaryLoadError": "The HTH account access summary could not be loaded. Please try again.",
+-                "hthSummaryLoading": "Loading HTH account access summary...",
+-                "hthMissingUserId": "The selected user ID is not available.",
+-                "hthMissingCloseId": "The HTH user profile or CloseID is not available.",
++                hthDiscardChanges: "Discard the unsaved HTH account and API changes?",
++                hthDeleteWarning: "This will remove all account and API access in this company context after approval.",
++                hthReviewMessage: "Review the selected HTH accounts and API services before submitting for approval.",
++                hthSubmitFailed: "The HTH user access request could not be submitted.",
++                hthSelectApi: "Select at least one API service for every selected account.",
++                hthSelectAccount: "Select at least one Current and Savings or Time Deposit account.",
++                hthMaintenanceLoadError: "The HTH account and service access could not be loaded. Please try again.",
++                hthLinkageRequires595: "HTH account linkage maintenance is not available in this deployment.",
++                hthSelectAssociatedCompany: "Please select an associated company.",
++                hthToLink: "To link",
++                hthPendingDetail: "Pending {action}. Reference: {reference}",
++                hthNotSetup: "Not set up",
++                hthPendingApproval: "Pending Approval",
++                hthActive: "Active",
++                hthDisabled: "Host to Host API Channel is not enabled for this company.",
++                hthSummaryLoadError: "The HTH account access summary could not be loaded. Please try again.",
++                hthSummaryLoading: "Loading HTH account access summary...",
++                hthMissingUserId: "The selected user ID is not available.",
++                hthMissingCloseId: "The HTH user profile or CloseID is not available.",
+                     preferenceInfo: "No party preference set up done for this party",
+                     linkagePreferenceInfo: "No party preference set up done for the linked party",
+                     accountSetUp: "There are no associated accounts linked to the company.",
+@@ -78,8 +78,8 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
+                     eStatementAndEAdviceSettingNotSameForAIO: "The 'View e-Statement' and/or 'View e-Advice' function setting for {accounts} in 'Current and Savings' is inconsistent with that in 'Time Deposit'. Please review and update the setting."
+                 },
+                 headers: {
+-                "hthReviewMapping": "HTH Accounts and API Services",
+-                "hthApiMapping": "HTH API Service Mapping",
++                hthReviewMapping: "HTH Accounts and API Services",
++                hthApiMapping: "HTH API Service Mapping",
+                     Mappingmodules: "Account Types",
+                     defualtPrivacy: "Module Accessibility",
+                     ExceptionAccounts: "Accounts Exclusion",
+@@ -127,10 +127,10 @@ define(["ojL10n!resources/nls/generic", "ojL10n!resources/nls/messages-access-ma
+                     copyAccountAccessSetting: "Would you like to copy the access settings from another user?"
+                 },
+                 fieldname: {
+-                "hthApplyFirstToAll": "Apply the first account's API selection to all selected accounts",
+-                "apiServices": "API Services",
+-                "companyName": "Company Name",
+-                "userChannelType": "User Channel Type",
++                hthApplyFirstToAll: "Apply the first account's API selection to all selected accounts",
++                apiServices: "API Services",
++                companyName: "Company Name",
++                userChannelType: "User Channel Type",
+                     mappingType: "Type of mapping",
+                     partyID: "CDC Account Number",
+                     partyName: "CDC Account Name",
+diff --git a/consulting/channel/extensions/resources/nls/security-menu.js b/consulting/channel/extensions/resources/nls/security-menu.js
+index c68334164f6f5d885f227ac30d93068a672164ad..525938f59b0c1918bdbfa3e0f5d4aaa80e5a8b9e 100644
+--- a/consulting/channel/extensions/resources/nls/security-menu.js
++++ b/consulting/channel/extensions/resources/nls/security-menu.js
+@@ -6,7 +6,7 @@ define([], function() {
+             root: {
+                 header: "Security and Login",
+                 labels: {
+-                "changeHthApiPassword": "Change HTH API Password",
++                changeHthApiPassword: "Change HTH API Password",
+                     changePassword: "Change Login PIN",
+                     changeSignerPin: "Change Signer PIN",
+                     setSecurityQuestion: "Set Security Questions",
+diff --git a/consulting/channel/extensions/resources/nls/user-management-headers.js b/consulting/channel/extensions/resources/nls/user-management-headers.js
+index 12883c85b391b9a71454f87a29d7f06898d8b4b2..8bfb78ece2c4825f6a16b84454e8bc36fed8b664 100644
+--- a/consulting/channel/extensions/resources/nls/user-management-headers.js
++++ b/consulting/channel/extensions/resources/nls/user-management-headers.js
+@@ -4,7 +4,7 @@ define([], function () {
+     return new function () {
+         return {
+             root: {
+-            "hthApiPasswordInfo": "HTH API Password Information",
++            hthApiPasswordInfo: "HTH API Password Information",
+                 usermanagement: "User Management",
+                 createpanel: "Create New User",
+                 profileinfo: "Personal Information",
+diff --git a/consulting/channel/extensions/resources/nls/user-management.js b/consulting/channel/extensions/resources/nls/user-management.js
+index 76e0bd653f3f100afdd3b7a945624db6089c1d90..f358dd5ac35f8a7cf297f05ae86119fab5d5c98a 100644
+--- a/consulting/channel/extensions/resources/nls/user-management.js
++++ b/consulting/channel/extensions/resources/nls/user-management.js
+@@ -5,16 +5,16 @@ define(["ojL10n!resources/nls/messages", "ojL10n!resources/nls/generic", "ojL10n
+         return {
+             root: {
+                 info: {
+-                "hthAutoGenReminderBody": "You haven't generated the HTH API password code yet. Here's the code you need to set up your API password, make sure to note it down.",
+-                "hthCodeValidity": "Valid for 24 hours after approval.",
+-                "hthCodeReminderCode": "HTH API Password Code: {code}",
+-                "hthCodeReminderBody2": "The \"HTH API Password Code\" will not be visible anymore after the instruction being submitted. Please ensure the \"HTH API Password Code\" is kept safe and acknowledge by the relevant user only.",
+-                "hthCodeReminderBody1": "Please be noted that by enabling the \"HTH API Password Code\", the user will only be able to reset his/her Login PIN by entering the \"HTH API Password Code\" without answering the Security Questions.",
+-                "hthInvalid": "This Code is invalid, please re-generate code for reset API password.",
+-                "hthUsed": "This Code has been used.",
+-                "hthExpired": "You have already generated the code, and it has expired, please re-generate code for reset API password.",
+-                "hthExpiryAfterApproval": "Valid for 24 hours after approval.",
+-                "hthViewerOnly": "HTH users can only be assigned the Viewer role.",
++                hthAutoGenReminderBody: "You haven't generated the HTH API password code yet. Here's the code you need to set up your API password, make sure to note it down.",
++                hthCodeValidity: "Valid for 24 hours after approval.",
++                hthCodeReminderCode: "HTH API Password Code: {code}",
++                hthCodeReminderBody2: "The \"HTH API Password Code\" will not be visible anymore after the instruction being submitted. Please ensure the \"HTH API Password Code\" is kept safe and acknowledge by the relevant user only.",
++                hthCodeReminderBody1: "Please be noted that by enabling the \"HTH API Password Code\", the user will only be able to reset his/her Login PIN by entering the \"HTH API Password Code\" without answering the Security Questions.",
++                hthInvalid: "This Code is invalid, please re-generate code for reset API password.",
++                hthUsed: "This Code has been used.",
++                hthExpired: "You have already generated the code, and it has expired, please re-generate code for reset API password.",
++                hthExpiryAfterApproval: "Valid for 24 hours after approval.",
++                hthViewerOnly: "HTH users can only be assigned the Viewer role.",
+                     searching: "Searching...",
+                     limitGroupSelection: "No Limit Group Selected.",
+                     invalidInfo: "The information you have provided is incorrect. Please check your details.",
+@@ -87,14 +87,14 @@ define(["ojL10n!resources/nls/messages", "ojL10n!resources/nls/generic", "ojL10n
+                     limitPackageHeader: "Limit"
+                 },
+                 fieldname: {
+-                "hthProceed": "Proceed",
+-                "hthReGenerate": "Re-Generate",
+-                "hthGenerate": "Generate",
+-                "hthApiPasswordDescription": "*Description for HTH API Password information",
+-                "hthApiPasswordCodeStatus": "HTH API Password Code Status",
+-                "hthApiPasswordCodeMask": "******",
+-                "hthApiPasswordCode": "HTH API Password Code",
+-                "userChannelType": "User Channel Type",
++                hthProceed: "Proceed",
++                hthReGenerate: "Re-Generate",
++                hthGenerate: "Generate",
++                hthApiPasswordDescription: "*Description for HTH API Password information",
++                hthApiPasswordCodeStatus: "HTH API Password Code Status",
++                hthApiPasswordCodeMask: "******",
++                hthApiPasswordCode: "HTH API Password Code",
++                userChannelType: "User Channel Type",
+                     username: "Username",
+                     firstname: "Full Name",
+                     lastname: "Last Name",
+@@ -208,7 +208,7 @@ define(["ojL10n!resources/nls/messages", "ojL10n!resources/nls/generic", "ojL10n
+                     loginPINResetCodeMask: "******"
+                 },
+                 required: {
+-                "userChannelType": "Please select a User Channel Type.",
++                userChannelType: "Please select a User Channel Type.",
+                     username: "Please select a username.",
+                     documentType: "Please select an identification document type.",
+                     documentCountry: "Please select a document issuing country/region.",
+diff --git a/consulting/channel/extensions/resources/nls/user-read.js b/consulting/channel/extensions/resources/nls/user-read.js
+index 61e3905fc0bfeb20627715969a851108a0f8edcc..0d8763bd01e68e45196c6f9cad825ab27bb21063 100644
+--- a/consulting/channel/extensions/resources/nls/user-read.js
++++ b/consulting/channel/extensions/resources/nls/user-read.js
+@@ -8,14 +8,14 @@ define(["ojL10n!resources/nls/generic",
+     const UserReadLocale = function () {
+         return {
+             root: {
+-            "hthCodeStatuses": {
+-                "PENDING": "Pending approval",
+-                "ACTIVE": "Active",
+-                "EXPIRED": "Expired",
+-                "USED": "Used",
+-                "INVALID": "Invalid",
+-                "IN_PROGRESS": "In progress",
+-                "UNKNOWN": "Unknown"
++            hthCodeStatuses: {
++                PENDING: "Pending approval",
++                ACTIVE: "Active",
++                EXPIRED: "Expired",
++                USED: "Used",
++                INVALID: "Invalid",
++                IN_PROGRESS: "In progress",
++                UNKNOWN: "Unknown"
+             },
+                 headers: {
+                     view: "View",
+@@ -37,8 +37,8 @@ define(["ojL10n!resources/nls/generic",
+                     signerIdInfo: "Signer PIN Information"
+                 },
+                 buttons: {
+-                "hideHthCode": "Hide HTH API Password Code",
+-                "showHthCode": "Show HTH API Password Code",
++                hideHthCode: "Hide HTH API Password Code",
++                showHthCode: "Show HTH API Password Code",
+                     back: "Back",
+                     cancel: "Cancel",
+                     resetpassword: "Reset Password",
+@@ -49,12 +49,12 @@ define(["ojL10n!resources/nls/generic",
+                     revoke: "Revoke"
+                 },
+                 fieldname: {
+-                "hthApiPasswordCodeStatus": "Code Status",
+-                "hthApiPasswordCodeExpiry": "Expiry Time",
+-                "hthApiPasswordCodePurpose": "Purpose",
+-                "hthApiPasswordCodeMask": "******",
+-                "hthApiPasswordCode": "HTH API Password Code",
+-                "userChannelType": "User Channel Type",
++                hthApiPasswordCodeStatus: "Code Status",
++                hthApiPasswordCodeExpiry: "Expiry Time",
++                hthApiPasswordCodePurpose: "Purpose",
++                hthApiPasswordCodeMask: "******",
++                hthApiPasswordCode: "HTH API Password Code",
++                userChannelType: "User Channel Type",
+                     username: "Username",
+                     firstname: "Full Name",
+                     lastname: "Last Name",
+diff --git a/consulting/channel/extensions/resources/nls/user-search-list.js b/consulting/channel/extensions/resources/nls/user-search-list.js
+index af7400fb386471ad5581585cb0757eb2eb2775b7..a1ed641f61d2e27e6a5bb14bcd243482a805b1d0 100644
+--- a/consulting/channel/extensions/resources/nls/user-search-list.js
++++ b/consulting/channel/extensions/resources/nls/user-search-list.js
+@@ -5,7 +5,7 @@ define(["ojL10n!resources/nls/generic"], function(e) {
+         return {
+             root: {
+                 header: {
+-                "userChannelType": "User Channel Type",
++                userChannelType: "User Channel Type",
+                     userList: "Search Results",
+                     fullName: "Full Name",
+                     userName: "Username",

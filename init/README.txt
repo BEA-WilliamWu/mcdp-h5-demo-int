@@ -1,56 +1,58 @@
-BCOH2H-1955 — 沿用原 BM DSP 调用方式的修正版
-交付日期：2026-11-12。原 init 目录原位更新，包含 CM 和 DSP。
+BCOH2H-1955 — SQL 新目录与首次部署文件更新
+交付日期：2026-11-12。原 init 原位更新；本次源代码提交 e39009d4。
 
-本次修正
-- 原 QTES2 已有 BM Host-to-Host Management 的 Correlate UAM Client ID 校验：启用 API Channel 后点 Next，
-  调用 validateUamClientId -> DSP POST /client/v1/validate。这不是本次密码功能新增的校验。
-- DSPApiClientFactory.java 已恢复为原 QTES2 同步版，BM 的业务 Java、页面和校验接口未改。
-- 三个接口共用 DSPApiAdapterImplConfig：DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、
-  DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（原默认 BCO）。不读取或回退到 H2H.*。
-- 密码接口仍为 POST /password/v1/public-key 与 POST /password/v1/modification，
-  通过原 DspClient/SDK 的 Header、连接配置调用。密码专用方法禁用 body 日志、自动重试和重定向。
-- DSP 密码入口的 CM 凭据取 BM 现有 DSP.APIC_CLIENT_ID/SECRET 对应值；不再要求使用 INQ01 配置。
-- 首次生产 SQL 恢复补建缺失的 BM DSP.* 配置，已有值不覆盖，H2H.* 不改。
-
-沿用上一版功能
-- Code reset 无需旧密码；浏览器传 Base64(raw SHA-256(UTF-8(password))) 的 RSA-OAEP 密文。
-- DSP 解密后原样保存 Hash，A 首次创建、M 重设；HTH_USER_PROFILE 四列保存本地状态。
-- DSP 成功才完成 Code 和状态；失败/结果不明正确处理，UNKNOWN/IN_PROGRESS 阻止自动重试。
-- 三张旧密码表不恢复，CM 不存密码或 Hash。
+本次更新
+- 随源仓库将 consulting/db/release 下六个文件迁到 consulting/db/branch_change_history/hosttohost。
+- 首次部署入口改为 hth_onboarding.sql，已补齐 API Password 的最新最终结构。
+- 不创建 HTH_API_PASSWORD_CREDENTIAL / STATE / OPERATION 三张旧表；不保存密码或 Hash。
+- HTH_USER_PROFILE 包含四个 API_PASSWORD_* 状态字段，Code 表包含 REMOTE_CLIENT_ID。
+- 删除旧 credentials/persist 配置，只使用原 BM DSP.*；已有 DSP.* 配置不覆盖。
+- story/20261112-BCOHTH-1955 保留已有 UAT 的字段升级、旧表退役脚本及最新部署说明。
+- story/20261111-BCOHTH-1442&1950 保留 UI 开关脚本，内容沿用用户同步版。
+- 本次没有修改 Java、前端业务逻辑或 DSP 源码；两个现有测试脚本改为读取新的 SQL 路径。
 
 应用方式
 CM：首次应用 1955 使用 bco-applicaion-main.patch（base 见 SOURCE_COMMITS.json）；
-    已应用上一版 init/df672a32，使用 UPDATE_FROM_PREVIOUS_INIT.patch。二选一，不叠加。
-DSP：从提供方同步 f9378da 开始使用 hth-dsp.patch；
-     已应用上一版 29e4dfa，使用 UPDATE_DSP_FROM_PREVIOUS_INIT.patch。二选一。
-所有补丁先 git apply --check，再 git apply。本次 DSP 增量只有配置说明的修正。
-手工复制使用各仓库同名子目录，保留原路径，并按 DELETED_FILES.txt 清理旧源码。
-特别注意：FILES.tsv 的 RESTORE 行也必须覆盖复制，恢复原 BM 工厂；不是删除文件。
-application.yaml 只交付 .patch，合并配置而非覆盖环境原文件。
+    已应用上一版 init/9fc7fe9a，使用 UPDATE_FROM_PREVIOUS_INIT.patch。二选一，不叠加。
+    增量同时包含用户已提交的目录迁移和本次 SQL 修正。
+DSP：本次与上一版 c603fd2 完全相同，无需重新应用或部署。
+     新安装仍使用从提供方 f9378da 开始的 hth-dsp.patch。旧 DSP 增量补丁已从本包移除，避免误用。
+补丁先 git apply --check，再 git apply；只适用于相应基线。
+手工复制使用各仓库同名子目录，保留原路径，并按 DELETED_FILES.txt 清理旧源码/旧 SQL 文件。
+旧 release 目录下的六个文件要删除，避免继续执行旧入口；这些删除只是文件清理，不是数据库删除。
+FILES.tsv 的 RESTORE 行也必须复制覆盖：原 BM DSPApiClientFactory.java 仍交付，不能删除。
+application.yaml 仍只交付 .patch，请合并配置而非覆盖环境原文件。
 PATCH_ONLY 行的校验值对应 .patch；FILE 行对应完整文件。
 本包是 1955 累计改动，依赖已有 HTH 迁移基线；其他交付目录未改。
 
-部署前提
-1. 已有 UAT 执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次，加四个状态字段；已存在勿重复执行。
+数据库执行入口（二选一）
+1. 首次生产部署：consulting/db/branch_change_history/hosttohost/hth_onboarding.sql。
+   适用只有 BCO + Inquiry、没有 HTH 表的数据库。包含全部最终结构，不再叠加 story 字段升级脚本。
+   脚本不是可重复执行的 UAT 升级；失败时先核查已执行的 DDL。
+2. 已有 UAT：按 story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt 执行。
+   缺少四个状态字段时执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次；已存在勿重复执行。
    仅 Code 表缺 REMOTE_CLIENT_ID 时执行 HTH_1955_UAT_UPGRADE.sql 一次。
-   生产首次部署使用 HTH_FIRST_DEPLOY.sql，不叠加 UAT 脚本；已配 DSP.* 不覆盖。
-2. 已有 profile 默认 UNKNOWN，按实际 DSP 数据核对为 ACTIVE/NOT_SETUP 并绑定业务 clientId。
-   不按历史 USED Code 或缺少本地记录盲目推断。
-3. 沿用原 BM DSP.* 地址和 APIC 订阅，确认两个密码路径也已加入该内部订阅。
-   DSP 注入 HTH_CM_APIC_CLIENT_ID / HTH_CM_APIC_CLIENT_SECRET，值与 BM DSP.* 一致。
-   空配置拒绝调用；网关须校验并转发相应身份请求头，Channel 为 BCO。
-4. 部署 CM/DSP 的修正包，刷新前端及配置缓存/重启；不要只部署一边。
-5. UAT 验证 setup/reset、错误/过期/已用 Code、DSP 故障、新密码获取 token 成功及旧密码失败。
-   API 客户端签名须使用同一 Base64 SHA-256 Hash。旧 hex/二次 Hash 不自动转换。
+   已有 profile 保持 UNKNOWN，按实际 DSP 数据核对为 ACTIVE/NOT_SETUP 并绑定业务 clientId。
+   HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 仅在备份、核对及清理旧操作后单独执行，不能用于首次部署。
 
-本地验证
-- 新回归：故意设置与 DSP 不同的 H2H.*，确认三个接口均用 DSP.*；密码调用前后 BM 校验都正常。
-- 共用 SDK、本地 HTTPS 请求头/路径、A/M 无旧密码、错误分类、不重试/重定向及 Header 清理通过。
-- 原 BM 工厂与 QTES2 按字节一致，BM 业务服务和页面与 1955 改造前一致。
-- 上一版 17 项 DSP 测试、CM Code/状态/并发测试、60 项前端错误提示测试仍适用于未变的业务代码。
-- AC4 本地用现有 DSP 登录/签名代码读取测试数据库，验证新密码通过、旧密码拒绝；UAM 使用测试替身。
-- 未连接真实 UAT Oracle、Redis、WebLogic、APIC 或 UAM，不代表 UAT 获取 token 已完成验收。
-- 密码强度和两次输入一致性由页面校验；仅接收 Hash 的服务端不另行验证明文强度。
+沿用上一版的运行配置与功能
+- BM Client ID 校验及两条密码接口共用 DSPApiAdapterImplConfig：DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、
+  DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（默认 BCO）；密码接口不读取 H2H.*。
+- 原 BM 工厂已经恢复原 QTES2 实现，BM 业务服务和页面未改。
+- Code reset 无需旧密码；浏览器传 Base64(raw SHA-256(UTF-8(password))) 的 RSA-OAEP 密文。
+- DSP 解密后原样保存 Hash，A 首次创建、M 重设；HTH 仅保留状态和 Code。
+- DSP 成功才完成 Code 和状态；UNKNOWN/IN_PROGRESS 阻止不确定结果的自动重试。
+- 两个密码路径需加入原 BM 的内部 APIC 订阅；DSP 注入 HTH_CM_APIC_CLIENT_ID / HTH_CM_APIC_CLIENT_SECRET，
+  与 BM DSP.* 对应凭据相同。空配置拒绝调用，网关须校验并转发身份，Channel 为 BCO。
+- 密码调用关闭敏感报文日志、自动重试和重定向。
 
-完整部署说明：bco-applicaion-main/consulting/db/release/HTH_1955_DEPLOYMENT.txt
+验证
+- 从新 hth_onboarding.sql 提取实际建表语句，Code/状态/并发、本地事务、SETUP/RESET 回归通过。
+- 60 个多语言错误提示、SQL 文案一致性及 UNKNOWN 页面门控通过。
+- 已核对 13 张 HTH 表、必需字段、退役表/配置移除，以及 DSP 配置只补缺失项。
+- 完整/增量补丁经临时 Git 索引验证可重建对应源提交；文件及 SHA256 校验一致。
+- 未执行 UAT/生产数据库，未连接真实 Oracle、Redis、WebLogic、APIC 或 UAM。
+- 前版真实 DSP 本地服务、存储及签名验证证据保留在部署说明中；仍需 UAT 端到端验收。
+
+完整部署说明：bco-applicaion-main/consulting/db/branch_change_history/hosttohost/story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt
 SOURCE_COMMITS.json 记录源提交和补丁基线；SHA256SUMS 校验交付文件。

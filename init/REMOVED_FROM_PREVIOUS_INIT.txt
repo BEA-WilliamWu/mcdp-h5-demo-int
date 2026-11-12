@@ -1,6 +1,11 @@
-本次恢复原 BM DSP 配置，不撤回功能。
-DSPApiClientFactory.java 虽与初始基线相同，仍作为 RESTORE 完整文件交付，覆盖上一版 H2H.* 实现。
-不存在的旧客户端仍按 DELETED_FILES.txt 清理。
+本次迁移 SQL 目录并补齐 API Password 最终结构。
+旧 release 文件按 DELETED_FILES.txt 从目标源码删除，数据库无需因此删除。
+DSP 与上一版一致，旧 UPDATE_DSP_FROM_PREVIOUS_INIT.patch 已移除，无需 DSP 增量。
+RESTORE 行的 BM 工厂仍须保留。
 
 本次从交付文件包移除：
-无
+bco-applicaion-main/consulting/db/release/HTH_1955_DEPLOYMENT.txt
+bco-applicaion-main/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql
+bco-applicaion-main/consulting/db/release/HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql
+bco-applicaion-main/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
+bco-applicaion-main/consulting/db/release/HTH_FIRST_DEPLOY.sql

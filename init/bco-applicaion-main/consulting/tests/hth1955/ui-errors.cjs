@@ -9,7 +9,7 @@ const channel = 'consulting/channel/';
 const source = read(channel + 'extensions/components/host-to-host/api-password/api-password.js');
 const start = source.indexOf('        self.showSubmissionError = function');
 const end = source.indexOf('        self.submit = function', start);
-const sql = read('consulting/db/release/HTH_FIRST_DEPLOY.sql');
+const sql = read('consulting/db/branch_change_history/hosttohost/hth_onboarding.sql').replace(/\r\n/g, '\n');
 let cases = 0;
 for (const [file, locale] of [['hth-api-password.js', 'en'], ['zh-CN/hth-api-password.js', 'zh-hans-cn'], ['zh-Hant/hth-api-password.js', 'zh-hant']]) {
     let nls;

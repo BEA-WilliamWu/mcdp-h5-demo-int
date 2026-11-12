@@ -7,6 +7,12 @@ bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/Hth
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordOperationKey-embeddable.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordState.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordStateKey-embeddable.orm.xml
+bco-applicaion-main/consulting/db/release/HTH_1955_DEPLOYMENT.txt
+bco-applicaion-main/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql
+bco-applicaion-main/consulting/db/release/HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql
+bco-applicaion-main/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
+bco-applicaion-main/consulting/db/release/HTH_FIRST_DEPLOY.sql
+bco-applicaion-main/consulting/db/release/HTH_ONBOARDING_UI_TOGGLES.sql
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordPersistClient.java
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordResponsePolicy.java

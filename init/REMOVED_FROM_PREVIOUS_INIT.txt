@@ -1,18 +1,6 @@
-上一版 init 中以下 DSP 交付项已撤回，不能继续复制或部署：
+本次从上一版 init 文件包移除的旧客户端文件：
 
-hth-dsp.patch
-hth-dsp/dsp-ms-support/CM_PASSWORD_1955.txt
-hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
-hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryRequest.java
-hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PublicKeyQueryResponse.java
-hth-dsp/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/pom.xml
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/JerseyConfig.java
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordExceptionMapper.java
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordService.java
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml.patch
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
-hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordServiceTest.java
+bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java
 
-若已经应用到其他 DSP 工作区，需撤回上一版的对应改动；不要删除 DSP 项目原有源码。
+本版按最新授权重新交付 DSP 修改，基线为提供方同步提交 f9378dac0baf5f58713360722819b5932bf6c359.
+历史被撤回的自定义 R/queryOnly/状态查询实现仍不交付。

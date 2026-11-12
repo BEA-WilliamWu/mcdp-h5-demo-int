@@ -18,6 +18,7 @@ import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthManagement;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfile;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfileKey;
 import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserProfileRepository;
+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.HthApiPasswordStateRepository;
 import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
 import com.ofss.digx.enumeration.ModuleType;
 import com.ofss.digx.enumeration.security.ActionType;
@@ -129,6 +130,8 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final String DATE_FORMAT_PATTERN = "yyyy/MM/dd HH:mm";
 
 
+  private final HthApiPasswordStateRepository passwordStateRepository = new HthApiPasswordStateRepository();
+
   private final HthApiPasswordCodeRepository codeRepository =
       HthApiPasswordCodeRepository.getInstance();
 
@@ -239,6 +242,9 @@ public class HostToHostApiPassword extends AbstractApplication
       if ("IN_PROGRESS".equals(previous) || "UNKNOWN".equals(previous)) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
+      if (replay && !IHthApiCredentialAdapter.STATUS_ACTIVE.equals(credentialState(identity, false))) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
       if (!replay) {
         stage = "CREDENTIAL_STATUS";
         String state = credentialState(identity, false);
@@ -262,15 +268,15 @@ public class HostToHostApiPassword extends AbstractApplication
         } catch (Exception failure) {
           boolean uncertain = !(failure instanceof com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException)
               || ((com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException) failure).isUncertain();
-          try { fail(identity.profileUserId, request.getRequestId(), codeId, uncertain); }
+          try { fail(identity, operation, request.getRequestId(), codeId, uncertain); }
           catch (Exception releaseFailure) { logPhaseFailure("CODE_RELEASE", releaseFailure); }
           throw failure;
         }
         stage = "CODE_COMPLETE";
-        try { complete(identity.profileUserId, request.getRequestId(), codeId); }
+        try { complete(identity, request.getRequestId(), codeId); }
         catch (Exception failure) {
           // DSP has committed. Never make this Code reusable after an ambiguous local commit.
-          try { fail(identity.profileUserId, request.getRequestId(), codeId, true); }
+          try { fail(identity, operation, request.getRequestId(), codeId, true); }
           catch (Exception releaseFailure) { logPhaseFailure("CODE_RECONCILE", releaseFailure); }
           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
         }
@@ -470,12 +476,18 @@ public class HostToHostApiPassword extends AbstractApplication
 
   private String credentialState(Identity identity, boolean allowUnknown) throws Exception {
     try {
-      return dspAdapter().getStatus(identity.uamClientId, identity.userId + "@" + identity.partyId);
+      return readCredentialState(identity.partyId, identity.userId, identity.uamClientId);
     } catch (Exception failure) {
       if (!allowUnknown) { throw failure; }
-      logPhaseFailure("DSP_STATUS", failure);
+      logPhaseFailure("LOCAL_PASSWORD_STATUS", failure);
       return IHthApiCredentialAdapter.STATUS_UNKNOWN;
     }
+  }
+
+  private String readCredentialState(String partyId, String userId, String clientId) throws Exception {
+    SessionLease lease = open(false);
+    try { return passwordStateRepository.read(lease.session, partyId, userId, clientId); }
+    finally { lease.close(false); }
   }
 
   /** The REST boundary retains this context in the authenticated session, never in a database. */
@@ -656,7 +668,7 @@ public class HostToHostApiPassword extends AbstractApplication
   private static final class Identity {
     private final String partyId;
     private final String userId;
-    /** Exact HTH_USER_PROFILE.CLOSE_ID used by password-table foreign keys. */
+    /** Exact HTH_USER_PROFILE.CLOSE_ID used for Code attribution. */
     private final String profileUserId;
     private final String uamClientId;
 
@@ -669,7 +681,7 @@ public class HostToHostApiPassword extends AbstractApplication
   }
   /**
    * Generates a one-time Code for the target user in the existing user-maintenance form.
-   * The selected credential store determines SETUP for an unset password and RESET for an active one.
+   * HTH-local metadata determines SETUP for an unset password and RESET for an active one.
    *
    * <p>Prior PENDING rows for the same user are superseded (Re-Generate semantics). The new row
    * stays PENDING — and therefore unusable — until the original user-maintenance transaction is
@@ -765,13 +777,17 @@ public class HostToHostApiPassword extends AbstractApplication
       throw new Exception("DIGX_CZ_HTH_PW_009");
     }
     String owner = canonicalUser(userName, partyId);
-    // Even a recreated CM user may already have a credential in DSP. Never infer state locally.
+    // Status is HTH-only metadata. Existing UAT profiles are UNKNOWN until reconciled with DSP.
     HthManagement management = new HthManagement().findActiveByPartyId(partyId);
     if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
         || normalize(management.getUamClientId()) == null) {
       throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
     }
-    String state = dspAdapter().getStatus(management.getUamClientId(), owner + "@" + partyId);
+    SessionLease lease = open(false);
+    String state;
+    try {
+      state = passwordStateRepository.readForCodeGeneration(lease.session, partyId, owner, management.getUamClientId());
+    } finally { lease.close(false); }
     String purpose;
     if (IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
       purpose = RESET;
@@ -1235,6 +1251,8 @@ public class HostToHostApiPassword extends AbstractApplication
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_003");
       }
 
+      passwordStateRepository.reserve(lease.session, partyId, userId, remoteClientId, requestId, purpose);
+
       if (codeRepository.reserve(lease.session, requestId, codeId, remoteClientId) != 1) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
@@ -1256,23 +1274,29 @@ public class HostToHostApiPassword extends AbstractApplication
     }
   }
 
-  /** The only local completion write is consumption of the approval Code. */
-  private void complete(String userId, String requestId, String codeId) throws Exception {
+  /** State and Code consumption commit together, only after DSP confirms success. */
+  private void complete(Identity identity, String requestId, String codeId) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
-      if (codeRepository.consume(lease.session, userId, codeId, requestId) != 1) {
+      passwordStateRepository.finish(lease.session, identity.partyId, identity.userId,
+          identity.uamClientId, requestId, "ACTIVE");
+      if (codeRepository.consume(lease.session, identity.profileUserId, codeId, requestId) != 1) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }
       success = true;
     } finally { lease.close(success); }
   }
 
-  private void fail(String userId, String requestId, String codeId, boolean uncertain) throws Exception {
+  private void fail(Identity identity, String operation, String requestId, String codeId, boolean uncertain) throws Exception {
     SessionLease lease = openIndependent();
     boolean success = false;
     try {
-      codeRepository.failReservation(lease.session, userId, requestId, codeId, uncertain);
+      passwordStateRepository.finish(lease.session, identity.partyId, identity.userId,
+          identity.uamClientId, requestId, uncertain ? "UNKNOWN" : SETUP.equals(operation) ? "NOT_SETUP" : "ACTIVE");
+      if (codeRepository.failReservation(lease.session, identity.profileUserId, requestId, codeId, uncertain) != 1) {
+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
+      }
 
       success = true;
     } catch (java.lang.Exception e) {

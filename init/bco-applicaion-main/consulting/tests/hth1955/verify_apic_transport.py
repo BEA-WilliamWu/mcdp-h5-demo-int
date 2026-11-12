@@ -9,16 +9,18 @@ LIB = ROOT / 'consulting/middleware/lib'
 SOURCE = ROOT / 'consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl'
 preferred = [LIB / 'thirdparty' / ('jackson-' + name + '-2.19.4.jar')
              for name in ('core', 'annotations', 'databind')]
-preferred += [LIB / 'OBDX_FW_LIB' / name for name in (
-    'jakarta.ws.rs-api-2.1.6.jar', 'jersey-client.jar', 'jersey-common.jar',
-    'jersey-hk2.jar', 'hk2-api-2.6.1.jar', 'hk2-utils-2.6.1.jar',
-    'hk2-locator-2.6.1.jar', 'jakarta.inject-2.6.1.jar',
-    'jakarta.annotation-api-1.3.5.jar', 'javassist-3.25.0-GA.jar')]
+preferred += [LIB / 'thirdparty' / name for name in (
+    'jackson-datatype-jsr310-2.19.4.jar', 'jakarta.ws.rs-api-3.1.0.jar',
+    'h2h-common-client-0.1.0.jar', 'h2h-common-api-0.1.0.jar',
+    'dsp-ms-support-api-0.1.0.jar', 'dsp-ms-support-client-0.1.0.jar',
+    'feign-core-13.6.jar', 'feign-jackson-13.6.jar', 'feign-jaxrs-13.6-jakarta.jar',
+    'feign-okhttp-13.6.jar', 'feign-slf4j-13.6.jar', 'slf4j-api-2.0.17.jar',
+    'okhttp-4.12.0.jar', 'logging-interceptor-4.12.0.jar', 'okio-jvm-3.6.0.jar',
+    'kotlin-stdlib-1.9.25.jar', 'kotlin-stdlib-jdk8-1.9.25.jar',
+    'kotlin-stdlib-jdk7-1.9.25.jar', 'fastjson2-2.0.61.jar')]
 CP = os.pathsep.join(str(path) for path in preferred + sorted(set(LIB.rglob('*.jar')) - set(preferred)))
-RUNTIME_CP = os.pathsep.join(str(path) for path in preferred + [
-    LIB / 'OBDX_FW_LIB/jakarta.activation-api-1.2.1.jar',
-    LIB / 'OBDX_FW_LIB/aopalliance-repackaged-2.6.1.jar',
-    LIB / 'OBDX_FW_LIB/osgi-resource-locator-1.0.3.jar'])
+RUNTIME_CP = os.pathsep.join(str(path) for path in preferred)
+SDK_SOURCE = SOURCE.parents[2] / 'microservice/api/dsp'
 
 HARNESS = r'''
 
@@ -37,11 +39,16 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.prefs.*;
 import javax.net.ssl.*;
-import javax.ws.rs.client.*;
-import javax.ws.rs.core.Response;
+import feign.Response;
+import com.hkbea.common.header.CommonHeader;
+import com.hkbea.dsp.model.ClientValidationParam;
+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.DspClient;
+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.factory.DSPApiClientFactory;
+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.impl.DSPCommonHeaderImpl;
+import com.ofss.fc.infra.config.ConfigurationFactory;
 
 public class DspTransportTest {
-  static final String PREFIX="HTH_API_PASSWORD.DSP_";
+  static final String PREFIX="DSP.";
   static final ObjectMapper MAPPER=new ObjectMapper();
   static class MemoryPreferences extends AbstractPreferences {
     final Map<String, String> values = new HashMap<>();
@@ -73,16 +80,27 @@ public class DspTransportTest {
     AtomicInteger calls=new AtomicInteger(),status=new AtomicInteger(200),delay=new AtomicInteger();
     AtomicReference<String> response=new AtomicReference<>("{\"status\":\"000000\"}");
     AtomicReference<JsonNode> request=new AtomicReference<>();
+    Set<String> messages=ConcurrentHashMap.newKeySet();
+    AtomicInteger clientValidationCalls=new AtomicInteger();
     AtomicReference<Throwable> assertion=new AtomicReference<>();
     server.createContext("/", exchange->{
       try {
         calls.incrementAndGet();
         check("POST".equals(exchange.getRequestMethod()),"POST required");
         check("BCO".equals(exchange.getRequestHeaders().getFirst("Channel")),"Missing Channel");
-        UUID.fromString(exchange.getRequestHeaders().getFirst("Message-Id"));
+        String messageId=exchange.getRequestHeaders().getFirst("Message-Id");
+        UUID.fromString(messageId);
+        check(messages.add(messageId),"Message-Id reused after header reset");
         check("fixture-id".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Id")),"Missing subscription ID");
         check("fixture-secret".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Secret")),"Missing subscription secret");
         request.set(MAPPER.readTree(exchange.getRequestBody()));
+        check(exchange.getRequestURI().getPath().startsWith("/catalog/shared/"),"APIC base path lost");
+        if(exchange.getRequestURI().getPath().endsWith("/client/v1/validate")){
+          clientValidationCalls.incrementAndGet();
+          byte[] valid="{\"clientId\":\"business-client\",\"valid\":true,\"validationTime\":1}".getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().set("Content-Type","application/json");
+          exchange.sendResponseHeaders(200,valid.length);exchange.getResponseBody().write(valid);return;
+        }
         check(!request.get().has("protocol") && !request.get().has("queryOnly")
             && !request.get().has("requestId"),"Private DSP protocol leaked");
         if (exchange.getRequestURI().getPath().endsWith("/public-key")) {
@@ -98,33 +116,38 @@ public class DspTransportTest {
       finally {exchange.close();}
     });
     ExecutorService executor=Executors.newCachedThreadPool();server.setExecutor(executor);server.start();
-    Client http=ClientBuilder.newBuilder().property("jersey.config.disableAutoDiscovery",true)
-      .property("jersey.config.disableMetainfServicesLookup",true).build();
     try {
-      MemoryPreferences config=new MemoryPreferences();String url="https://localhost:"+server.getAddress().getPort();
-      config.put(PREFIX+"PUBLIC_KEY_URL",url+"/password/v1/public-key");
-      config.put(PREFIX+"MODIFICATION_URL",url+"/password/v1/modification");
-      config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
-      DspApiPasswordClient client=new DspApiPasswordClient(http,config);
+      MemoryPreferences config=new MemoryPreferences();
+      String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
+      config.put(PREFIX+"SERVICE_URL","https://obsolete-dsp.invalid");
+      config.put(PREFIX+"APIC_CLIENT_ID","obsolete-dsp-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","obsolete-dsp-secret");
+      config.put(PREFIX+"CHANNEL","obsolete-channel");
+      MemoryPreferences inq01=new MemoryPreferences();
+      inq01.put("H2H.CLIENT_ID","fixture-id");inq01.put("H2H.CLIENT_SECRET","fixture-secret");
+      inq01.put("H2H.SERVICE_URL",url+"/");
+      ConfigurationFactory.preferences=config;ConfigurationFactory.inq01=inq01;
+      DspClient client=DSPApiClientFactory.getDspClient();
+      check(client==DSPApiClientFactory.getDspClient(),"Factory did not reuse SDK client");
+      CommonHeader header=client.getCommonHeader();
       HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
       int initial=calls.get();
       check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
-      for(String operation:new String[]{"SETUP","RESET"}){
-        fails(()->adapter.requireWriteSupported(operation),false);
-        fails(()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),operation,
-              "synthetic-ciphertext","314159"),false);
-      }
-      check(calls.get()==initial,"Unsupported operation issued an HTTP request");
+      for(String operation:new String[]{"SETUP","RESET"}){ adapter.requireWriteSupported(operation); }
+      fails(()->adapter.requireWriteSupported("OTHER"),false);
+      check(calls.get()==initial,"Operation validation issued an HTTP request");
       String nonceHash="77d803e4073d578f460f6b48b1c755285b0766a4fb5fae39e510b68005d88c57";
       response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
+      header.setAccessToken("fixture-token");
       check("test-public-key".equals(adapter.publicKey(nonceHash)),"Key missing");
+      check(header.getAccessToken()==null,"Success did not reset thread headers");
       check(request.get().size()==1 && nonceHash.equals(request.get().path("hashValue").asText()),"Nonce hash changed");
       int before=calls.get();
       fails(()->adapter.publicKey("invalid"),false);
       check(calls.get()==before,"Invalid nonce hash sent");
       Attempt query=()->adapter.publicKey(nonceHash);
       for(int code:new int[]{400,401,403,404,405,422,450,460,470,490,500,502,302}){
-        status.set(code);before=calls.get();fails(query,false);
+        status.set(code);before=calls.get();header.setAccessToken("fixture-token");fails(query,false);
+        check(header.getAccessToken()==null,"HTTP failure did not reset thread headers");
         check(calls.get()==before+1,"Unexpected redirect or retry");
       }
       status.set(200);
@@ -132,25 +155,45 @@ public class DspTransportTest {
         response.set(malformed);fails(query,false);
       }
       response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
-      before=calls.get();config.put(PREFIX+"PUBLIC_KEY_URL","http://localhost/password/v1/public-key");
-      fails(query,false); check(calls.get()==before,"Insecure URL invoked");
-      config.put(PREFIX+"PUBLIC_KEY_URL",url+"/password/v1/public-key");
-      config.put(PREFIX+"READ_TIMEOUT_MS","100");delay.set(400);fails(query,false);
-      check(calls.get()==before+1,"Timeout retried");
-      // Low-level APIC plumbing for the documented A/M endpoint only. Not a CM password write:
-      // synthetic data is sent to this local fixture; the CM adapter remains blocked above.
-      config.put(PREFIX+"READ_TIMEOUT_MS","15000");delay.set(0);response.set("{\"status\":\"000000\"}");
-      for(String function:new String[]{"A","M"}){
-        Map<String,Object> body=new LinkedHashMap<>();body.put("function",function);
-        body.put("newEncryptedPassword","fixture-ciphertext");body.put("randomNumber","314159");
-        body.put("clientId","business-client");body.put("closeId","USER@PARTY");
-        if("M".equals(function))body.put("oldEncryptedPassword","fixture-old-ciphertext");
-        try(Response result=client.send(body,true)){check(result.getStatus()==200,"Modification route transport failed");}
-        check(function.equals(request.get().path("function").asText()),"Documented function changed");
+      for(String badUrl:new String[]{"http://localhost", "https://user@localhost", url+"?query=1", url+"#fragment"}){
+        before=calls.get();DspClient invalid=new DspClient();invalid.setServiceUrl(badUrl);invalid.setCommonHeader(header);
+        fails(()->new HthDspApiCredentialAdapter(invalid).publicKey(nonceHash),false);
+        check(calls.get()==before,"Invalid URL invoked");
       }
-      check(assertion.get()==null,"Server request assertion failed");
-      System.out.println("PASS: provider public-key contract, APIC headers, A/M transport fixture, strict response, no retry/redirect; UNKNOWN status and SETUP/RESET blocked without HTTP writes");
-    }finally{http.close();server.stop(0);executor.shutdownNow();}
+      before=calls.get();
+      DspClient slow=new DspClient(){
+        protected okhttp3.OkHttpClient getOkHttpClient(){return super.getOkHttpClient().newBuilder()
+          .readTimeout(100,TimeUnit.MILLISECONDS).build();}
+      };
+      slow.setServiceUrl(url);slow.setCommonHeader(header);
+      delay.set(400);fails(()->new HthDspApiCredentialAdapter(slow).publicKey(nonceHash),false);
+      check(calls.get()==before+1,"Timeout retried");
+      delay.set(0);response.set("{\"status\":\"000000\"}");
+      for(String operation:new String[]{"SETUP","RESET"}){
+        adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),operation,
+            "fixture-ciphertext","314159");
+        check(("SETUP".equals(operation)?"A":"M").equals(request.get().path("function").asText()),"Wrong function");
+        check(request.get().size()==5 && !request.get().has("oldEncryptedPassword"),"Reset must not require old password");
+      }
+      Attempt write=()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),"RESET","fixture-ciphertext","314159");
+      for(int code:new int[]{400,401,403,404,450,460}) { status.set(code);fails(write,false); }
+      for(int code:new int[]{470,500,502,302}) { status.set(code);before=calls.get();fails(write,true);check(calls.get()==before+1,"Write retried or redirected"); }
+      status.set(200);
+      for(String bad:new String[]{"{}","not-json","{\"status\":\"FAILED\"}"}) {response.set(bad);fails(write,true);}
+      response.set("{\"status\":\"000000\"}");
+      delay.set(400);before=calls.get();
+      fails(()->new HthDspApiCredentialAdapter(slow).modify("business-client","USER@PARTY","request","RESET","fixture-ciphertext","314159"),true);
+      check(calls.get()==before+1,"Password write timed out and retried");delay.set(0);
+      // Existing SDK client validation still uses its original interface and route.
+      ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
+      check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
+      header.reset();check(clientValidationCalls.get()==1,"Existing client route changed");
+      // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
+      DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
+      fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
+      check(assertion.get()==null,"Server request assertion failed: "+assertion.get());
+      System.out.println("PASS: SDK factory, shared INQ01 base URL/authentication, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
+    }finally{server.stop(0);executor.shutdownNow();}
   }
 }
 '''
@@ -175,7 +218,7 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
     common = ROOT / 'consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter'
     checked([str(JAVA / 'javac'), '--release', '8', '-proc:none', '-encoding', 'UTF-8',
                     '-cp', CP, '-d', temporary,
-                    str(SOURCE / 'DspApiPasswordClient.java'),
+                    *[str(path) for path in SDK_SOURCE.rglob('*.java')],
                     str(SOURCE / 'HthDspApiCredentialAdapter.java'),
                     str(common / 'IHthApiCredentialAdapter.java'),
                     str(common / 'HthApiCredentialWriteException.java')])
@@ -183,6 +226,25 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
     exception = tmp / 'Exception.java'
     exception.write_text('package com.ofss.digx.infra.exceptions; public class Exception extends java.lang.Exception { public Exception(String code) { super(code); } }')
     checked([str(JAVA / 'javac'), '--release', '8', '-proc:none', '-d', temporary, str(exception)])
+    # Replace only environment-owned preference/thread storage, retaining production factory/header code.
+    config_stub=tmp/'ConfigurationFactory.java'
+    config_stub.write_text('''package com.ofss.fc.infra.config;
+public class ConfigurationFactory {
+ public static java.util.prefs.Preferences preferences,inq01;
+ public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
+ public java.util.prefs.Preferences getConfigurations(String category){
+  if("H2HApiAdapterImplConfig".equals(category))return inq01;
+  throw new AssertionError("Wrong configuration category");
+ }
+}''')
+    thread_stub=tmp/'ThreadAttribute.java'
+    thread_stub.write_text('''package com.ofss.fc.infra.thread;
+public class ThreadAttribute {
+ private static final ThreadLocal<java.util.Map<String,Object>> VALUES=ThreadLocal.withInitial(java.util.HashMap::new);
+ public static Object get(String key){return VALUES.get().get(key);}
+ public static void set(String key,Object value){if(value==null)VALUES.get().remove(key);else VALUES.get().put(key,value);}
+}''')
+    checked([str(JAVA/'javac'),'--release','8','-proc:none','-d',temporary,str(config_stub),str(thread_stub)])
     # The local HTTPS harness uses the JDK httpserver test module; production remains Java 8.
     checked([str(JAVA / 'javac'), '-proc:none', '-encoding', 'UTF-8',
                     '-cp', temporary + os.pathsep + CP, '-d', temporary, str(harness)])

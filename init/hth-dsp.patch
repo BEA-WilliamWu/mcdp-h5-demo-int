@@ -1,0 +1,1098 @@
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
+index 16d07d48e1a61dc65768fcf4659bc42d6b42eec1..5526cd379a353aad942bae6a7dccb9a3dadbe2ea 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
+@@ -18,7 +18,7 @@ import jakarta.ws.rs.Produces;
+ public interface PasswordApi {
+ 
+     /**
+-     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Password text must first be converted into UTF-8 bytes. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - oldEncryptedPassword is mandatory when function = M. - newEncryptedPassword is always mandatory. 
++     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Base64(raw SHA-256(UTF-8(password))) must be converted into ASCII bytes; OAEP and MGF1 both use SHA-256, empty label. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - This endpoint accepts only the internal CM subscription. M resets with an approved Code validated by CM; no old password is required. - newEncryptedPassword is always mandatory.
+      *
+      * @param passwordModificationRequest 
+      * @return Password modification completed.
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
+index f2b1f3400929ae940bd35c6d91813e566e5eb158..55c96f979b0bdeac54cc3c75f90e3d11d1ca9225 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java
+@@ -104,7 +104,7 @@ public class PasswordModificationRequest   {
+   }
+ 
+   /**
+-   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Mandatory when function &#x3D; M. 
++   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Deprecated compatibility field; ignored. CM must validate an approved HTH Code for function M.
+    **/
+   public PasswordModificationRequest oldEncryptedPassword(String oldEncryptedPassword) {
+     this.oldEncryptedPassword = oldEncryptedPassword;
+@@ -123,7 +123,7 @@ public class PasswordModificationRequest   {
+   }
+ 
+   /**
+-   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Password must first be converted to UTF-8 bytes.  Base64 encoded encrypted bytes. 
++   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64(raw SHA-256(UTF-8(password))) must first be converted to ASCII bytes. OAEP and MGF1 both use SHA-256 with an empty label.  Base64 encoded encrypted bytes.
+    **/
+   public PasswordModificationRequest newEncryptedPassword(String newEncryptedPassword) {
+     this.newEncryptedPassword = newEncryptedPassword;
+@@ -227,9 +227,9 @@ public class PasswordModificationRequest   {
+     sb.append("class PasswordModificationRequest {\n");
+     
+     sb.append("    function: ").append(toIndentedString(function)).append("\n");
+-    sb.append("    oldEncryptedPassword: ").append(toIndentedString(oldEncryptedPassword)).append("\n");
+-    sb.append("    newEncryptedPassword: ").append(toIndentedString(newEncryptedPassword)).append("\n");
+-    sb.append("    randomNumber: ").append(toIndentedString(randomNumber)).append("\n");
++    sb.append("    oldEncryptedPassword: ").append("[REDACTED]").append("\n");
++    sb.append("    newEncryptedPassword: ").append("[REDACTED]").append("\n");
++    sb.append("    randomNumber: ").append("[REDACTED]").append("\n");
+     sb.append("    closeId: ").append(toIndentedString(closeId)).append("\n");
+     sb.append("    clientId: ").append(toIndentedString(clientId)).append("\n");
+     sb.append("}");
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+index f6091dec79a2e23d2c26669af63e0f24ae1e86b8..8e839f1f8339b71e569bbbcaae6ae959303b6272 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+@@ -3,7 +3,12 @@ openapi: 3.0.3
+ info:
+   title: DSP Support - Password API
+   description: |
+-    API documentation for Password.
++    Internal CM password setup/reset. CM validates user entitlement and the approved one-time Code.
++    Only the configured CM APIC subscription is accepted; Channel alone is not authorization.
++    Deploy with dsp.password.cm-client-id/secret set to the existing INQ01 CM subscription.
++    A creates a password; M replaces an existing active password without an old password.
++    Password hash format is Base64(raw SHA-256(UTF-8(password))), stored without rehashing.
++    OAEP SHA-256, MGF1 SHA-256, empty label; encrypted bytes use Base64.
+ 
+     ---
+     ### Global Required Headers
+@@ -49,7 +54,7 @@ paths:
+             examples:
+               queryPublicKey:
+                 value:
+-                  hashValue: "ABC123XYZ456"
++                  hashValue: "c5b389beb081fe1e43ae92e895deca086b4eed5cf9efc7b78eebbbc9dc75c3f0"
+ 
+       responses:
+ 
+@@ -160,10 +165,10 @@ paths:
+ 
+         Password Rules:
+ 
+-        - Password text must first be converted into UTF-8 bytes.
++        - Base64(raw SHA-256(UTF-8(password))) must first be converted into ASCII bytes.
+         - RSA encryption must be performed on the UTF-8 bytes.
+         - Encrypted bytes must be encoded using Base64.
+-        - oldEncryptedPassword is mandatory when function = M.
++        - No old password is required. CM must first validate the approved HTH reset Code.
+         - newEncryptedPassword is always mandatory.
+ 
+       operationId: modifyPassword
+@@ -187,7 +192,6 @@ paths:
+               modifyPassword:
+                 value:
+                   function: "M"
+-                  oldEncryptedPassword: "BexEfs9Def..."
+                   newEncryptedPassword: "AexEfs8Fef..."
+                   randomNumber: "123456"
+                   closeId: "CLOSED001"
+@@ -340,7 +344,7 @@ components:
+ 
+             Base64 encoded encrypted bytes.
+ 
+-            Mandatory when function = M.
++            Deprecated and ignored; approved-Code reset does not require the old password.
+           example: "BexEfs9Def..."
+ 
+         newEncryptedPassword:
+@@ -351,7 +355,7 @@ components:
+ 
+             RSA/ECB/OAEPWithSHA-256AndMGF1Padding
+ 
+-            Password must first be converted to UTF-8 bytes.
++            Base64(raw SHA-256(UTF-8(password))) must first be converted into ASCII bytes.
+ 
+             Base64 encoded encrypted bytes.
+           example: "AexEfs8Fef..."
+diff --git a/dsp-ms-support/dsp-ms-support-svc/pom.xml b/dsp-ms-support/dsp-ms-support-svc/pom.xml
+index 4ae8d749d6a5bc5d5e567a850ebedc851ee26a02..537413953acf9c235250704c1cddc096b50261b7 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/pom.xml
++++ b/dsp-ms-support/dsp-ms-support-svc/pom.xml
+@@ -13,6 +13,12 @@
+     <packaging>jar</packaging>
+ 
+     <dependencies>
++        <dependency>
++            <groupId>com.h2database</groupId>
++            <artifactId>h2</artifactId>
++            <version>2.3.232</version>
++            <scope>test</scope>
++        </dependency>
+         <dependency>
+             <groupId>io.github.openfeign</groupId>
+             <artifactId>feign-slf4j</artifactId>
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a276b7982f644f480c68e9cc405412054207f990
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java
+@@ -0,0 +1,32 @@
++package com.hkbea.dsp.service;
++
++import com.hkbea.common.exception.ParameterException;
++import com.hkbea.common.exception.ErrorMapping;
++import jakarta.ws.rs.core.HttpHeaders;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
++
++/** Restricted to the internal CM subscription; Channel alone never authorizes a password reset. */
++@Component
++public class CmPasswordCallerGuard {
++    @Value("${dsp.password.cm-client-id:}")
++    private String clientId;
++    @Value("${dsp.password.cm-client-secret:}")
++    private String clientSecret;
++
++    public void check(HttpHeaders headers) {
++        if (headers == null || !"BCO".equalsIgnoreCase(headers.getHeaderString("Channel"))
++                || !matches(clientId, headers.getHeaderString("X-IBM-Client-Id"))
++                || !matches(clientSecret, headers.getHeaderString("X-IBM-Client-Secret"))) {
++            throw new ParameterException("CM subscription", ErrorMapping.HEADER_INVALID_EXCEPTION);
++        }
++    }
++
++    private boolean matches(String configured, String supplied) {
++        return configured != null && !configured.isBlank() && supplied != null
++                && MessageDigest.isEqual(configured.getBytes(StandardCharsets.UTF_8),
++                        supplied.getBytes(StandardCharsets.UTF_8));
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+index 7e31f3e97de334d84b58b5dcd278551a3ab479ab..e2d171f56cbc7a8f3125367ed4cf100f16fdc778 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+@@ -1,8 +1,5 @@
+ package com.hkbea.dsp.service;
+ 
+-import com.hkbea.common.cipher.AsymmetricCipher;
+-import com.hkbea.common.cipher.config.RsaCryptoConfig;
+-import com.hkbea.common.cipher.impl.RsaCryptoCipher;
+ import com.hkbea.common.exception.ParameterException;
+ import com.hkbea.common.exception.ServiceException;
+ import com.hkbea.dsp.api.PasswordApi;
+@@ -16,6 +13,8 @@ import com.hkbea.dsp.model.PublicKeyQueryResponse;
+ import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
+ import com.hkbea.dsp.utils.HashUtils;
+ import jakarta.ws.rs.Path;
++import jakarta.ws.rs.core.Context;
++import jakarta.ws.rs.core.HttpHeaders;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.beans.factory.annotation.Autowired;
+@@ -24,6 +23,16 @@ import org.springframework.stereotype.Service;
+ import java.nio.charset.StandardCharsets;
+ import java.time.LocalDateTime;
+ import java.util.Base64;
++import java.util.Arrays;
++import java.security.KeyFactory;
++import java.security.spec.PKCS8EncodedKeySpec;
++import java.security.spec.MGF1ParameterSpec;
++import javax.crypto.Cipher;
++import javax.crypto.spec.OAEPParameterSpec;
++import javax.crypto.spec.PSource;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.transaction.support.TransactionSynchronization;
++import org.springframework.transaction.support.TransactionSynchronizationManager;
+ import java.util.regex.Pattern;
+ 
+ 
+@@ -48,7 +57,11 @@ public class PasswordApiServiceImpl implements PasswordApi {
+ 
+     private static final Pattern PATTERN = Pattern.compile(String.format("^\\d{%d}$", VALID_RANDOM_DIGITS));
+ 
+-    private final AsymmetricCipher<RsaCryptoConfig> rsa = new RsaCryptoCipher();
++    @Context
++    private HttpHeaders headers;
++
++    @Autowired
++    private CmPasswordCallerGuard callerGuard;
+ 
+     /**
+      * no need use spring to inject this
+@@ -71,6 +84,7 @@ public class PasswordApiServiceImpl implements PasswordApi {
+      */
+     @Override
+     public PublicKeyQueryResponse queryPublicKey(PublicKeyQueryRequest publicKeyQueryRequest) {
++        callerGuard.check(headers);
+         checkPublicKeyQueryRequest(publicKeyQueryRequest);
+ 
+         String hashValue = publicKeyQueryRequest.getHashValue();
+@@ -93,6 +107,9 @@ public class PasswordApiServiceImpl implements PasswordApi {
+             LOGGER.error("parameter is mandatory");
+             throw new ParameterException(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, "hashValue");
+         }
++        if (!hashValue.matches("[0-9a-f]{64}")) {
++            throw new ParameterException(DspSupportErrorMapping.PARAMETER_INVALID_EXCEPTION, "hashValue");
++        }
+     }
+ 
+     /**
+@@ -106,7 +123,9 @@ public class PasswordApiServiceImpl implements PasswordApi {
+      * @return Other / General Exception.  Possible Error Codes: - **900000**: General exception.
+      */
+     @Override
++    @Transactional
+     public PasswordModificationResponse modifyPassword(PasswordModificationRequest passwordModificationRequest) {
++        callerGuard.check(headers);
+         validateRequestForPasswordModify(passwordModificationRequest);
+ 
+         // get hash
+@@ -137,6 +156,15 @@ public class PasswordApiServiceImpl implements PasswordApi {
+             modifyPassword(passwordModificationRequest, cryptoKeyDto, dspAuthCredential);
+         }
+ 
++        passwordAppService.removeCryptoKeyDto(hashKey);
++        if (TransactionSynchronizationManager.isSynchronizationActive()) {
++            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
++                @Override public void afterCommit() {
++                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={}", function);
++                }
++            });
++        }
++
+         // return
+         PasswordModificationResponse response = new PasswordModificationResponse();
+         response.setStatus(NORMAL_RETURN_CODE);
+@@ -166,13 +194,8 @@ public class PasswordApiServiceImpl implements PasswordApi {
+             throw new ParameterException(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, "newEncryptedPassword");
+         }
+ 
+-        String oldEncryptedPassword = request.getOldEncryptedPassword();
+-        if (function == PasswordModificationRequest.FunctionEnum.M) {
+-            if (oldEncryptedPassword == null || oldEncryptedPassword.isBlank()) {
+-                LOGGER.error("when change password, the old password is mandatory");
+-                throw new ParameterException(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, "oldEncryptedPassword");
+-            }
+-        }
++        // This internal CM endpoint is an approved-Code reset, not a self-service old-password change.
++        // CM validates the Code and target entitlement before calling DSP.
+ 
+         String randomNumber = request.getRandomNumber();
+         if (randomNumber == null || randomNumber.isBlank()) {
+@@ -208,7 +231,7 @@ public class PasswordApiServiceImpl implements PasswordApi {
+         DspAuthCredential authCredential = new DspAuthCredential();
+         authCredential.setClientId(request.getClientId());
+         authCredential.setCloseId(request.getCloseId());
+-        authCredential.setPasswordHash(HashUtils.sha256(decrypted));
++        authCredential.setPasswordHash(decrypted);
+         authCredential.setObjectStatus(DspAuthCredentialRepoService.AUTH_STATUS_ACTIVE);
+         authCredential.setCreatedBy(ADMIN_CREATOR);
+         authCredential.setLastUpdatedBy(ADMIN_CREATOR);
+@@ -226,18 +249,8 @@ public class PasswordApiServiceImpl implements PasswordApi {
+             throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
+         }
+ 
+-        // check old password
+-        String oldPassHashDB = dspAuthCredential.getPasswordHash();
+-        String decryptedOld = decrypt(cryptoKeyDto.getPrivateKey(), request.getOldEncryptedPassword());
+-        String oldPassHashPassed = HashUtils.sha256(decryptedOld);
+-        if (oldPassHashDB == null || !oldPassHashDB.equals(oldPassHashPassed)) {
+-            LOGGER.error("password not match");
+-            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
+-        }
+-
+-        // update new password
+-        String decrypted = decrypt(cryptoKeyDto.getPrivateKey(), request.getNewEncryptedPassword());
+-        String newHash = HashUtils.sha256(decrypted);
++        // The browser already computed Base64(SHA-256(UTF-8(password))). Do not hash it again.
++        String newHash = decrypt(cryptoKeyDto.getPrivateKey(), request.getNewEncryptedPassword());
+ 
+         // update
+         dspAuthCredential.setPasswordHash(newHash);
+@@ -255,9 +268,29 @@ public class PasswordApiServiceImpl implements PasswordApi {
+      * @return UTF8 String
+      */
+     private String decrypt(String key, String encryptedText) {
+-        byte[] keyBytes = Base64.getDecoder().decode(key);
+-        byte[] encryptedBytes = Base64.getDecoder().decode(encryptedText);
+-        byte[] decryptedBytes = rsa.decrypt(keyBytes, encryptedBytes);
+-        return new String(decryptedBytes, StandardCharsets.UTF_8);
++        byte[] clear = null;
++        byte[] digest = null;
++        byte[] keyBytes = null;
++        try {
++            keyBytes = Base64.getDecoder().decode(key);
++            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
++            cipher.init(Cipher.DECRYPT_MODE,
++                    KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(keyBytes)),
++                    new OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT));
++            clear = cipher.doFinal(Base64.getDecoder().decode(encryptedText));
++            String hash = new String(clear, StandardCharsets.US_ASCII);
++            digest = Base64.getDecoder().decode(hash);
++            if (digest.length != 32 || !Base64.getEncoder().encodeToString(digest).equals(hash)) {
++                throw new IllegalArgumentException();
++            }
++            return hash;
++        } catch (java.lang.Exception failure) {
++            LOGGER.warn("HTH_API_PASSWORD stage=DSP_DECRYPT exceptionType={}", failure.getClass().getSimpleName());
++            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
++        } finally {
++            if (clear != null) { Arrays.fill(clear, (byte) 0); }
++            if (digest != null) { Arrays.fill(digest, (byte) 0); }
++            if (keyBytes != null) { Arrays.fill(keyBytes, (byte) 0); }
++        }
+     }
+ }
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..05fccba0b97a4d547f17cbf361360f42315f47ca 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+@@ -35,6 +35,8 @@ logging:
+   file:
+     path: /app/logs/dsp-ms-support/
+   exclude_patterns:
++    - "/**/password/v1/public-key"
++    - "/**/password/v1/modification"
+     - "**/*.html"
+     - "**/*.htm"
+     - "**/*.js"
+@@ -87,4 +89,10 @@ management:
+     livenessstate:
+       enabled: true
+     readinessstate:
+-      enabled: true
+\ No newline at end of file
++      enabled: true
++# Same internal APIC subscription as CM's released INQ01 call. Inject using deployment secrets.
++# Empty values reject both password APIs; no fallback to a customer subscription.
++dsp:
++  password:
++    cm-client-id: ${HTH_CM_APIC_CLIENT_ID:}
++    cm-client-secret: ${HTH_CM_APIC_CLIENT_SECRET:}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
+index fea8feef58ef4ac288f8b00f54308821ec346bfa..53fee755ef2722afc1e3f202c5670e9cbfed618e 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+-<mapper namespace="com.hkbea.dsp.entity.DspAuthCredential">
++<mapper namespace="com.hkbea.dsp.mapper.DspAuthCredentialMapper">
+ 
+     <update id="updatePassword">
+         UPDATE DSP_AUTH_CREDENTIAL
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6bf1be9a0478435362b9ad9a43cde1f74c3ca9e3
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java
+@@ -0,0 +1,25 @@
++package com.hkbea.dsp.service;
++import com.hkbea.common.exception.ParameterException;
++import jakarta.ws.rs.core.HttpHeaders;
++import org.junit.jupiter.api.Test;
++import org.springframework.test.util.ReflectionTestUtils;
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++class CmPasswordCallerGuardTest {
++    @Test void subscriptionAndChannelRequired() {
++        CmPasswordCallerGuard guard = new CmPasswordCallerGuard();
++        HttpHeaders headers=mock(HttpHeaders.class);
++        when(headers.getHeaderString("Channel")).thenReturn("BCO");
++        assertThrows(ParameterException.class, () -> guard.check(headers));
++        ReflectionTestUtils.setField(guard,"clientId","cm-id");
++        ReflectionTestUtils.setField(guard,"clientSecret","cm-secret");
++        when(headers.getHeaderString("X-IBM-Client-Id")).thenReturn("cm-id");
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("wrong-secret");
++        assertThrows(ParameterException.class, () -> guard.check(headers));
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("cm-secret");
++        assertDoesNotThrow(() -> guard.check(headers));
++        when(headers.getHeaderString("Channel")).thenReturn("HTH");
++        assertThrows(ParameterException.class, () -> guard.check(headers));
++        assertThrows(ParameterException.class, () -> guard.check(null));
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+index 28d9cfc9dc85f828b18a839b3b5ad5d55a30a8f5..b4053ac1312e8d0a78113abc39d05b11cae8fb13 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+@@ -1,380 +1,134 @@
+-package com.hkbea.dsp.service;
+-
+-import com.hkbea.common.cipher.AsymmetricCipher;
+-import com.hkbea.common.cipher.config.RsaCryptoConfig;
+-import com.hkbea.common.exception.ParameterException;
+-import com.hkbea.common.exception.ServiceException;
+-import com.hkbea.dsp.dto.CryptKeyDto;
+-import com.hkbea.dsp.entity.DspAuthCredential;
+-import com.hkbea.dsp.exception.DspSupportErrorMapping;
+-import com.hkbea.dsp.model.PasswordModificationRequest;
+-import com.hkbea.dsp.model.PasswordModificationResponse;
+-import com.hkbea.dsp.model.PublicKeyQueryRequest;
+-import com.hkbea.dsp.model.PublicKeyQueryResponse;
+-import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
+-import com.hkbea.dsp.utils.HashUtils;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.mockito.InjectMocks;
+-import org.mockito.Mock;
+-import org.mockito.junit.jupiter.MockitoExtension;
+-
+-import static org.junit.jupiter.api.Assertions.assertEquals;
+-import static org.junit.jupiter.api.Assertions.assertNotNull;
+-import static org.junit.jupiter.api.Assertions.assertThrows;
+-import static org.junit.jupiter.api.Assertions.assertTrue;
+-import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.ArgumentMatchers.anyString;
+-import static org.mockito.Mockito.verify;
+-import static org.mockito.Mockito.when;
+-
+-@ExtendWith(MockitoExtension.class)
+-public class PasswordApiServiceImplTest {
+-
+-    @InjectMocks
+-    private PasswordApiServiceImpl passwordApiService;
+-
+-    @Mock
+-    private PasswordAppService passwordAppService;
+-
+-    @Mock
+-    private DspAuthCredentialRepoService dspAuthCredentialRepoService;
+-
+-    @Mock
+-    private AsymmetricCipher<RsaCryptoConfig> rsa;
+-
+-    private static final String MOCK_HASH_VALUE = "mockHashValue";
+-//    private static final String MOCK_PUBLIC_KEY = "mockPublicKey";
+-//    private static final String MOCK_PRIVATE_KEY = "mockPrivateKey";
+-    private static final String MOCK_CLIENT_ID = "mockClientId";
+-    private static final String MOCK_CLOSE_ID = "mockCloseId";
+-    private static final String MOCK_RANDOM_NUMBER = "123456";
+-    private static final String MOCK_ENCRYPTED_NEW_PASSWORD = "M/5lkAXrYmUvL9zcJDau4qwGlpkD5AQA5/K5FRQj8VdFM9CaHOIdztg863FultsFRpk0sSUh2HC+4RpU03IRSZ0JtoXX+VcMwMlVkk2yRui/XWOT7gs+7RmG7kXtZfInsRmxvXF2s74Kbm5HyJSNaEqox1crDgD7hnXSFgayfeCi/XbqUEvS2xB7SFtIOD09oQ1UZeXODu/BGsPvkL0zgKsnxtpB8OYidsaCbPrM8k9SkKI/co1IDIOfU9paJw16LSQM0iNkCjVCLUXKiAAMI3OB3/e69VrTFXTwKBvmX/sTTlbe5U7vUV+MWG7abTue04f88dtNI01RaPM7u/XM8Q==";
+-    private static final String MOCK_ENCRYPTED_OLD_PASSWORD = "ldtAsRw7SE5XOGRo+eYqZEtGg5LxzO6QnpNVBGGdIlMHHdwd8sHh5+07gdvpySn7OjbMnaQQ6TFIClJ7BZZuM/vrpfXtfa7CtYozK1DGIxi9+0L90hc3k+/NPZ8gSuLmYWR54172o2uRm5xNfhsB2gM9J3IJOR8w2gzTXWYRWG63BF9Ybzed+5ZuA1sqp8Zrm0XjuwGfzW8ByMggHac4Pmn370xe4yqxGpNfu5KDTfZYYpssgwH1ZlFIp7ar+S+WZe9vh1ZivuFV2mefEXuXhgjWlfCAknnY2IRD6L7ERsl0nwcAtWXC15h2ygknOdNWgQJhaL1TUP9c96PyAYOSQQ==";
+-//    private static final String MOCK_ENCRYPTED_NEW_PASSWORD = "KZEckzSqQ9UaKEDTMWT2LTovNFoPiqAd0wkjxNe2KAu7sTOhawm7LtOItgazJoTTllYP5WQDr/vIJhCDXFcJ1n4CecD+/D5ctGEgnV7vVpx7f1KdfsYL8QIOIFWmL5urA6QjbeTZynK4dswl3InJ7x37Tp07GJw9TzPLXqvMAVoJK2OLSMkoz9g2afTl35Td00Y4cmZ18B5g09KMS6uVv3xMJ4pVUYxch4tAplmuFJjSaswGfzMoaw2s/Nd8rA7eVMYzy/cnYKE1iSBcCQinSAOQFdgLq+suZ8bPKY9G7pxLiO1jfWc7hRbTAd5HIDRfVLqTm1Zd7zxANQ36QCVKYA==";
+-//    private static final String MOCK_ENCRYPTED_OLD_PASSWORD = "ldtAsRw7SE5XOGRo+eYqZEtGg5LxzO6QnpNVBGGdIlMHHdwd8sHh5+07gdvpySn7OjbMnaQQ6TFIClJ7BZZuM/vrpfXtfa7CtYozK1DGIxi9+0L90hc3k+/NPZ8gSuLmYWR54172o2uRm5xNfhsB2gM9J3IJOR8w2gzTXWYRWG63BF9Ybzed+5ZuA1sqp8Zrm0XjuwGfzW8ByMggHac4Pmn370xe4yqxGpNfu5KDTfZYYpssgwH1ZlFIp7ar+S+WZe9vh1ZivuFV2mefEXuXhgjWlfCAknnY2IRD6L7ERsl0nwcAtWXC15h2ygknOdNWgQJhaL1TUP9c96PyAYOSQQ==";
+-    private static final String MOCK_DECRYPTED_PASSWORD = "123456abc";
+-    private static final String MOCK_PASSWORD_HASH = "passwordHash";
+-
+-    private static final String testPublicKey  = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA34kvoqtczudfywanyNeFQIfqYKzaVEsBs+8vIbLN89QS2ANzX/uXGeDJG+9/gY717sadUWzQviv/r9d+zUmzg+dn+x2/k9qg9IdJuJEvKVV9/v+VM0vTVjwRTJkbU5BrvI66b4a1/fADGhzMqQUz9U33HftiTxOXv7XGXNKKMbIFMW+Ln3KwNQVrjG3kBRXY6lXAF8H2OTugjGujIioLpsZzQvfo76v1qch63GIYVqLTqCRdZFTx61TFenF76JOU2kKA8xDMTSArAcvj8kEe2r7RT/cUl//HxJqrSTUzgcKWHsDFFWXvY8NyKPVRYQS0dQs91SUgH4k4P4NEyBSd1wIDAQAB";
+-    private static final String testPrivateKey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDfiS+iq1zO51/LBqfI14VAh+pgrNpUSwGz7y8hss3z1BLYA3Nf+5cZ4Mkb73+BjvXuxp1RbNC+K/+v137NSbOD52f7Hb+T2qD0h0m4kS8pVX3+/5UzS9NWPBFMmRtTkGu8jrpvhrX98AMaHMypBTP1Tfcd+2JPE5e/tcZc0ooxsgUxb4ufcrA1BWuMbeQFFdjqVcAXwfY5O6CMa6MiKgumxnNC9+jvq/WpyHrcYhhWotOoJF1kVPHrVMV6cXvok5TaQoDzEMxNICsBy+PyQR7avtFP9xSX/8fEmqtJNTOBwpYewMUVZe9jw3Io9VFhBLR1Cz3VJSAfiTg/g0TIFJ3XAgMBAAECggEARaY1FXZXYJBvJI9aUBX3CvhOavjwvjrwuOPZx6Iy0bpOdMf+dvWpSwLjJrUlAXVN46w28Fv7XoXPETcP518DdCHyIChQvPzuEcLlkYCLNVHSBFYWYvlJTCFDMp6yCQOCzimapY1Pv2O9U7GNg0x/t/sm+EyPgRwVuEInIFzpejnsQ3hGoLoeJVir2rc8HXRMkXCWf/nqisnC0zcV318LcgdUP3K+k31WdhAVmAoXwzgWk6VUjAaaeIl9BuKd2w53UoqTz34nhn6FyMVJBA0xGQ0TY4wmzXsU1AjUuHC1mQCaliZX0TONQ2CAsIzQaAF265NvsgY7utrtGkVVuBq+IQKBgQDfrZ/yjWDqeoOybK2HB+HhD28+aQVY+oVvNZXg8rOlhGtc3nUmRIMC8H9aiaE3QPMcZoPT34l1rYzTZiPkxe/72mFnc7Fj6NUz5wRvy3awrzuVJdcBX7J86gyCRnxQPsEV3hC/TpGOqrlsqx70VPMD/3NirGEGzXZFiCeYHoSGVQKBgQD/1ku8QtpfyV1zraDiuOXQXh7SgydlRa2lxKH+R99fDM7ZIOAO9tUtp2bEc9q1FuRMJVhsaqD6xdSDTNK4nMr7ueaJP8MDCWakkldNhYptsMaggC7jnCvD62JFrcFjHWsQvde22eSx37r9NEDDYwAZ57+IDCh4lgo5G4VllgzHewKBgQCYvuZlKqquNO/OXmy5s2ZK3NFo2yrtslaAtSUesl5/f0gZ6Ugy08JrtXQija3sH4xlLpSDkTk7hUKP8kY8qfbSFDVEAjt3ML63bOEYvubUjTWxCmAi7gjjSKk2JZAq9E/C8Ryap7q6pFdvoAPJcmFpr35KOdEgZhqILQxs0xpI6QKBgG6rhuuTh9+zvedSjqxFC7UNYgvyjFI0yB9TZjgXYzs80SYAIKyYfjNXnQ8ShuObWXrPFOchYS3Z8koyK12NBgnKqz1oBbYElRBP9dAlGnLE68d2a9IuNoh0BHjb5zI3AZ+mX/BLZbDEdaEev31GED8kjygNClzPmvCFRTlipXiNAoGAIGBFBbuhrMs1pi8tv1inQLI4EbGrhloq+x6qTyspRBybEzn86o6F7Qnfwfz+9yE4lbmqAjXjuhr0Jig0oX09VjH4CoaREH9FA+HDiPgvwm/mnLy9LXUC9t21sOLfx/UKlFi9dKDbVcifb5x7lSokUB6YPbRwvXUSmREfogi8S+M=";
+-    private static final String MOCK_PUBLIC_KEY = testPublicKey;
+-    private static final String MOCK_PRIVATE_KEY = testPrivateKey;
+-
+-    static {
+-        try {
+-            Class.forName("com.hkbea.dsp.exception.DspSupportErrorMapping");
+-        } catch (Exception e) {
+-
+-        }
+-    }
+-
+-    @BeforeEach
+-    void setUp() {
+-//        // Mock the rsa.decrypt method
+-//        when(rsa.decrypt(any(byte[].class), any(byte[].class))).thenReturn(MOCK_DECRYPTED_PASSWORD.getBytes());
+-    }
+-
+-    @Test
+-    void getPublicKey_Successful_ReturnsPublicKey() {
+-        // Given
+-        PublicKeyQueryRequest request = new PublicKeyQueryRequest();
+-        request.setHashValue(MOCK_HASH_VALUE);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.getCryptoKeyDto(MOCK_HASH_VALUE)).thenReturn(cryptKeyDto);
+-
+-        // When
+-        PublicKeyQueryResponse response = passwordApiService.queryPublicKey(request);
+-
+-        // Then
+-        assertNotNull(response);
+-        assertEquals(MOCK_PUBLIC_KEY, response.getPublicKey());
+-        assertEquals("000000", response.getStatus());
+-        verify(passwordAppService).getCryptoKeyDto(MOCK_HASH_VALUE);
+-    }
+-
+-    @Test
+-    void getPublicKey_NullRequest_ThrowsServiceException() {
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.queryPublicKey(null));
+-        assertEquals(DspSupportErrorMapping.REQ_BODY_MISS_OR_EMPTY, exception.getErrCode());
+-    }
+-
+-    @Test
+-    void getPublicKey_EmptyHashValue_ThrowsParameterException() {
+-        // Given
+-        PublicKeyQueryRequest request = new PublicKeyQueryRequest();
+-        request.setHashValue("   ");
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.queryPublicKey(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("hashValue"));
+-    }
+-
+-    @Test
+-    void modifyPassword_NewPassword_Successful() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+-        when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(null);
+-
+-        // When
+-        PasswordModificationResponse response = passwordApiService.modifyPassword(request);
+-
+-        // Then
+-        assertNotNull(response);
+-        assertEquals("000000", response.getStatus());
+-        verify(dspAuthCredentialRepoService).insert(any(DspAuthCredential.class));
+-    }
+-
+-    @Test
+-    void modifyPassword_ModifyExistingPassword_Successful() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.M);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-        request.setOldEncryptedPassword(MOCK_ENCRYPTED_OLD_PASSWORD);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+-
+-        DspAuthCredential existingCredential = new DspAuthCredential();
+-        existingCredential.setPasswordHash(HashUtils.sha256(MOCK_DECRYPTED_PASSWORD));
+-        when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(existingCredential);
+-
+-        // When
+-        PasswordModificationResponse response = passwordApiService.modifyPassword(request);
+-
+-        // Then
+-        assertNotNull(response);
+-        assertEquals("000000", response.getStatus());
+-        verify(dspAuthCredentialRepoService).updatePassword(any(DspAuthCredential.class));
+-    }
+-
+-    @Test
+-    void modifyPassword_NullRequest_ThrowsServiceException() {
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(null));
+-        assertEquals(DspSupportErrorMapping.REQ_BODY_MISS_OR_EMPTY, exception.getErrCode());
+-    }
+-
+-    @Test
+-    void modifyPassword_NullFunction_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("function"));
+-    }
+-
+-    @Test
+-    void modifyPassword_InvalidFunction_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(null);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("function"));
+-    }
+-
+-    @Test
+-    void modifyPassword_EmptyNewPassword_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword("   ");
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("newEncryptedPassword"));
+-    }
+-
+-    @Test
+-    void modifyPassword_ModifyFunctionWithEmptyOldPassword_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.M);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-        request.setOldEncryptedPassword("   ");
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("oldEncryptedPassword"));
+-    }
+-
+-    @Test
+-    void modifyPassword_EmptyRandomNumber_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber("   ");
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("randomNumber"));
+-    }
+-
+-    @Test
+-    void modifyPassword_InvalidRandomNumberFormat_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber("123"); // Invalid format
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.DATA_FORMAT_INVALID, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("randomNumber"));
+-    }
+-
+-    @Test
+-    void modifyPassword_EmptyClientId_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId("   ");
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("clientId"));
+-    }
+-
+-    @Test
+-    void modifyPassword_EmptyCloseId_ThrowsParameterException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId("   ");
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        // When & Then
+-        ParameterException exception = assertThrows(ParameterException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PARAMETER_IS_MANDATORY, exception.getErrCode());
+-        assertTrue(exception.getMessage().contains("closeId"));
+-    }
+-
+-    @Test
+-    void modifyPassword_CryptoKeyNotFound_ThrowsServiceException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(null);
+-
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
+-    }
+-
+-    @Test
+-    void modifyPassword_NewPasswordExistingRecord_ThrowsServiceException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.A);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+-        when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(new DspAuthCredential());
+-
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
+-    }
+-
+-    @Test
+-    void modifyPassword_ModifyPasswordNoExistingRecord_ThrowsServiceException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.M);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-        request.setOldEncryptedPassword(MOCK_ENCRYPTED_OLD_PASSWORD);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+-        when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(null);
+-
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
+-    }
+-
+-    @Test
+-    void modifyPassword_ModifyPasswordMismatchOldPassword_ThrowsServiceException() {
+-        // Given
+-        PasswordModificationRequest request = new PasswordModificationRequest();
+-        request.setFunction(PasswordModificationRequest.FunctionEnum.M);
+-        request.setClientId(MOCK_CLIENT_ID);
+-        request.setCloseId(MOCK_CLOSE_ID);
+-        request.setRandomNumber(MOCK_RANDOM_NUMBER);
+-        request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-        request.setOldEncryptedPassword(MOCK_ENCRYPTED_OLD_PASSWORD);
+-
+-        CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+-        when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+-
+-        DspAuthCredential existingCredential = new DspAuthCredential();
+-        existingCredential.setPasswordHash("differentHash"); // Mismatch
+-        when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(existingCredential);
+-
+-        // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
+-    }
+-}
++package com.hkbea.dsp.service;
++
++import com.hkbea.common.exception.ServiceException;
++import com.hkbea.dsp.dto.CryptKeyDto;
++import com.hkbea.dsp.entity.DspAuthCredential;
++import com.hkbea.dsp.model.PasswordModificationRequest;
++import com.hkbea.dsp.model.PublicKeyQueryRequest;
++import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
++import com.hkbea.dsp.utils.HashUtils;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import java.nio.charset.StandardCharsets;
++import java.security.KeyPair;
++import java.security.KeyPairGenerator;
++import java.security.MessageDigest;
++import java.security.spec.MGF1ParameterSpec;
++import java.util.Base64;
++import javax.crypto.Cipher;
++import javax.crypto.spec.OAEPParameterSpec;
++import javax.crypto.spec.PSource;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import org.mockito.junit.jupiter.MockitoExtension;
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++import static org.mockito.ArgumentMatchers.*;
++
++@ExtendWith(MockitoExtension.class)
++class PasswordApiServiceImplTest {
++    @InjectMocks private PasswordApiServiceImpl service;
++    @Mock private PasswordAppService keys;
++    @Mock private DspAuthCredentialRepoService repo;
++    @Mock private CmPasswordCallerGuard guard;
++    private KeyPair pair;
++    private CryptKeyDto key;
++    private static final String NONCE = "314159";
++
++    @BeforeEach void prepare() throws Exception {
++        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
++        generator.initialize(2048); pair = generator.generateKeyPair();
++        key = new CryptKeyDto(Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()),
++                Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded()));
++    }
++    private void cached() { when(keys.findCryptoKeyDto(HashUtils.sha256(NONCE))).thenReturn(key); }
++    private String hash(String password) throws Exception {
++        return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(password.getBytes(StandardCharsets.UTF_8)));
++    }
++    private String encrypt(String value) throws Exception {
++        Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
++        cipher.init(Cipher.ENCRYPT_MODE, pair.getPublic(), new OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT));
++        return Base64.getEncoder().encodeToString(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)));
++    }
++    private PasswordModificationRequest request(String function, String cipher) {
++        return new PasswordModificationRequest().function(PasswordModificationRequest.FunctionEnum.fromValue(function))
++                .clientId("test-client").closeId("USER@PARTY").randomNumber(NONCE).newEncryptedPassword(cipher);
++    }
++    @Test void firstSetupStoresHashWithoutRehashing() throws Exception {
++        cached(); String digest = hash("Setup1234");
++        assertEquals("000000", service.modifyPassword(request("A", encrypt(digest))).getStatus());
++        verify(repo).insert(argThat(row -> digest.equals(row.getPasswordHash())));
++        verify(keys).removeCryptoKeyDto(HashUtils.sha256(NONCE)); verify(guard).check(null);
++    }
++    @Test void resetDoesNotRequireOldPassword() throws Exception {
++        cached(); DspAuthCredential existing = new DspAuthCredential(); existing.setPasswordHash(hash("Old12345"));
++        when(repo.queryWithStatus("USER@PARTY", "test-client", "A")).thenReturn(existing);
++        String digest = hash("New12345");
++        assertEquals("000000", service.modifyPassword(request("M", encrypt(digest))).getStatus());
++        verify(repo).updatePassword(argThat(row -> digest.equals(row.getPasswordHash())));
++        verify(repo, never()).insert(any());
++    }
++    @Test void setupCannotOverwriteExistingCredential() throws Exception {
++        cached(); when(repo.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(new DspAuthCredential());
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
++        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
++    }
++    @Test void resetRequiresExistingActiveCredential() throws Exception {
++        cached(); assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
++        verify(repo, never()).updatePassword(any());
++    }
++    @Test void rejectsPlaintextAndHexInsteadOfBase64Digest() throws Exception {
++        cached();
++        for (String clear : new String[]{"Password123", HashUtils.sha256("Password123"), "AA=="}) {
++            assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(clear))));
++        }
++        verify(repo, never()).insert(any());
++    }
++    @Test void rejectsWrongKeyAndMalformedCiphertext() throws Exception {
++        cached();
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", "not-base64")));
++        KeyPairGenerator other = KeyPairGenerator.getInstance("RSA"); other.initialize(2048); pair=other.generateKeyPair();
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Wrong1234")))));
++        verify(repo, never()).insert(any());
++    }
++    @Test void missingExpiredKeyCannotWrite() throws Exception {
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
++        verifyNoInteractions(repo);
++    }
++    @Test void queryUsesHashOfNonceExactlyOnce() {
++        String hash = HashUtils.sha256(NONCE); when(keys.getCryptoKeyDto(hash)).thenReturn(key);
++        PublicKeyQueryRequest request = new PublicKeyQueryRequest(); request.setHashValue(hash);
++        assertEquals(key.getPublicKey(), service.queryPublicKey(request).getPublicKey());
++        verify(keys).getCryptoKeyDto(hash);
++    }
++    @Test void databaseFailureIsNotReportedAsSuccess() throws Exception {
++        cached(); doThrow(new IllegalStateException()).when(repo).insert(any());
++        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
++        verify(keys, never()).removeCryptoKeyDto(anyString());
++    }
++    @Test void requestStringDoesNotLeakSecrets() {
++        String text=request("M", "cipher-sentinel").oldEncryptedPassword("old-sentinel").toString();
++        assertFalse(text.contains("cipher-sentinel"));assertFalse(text.contains("old-sentinel")); assertFalse(text.contains(NONCE));
++    }
++    @Test void actualCmBrowserEncryptionWorksForSetupAndReset() throws Exception {
++        String script = System.getProperty("cm.browser.interop");
++        org.junit.jupiter.api.Assumptions.assumeTrue(script != null, "Set cm.browser.interop to CM browser-interop.cjs");
++        cached();
++        DspAuthCredential saved = new DspAuthCredential();
++        for (String operation : new String[]{"SETUP", "RESET"}) {
++            String password = operation.equals("SETUP") ? "Browser123" : "Reset45678";
++            Process process = new ProcessBuilder(System.getProperty("node.bin", "node"), script,
++                    key.getPublicKey(), password, operation).start();
++            String json = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
++            assertEquals(0, process.waitFor(), new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
++            String ciphertext = new ObjectMapper().readTree(json).path("dspEncryptedPassword").asText();
++            if (operation.equals("RESET")) { when(repo.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(saved); }
++            service.modifyPassword(request(operation.equals("SETUP") ? "A" : "M", ciphertext));
++            String digest=hash(password);
++            if (operation.equals("SETUP")) { verify(repo).insert(argThat(row -> digest.equals(row.getPasswordHash()))); saved.setPasswordHash(digest); }
++            else { verify(repo).updatePassword(argThat(row -> digest.equals(row.getPasswordHash()))); }
++        }
++    }
++}
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e396632f066e4d19c9c01b719ea94941432b4758
+--- /dev/null
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java
+@@ -0,0 +1,159 @@
++package com.hkbea.dsp.service;
++
++import com.baomidou.mybatisplus.core.MybatisConfiguration;
++import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
++import com.hkbea.dsp.dto.CryptKeyDto;
++import com.hkbea.dsp.entity.DspAuthCredential;
++import com.hkbea.dsp.mapper.DspAuthCredentialMapper;
++import com.hkbea.dsp.model.PasswordModificationRequest;
++import com.hkbea.dsp.model.PublicKeyQueryRequest;
++import com.hkbea.dsp.repo.DspAuthCredentialRepoService;
++import com.hkbea.dsp.utils.HashUtils;
++import jakarta.ws.rs.core.HttpHeaders;
++import java.nio.charset.StandardCharsets;
++import java.security.*;
++import java.security.spec.*;
++import java.util.*;
++import javax.crypto.Cipher;
++import javax.crypto.spec.*;
++import org.apache.ibatis.builder.xml.XMLMapperBuilder;
++import org.apache.ibatis.mapping.Environment;
++import org.h2.jdbcx.JdbcDataSource;
++import org.mybatis.spring.SqlSessionTemplate;
++import org.mybatis.spring.transaction.SpringManagedTransactionFactory;
++import org.springframework.aop.framework.ProxyFactory;
++import org.springframework.jdbc.datasource.DataSourceTransactionManager;
++import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
++import org.springframework.transaction.interceptor.TransactionInterceptor;
++import org.springframework.test.util.ReflectionTestUtils;
++import org.junit.jupiter.api.*;
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++
++/** Real DSP service, MyBatis mapper and transaction manager. H2 replaces Oracle; Redis is an in-memory cache. */
++class PasswordDatabaseTest {
++    private PasswordApiServiceImpl service;
++    private DspAuthCredentialRepoService repo;
++    private DspAuthCredentialMapper mapper;
++    private Keys keys;
++    private String publicKey;
++    static final String NONCE="314159";
++    static class Keys extends PasswordAppService {
++        final Map<String,CryptKeyDto> cache=new HashMap<>(); boolean failAfterWrite;
++        @Override public CryptKeyDto getCryptoKeyDto(String h) { return cache.computeIfAbsent(h, x->super.getCryptoKeyDto(x)); }
++        @Override public CryptKeyDto findCryptoKeyDto(String h) { return cache.get(h); }
++        @Override public void removeCryptoKeyDto(String h) { cache.remove(h); if(failAfterWrite) throw new IllegalStateException(); }
++    }
++    @BeforeEach void init() throws Exception {
++        JdbcDataSource data=new JdbcDataSource();data.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";MODE=Oracle;DB_CLOSE_DELAY=-1");
++        try(var c=data.getConnection()) {
++            c.createStatement().execute("CREATE TABLE DSP_AUTH_CREDENTIAL (ID BIGINT PRIMARY KEY, PASSWORD_HASH VARCHAR(255), "
++                +"CLIENT_ID VARCHAR(64), CLOSE_ID VARCHAR(255), OBJECT_STATUS CHAR(1), CREATION_DATE TIMESTAMP, CREATED_BY VARCHAR(100), "
++                +"LAST_UPDATE_DATE TIMESTAMP, LAST_UPDATED_BY VARCHAR(100), UNIQUE(CLIENT_ID,CLOSE_ID,OBJECT_STATUS))");
++        }
++        MybatisConfiguration config=new MybatisConfiguration();
++        config.setEnvironment(new Environment("test",new SpringManagedTransactionFactory(),data));config.addMapper(DspAuthCredentialMapper.class);
++        try(var stream=getClass().getResourceAsStream("/mapper/DspAuthCredentialMapper.xml")) {
++            new XMLMapperBuilder(stream,config,"mapper/DspAuthCredentialMapper.xml",config.getSqlFragments()).parse();
++        }
++        SqlSessionTemplate template=new SqlSessionTemplate(new MybatisSqlSessionFactoryBuilder().build(config));
++        mapper=template.getMapper(DspAuthCredentialMapper.class);
++        repo=new DspAuthCredentialRepoService();ReflectionTestUtils.setField(repo,"dspAuthCredentialMapper",mapper);
++        keys=new Keys();CmPasswordCallerGuard guard=new CmPasswordCallerGuard();
++        ReflectionTestUtils.setField(guard,"clientId","fixture-id");ReflectionTestUtils.setField(guard,"clientSecret","fixture-secret");
++        HttpHeaders headers=mock(HttpHeaders.class);
++        when(headers.getHeaderString("Channel")).thenReturn("BCO");
++        when(headers.getHeaderString("X-IBM-Client-Id")).thenReturn("fixture-id");
++        when(headers.getHeaderString("X-IBM-Client-Secret")).thenReturn("fixture-secret");
++        PasswordApiServiceImpl target=new PasswordApiServiceImpl();
++        ReflectionTestUtils.setField(target,"headers",headers);ReflectionTestUtils.setField(target,"callerGuard",guard);
++        ReflectionTestUtils.setField(target,"passwordAppService",keys);ReflectionTestUtils.setField(target,"dspAuthCredentialRepoService",repo);
++        ProxyFactory proxy=new ProxyFactory(target);proxy.setProxyTargetClass(true);
++        proxy.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(data),new AnnotationTransactionAttributeSource()));
++        service=(PasswordApiServiceImpl)proxy.getProxy();
++    }
++    String hash(String p) throws Exception { return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(p.getBytes(StandardCharsets.UTF_8))); }
++    PasswordModificationRequest request(String f,String password) throws Exception {
++        PublicKeyQueryRequest query=new PublicKeyQueryRequest();query.setHashValue(HashUtils.sha256(NONCE));
++        publicKey=service.queryPublicKey(query).getPublicKey();
++        Cipher cipher=Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
++        cipher.init(Cipher.ENCRYPT_MODE,KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicKey))),
++            new OAEPParameterSpec("SHA-256","MGF1",MGF1ParameterSpec.SHA256,PSource.PSpecified.DEFAULT));
++        return new PasswordModificationRequest().function(PasswordModificationRequest.FunctionEnum.fromValue(f)).clientId("client").closeId("USER@PARTY")
++            .randomNumber(NONCE).newEncryptedPassword(Base64.getEncoder().encodeToString(cipher.doFinal(hash(password).getBytes(StandardCharsets.US_ASCII))));
++    }
++    String stored() { DspAuthCredential row=repo.queryWithStatus("USER@PARTY","client","A");return row==null?null:row.getPasswordHash(); }
++    @Test void setupAndResetPersistExactHashWithRealMapper() throws Exception {
++        service.modifyPassword(request("A","First123"));assertEquals(hash("First123"),stored());
++        service.modifyPassword(request("M","Second456"));assertEquals(hash("Second456"),stored());assertNotEquals(hash("First123"),stored());
++    }
++    @Test void successfulWriteConsumesKey() throws Exception {
++        var r=request("A","First123");service.modifyPassword(r);
++        assertThrows(RuntimeException.class,()->service.modifyPassword(r));assertEquals(hash("First123"),stored());
++    }
++    @Test void duplicateSetupAndAbsentResetDoNotWrite() throws Exception {
++        assertThrows(RuntimeException.class,()->service.modifyPassword(request("M","First123")));assertNull(stored());
++        service.modifyPassword(request("A","First123"));
++        assertThrows(RuntimeException.class,()->service.modifyPassword(request("A","Other123")));assertEquals(hash("First123"),stored());
++    }
++    @Test void runtimeFailureAfterUpdateRollsBackRealTransaction() throws Exception {
++        service.modifyPassword(request("A","First123"));keys.failAfterWrite=true;
++        assertThrows(IllegalStateException.class,()->service.modifyPassword(request("M","Second456")));
++        assertEquals(hash("First123"),stored());
++    }
++
++    /** AC4: production token entry point and signature verification read the latest real database row.
++     * Only external UAM token issuance/public-key lookup are fixtures; no real UAM token is obtained. */
++    @Test void tokenFlowAcceptsLatestPasswordAndRejectsPreviousPasswordAfterReset() throws Exception {
++        var signingKey = new com.nimbusds.jose.jwk.gen.RSAKeyGenerator(2048).keyID("fixture").generate();
++        CypherServiceImpl cypher = new CypherServiceImpl() {
++            @Override public String getPublicKeyByClientIdV2(String clientId) {
++                assertEquals("client", clientId);
++                return new com.nimbusds.jose.jwk.JWKSet(signingKey.toPublicJWK()).toString();
++            }
++        };
++        var uam = mock(com.hkbea.dsp.uam.api.UamService.class);
++        var issuedToken = new com.hkbea.dsp.uam.model.GetTokenResult();
++        issuedToken.setAccessToken("fixture-token");
++        issuedToken.setTokenType("Bearer");
++        when(uam.getAccessToken(anyString(), anyString(), anyString())).thenReturn(issuedToken);
++        var tokens = new CorporateTokenServiceImpl();
++        ReflectionTestUtils.setField(tokens, "dspAuthCredentialMapper", mapper);
++        ReflectionTestUtils.setField(tokens, "cypherApi", cypher);
++        ReflectionTestUtils.setField(tokens, "uamService", uam);
++        ReflectionTestUtils.setField(tokens, "clientAssertionType", "fixture-type");
++        ReflectionTestUtils.setField(tokens, "grantType", "fixture-grant");
++
++        var assertion = new com.nimbusds.jwt.SignedJWT(
++            new com.nimbusds.jose.JWSHeader(com.nimbusds.jose.JWSAlgorithm.RS256),
++            new com.nimbusds.jwt.JWTClaimsSet.Builder().issuer("client").subject("client")
++                .audience("fixture-audience").claim("close-id", "USER@PARTY")
++                .issueTime(new Date()).expirationTime(new Date(System.currentTimeMillis() + 60000))
++                .jwtID(UUID.randomUUID().toString()).build());
++        assertion.sign(new com.nimbusds.jose.crypto.RSASSASigner(signingKey));
++        var login = new com.hkbea.dsp.model.CorporateTokenParam();
++        login.setClientAssertion(assertion.serialize());
++        Signature signer = Signature.getInstance("SHA256withRSA");
++        signer.initSign(signingKey.toPrivateKey());
++        signer.update(hash("First123").getBytes(StandardCharsets.UTF_8));
++        String previousSignature = Base64.getEncoder().encodeToString(signer.sign());
++
++        service.modifyPassword(request("A", "First123"));
++        login.setPasswordSignature(previousSignature);
++        assertEquals("fixture-token", tokens.getCorporateToken(login).getAccessToken());
++
++        service.modifyPassword(request("M", "Second456"));
++        clearInvocations(uam);
++        var rejected = assertThrows(com.hkbea.common.exception.ParameterException.class,
++            () -> tokens.getCorporateToken(login));
++        assertEquals(com.hkbea.dsp.exception.DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION,
++            rejected.getErrCode());
++        verifyNoInteractions(uam);
++
++        signer.initSign(signingKey.toPrivateKey());
++        signer.update(hash("Second456").getBytes(StandardCharsets.UTF_8));
++        login.setPasswordSignature(Base64.getEncoder().encodeToString(signer.sign()));
++        assertEquals("fixture-token", tokens.getCorporateToken(login).getAccessToken());
++        verify(uam).getAccessToken(anyString(), anyString(), anyString());
++    }
++}

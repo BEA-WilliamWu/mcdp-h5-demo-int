@@ -1,4 +1,5 @@
-需从 CM 目标源码移除的旧文件（完整补丁已包含删除）：
+需从 CM 目标源码移除的旧文件。完整补丁及增量补丁分别包含其基线上的删除。
+手工复制时，以下不存在的文件可忽略；存在时须删除，避免编译残留。
 
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredential.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredentialKey-embeddable.orm.xml
@@ -6,6 +7,7 @@ bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/Hth
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordOperationKey-embeddable.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordState.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordStateKey-embeddable.orm.xml
+bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordPersistClient.java
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordResponsePolicy.java
 bco-applicaion-main/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthApiCredentialAdapter.java

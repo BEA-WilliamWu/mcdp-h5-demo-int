@@ -25,10 +25,10 @@ const context = {
     } }) }, RSAKey); }
 };
 vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,"../../channel/extensions/components/host-to-host/api-password/transport.js"),"utf8"),context);
-encrypt("Browser123","314159",requestId,"SETUP").then(result => {
-    assert.equal(envelope[0],"HTH3"); assert.equal(envelope[1],"SETUP");
+encrypt(process.argv[3] || "Browser123","314159",requestId,process.argv[4] || "SETUP").then(result => {
+    assert.equal(envelope[0],"HTH3"); assert.equal(envelope[1],process.argv[4] || "SETUP");
     assert.equal(envelope[2],requestId); assert.equal(envelope[3],"314159");
     assert.equal(envelope[4],crypto.createHash("sha256").update(result.dspEncryptedPassword).digest("base64"));
-    assert.ok(!JSON.stringify(result).includes("Browser123"));
+    assert.ok(!JSON.stringify(result).includes(process.argv[3] || "Browser123"));
     process.stdout.write(JSON.stringify(result));
 }).catch(error => { console.error(error); process.exitCode=1; });

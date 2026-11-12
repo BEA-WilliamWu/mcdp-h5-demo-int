@@ -1,0 +1,26 @@
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..05fccba0b97a4d547f17cbf361360f42315f47ca 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
+@@ -35,6 +35,8 @@ logging:
+   file:
+     path: /app/logs/dsp-ms-support/
+   exclude_patterns:
++    - "/**/password/v1/public-key"
++    - "/**/password/v1/modification"
+     - "**/*.html"
+     - "**/*.htm"
+     - "**/*.js"
+@@ -87,4 +89,10 @@ management:
+     livenessstate:
+       enabled: true
+     readinessstate:
+-      enabled: true
+\ No newline at end of file
++      enabled: true
++# Same internal APIC subscription as CM's released INQ01 call. Inject using deployment secrets.
++# Empty values reject both password APIs; no fallback to a customer subscription.
++dsp:
++  password:
++    cm-client-id: ${HTH_CM_APIC_CLIENT_ID:}
++    cm-client-secret: ${HTH_CM_APIC_CLIENT_SECRET:}

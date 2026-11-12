@@ -3,7 +3,19 @@
     "repository": "bco-applicaion-main",
     "commit": "d56fd4607cc8204f592ed11ec11c295d4c6f2811",
     "base": "1df981ede1638452cbc85a17dcce018a4f4cd05f",
-    "previous_init_commit": "e39009d444fb48ffa683e870787c34e2684475c4"
+    "previous_init_commit": "e39009d444fb48ffa683e870787c34e2684475c4",
+    "supplemental_changes": [
+      {
+        "name": "account-access-summary-20261112",
+        "commit": "2ecf4c62b2ca611529164e8448fd845eaf378ddb",
+        "base": "08693aa26a7cc141b4d93688ec708ac1d5a5f714",
+        "compatible_previous_init_commit": "d56fd4607cc8204f592ed11ec11c295d4c6f2811",
+        "patch": "UPDATE_SUMMARY_20261112.patch",
+        "paths": [
+          "consulting/channel/extensions/components/account-access-management/summary/summary.js"
+        ]
+      }
+    ]
   },
   {
     "repository": "hth-dsp",

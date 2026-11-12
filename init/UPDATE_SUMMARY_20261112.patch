@@ -1,0 +1,53 @@
+diff --git a/consulting/channel/extensions/components/account-access-management/summary/summary.js b/consulting/channel/extensions/components/account-access-management/summary/summary.js
+index 7a84d9656334571fad468bde6515194e49399651..70a330ab393cc5b8624d88172f6bab27b5fbb289 100644
+--- a/consulting/channel/extensions/components/account-access-management/summary/summary.js
++++ b/consulting/channel/extensions/components/account-access-management/summary/summary.js
+@@ -193,7 +193,7 @@ define([
+ 
+         self.userAccessPageTitle = function () {
+             return self.isHthMode() ? self.nls.pageTitle.hthUserAccess
+-                : rootParams.baseModel.format(self.nls.pageTitle.accessManagement, { user: self.nls.navLabels.UserLevel_title });
++                : self.nls.pageTitle.bcoUserAccess;
+         };
+ 
+         if (rootParams.dashboard.appData.segment === "ADMIN") {
+@@ -1180,6 +1180,7 @@ define([
+ 
+                                     ko.utils.arrayForEach(item.tasks, function (thisChildTaskItem) {
+                                         self.newResourceObject = {
++                                            id: "",
+                                             childTasks: [],
+                                             name: ""
+                                         };
+@@ -1213,6 +1214,7 @@ define([
+ 
+                                             self.newLMObject.fullResourceTaskList.push(thisItem.childTask.id);
+                                             self.newResourceObject.childTasks.push(self.newTaskObject);
++                                            self.newResourceObject.id = thisChildTaskItem.id;
+                                             self.newResourceObject.name = thisChildTaskItem.name;
+                                         });
+ 
+@@ -2436,6 +2438,7 @@ define([
+ 
+                                     ko.utils.arrayForEach(item.tasks, function (thisChildTaskItem) {
+                                         self.newResourceObject = {
++                                            id: "",
+                                             childTasks: [],
+                                             name: ""
+                                         };
+@@ -2469,6 +2472,7 @@ define([
+ 
+                                             self.newLMObject.fullResourceTaskList.push(thisItem.childTask.id);
+                                             self.newResourceObject.childTasks.push(self.newTaskObject);
++                                            self.newResourceObject.id = thisChildTaskItem.id;
+                                             self.newResourceObject.name = thisChildTaskItem.name;
+                                         });
+ 
+@@ -2835,6 +2839,7 @@ define([
+                     .split("@")[0].trim().toUpperCase();
+ 
+                 self.userDisplayList.removeAll();
++                self.accessCreatedUserDisplayList.removeAll();
+                 self.hthCopyCandidates.removeAll();
+ 
+                 if (data.userDTOList && data.userDTOList.length > 0) {

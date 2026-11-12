@@ -1,3 +1,33 @@
+HTH account access summary update — 2026-11-12
+Source: bco-applicaion-main 2ecf4c62b2ca611529164e8448fd845eaf378ddb (branch hth-integration-20261110).
+
+This update adds one application file:
+  bco-applicaion-main/consulting/channel/extensions/components/account-access-management/summary/summary.js
+The summary now matches the supplied QTES2 / hth-account version:
+- Use the BCO-prefixed title alongside the existing HTH title.
+- Preserve the LM resource group id in both account-loading paths.
+- Clear the BCO copy-candidate list before rebuilding it.
+
+Apply this summary update by EITHER copying the single file above OR applying
+UPDATE_SUMMARY_20261112.patch at the application repository root.
+The patch preimage matches both 08693aa2 and the previous init CM source
+d56fd460. Run git apply --check before applying the patch.
+
+The earlier 1955 cumulative and update patches below retain their original scope.
+For a fresh cumulative installation, apply that existing package first, then this
+summary update. The complete summary file is included for manual-copy deployments.
+SOURCE_COMMITS.json records this additional file under supplemental_changes.
+This is not a full export of source HEAD; the other files from sync 08693aa2
+have not been added by this summary-only update.
+
+Scope: no SQL or DSP changes. LD downstream filtering and review-page changes
+are not included; retaining the resource id alone does not enable that whole flow.
+Validation: JavaScript syntax, whitespace with existing CRLF line endings,
+source equality, and focused title/candidate-list/resource-id behavior checks passed.
+UAT and a full browser deployment have not been run for this update.
+
+Previous 1955 delivery instructions (unchanged scope):
+
 BCOH2H-1955 — DSP 密码接口移除重复 APIC 校验
 交付日期：2026-11-12。原 init 目录原位更新。
 源提交：DSP a366c89；CM 部署说明 d56fd460。

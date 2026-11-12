@@ -75,3 +75,4 @@ bco-applicaion-main	D	DELETE	consulting/db/release/HTH_1955_UAT_UPGRADE.sql	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java	-
 hth-dsp	D	DELETE	dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java	-
 hth-dsp	D	DELETE	dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java	-
+bco-applicaion-main	M	FILE	consulting/channel/extensions/components/account-access-management/summary/summary.js	355a3f1b0ad5d337ad9cffc5c846d005efd25fe8360ffe0e2d68e7ba29df3111

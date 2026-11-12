@@ -1,1553 +1,217 @@
 diff --git a/consulting/db/release/HTH_1955_DEPLOYMENT.txt b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
-index e7f2ed4158e75382d586b2781ac029a20bff13f2..be0c001b57323497e0a82e7e39dee55b0425780a 100644
+index be0c001b57323497e0a82e7e39dee55b0425780a..987f3e79306b3e55f72cb2813a3fdab3e7678ab7 100644
 --- a/consulting/db/release/HTH_1955_DEPLOYMENT.txt
 +++ b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
-@@ -1,84 +1,103 @@
--BCOH2H-1955 — CM caller-only correction (2026-11-12)
-+BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码 Hash
-+2026-11-12
+@@ -12,8 +12,11 @@ BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码
+    oldEncryptedPassword 是兼容保留字段，已不参与本接口校验；没有新增 R、queryOnly 或状态查询 API。
+ 4. DSP 解密后检查是否为规范的 32 字节 SHA-256 Base64 字符串，原样保存，不再次 Hash。
+    修正 DSP_AUTH_CREDENTIAL 的 MyBatis mapper namespace；保存失败不得返回成功。
+-5. CM 仍复用已上线 INQ01 的 H2HApiAdapterImplConfig：
+-   H2H.SERVICE_URL、H2H.CLIENT_ID、H2H.CLIENT_SECRET、H2H.CHANNEL（本流程为 BCO）。
++5. CM 密码接口沿用原 BM Client ID 校验的 DSPApiAdapterImplConfig：
++   DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（原默认 BCO）。
++   DSPApiClientFactory 已恢复为 QTES2 同步版本原样；BM 校验页面和 HostToHostManagement 调用代码未改。
++   H2H.* 继续用于原 Inquiry，密码接口不读取或回退到该配置。
++   密码方法在 DspClient 中独立增加，共用原工厂、Header 和 SDK 底层传输，原 clientApi() 保持 SDK 实现。
+    密码调用禁用请求体日志、自动重试和重定向；其余 Inquiry 逻辑不改。
  
--Release state
--This delivery corrects the previous out-of-scope DSP changes. It is NOT a completed setup/reset release.
--The provider-owned DSP source is restored to b5e5eec. No DSP application/configuration changes are delivered.
--The CM code does not invent protocol, queryOnly, credentialStatus, requestId fields or function R on DSP APIs.
--SETUP/RESET and automatic Code-purpose selection remain unavailable pending the provider contract.
--This is intentional, agreed with the requester: deliver the correction and list the gaps first.
--Do not bypass the guard or interpret the local tests as a successful UAT setup/reset integration.
-+本次实现
-+1. CM 保持 Code + 新密码 + 确认密码的页面。Code 的审批、24 小时有效期、错误次数和一次性使用校验保留。
-+2. 浏览器计算 Base64(raw SHA-256(UTF-8(password)))，再使用 DSP 公钥加密该字符串。
-+   RSA-OAEP 的 OAEP、MGF1 都为 SHA-256，label 为空，密文使用 Base64。
-+3. 两个 DSP 接口路径不变：POST /password/v1/public-key、POST /password/v1/modification。
-+   取公钥仍传 hashValue = lowercase hex SHA-256(六位 randomNumber)。
-+   保存仍传 function、clientId、closeId、newEncryptedPassword、randomNumber。
-+   SETUP -> A：仅允许不存在有效密码时创建。RESET -> M：仅允许存在有效密码时替换，无需旧密码。
-+   oldEncryptedPassword 是兼容保留字段，已不参与本接口校验；没有新增 R、queryOnly 或状态查询 API。
-+4. DSP 解密后检查是否为规范的 32 字节 SHA-256 Base64 字符串，原样保存，不再次 Hash。
-+   修正 DSP_AUTH_CREDENTIAL 的 MyBatis mapper namespace；保存失败不得返回成功。
-+5. CM 仍复用已上线 INQ01 的 H2HApiAdapterImplConfig：
-+   H2H.SERVICE_URL、H2H.CLIENT_ID、H2H.CLIENT_SECRET、H2H.CHANNEL（本流程为 BCO）。
-+   密码调用禁用请求体日志、自动重试和重定向；其余 Inquiry 逻辑不改。
+ 授权与部署配置
+@@ -21,9 +24,9 @@ BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码
+ - DSP 的两个密码接口额外验证 BCO Channel 和受信任 CM 的 APIC client ID/secret。
+   不能仅凭调用方可自行填写的 Channel=BCO 就允许重设。
+ - 在 DSP 部署环境注入 HTH_CM_APIC_CLIENT_ID、HTH_CM_APIC_CLIENT_SECRET。
+-  值复用现有 CM INQ01 的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
++  值使用原 BM DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET 对应的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
+   这两个值为空时接口拒绝请求。API 网关必须校验并向 DSP 转发相应凭据，或由网关维护等价可信身份。
+-- APIC 路由继续复用原 H2H.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
++- APIC 路由继续复用原 BM DSP.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
+ - DSP application.yaml 对密码接口排除通用请求体审计日志；应用日志只记阶段、结果及异常类型。
+   部署配置不得另行打开这两个接口的 HTTP body 调试日志。
  
--Implemented caller behaviour
--- POST .../dsp/api/password/v1/public-key sends only {"hashValue":"lowercase hex SHA256(six-digit nonce)"}.
--- The provider stores the key against that hash; its modification API receives the original randomNumber.
--- CM retains clientId, full closeId and requestId binding locally in the authenticated session.
--  They are not added to the provider's public-key request.
--- Internal APIC headers remain X-IBM-Client-Id, X-IBM-Client-Secret, Channel=BCO, UUID Message-Id.
--- Only HTTP 200 with status=000000 and nonempty publicKey is accepted for key retrieval.
--- HTTPS certificate/host checks stay enabled; no redirect or automatic retry.
--- The low-level HTTP transport retains the configured .../password/v1/modification endpoint.
--  The business adapter does NOT invoke it until the hash/reset contract is supplied.
--- Status returns UNKNOWN with resetAllowed=false. It does not return NOT_SETUP/ACTIVE based on local history.
--- Both setup/reset reject with DIGX_CZ_HTH_API_PASSWORD_009 before Code lookup/reservation/write/notification,
--  including requests that would previously have been treated as USED replays.
--- Code generation cannot safely auto-select SETUP/RESET; UNKNOWN fails with the same availability error.
--- Opening the password form with UNKNOWN status shows the existing AC failure panel.
--- Passwords/hashes are never logged or stored in CM. The three retired local password stores stay removed.
--- HTH_API_PASSWORD_CODE remains for approval, 24-hour expiry and Code lifecycle; it is not a password-state cache.
-+授权与部署配置
-+- 无旧密码重设只能供受信任 CM 后端调用。CM 负责校验当前会话、目标用户权限及已审批 Code。
-+- DSP 的两个密码接口额外验证 BCO Channel 和受信任 CM 的 APIC client ID/secret。
-+  不能仅凭调用方可自行填写的 Channel=BCO 就允许重设。
-+- 在 DSP 部署环境注入 HTH_CM_APIC_CLIENT_ID、HTH_CM_APIC_CLIENT_SECRET。
-+  值复用现有 CM INQ01 的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
-+  这两个值为空时接口拒绝请求。API 网关必须校验并向 DSP 转发相应凭据，或由网关维护等价可信身份。
-+- APIC 路由继续复用原 H2H.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
-+- DSP application.yaml 对密码接口排除通用请求体审计日志；应用日志只记阶段、结果及异常类型。
-+  部署配置不得另行打开这两个接口的 HTTP body 调试日志。
+@@ -52,6 +55,8 @@ CM 不保存密码或密码 Hash。现有 HTH_USER_PROFILE ORM 不映射这四
  
--Provider gaps — must be resolved before enabling setup/reset
--1. Hash payload/storage (DSP owner + architect)
--   AC and confirmed requirement: browser computes Base64(raw SHA256(UTF8(password))), encrypts it with DSP's key,
--   and DSP stores the decrypted hash as-is.
--   Existing PasswordApiServiceImpl.newPassword/modifyPassword instead call HashUtils.sha256(decrypted).
--   HashUtils.sha256 returns lowercase HEX. Sending our Base64 hash would double-hash and change representation.
--   Required: confirm the released hash-accepting API/version and exact hash encoding; do not change CM to transmit
--   plaintext, re-hash again, or silently switch to hex to make the old endpoint appear to work.
--2. Approved-Code reset (DSP owner + BA/architect)
--   Existing A creates only when no active row exists. Existing M requires oldEncryptedPassword and validates it.
--   CM reset has an approved Code and new password, not the old password.
--   Required: provider-confirmed reset contract and authorization; do not use A as upsert, fabricate old credentials,
--   add R ourselves or add an old-password UI field without an approved requirement change.
--3. Credential status (DSP owner + architect)
--   Neither of the two published endpoints returns whether clientId/full closeId already has a password.
--   Required: supported status source/API for initial popup, SETUP/RESET Code purpose and reset availability.
--   Code USED history, empty local tables and public-key success are not authoritative status.
--4. Exact RSA OAEP parameters (DSP owner)
--   Browser preparation currently uses SHA-256 for both OAEP and MGF1, empty label, RSA-2048.
--   Provider code initializes Cipher with a transformation string only; MGF1 therefore depends on its provider default.
--   Required: explicit OAEP digest + MGF1 digest + label and a non-production interop test vector.
--   This delivery does not change shared DSP cryptography or claim existing-provider decrypt compatibility.
--5. Internal APIC publication (DSP/APIC owner)
--   Confirm the environment URLs/subscription and that the final provider contract is available there.
--   Keep APIC credentials in environment configuration, separate from the business clientId.
-+HTH 状态保存
-+在现有 HTH_BEA.HTH_USER_PROFILE 增加四列，使用 HTH 专用 repository 的绑定参数 SQL：
-+  API_PASSWORD_STATE       NOT_SETUP / ACTIVE / IN_PROGRESS / UNKNOWN
-+  API_PASSWORD_CLIENT_ID   实际 DSP 业务 clientId，非 APIC client ID
-+  API_PASSWORD_REQUEST_ID  最近预约操作的 CM requestId
-+  API_PASSWORD_UPDATED_AT  状态更新时间
-+不新增表，不恢复 HTH_API_PASSWORD_CREDENTIAL / STATE / OPERATION 三张旧表。
-+CM 不保存密码或密码 Hash。现有 HTH_USER_PROFILE ORM 不映射这四列，避免旧缓存实体覆盖它们。
- 
--Diagnostic logs (no input values)
--HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE
--HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED
--HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED
-+流程与一致性
-+- 新建 HTH profile 默认 NOT_SETUP，生成 SETUP Code；已 ACTIVE 且业务 clientId 相符，生成 RESET Code。
-+- 新用户在审批前尚未建立 profile，也允许生成 PENDING SETUP Code；审批前不能使用。
-+  DSP A 仍拒绝覆盖已经存在的密码，用户删除/重建不会绕过该检查。
-+- 校验正确 Code 后，在同一个本地事务中将状态与 Code 预约为 IN_PROGRESS。
-+  profile 行锁让同一用户的并发提交只放行一笔；Code 仍使用原有状态和条件更新。
-+- DSP 返回明确成功后，同一个本地事务更新状态 ACTIVE 并将 Code 标为 USED，再执行成功通知。
-+- DSP 明确拒绝：释放预约，保留原设置状态；用户可重新获取公钥再提交。
-+- 网络超时、5xx、无效响应或 DSP 成功后的本地提交失败：保留 UNKNOWN 或 IN_PROGRESS，
-+  阻止再写及自动选取 Code 用途，人工与 DSP 核对后恢复；不自动重发，不伪报成功。
-+- 相同已完成 requestId 只返回成功，不再次写 DSP 或通知；当前状态已不确定时拒绝旧成功重放。
-+- 本地 ACTIVE 仅表示 CM 确认过成功，不能自动感知 DSP 外部停用/删改密码。
-+  业务 clientId 改变或出现重复 profile 时返回 UNKNOWN，需核对。
- 
--SQL and packaging
--- Production first install: HTH_FIRST_DEPLOY.sql remains the consolidated schema/configuration script.
--  It does not create HTH_API_PASSWORD_CREDENTIAL/STATE/OPERATION. Do not treat it as an upgrade or re-run it on UAT.
--- Existing UAT: HTH_1955_UAT_UPGRADE.sql adds REMOTE_CLIENT_ID once and updates APIC configuration.
--  If already applied, do not repeat ADD COLUMN. This correction introduces no additional DDL.
--- HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql remains a separate destructive cleanup, NOT to run now:
--  first resolve provider gaps, verify real setup/reset and token authentication, back up and reconcile existing data.
--  Local PBKDF2 credentials cannot be converted to the DSP password hash without the original password.
--- Remove retired CM Java/ORM files using the deletion manifest as well as copying updated files.
--- init replaces the previous delivery in place. Remove its old hth-dsp/ and hth-dsp.patch; they are no longer part of delivery.
--- If the previous DSP patch was already applied elsewhere, revert that exact change in the DSP source with its owner;
--  do not replace unrelated provider changes with a full project copy. This work does not deploy or alter remote services.
-+SQL 执行
-+生产首次上线（只有 BCO + Inquiry）：执行合并的 HTH_FIRST_DEPLOY.sql。
-+已有 UAT：执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次，先加四列再部署 CM。
-+  脚本让已有 profile 保持 UNKNOWN，随后新建 profile 默认 NOT_SETUP。
-+  若四列已存在，不要重复执行 ALTER ADD；先查询 USER_TAB_COLUMNS/ALL_TAB_COLUMNS 确认。
-+  REMOTE_CLIENT_ID 是之前 Code 预约功能已有列；若没有，再执行 HTH_1955_UAT_UPGRADE.sql 一次。
-+不能因本地没有记录就断定 DSP 未设置密码。部署前对现有 UAT 用户逐个核对：
-+  DSP 已存在有效密码 -> ACTIVE + 对应业务 clientId。
-+  DSP 确认不存在密码 -> NOT_SETUP + 当前业务 clientId。
-+  历史数据、结果不明或旧 Hash 格式未核对 -> 保持 UNKNOWN。
-+不要使用 USED Code 历史批量推断密码状态，也不要统一将现有用户设置为 NOT_SETUP。
-+HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本次不执行远程数据库删除。
- 
--Validation for this correction
--- Local HTTPS fixture: exact provider public-key JSON, APIC headers, strict response validation, no retry/redirect.
--- Documented A/M low-level transport uses synthetic fixture data only; CM adapter blocks both business setup/reset paths.
--- Production service guard tests verify no Code reservation/consumption, DSP write or success notification occurs.
--- UI tests verify UNKNOWN blocks the form, plus existing localized AC error messages.
--- Previous 39-test DSP results exercised the withdrawn custom protocol and are NOT evidence for the original provider APIs.
--- No UAT/Oracle/WebLogic/APIC deployment or real password setup/reset success is claimed.
-+发布顺序
-+1. 数据库升级并核对已有 UAT 状态。
-+2. 部署 DSP（API + service），注入上述已有 APIC 凭据；确认内部路由及权限。
-+3. 部署 CM 的 HTH module 和 ext-xface 实现，保留先前 1955 前端加密组件；清除旧客户端缓存/重启。
-+4. 在 UAT 测试首次 setup、Code reset、错误/过期/已用 Code，验证 DSP 记录与 HTH 状态一致。
-+5. 获取 token 的客户端必须使用相同 Base64 SHA-256 Hash 生成签名；旧 hex Hash 记录不会被本次 SQL 批量转换。
-+   不要把旧 hex 或二次 Hash 数据仅改状态当作已完成迁移。
- 
--Tests
--JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_apic_transport.py
--JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_contract_guard.py
--node consulting/tests/hth1955/ui-errors.cjs
-+已完成本地验证
-+- DSP 实际服务、MyBatis SQL、H2 数据库和 Spring 事务：setup/reset 保存、旧值替换、重复 setup 拒绝、
-+  不存在密码时 reset 拒绝、密钥使用后失效、更新后异常回滚。
-+- 实际 CM 浏览器 transport.js + WebCrypto -> 实际 DSP 解密/保存逻辑，验证准确的 Base64 Hash。
-+- CM 实际 change() 方法：成功、Code 拒绝、DSP 拒绝/超时、本地完成失败、重复请求、通知及敏感字段清理。
-+- CM 实际状态/Code SQL 与 H2：预约/消费原子性、UNKNOWN 门控、错误次数、先匹配再判断过期、用途和会话隔离。
-+- 本地 HTTPS：共用 INQ01 配置、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
-+- DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
-+  新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
-+  DSP 本次共 17 项测试通过（无失败、无跳过）。
-+这些是本地集成测试；没有连接 UAT 的 Oracle、Redis、WebLogic 或 APIC，也没有宣称实际 UAT token 已验证。
-+
-+AC 核对及验收边界
-+- 1955 AC1：首次 setup 的 Hash 加密传输及 DSP 保存已实现，本地成功测试通过。
-+- 1955 AC2：不需要旧密码的 Code reset、替换 DSP 旧 Hash 已实现，本地成功测试通过。
-+- 1955 AC3：传输/保存失败返回错误，页面显示失败；不消费为成功、不发送成功通知。
-+  结果不明时保留 UNKNOWN/IN_PROGRESS，需要对账，不自动重试。
-+- 1955 AC4：现有 DSP 登录校验读取最新 Hash；本地验证新密码通过、旧密码被拒绝。
-+  仍需在 UAT 用实际 API 客户端、签名密钥、APIC 和 UAM 完成获取 token 的验收。
-+- 788/790 原有页面的密码规则、两次输入一致性校验，以及后端 Code 的正确性/过期/次数校验保留。
-+  密码规则和两次输入一致性在浏览器校验；CM/DSP 只接收 Hash/密文，不能声称后端另行验证了明文密码强度。
-+  若要求防绕过前端的服务端密码强度校验，需要与目前“仅传 Hash”的架构另行协调。
-+- 当前交付为源码和 SQL，未部署 UAT、未执行远程数据库脚本，也不代表全部 AC 已完成 UAT 验收。
-+
-+日志定位
-+CM：HTH_API_PASSWORD lifecycle: stage=...
-+    INPUT_DECRYPT / CODE_RESERVE / DSP_WRITE / CODE_COMPLETE / LOCAL_PASSWORD_STATUS
-+DSP：HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function=A 或 M
-+     HTH_API_PASSWORD stage=DSP_DECRYPT exceptionType=...
-+不要打印 Code、密码、Hash、请求密文、私钥或 APIC secret。
-diff --git a/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql b/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql
-new file mode 100644
-index 0000000000000000000000000000000000000000..4cd255eed3e2648c8ec2bc5a968fc6a1e49fefb9
---- /dev/null
-+++ b/consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql
-@@ -0,0 +1,19 @@
-+-- Existing UAT only: run ONCE before deploying CM. No stored procedures; no password/hash columns.
-+-- Fresh production uses HTH_FIRST_DEPLOY.sql instead. Oracle DDL commits; take a backup first.
-+WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
-+SET VERIFY OFF
-+ALTER TABLE HTH_BEA.HTH_USER_PROFILE ADD (
-+  API_PASSWORD_STATE VARCHAR2(16 BYTE) DEFAULT 'UNKNOWN' NOT NULL,
-+  API_PASSWORD_CLIENT_ID VARCHAR2(64 BYTE),
-+  API_PASSWORD_REQUEST_ID VARCHAR2(36 BYTE),
-+  API_PASSWORD_UPDATED_AT TIMESTAMP,
-+  CONSTRAINT CK_HTH_USER_PWD_STATE CHECK (API_PASSWORD_STATE IN ('NOT_SETUP','ACTIVE','IN_PROGRESS','UNKNOWN'))
-+);
-+-- Existing rows stay UNKNOWN; only newly created profiles default to NOT_SETUP.
-+ALTER TABLE HTH_BEA.HTH_USER_PROFILE MODIFY (API_PASSWORD_STATE DEFAULT 'NOT_SETUP');
-+-- Reconcile existing profiles against DSP before enabling setup/reset for them.
-+-- Verified active DSP credential: set ACTIVE and API_PASSWORD_CLIENT_ID to its actual business clientId.
-+-- Verified no DSP credential: set NOT_SETUP and bind the current business clientId.
-+-- Do not infer status from USED Code history or blindly mark all existing profiles NOT_SETUP.
-+SELECT PARTY_ID, CLOSE_ID, API_PASSWORD_STATE, API_PASSWORD_CLIENT_ID, API_PASSWORD_UPDATED_AT
-+FROM HTH_BEA.HTH_USER_PROFILE ORDER BY PARTY_ID, CLOSE_ID;
+ SQL 执行
+ 生产首次上线（只有 BCO + Inquiry）：执行合并的 HTH_FIRST_DEPLOY.sql。
++  section 18 仅补缺失的原 BM DSP.* 配置，已有值不覆盖；不会修改 H2H.*。
++  已有 UAT DSP.* 配置继续沿用，只需确认同一 APIC 订阅可访问两个密码路径。
+ 已有 UAT：执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次，先加四列再部署 CM。
+   脚本让已有 profile 保持 UNKNOWN，随后新建 profile 默认 NOT_SETUP。
+   若四列已存在，不要重复执行 ALTER ADD；先查询 USER_TAB_COLUMNS/ALL_TAB_COLUMNS 确认。
+@@ -77,7 +82,7 @@ HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本
+ - 实际 CM 浏览器 transport.js + WebCrypto -> 实际 DSP 解密/保存逻辑，验证准确的 Base64 Hash。
+ - CM 实际 change() 方法：成功、Code 拒绝、DSP 拒绝/超时、本地完成失败、重复请求、通知及敏感字段清理。
+ - CM 实际状态/Code SQL 与 H2：预约/消费原子性、UNKNOWN 门控、错误次数、先匹配再判断过期、用途和会话隔离。
+-- 本地 HTTPS：共用 INQ01 配置、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
++- 本地 HTTPS：共用原 BM DSP 配置（测试同时提供不同的 H2H 配置，确认不读取它）、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
+ - DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
+   新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
+   DSP 本次共 17 项测试通过（无失败、无跳过）。
 diff --git a/consulting/db/release/HTH_1955_UAT_UPGRADE.sql b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
-index 807143d4e9408a4e5099475cb1051696d4564f56..655c3df7c428e5bb4eb4b7e1c3c89a4ba25233cd 100644
+index 655c3df7c428e5bb4eb4b7e1c3c89a4ba25233cd..e3ba71a464f5100778c34cf05fb5c5f0c8f730a3 100644
 --- a/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
 +++ b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
-@@ -1,55 +1,9 @@
---- Existing UAT only. Run once before deploying the DSP-only CM version.
---- Production FIRST_DEPLOY already contains this column; do not run both scripts there.
-+-- Historical Code-reservation column upgrade. Existing UAT only; run ONCE if the column is absent.
-+-- HTH_FIRST_DEPLOY.sql already includes it. This script does not depend on any retired password table.
- WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
- SET VERIFY OFF
- ALTER TABLE HTH_BEA.HTH_API_PASSWORD_CODE ADD (REMOTE_CLIENT_ID VARCHAR2(64 BYTE));
---- Preserve the old DSP-client binding on historical Code reservations before removing the old table.
--UPDATE HTH_BEA.HTH_API_PASSWORD_CODE C
--SET REMOTE_CLIENT_ID = (SELECT O.REMOTE_CLIENT_ID FROM HTH_BEA.HTH_API_PASSWORD_OPERATION O
--                       WHERE O.REQUEST_ID = C.REQUEST_ID AND O.CODE_ID = C.ID AND O.STORAGE_BACKEND = 'DSP')
--WHERE EXISTS (SELECT 1 FROM HTH_BEA.HTH_API_PASSWORD_OPERATION O
--              WHERE O.REQUEST_ID = C.REQUEST_ID AND O.CODE_ID = C.ID AND O.STORAGE_BACKEND = 'DSP');
--COMMIT;
---- Configure the internal APIC subscription for both endpoints. No values are embedded in source.
--SET DEFINE ON
--ACCEPT DSP_PUBLIC_KEY_URL CHAR PROMPT 'Internal APIC DSP public-key URL: '
--ACCEPT DSP_MODIFICATION_URL CHAR PROMPT 'Internal APIC DSP modification URL: '
--ACCEPT DSP_PASSWORD_CLIENT_ID CHAR PROMPT 'Internal APIC subscription ID: ' HIDE
--ACCEPT DSP_PASSWORD_CLIENT_SECRET CHAR PROMPT 'Internal APIC subscription secret: ' HIDE
--MERGE INTO DIGX_FW_CONFIG_ADAPTER_PROP_B T
--USING (SELECT 'HthApiCredentialAdapterConfig' HOST_ID, 'HTH_API_PASSWORD' TRANSACTION_TYPE,
--       'DSP_PUBLIC_KEY_URL' PROP_ID, '&&DSP_PUBLIC_KEY_URL' PROP_VALUE FROM DUAL) S
--ON (T.HOST_ID=S.HOST_ID AND T.TRANSACTION_TYPE=S.TRANSACTION_TYPE AND T.PROP_ID=S.PROP_ID)
--WHEN MATCHED THEN UPDATE SET T.PROP_VALUE=S.PROP_VALUE, T.LAST_UPDATED_BY=USER, T.LAST_UPDATED_DATE=SYSTIMESTAMP
--WHEN NOT MATCHED THEN INSERT
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
--MERGE INTO DIGX_FW_CONFIG_ADAPTER_PROP_B T
--USING (SELECT 'HthApiCredentialAdapterConfig' HOST_ID, 'HTH_API_PASSWORD' TRANSACTION_TYPE,
--       'DSP_MODIFICATION_URL' PROP_ID, '&&DSP_MODIFICATION_URL' PROP_VALUE FROM DUAL) S
--ON (T.HOST_ID=S.HOST_ID AND T.TRANSACTION_TYPE=S.TRANSACTION_TYPE AND T.PROP_ID=S.PROP_ID)
--WHEN MATCHED THEN UPDATE SET T.PROP_VALUE=S.PROP_VALUE, T.LAST_UPDATED_BY=USER, T.LAST_UPDATED_DATE=SYSTIMESTAMP
--WHEN NOT MATCHED THEN INSERT
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
--MERGE INTO DIGX_FW_CONFIG_ADAPTER_PROP_B T
--USING (SELECT 'HthApiCredentialAdapterConfig' HOST_ID, 'HTH_API_PASSWORD' TRANSACTION_TYPE,
--       'DSP_APIC_CLIENT_ID' PROP_ID, '&&DSP_PASSWORD_CLIENT_ID' PROP_VALUE FROM DUAL) S
--ON (T.HOST_ID=S.HOST_ID AND T.TRANSACTION_TYPE=S.TRANSACTION_TYPE AND T.PROP_ID=S.PROP_ID)
--WHEN MATCHED THEN UPDATE SET T.PROP_VALUE=S.PROP_VALUE, T.LAST_UPDATED_BY=USER, T.LAST_UPDATED_DATE=SYSTIMESTAMP
--WHEN NOT MATCHED THEN INSERT
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
--MERGE INTO DIGX_FW_CONFIG_ADAPTER_PROP_B T
--USING (SELECT 'HthApiCredentialAdapterConfig' HOST_ID, 'HTH_API_PASSWORD' TRANSACTION_TYPE,
--       'DSP_APIC_CLIENT_SECRET' PROP_ID, '&&DSP_PASSWORD_CLIENT_SECRET' PROP_VALUE FROM DUAL) S
--ON (T.HOST_ID=S.HOST_ID AND T.TRANSACTION_TYPE=S.TRANSACTION_TYPE AND T.PROP_ID=S.PROP_ID)
--WHEN MATCHED THEN UPDATE SET T.PROP_VALUE=S.PROP_VALUE, T.LAST_UPDATED_BY=USER, T.LAST_UPDATED_DATE=SYSTIMESTAMP
--WHEN NOT MATCHED THEN INSERT
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- VALUES (S.HOST_ID,S.TRANSACTION_TYPE,S.PROP_ID,S.PROP_VALUE,USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1);
--COMMIT;
--UNDEFINE DSP_PUBLIC_KEY_URL DSP_MODIFICATION_URL DSP_PASSWORD_CLIENT_ID DSP_PASSWORD_CLIENT_SECRET
---- Caller-only correction: DSP is unchanged. Setup/reset remain blocked pending the provider contract.
---- Do not run the retirement script until end-to-end support and existing credentials are verified.
---- Only after that, run HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql.
-+-- Historical request rows with no confirmed DSP client binding cannot be replayed as successes.
-+-- Reconcile any IN_PROGRESS/UNKNOWN reservations with DSP before reusing affected users.
-+-- The new local status columns are in HTH_1955_LOCAL_STATE_UPGRADE.sql; apply that once as well.
-+-- Transport reuses H2HApiAdapterImplConfig / H2H.SERVICE_URL, CLIENT_ID, CLIENT_SECRET, CHANNEL.
+@@ -6,4 +6,4 @@ ALTER TABLE HTH_BEA.HTH_API_PASSWORD_CODE ADD (REMOTE_CLIENT_ID VARCHAR2(64 BYTE
+ -- Historical request rows with no confirmed DSP client binding cannot be replayed as successes.
+ -- Reconcile any IN_PROGRESS/UNKNOWN reservations with DSP before reusing affected users.
+ -- The new local status columns are in HTH_1955_LOCAL_STATE_UPGRADE.sql; apply that once as well.
+--- Transport reuses H2HApiAdapterImplConfig / H2H.SERVICE_URL, CLIENT_ID, CLIENT_SECRET, CHANNEL.
++-- Transport reuses the original BM DSPApiAdapterImplConfig / DSP.SERVICE_URL, APIC_CLIENT_ID, APIC_CLIENT_SECRET, CHANNEL.
 diff --git a/consulting/db/release/HTH_FIRST_DEPLOY.sql b/consulting/db/release/HTH_FIRST_DEPLOY.sql
-index f8fd746b3fb25831f20290ef172eadb1c9e0b76f..3bc349e53e51d8ef203c61607d7118ba006a2921 100644
+index 3bc349e53e51d8ef203c61607d7118ba006a2921..1c31858fa06fa89781ca6c8e58fa97e9ea071e7c 100644
 --- a/consulting/db/release/HTH_FIRST_DEPLOY.sql
 +++ b/consulting/db/release/HTH_FIRST_DEPLOY.sql
-@@ -22,13 +22,13 @@ ACCEPT HTH_RUNTIME_OWNER CHAR PROMPT 'HTH runtime database schema: '
+@@ -9,8 +9,7 @@
+ -- On any error: STOP; do not resume blindly. Inspect partial DDL before preparing recovery.
+ -- Supply production values from the approved release configuration, not UAT credentials.
+ -- No output/spooling of secrets. Existing DSP configuration is preserved by section 18.
+--- Optional DSP success JSON pointer/value must match the delivered API response; blank means
+--- only synchronous empty-body 200/201/204 is accepted. Never treat a business error as success.
++-- Password writes require HTTP 200 and DSP status 000000; never treat a business error as success.
+ SET ECHO OFF
+ SET VERIFY OFF
+ SET FEEDBACK ON
+@@ -22,13 +21,13 @@ ACCEPT HTH_RUNTIME_OWNER CHAR PROMPT 'HTH runtime database schema: '
  ACCEPT BM_MAKER_POLICY CHAR PROMPT 'Approved BM maker policy ID: '
  ACCEPT BM_APPROVER_POLICY CHAR PROMPT 'Approved BM approver policy ID: '
  ACCEPT HTH_CODE_KEY CHAR PROMPT 'Production AES-256 Code key (Base64): ' HIDE
--ACCEPT DSP_MGMT_URL CHAR PROMPT 'Production DSP management base URL: '
--ACCEPT DSP_MGMT_CLIENT_ID CHAR PROMPT 'DSP management APIC client ID: ' HIDE
--ACCEPT DSP_MGMT_CLIENT_SECRET CHAR PROMPT 'DSP management APIC secret: ' HIDE
--ACCEPT DSP_PUBLIC_KEY_URL CHAR PROMPT 'Production internal APIC DSP public-key URL: '
--ACCEPT DSP_MODIFICATION_URL CHAR PROMPT 'Production internal APIC DSP password modification URL: '
--ACCEPT DSP_PASSWORD_CLIENT_ID CHAR PROMPT 'DSP password APIC client ID: ' HIDE
--ACCEPT DSP_PASSWORD_CLIENT_SECRET CHAR PROMPT 'DSP password APIC secret: ' HIDE
-+-- DSP reuses the released INQ01 APIC base, client ID, secret and channel; no DSP settings are inserted.
-+PROMPT Check: Existing INQ01 APIC base, client ID and secret must be provisioned
-+SELECT CASE WHEN COUNT(DISTINCT PROP_ID)=3 THEN 1 ELSE 1/0 END AS CHECK_OK
-+FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
-+WHERE CATEGORY_ID='H2HApi' AND PROP_ID IN ('H2H.SERVICE_URL','H2H.CLIENT_ID','H2H.CLIENT_SECRET')
-+  AND TRIM(PROP_VALUE) IS NOT NULL
-+  AND (PROP_ID<>'H2H.SERVICE_URL' OR PROP_VALUE LIKE 'https://%');
+--- DSP reuses the released INQ01 APIC base, client ID, secret and channel; no DSP settings are inserted.
+-PROMPT Check: Existing INQ01 APIC base, client ID and secret must be provisioned
+-SELECT CASE WHEN COUNT(DISTINCT PROP_ID)=3 THEN 1 ELSE 1/0 END AS CHECK_OK
+-FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
+-WHERE CATEGORY_ID='H2HApi' AND PROP_ID IN ('H2H.SERVICE_URL','H2H.CLIENT_ID','H2H.CLIENT_SECRET')
+-  AND TRIM(PROP_VALUE) IS NOT NULL
+-  AND (PROP_ID<>'H2H.SERVICE_URL' OR PROP_VALUE LIKE 'https://%');
++-- Reuse the original BM DSP configuration. Existing rows are preserved in section 18.
++ACCEPT DSP_MGMT_URL CHAR PROMPT 'Production DSP internal APIC base URL (BM and password APIs): '
++ACCEPT DSP_MGMT_CLIENT_ID CHAR PROMPT 'Existing BM DSP APIC client ID: ' HIDE
++ACCEPT DSP_MGMT_CLIENT_SECRET CHAR PROMPT 'Existing BM DSP APIC client secret: ' HIDE
++PROMPT Check: Supplied DSP defaults must be HTTPS with nonempty subscription credentials
++SELECT CASE WHEN '&&DSP_MGMT_URL' LIKE 'https://%' AND TRIM('&&DSP_MGMT_CLIENT_ID') IS NOT NULL
++  AND TRIM('&&DSP_MGMT_CLIENT_SECRET') IS NOT NULL THEN 1 ELSE 1/0 END AS CHECK_OK FROM DUAL;
  
  -- 00 / Stop on failed baseline checks BEFORE any DDL
  PROMPT Check: No new HTH tables may exist for this first-install script
-@@ -138,34 +138,6 @@ PROMPT Check: Supplied new Code encryption key is Base64 AES-256
- SELECT CASE WHEN REGEXP_LIKE(V,'^[A-Za-z0-9+/]{43}=$','c') AND UTL_RAW.LENGTH(UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(V)))=32 THEN 1 ELSE 1/0 END AS CHECK_OK
- FROM (SELECT '&&HTH_CODE_KEY' V FROM DUAL);
- 
--PROMPT Check: DSP_PUBLIC_KEY_URL must use HTTPS
--SELECT CASE WHEN V LIKE 'https://%' AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_PUBLIC_KEY_URL' V FROM DUAL);
--
--PROMPT Check: DSP_MODIFICATION_URL must use HTTPS
--SELECT CASE WHEN V LIKE 'https://%' AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_MODIFICATION_URL' V FROM DUAL);
--
--PROMPT Check: DSP_MGMT_URL must use HTTPS
--SELECT CASE WHEN V LIKE 'https://%' AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_MGMT_URL' V FROM DUAL);
--
--PROMPT Check: DSP_PASSWORD_CLIENT_ID must be provisioned
--SELECT CASE WHEN TRIM(V) IS NOT NULL AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_PASSWORD_CLIENT_ID' V FROM DUAL);
--
--PROMPT Check: DSP_PASSWORD_CLIENT_SECRET must be provisioned
--SELECT CASE WHEN TRIM(V) IS NOT NULL AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_PASSWORD_CLIENT_SECRET' V FROM DUAL);
--
--PROMPT Check: DSP_MGMT_CLIENT_ID must be provisioned
--SELECT CASE WHEN TRIM(V) IS NOT NULL AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_MGMT_CLIENT_ID' V FROM DUAL);
--
--PROMPT Check: DSP_MGMT_CLIENT_SECRET must be provisioned
--SELECT CASE WHEN TRIM(V) IS NOT NULL AND V NOT LIKE '%CHANGE_ME%' THEN 1 ELSE 1/0 END AS CHECK_OK
--FROM (SELECT '&&DSP_MGMT_CLIENT_SECRET' V FROM DUAL);
--
- PROMPT Check: Existing HTH password configuration must not disable the feature
- SELECT CASE WHEN N=0 THEN 1 ELSE 1/0 END AS CHECK_OK
- FROM (SELECT COUNT(*) N FROM DIGX_FW_CONFIG_ADAPTER_PROP_B WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND (PROP_ID='ENABLED' AND NVL(LOWER(TRIM(PROP_VALUE)),'?')<>'true'));
-@@ -447,6 +419,11 @@ COMMENT ON COLUMN HTH_BEA.HTH_CERTIFICATE_REQUEST.PEM_CONTENT IS 'Uploaded PEM p
- CREATE TABLE HTH_BEA.HTH_USER_PROFILE (
-   PARTY_ID VARCHAR2(64 BYTE) NOT NULL,
-   CLOSE_ID VARCHAR2(255 BYTE) NOT NULL,
-+  API_PASSWORD_STATE VARCHAR2(16 BYTE) DEFAULT 'NOT_SETUP' NOT NULL,
-+  API_PASSWORD_CLIENT_ID VARCHAR2(64 BYTE),
-+  API_PASSWORD_REQUEST_ID VARCHAR2(36 BYTE),
-+  API_PASSWORD_UPDATED_AT TIMESTAMP,
-+  CONSTRAINT CK_HTH_USER_PWD_STATE CHECK (API_PASSWORD_STATE IN ('NOT_SETUP','ACTIVE','IN_PROGRESS','UNKNOWN')),
-   CONSTRAINT PK_HTH_USER_PROFILE PRIMARY KEY (PARTY_ID, CLOSE_ID)
- );
- 
-@@ -459,6 +436,15 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.PARTY_ID IS
- COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.CLOSE_ID IS
-   'HTH CloseID associated with the corporate user.';
- 
-+COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.API_PASSWORD_STATE IS
-+  'CM-confirmed DSP password setup state; no password/hash is stored locally.';
-+COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.API_PASSWORD_CLIENT_ID IS
-+  'DSP business clientId binding for password state, not the APIC caller identity.';
-+COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.API_PASSWORD_REQUEST_ID IS
-+  'CM requestId binding for the current or latest password operation.';
-+COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.API_PASSWORD_UPDATED_AT IS
-+  'Last password-state update time; DSP remains the password store.';
-+
- CREATE TABLE HTH_BEA.HTH_USER_ACCESS_ACCOUNT (
-   ID                    VARCHAR2(36 BYTE)  NOT NULL,
-   PARTY_ID              VARCHAR2(64 BYTE)  NOT NULL,
-@@ -3448,7 +3434,7 @@ UPDATE DIGX_CZ_FW_CONFIG_ALL_O
+@@ -3434,7 +3433,7 @@ UPDATE DIGX_CZ_FW_CONFIG_ALL_O
   AND INSTR(',' || REPLACE(PROP_VALUE,' ','') || ',', ',PP_N_HTH_CERT_UPL,')=0;
  
  -- ============================================================================
---- 18 / Production DSP / encryption settings (insert missing keys only)
-+-- 18 / Production encryption settings (insert missing keys only)
+--- 18 / Production encryption settings (insert missing keys only)
++-- 18 / Production DSP / encryption settings (insert missing keys only)
  -- ============================================================================
  SET DEFINE ON
  
-@@ -3464,44 +3450,6 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-  WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-  WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='CODE_CIPHER_KEY');
- 
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_PUBLIC_KEY_URL','&&DSP_PUBLIC_KEY_URL',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_PUBLIC_KEY_URL');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_MODIFICATION_URL','&&DSP_MODIFICATION_URL',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_MODIFICATION_URL');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_APIC_CLIENT_ID','&&DSP_PASSWORD_CLIENT_ID',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_APIC_CLIENT_ID');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_APIC_CLIENT_SECRET','&&DSP_PASSWORD_CLIENT_SECRET',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_APIC_CLIENT_SECRET');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_CONNECT_TIMEOUT_MS','5000',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_CONNECT_TIMEOUT_MS');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'HthApiCredentialAdapterConfig','HTH_API_PASSWORD','DSP_READ_TIMEOUT_MS','15000',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='DSP_READ_TIMEOUT_MS');
--
--
--
- 
- INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-  (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-@@ -3539,29 +3487,6 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-  WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
+@@ -3488,6 +3487,30 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
   WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='POLICY_SPACES_ALLOWED');
  
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','APIC_CLIENT_ID','&&DSP_MGMT_CLIENT_ID',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_ID');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','APIC_CLIENT_SECRET','&&DSP_MGMT_CLIENT_SECRET',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_SECRET');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','SERVICE_URL','&&DSP_MGMT_URL',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='SERVICE_URL');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','CHANNEL','BCO',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='CHANNEL');
  
++INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
++ (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
++ SELECT 'DSPApi','DSP','APIC_CLIENT_ID','&&DSP_MGMT_CLIENT_ID',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
++ WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
++ WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_ID');
++
++INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
++ (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
++ SELECT 'DSPApi','DSP','APIC_CLIENT_SECRET','&&DSP_MGMT_CLIENT_SECRET',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
++ WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
++ WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_SECRET');
++
++INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
++ (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
++ SELECT 'DSPApi','DSP','SERVICE_URL','&&DSP_MGMT_URL',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
++ WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
++ WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='SERVICE_URL');
++
++INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
++ (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
++ SELECT 'DSPApi','DSP','CHANNEL','BCO',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
++ WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
++ WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='CHANNEL');
++
  SET DEFINE OFF
  
-@@ -3604,5 +3529,5 @@ SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='HTH_BEA' AND TABLE_NAME LIKE 'HTH
+ -- ============================================================================
+@@ -3529,5 +3552,5 @@ SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='HTH_BEA' AND TABLE_NAME LIKE 'HTH
  SELECT COD_EVENT_ID,TXT_DEST_TYP,LOCALE,COD_MSG_TMPL_ID,SUBSCRIBER_TYPE
   FROM DIGX_EP_EVT_REC_B WHERE COD_EVENT_ID LIKE 'HTH_%' ORDER BY COD_EVENT_ID,TXT_DEST_TYP,LOCALE;
  SELECT ID,NAME FROM DIGX_CM_TASK WHERE ID LIKE '%HTH%' OR ID LIKE '%HAP%' OR ID LIKE '%HUA%' ORDER BY ID;
--UNDEFINE HTH_CODE_KEY DSP_MGMT_CLIENT_ID DSP_MGMT_CLIENT_SECRET DSP_PASSWORD_CLIENT_ID DSP_PASSWORD_CLIENT_SECRET
--UNDEFINE HTH_RUNTIME_OWNER BM_MAKER_POLICY BM_APPROVER_POLICY DSP_PUBLIC_KEY_URL DSP_MODIFICATION_URL DSP_MGMT_URL
-+UNDEFINE HTH_CODE_KEY
-+UNDEFINE HTH_RUNTIME_OWNER BM_MAKER_POLICY BM_APPROVER_POLICY
-diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java
-deleted file mode 100644
-index 5885e186803e3586b53df972b079554f93d63f03..0000000000000000000000000000000000000000
---- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordClient.java
-+++ /dev/null
-@@ -1,129 +0,0 @@
--package com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl;
--
--import com.fasterxml.jackson.databind.ObjectMapper;
--import java.util.Map;
--import java.util.UUID;
--import com.ofss.fc.infra.config.ConfigurationFactory;
--import java.net.URI;
--import java.util.prefs.Preferences;
--import javax.ws.rs.client.Client;
--import javax.ws.rs.client.ClientBuilder;
--import javax.ws.rs.client.Entity;
--import javax.ws.rs.core.MediaType;
--import javax.ws.rs.core.Response;
--import org.glassfish.jersey.client.ClientProperties;
--
--/** Internal APIC transport for the two DSP password endpoints. */
--public final class DspApiPasswordClient {
--  private static final String CATEGORY = "HthApiCredentialAdapterConfig";
--  private static final String PREFIX = "HTH_API_PASSWORD.DSP_";
--  private static final ObjectMapper MAPPER = new ObjectMapper();
--  private final Client client;
--  private final Preferences config;
--
--  private static final class ClientHolder {
--    // Use the application trust store and standard hostname verification.
--    private static final Client CLIENT = ClientBuilder.newClient();
--  }
--
--  public DspApiPasswordClient() {
--    this(ClientHolder.CLIENT,
--        ConfigurationFactory.getInstance().getConfigurations(CATEGORY));
--  }
--
--  DspApiPasswordClient(Client client, Preferences config) {
--    this.client = client;
--    this.config = config;
--  }
--
--  /**
--   * Submit once without following redirects or retrying a possibly accepted password update.
--   * No request, response or credential content is included in logs or transport exceptions.
--   */
--  public Response send(Map<String, Object> request, boolean modification) throws TransportException {
--    String stage = "CONFIG";
--    try {
--      URI endpoint = endpoint(required(modification ? "MODIFICATION_URL" : "PUBLIC_KEY_URL"), modification);
--      String clientId = required("APIC_CLIENT_ID");
--      String clientSecret = required("APIC_CLIENT_SECRET");
--      int connectTimeout = timeout("CONNECT_TIMEOUT_MS", 5000);
--      int readTimeout = timeout("READ_TIMEOUT_MS", 15000);
--      stage = "SERIALIZE";
--      if (request == null) {
--        throw new IllegalArgumentException();
--      }
--      String json = MAPPER.writeValueAsString(request);
--      stage = "POST";
--      return client.target(endpoint)
--          .property(ClientProperties.CONNECT_TIMEOUT, connectTimeout)
--          .property(ClientProperties.READ_TIMEOUT, readTimeout)
--          .property(ClientProperties.FOLLOW_REDIRECTS, false)
--          .request(MediaType.APPLICATION_JSON_TYPE)
--          .header("X-IBM-Client-Id", clientId)
--          .header("X-IBM-Client-Secret", clientSecret)
--          .header("Channel", "BCO")
--          .header("Message-Id", UUID.randomUUID().toString())
--          .post(Entity.entity(json, MediaType.APPLICATION_JSON_TYPE));
--    } catch (java.lang.Exception failure) {
--      // Upstream exception messages can contain headers, bodies or URLs. Retain only the type.
--      StringBuilder types = new StringBuilder();
--      Throwable cause = failure;
--      for (int depth = 0; cause != null && depth < 8; depth++) {
--        if (depth > 0) {
--          types.append(" -> ");
--        }
--        types.append(cause.getClass().getName());
--        cause = cause.getCause();
--      }
--      throw new TransportException(stage, types.toString());
--    }
--  }
--
--  private String required(String key) {
--    String value = config.get(PREFIX + key, "").trim();
--    if (value.isEmpty() || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
--      throw new IllegalArgumentException();
--    }
--    return value;
--  }
--
--  private int timeout(String key, int defaultValue) {
--    int value = Integer.parseInt(config.get(PREFIX + key, String.valueOf(defaultValue)));
--    if (value <= 0) {
--      throw new IllegalArgumentException();
--    }
--    return value;
--  }
--
--  private static URI endpoint(String value, boolean modification) throws java.net.URISyntaxException {
--    URI uri = new URI(value);
--    if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
--        || uri.getRawUserInfo() != null || uri.getRawQuery() != null
--        || uri.getRawFragment() != null || uri.getPath() == null
--        || !uri.getPath().endsWith(modification ? "/password/v1/modification" : "/password/v1/public-key")) {
--      throw new IllegalArgumentException();
--    }
--    return uri;
--  }
--
--  /** Sanitized failure; callers must treat a POST-stage failure as potentially accepted. */
--  public static final class TransportException extends java.lang.Exception {
--    private static final long serialVersionUID = 1L;
--    private final String stage;
--    private final String exceptionTypes;
--
--    private TransportException(String stage, String exceptionTypes) {
--      super("DSP API password transport: stage=" + stage + ", exceptionTypes=" + exceptionTypes);
--      this.stage = stage;
--      this.exceptionTypes = exceptionTypes;
--    }
--
--    public String getStage() {
--      return stage;
--    }
--
--    public String getExceptionTypes() {
--      return exceptionTypes;
--    }
--  }
--}
-diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
-index 2dc61b5e61b00c9a9f92cae8291d4cad687b7e17..8b2543d1f94cbf3d8e8049828f2d75975d41d114 100644
---- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
-+++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java
-@@ -8,32 +8,27 @@ import com.ofss.digx.infra.exceptions.Exception;
- import java.util.LinkedHashMap;
- import java.util.Map;
- import java.util.logging.Logger;
--import javax.ws.rs.core.Response;
-+import feign.Response;
-+import com.hkbea.common.header.CommonHeader;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.DspClient;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.factory.DSPApiClientFactory;
- 
- /** Caller of the provider-owned DSP contract; no private DSP protocol extensions. */
- public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
-   private static final Logger LOGGER = Logger.getLogger(HthDspApiCredentialAdapter.class.getName());
--  private final DspApiPasswordClient client;
--  public HthDspApiCredentialAdapter() { this(new DspApiPasswordClient()); }
--  HthDspApiCredentialAdapter(DspApiPasswordClient client) { this.client = client; }
-+  private final DspClient client;
-+  public HthDspApiCredentialAdapter() { this(null); }
-+  HthDspApiCredentialAdapter(DspClient client) { this.client = client; }
- 
-   public String getStatus(String clientId, String closeId) throws Exception {
--    // Neither published endpoint queries credential existence. A key response is not a status response.
--    // Do not infer NOT_SETUP from no local record or issue a trial password write.
--    LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=CREDENTIAL_STATUS_UNAVAILABLE");
-+    // State belongs to HTH_USER_PROFILE. No DSP status endpoint exists.
-     return STATUS_UNKNOWN;
-   }
- 
-   public void requireWriteSupported(String operation) throws Exception {
--    // 1955 requires an encrypted password hash. The available provider implementation hashes
--    // the decrypted value again; its M function also requires the actual old password.
--    // No switch enables this until the provider supplies the agreed contract.
--    if ("RESET".equals(operation)) {
--      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=RESET_WITHOUT_OLD_PASSWORD_UNSUPPORTED");
--    } else {
--      LOGGER.warning("HTH_API_PASSWORD stage=DSP_CONTRACT reason=HASH_STORAGE_CONTRACT_UNCONFIRMED");
-+    if (!"SETUP".equals(operation) && !"RESET".equals(operation)) {
-+      throw new HthApiCredentialWriteException(false);
-     }
--    throw new HthApiCredentialWriteException(false);
-   }
- 
-   public String publicKey(String nonceHash) throws Exception {
-@@ -50,26 +45,55 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
- 
-   public void modify(String clientId, String closeId, String requestId, String operation,
-       String encryptedHash, String randomNumber) throws Exception {
--    // Defence in depth for direct callers. Do not send the hash into a plaintext-password API,
--    // invent function R, use A to overwrite an existing credential, or fake an old password.
-     requireWriteSupported(operation);
-+    if (clientId == null || clientId.trim().isEmpty() || closeId == null || closeId.trim().isEmpty()
-+        || encryptedHash == null || encryptedHash.isEmpty()
-+        || randomNumber == null || !randomNumber.matches("[0-9]{6}")) {
-+      throw new HthApiCredentialWriteException(false);
-+    }
-+    Map<String, Object> request = new LinkedHashMap<String, Object>();
-+    request.put("function", "SETUP".equals(operation) ? "A" : "M");
-+    request.put("clientId", clientId);
-+    request.put("closeId", closeId);
-+    request.put("newEncryptedPassword", encryptedHash);
-+    request.put("randomNumber", randomNumber);
-+    // requestId stays in CM's Code reservation. DSP does not promise replay/idempotency.
-+    send(request, true);
-   }
- 
-   private JsonNode sendPublicKey(Map<String, Object> request) throws Exception {
-+    return send(request, false);
-+  }
-+
-+  private JsonNode send(Map<String, Object> request, boolean write) throws Exception {
-     Response response = null;
-+    CommonHeader header = null;
-     try {
--      response = client.send(request, false);
--      if (response.getStatus() != 200) { throw new HthApiCredentialWriteException(false); }
--      JsonNode body = new ObjectMapper().readTree(response.readEntity(String.class));
-+      DspClient dspClient = client == null ? DSPApiClientFactory.getDspClient() : client;
-+      header = dspClient.getCommonHeader();
-+      response = write ? dspClient.passwordApi().modifyPassword(request)
-+          : dspClient.passwordApi().queryPublicKey(request);
-+      if (response.status() != 200 || response.body() == null) {
-+        throw new HthApiCredentialWriteException(write && !definiteRejection(response.status()));
-+      }
-+      JsonNode body = new ObjectMapper().readTree(response.body().asInputStream());
-       if (body == null || !"000000".equals(body.path("status").asText())) {
--        throw new HthApiCredentialWriteException(false);
-+        throw new HthApiCredentialWriteException(write);
-       }
-       return body;
-     } catch (HthApiCredentialWriteException failure) {
-       throw failure;
-     } catch (java.lang.Exception failure) {
--      // No password write occurred; never include response bodies, headers or causes in logs.
--      throw new HthApiCredentialWriteException(false);
--    } finally { if (response != null) { response.close(); } }
-+      // Timeout, malformed response or network loss may follow a committed DSP write.
-+      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE exceptionType=" + failure.getClass().getSimpleName());
-+      throw new HthApiCredentialWriteException(write);
-+    } finally {
-+      try { if (response != null) { response.close(); } }
-+      finally { if (header != null) { header.reset(); } }
-+    }
-+  }
-+  private boolean definiteRejection(int status) {
-+    // DSP's parameter/service errors are transactional rejections; gateway/system failures are uncertain.
-+    return status == 400 || status == 401 || status == 403 || status == 404 || status == 450 || status == 460;
-   }
- }
-diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
-index 3619d143a7c813d853f7e2e6e61b1f1909fa3bcb..9b43b7c426278c01eef17ca04b314a6f2f9d0244 100644
---- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
-+++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
-@@ -1,7 +1,77 @@
- package com.ofss.digx.cz.bea.extxface.microservice.api.dsp;
- 
- import com.hkbea.dsp.client.DspSupportClient;
-+import com.hkbea.common.header.CommonHeader;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.api.DspPasswordApi;
-+import feign.Feign;
-+import feign.Logger;
-+import feign.Request;
-+import feign.Retryer;
-+import feign.jackson.JacksonEncoder;
-+import feign.jaxrs.JAXRSContract;
-+import java.net.URI;
-+import java.util.concurrent.TimeUnit;
-+import okhttp3.OkHttpClient;
-+import okhttp3.logging.HttpLoggingInterceptor;
- 
- /** Uses the DSP SDK transport and the application trust store without bypassing TLS checks. */
- public class DspClient extends DspSupportClient {
-+    private volatile DspPasswordApi passwordApi;
-+
-+    /** CM-side API declaration until the provider SDK includes PasswordApi. */
-+    public DspPasswordApi passwordApi() {
-+        DspPasswordApi api = passwordApi;
-+        if (api == null) {
-+            synchronized (this) {
-+                api = passwordApi;
-+                if (api == null) {
-+                    api = createPasswordApi();
-+                    passwordApi = api;
-+                }
-+            }
-+        }
-+        return api;
-+    }
-+
-+    private DspPasswordApi createPasswordApi() {
-+        String serviceUrl = required(getServiceUrl());
-+        URI uri = URI.create(serviceUrl);
-+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
-+                || uri.getRawUserInfo() != null || uri.getRawQuery() != null
-+                || uri.getRawFragment() != null) {
-+            throw new IllegalArgumentException("Invalid DSP service URL");
-+        }
-+        CommonHeader header = getCommonHeader();
-+        if (header == null) {
-+            throw new IllegalArgumentException("Missing DSP common header");
-+        }
-+        required(header.getApicClientId());
-+        required(header.getApicClientSecret());
-+        required(header.getChannel());
-+
-+        // Keep the SDK's pool, timeouts and TLS validation. Only password calls suppress
-+        // the old SDK's BODY logger and automatic retries/redirects; other APIs are unchanged.
-+        OkHttpClient.Builder transport = getOkHttpClient().newBuilder()
-+                .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false);
-+        transport.interceptors().removeIf(interceptor -> interceptor instanceof HttpLoggingInterceptor);
-+        transport.networkInterceptors().removeIf(interceptor -> interceptor instanceof HttpLoggingInterceptor);
-+        OkHttpClient http = transport.build();
-+        return Feign.builder()
-+                .contract(new JAXRSContract())
-+                .encoder(new JacksonEncoder())
-+                .client(new feign.okhttp.OkHttpClient(http))
-+                .requestInterceptors(getHeaderInterceptors())
-+                .options(new Request.Options(http.connectTimeoutMillis(), TimeUnit.MILLISECONDS,
-+                        http.readTimeoutMillis(), TimeUnit.MILLISECONDS, false))
-+                .retryer(Retryer.NEVER_RETRY)
-+                .logger(new Logger.NoOpLogger()).logLevel(Logger.Level.NONE)
-+                .target(DspPasswordApi.class, serviceUrl.replaceAll("/+$", ""));
-+    }
-+
-+    private static String required(String value) {
-+        if (value == null || value.trim().isEmpty() || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
-+            throw new IllegalArgumentException("Missing or invalid DSP configuration");
-+        }
-+        return value.trim();
-+    }
- }
-diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..16ac8904376b676264aecc8ae6a5cd82bab95147
---- /dev/null
-+++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java
-@@ -0,0 +1,28 @@
-+package com.ofss.digx.cz.bea.extxface.microservice.api.dsp.api;
-+
-+import feign.Response;
-+import jakarta.ws.rs.Consumes;
-+import jakarta.ws.rs.POST;
-+import jakarta.ws.rs.Path;
-+import jakarta.ws.rs.Produces;
-+import java.util.Map;
-+
-+/**
-+ * Caller-side declarations of the provider's two password endpoints.
-+ * The installed DSP SDK predates PasswordApi. Keep its JAX-RS/Feign calling style
-+ * without replacing the shared SDK or changing the provider's request contract.
-+ * Responses stay raw so the adapter can enforce HTTP 200 and provider status 000000.
-+ */
-+public interface DspPasswordApi {
-+    @POST
-+    @Path("/password/v1/public-key")
-+    @Consumes("application/json")
-+    @Produces("application/json")
-+    Response queryPublicKey(Map<String, Object> request);
-+
-+    @POST
-+    @Path("/password/v1/modification")
-+    @Consumes("application/json")
-+    @Produces("application/json")
-+    Response modifyPassword(Map<String, Object> request);
-+}
+-UNDEFINE HTH_CODE_KEY
++UNDEFINE HTH_CODE_KEY DSP_MGMT_CLIENT_ID DSP_MGMT_CLIENT_SECRET DSP_MGMT_URL
+ UNDEFINE HTH_RUNTIME_OWNER BM_MAKER_POLICY BM_APPROVER_POLICY
 diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
-index a9e79213da35e196c1f9953df0d910ce6a8bd9e7..d90079b97d9a20d3325970260dec0f861c9904ce 100644
+index d90079b97d9a20d3325970260dec0f861c9904ce..a9e79213da35e196c1f9953df0d910ce6a8bd9e7 100644
 --- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
 +++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
-@@ -9,12 +9,13 @@ import java.util.prefs.Preferences;
+@@ -9,13 +9,12 @@ import java.util.prefs.Preferences;
  
  public class DSPApiClientFactory {
  
--    private static final String CONFIG_CATEGORY = "DSPApiAdapterImplConfig";
-+    // Reuse the released INQ01 internal APIC base, subscription and channel.
-+    private static final String CONFIG_CATEGORY = "H2HApiAdapterImplConfig";
+-    // Reuse the released INQ01 internal APIC base, subscription and channel.
+-    private static final String CONFIG_CATEGORY = "H2HApiAdapterImplConfig";
++    private static final String CONFIG_CATEGORY = "DSPApiAdapterImplConfig";
  
--    private static final String PROP_SERVICE_URL = "DSP.SERVICE_URL";
--    private static final String PROP_APIC_CLIENT_ID = "DSP.APIC_CLIENT_ID";
--    private static final String PROP_APIC_CLIENT_SECRET = "DSP.APIC_CLIENT_SECRET";
--    private static final String PROP_CHANNEL = "DSP.CHANNEL";
-+    private static final String PROP_SERVICE_URL = "H2H.SERVICE_URL";
-+    private static final String PROP_APIC_CLIENT_ID = "H2H.CLIENT_ID";
-+    private static final String PROP_APIC_CLIENT_SECRET = "H2H.CLIENT_SECRET";
-+    private static final String PROP_CHANNEL = "H2H.CHANNEL";
+-    private static final String PROP_SERVICE_URL = "H2H.SERVICE_URL";
+-    private static final String PROP_APIC_CLIENT_ID = "H2H.CLIENT_ID";
+-    private static final String PROP_APIC_CLIENT_SECRET = "H2H.CLIENT_SECRET";
+-    private static final String PROP_CHANNEL = "H2H.CHANNEL";
++    private static final String PROP_SERVICE_URL = "DSP.SERVICE_URL";
++    private static final String PROP_APIC_CLIENT_ID = "DSP.APIC_CLIENT_ID";
++    private static final String PROP_APIC_CLIENT_SECRET = "DSP.APIC_CLIENT_SECRET";
++    private static final String PROP_CHANNEL = "DSP.CHANNEL";
  
      private static final String DEFAULT_CHANNEL = "BCO";
      private static final String EMPTY_STR = "";
-diff --git a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
-index f4c4e386ca7d1f96fc60185f646dc85e385ecfca..c2b3916225487516f52faceed8dde4265cb12713 100644
---- a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
-+++ b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
-@@ -18,6 +18,7 @@ import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthManagement;
- import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfile;
- import com.ofss.digx.cz.bea.domain.hosttohost.entity.HthUserProfileKey;
- import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.HthUserProfileRepository;
-+import com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter.HthApiPasswordStateRepository;
- import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
- import com.ofss.digx.enumeration.ModuleType;
- import com.ofss.digx.enumeration.security.ActionType;
-@@ -129,6 +130,8 @@ public class HostToHostApiPassword extends AbstractApplication
-   private static final String DATE_FORMAT_PATTERN = "yyyy/MM/dd HH:mm";
- 
- 
-+  private final HthApiPasswordStateRepository passwordStateRepository = new HthApiPasswordStateRepository();
-+
-   private final HthApiPasswordCodeRepository codeRepository =
-       HthApiPasswordCodeRepository.getInstance();
- 
-@@ -239,6 +242,9 @@ public class HostToHostApiPassword extends AbstractApplication
-       if ("IN_PROGRESS".equals(previous) || "UNKNOWN".equals(previous)) {
-         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-       }
-+      if (replay && !IHthApiCredentialAdapter.STATUS_ACTIVE.equals(credentialState(identity, false))) {
-+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-+      }
-       if (!replay) {
-         stage = "CREDENTIAL_STATUS";
-         String state = credentialState(identity, false);
-@@ -262,15 +268,15 @@ public class HostToHostApiPassword extends AbstractApplication
-         } catch (Exception failure) {
-           boolean uncertain = !(failure instanceof com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException)
-               || ((com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException) failure).isUncertain();
--          try { fail(identity.profileUserId, request.getRequestId(), codeId, uncertain); }
-+          try { fail(identity, operation, request.getRequestId(), codeId, uncertain); }
-           catch (Exception releaseFailure) { logPhaseFailure("CODE_RELEASE", releaseFailure); }
-           throw failure;
-         }
-         stage = "CODE_COMPLETE";
--        try { complete(identity.profileUserId, request.getRequestId(), codeId); }
-+        try { complete(identity, request.getRequestId(), codeId); }
-         catch (Exception failure) {
-           // DSP has committed. Never make this Code reusable after an ambiguous local commit.
--          try { fail(identity.profileUserId, request.getRequestId(), codeId, true); }
-+          try { fail(identity, operation, request.getRequestId(), codeId, true); }
-           catch (Exception releaseFailure) { logPhaseFailure("CODE_RECONCILE", releaseFailure); }
-           throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
-         }
-@@ -470,14 +476,20 @@ public class HostToHostApiPassword extends AbstractApplication
- 
-   private String credentialState(Identity identity, boolean allowUnknown) throws Exception {
-     try {
--      return dspAdapter().getStatus(identity.uamClientId, identity.userId + "@" + identity.partyId);
-+      return readCredentialState(identity.partyId, identity.userId, identity.uamClientId);
-     } catch (Exception failure) {
-       if (!allowUnknown) { throw failure; }
--      logPhaseFailure("DSP_STATUS", failure);
-+      logPhaseFailure("LOCAL_PASSWORD_STATUS", failure);
-       return IHthApiCredentialAdapter.STATUS_UNKNOWN;
-     }
-   }
- 
-+  private String readCredentialState(String partyId, String userId, String clientId) throws Exception {
-+    SessionLease lease = open(false);
-+    try { return passwordStateRepository.read(lease.session, partyId, userId, clientId); }
-+    finally { lease.close(false); }
-+  }
-+
-   /** The REST boundary retains this context in the authenticated session, never in a database. */
-   public KeyMaterial prepareTransport(SessionContext context, String requestId) throws Exception {
-     super.checkAccessPolicy(STATUS_SERVICE, context);
-@@ -656,7 +668,7 @@ public class HostToHostApiPassword extends AbstractApplication
-   private static final class Identity {
-     private final String partyId;
-     private final String userId;
--    /** Exact HTH_USER_PROFILE.CLOSE_ID used by password-table foreign keys. */
-+    /** Exact HTH_USER_PROFILE.CLOSE_ID used for Code attribution. */
-     private final String profileUserId;
-     private final String uamClientId;
- 
-@@ -669,7 +681,7 @@ public class HostToHostApiPassword extends AbstractApplication
-   }
-   /**
-    * Generates a one-time Code for the target user in the existing user-maintenance form.
--   * The selected credential store determines SETUP for an unset password and RESET for an active one.
-+   * HTH-local metadata determines SETUP for an unset password and RESET for an active one.
-    *
-    * <p>Prior PENDING rows for the same user are superseded (Re-Generate semantics). The new row
-    * stays PENDING — and therefore unusable — until the original user-maintenance transaction is
-@@ -765,13 +777,17 @@ public class HostToHostApiPassword extends AbstractApplication
-       throw new Exception("DIGX_CZ_HTH_PW_009");
-     }
-     String owner = canonicalUser(userName, partyId);
--    // Even a recreated CM user may already have a credential in DSP. Never infer state locally.
-+    // Status is HTH-only metadata. Existing UAT profiles are UNKNOWN until reconciled with DSP.
-     HthManagement management = new HthManagement().findActiveByPartyId(partyId);
-     if (management == null || !"ENABLE".equalsIgnoreCase(management.getHthStatus())
-         || normalize(management.getUamClientId()) == null) {
-       throw new Exception("DIGX_CZ_HTH_API_PASSWORD_009");
-     }
--    String state = dspAdapter().getStatus(management.getUamClientId(), owner + "@" + partyId);
-+    SessionLease lease = open(false);
-+    String state;
-+    try {
-+      state = passwordStateRepository.readForCodeGeneration(lease.session, partyId, owner, management.getUamClientId());
-+    } finally { lease.close(false); }
-     String purpose;
-     if (IHthApiCredentialAdapter.STATUS_ACTIVE.equals(state)) {
-       purpose = RESET;
-@@ -1235,6 +1251,8 @@ public class HostToHostApiPassword extends AbstractApplication
-         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_003");
-       }
- 
-+      passwordStateRepository.reserve(lease.session, partyId, userId, remoteClientId, requestId, purpose);
-+
-       if (codeRepository.reserve(lease.session, requestId, codeId, remoteClientId) != 1) {
-         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-       }
-@@ -1256,23 +1274,29 @@ public class HostToHostApiPassword extends AbstractApplication
-     }
-   }
- 
--  /** The only local completion write is consumption of the approval Code. */
--  private void complete(String userId, String requestId, String codeId) throws Exception {
-+  /** State and Code consumption commit together, only after DSP confirms success. */
-+  private void complete(Identity identity, String requestId, String codeId) throws Exception {
-     SessionLease lease = openIndependent();
-     boolean success = false;
-     try {
--      if (codeRepository.consume(lease.session, userId, codeId, requestId) != 1) {
-+      passwordStateRepository.finish(lease.session, identity.partyId, identity.userId,
-+          identity.uamClientId, requestId, "ACTIVE");
-+      if (codeRepository.consume(lease.session, identity.profileUserId, codeId, requestId) != 1) {
-         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-       }
-       success = true;
-     } finally { lease.close(success); }
-   }
- 
--  private void fail(String userId, String requestId, String codeId, boolean uncertain) throws Exception {
-+  private void fail(Identity identity, String operation, String requestId, String codeId, boolean uncertain) throws Exception {
-     SessionLease lease = openIndependent();
-     boolean success = false;
-     try {
--      codeRepository.failReservation(lease.session, userId, requestId, codeId, uncertain);
-+      passwordStateRepository.finish(lease.session, identity.partyId, identity.userId,
-+          identity.uamClientId, requestId, uncertain ? "UNKNOWN" : SETUP.equals(operation) ? "NOT_SETUP" : "ACTIVE");
-+      if (codeRepository.failReservation(lease.session, identity.profileUserId, requestId, codeId, uncertain) != 1) {
-+        throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-+      }
- 
-       success = true;
-     } catch (java.lang.Exception e) {
-diff --git a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/HthApiPasswordStateRepository.java b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/HthApiPasswordStateRepository.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..5eeb48e1bd6b61169350d939e9437f01380bcf30
---- /dev/null
-+++ b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/HthApiPasswordStateRepository.java
-@@ -0,0 +1,76 @@
-+package com.ofss.digx.cz.bea.domain.hosttohost.entity.repository.adapter;
-+
-+import com.ofss.digx.infra.exceptions.Exception;
-+import com.ofss.fc.infra.das.orm.Query;
-+import com.ofss.fc.infra.das.orm.Session;
-+import java.util.List;
-+
-+/** HTH-only metadata in HTH_USER_PROFILE; never stores a password or its hash. */
-+public final class HthApiPasswordStateRepository {
-+  public String read(Session session, String party, String user, String client) throws Exception {
-+    return state(rows(session, party, user, false), client);
-+  }
-+
-+  public String readForCodeGeneration(Session session, String party, String user, String client) throws Exception {
-+    List result = rows(session, party, user, false);
-+    // User-create can generate a PENDING Code before approval creates HTH_USER_PROFILE.
-+    // DSP function A still rejects an existing credential; this is not an upsert permission.
-+    return result != null && result.isEmpty() ? "NOT_SETUP" : state(result, client);
-+  }
-+
-+  private List rows(Session session, String party, String user, boolean lock) throws Exception {
-+    Query query = session.createSQLQuery("SELECT API_PASSWORD_STATE, API_PASSWORD_CLIENT_ID "
-+        + "FROM HTH_BEA.HTH_USER_PROFILE WHERE PARTY_ID = ? AND CLOSE_ID IN (?, ?)"
-+        + (lock ? " FOR UPDATE" : ""));
-+    query.setParameter(1, party);
-+    query.setParameter(2, user);
-+    query.setParameter(3, user + "@" + party);
-+    return query.list();
-+  }
-+
-+  private String state(List rows, String client) {
-+    if (rows == null || rows.size() != 1 || client == null || client.isEmpty()) { return "UNKNOWN"; }
-+    Object[] row = (Object[]) rows.get(0);
-+    String status = row[0] == null ? "UNKNOWN" : String.valueOf(row[0]);
-+    String boundClient = row[1] == null ? null : String.valueOf(row[1]);
-+    if ("NOT_SETUP".equals(status) && (boundClient == null || client.equals(boundClient))) {
-+      return "NOT_SETUP";
-+    }
-+    return "ACTIVE".equals(status) && client.equals(boundClient) ? "ACTIVE" : "UNKNOWN";
-+  }
-+
-+  public void reserve(Session session, String party, String user, String client, String request,
-+      String operation) throws Exception {
-+    String expected = "SETUP".equals(operation) ? "NOT_SETUP" : "ACTIVE";
-+    if (!expected.equals(state(rows(session, party, user, true), client))) {
-+      throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
-+    }
-+    Query query = session.createSQLQuery("UPDATE HTH_BEA.HTH_USER_PROFILE SET "
-+        + "API_PASSWORD_STATE = 'IN_PROGRESS', API_PASSWORD_CLIENT_ID = ?, API_PASSWORD_REQUEST_ID = ?, "
-+        + "API_PASSWORD_UPDATED_AT = SYSTIMESTAMP WHERE PARTY_ID = ? AND CLOSE_ID IN (?, ?) "
-+        + "AND API_PASSWORD_STATE = ? AND (API_PASSWORD_CLIENT_ID IS NULL OR API_PASSWORD_CLIENT_ID = ?)");
-+    query.setParameter(1, client);
-+    query.setParameter(2, request);
-+    query.setParameter(3, party);
-+    query.setParameter(4, user);
-+    query.setParameter(5, user + "@" + party);
-+    query.setParameter(6, expected);
-+    query.setParameter(7, client);
-+    if (query.executeUpdate() != 1) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007"); }
-+  }
-+
-+  public void finish(Session session, String party, String user, String client, String request,
-+      String status) throws Exception {
-+    Query query = session.createSQLQuery("UPDATE HTH_BEA.HTH_USER_PROFILE SET "
-+        + "API_PASSWORD_STATE = ?, API_PASSWORD_UPDATED_AT = SYSTIMESTAMP "
-+        + "WHERE PARTY_ID = ? AND CLOSE_ID IN (?, ?) AND API_PASSWORD_CLIENT_ID = ? "
-+        + "AND API_PASSWORD_REQUEST_ID = ? AND API_PASSWORD_STATE = 'IN_PROGRESS'");
-+    query.setParameter(1, status);
-+    query.setParameter(2, party);
-+    query.setParameter(3, user);
-+    query.setParameter(4, user + "@" + party);
-+    query.setParameter(5, client);
-+    query.setParameter(6, request);
-+    if (query.executeUpdate() != 1) { throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007"); }
-+  }
-+}
-diff --git a/consulting/tests/hth1955/browser-interop.cjs b/consulting/tests/hth1955/browser-interop.cjs
-index b926981097cb059098eb428519e920304127997b..ab465824f189d3329bf12429e50cd84bf9d073af 100644
---- a/consulting/tests/hth1955/browser-interop.cjs
-+++ b/consulting/tests/hth1955/browser-interop.cjs
-@@ -25,10 +25,10 @@ const context = {
-     } }) }, RSAKey); }
- };
- vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,"../../channel/extensions/components/host-to-host/api-password/transport.js"),"utf8"),context);
--encrypt("Browser123","314159",requestId,"SETUP").then(result => {
--    assert.equal(envelope[0],"HTH3"); assert.equal(envelope[1],"SETUP");
-+encrypt(process.argv[3] || "Browser123","314159",requestId,process.argv[4] || "SETUP").then(result => {
-+    assert.equal(envelope[0],"HTH3"); assert.equal(envelope[1],process.argv[4] || "SETUP");
-     assert.equal(envelope[2],requestId); assert.equal(envelope[3],"314159");
-     assert.equal(envelope[4],crypto.createHash("sha256").update(result.dspEncryptedPassword).digest("base64"));
--    assert.ok(!JSON.stringify(result).includes("Browser123"));
-+    assert.ok(!JSON.stringify(result).includes(process.argv[3] || "Browser123"));
-     process.stdout.write(JSON.stringify(result));
- }).catch(error => { console.error(error); process.exitCode=1; });
 diff --git a/consulting/tests/hth1955/verify_apic_transport.py b/consulting/tests/hth1955/verify_apic_transport.py
-index 84da6cc5cac55fdcc2e9a94fc3679bfb409f72aa..83afed40694bd53e1e439d7c5d885edac1368627 100644
+index 83afed40694bd53e1e439d7c5d885edac1368627..0562724c4dad406312daf9a5d6e190f995374fda 100644
 --- a/consulting/tests/hth1955/verify_apic_transport.py
 +++ b/consulting/tests/hth1955/verify_apic_transport.py
-@@ -9,16 +9,18 @@ LIB = ROOT / 'consulting/middleware/lib'
- SOURCE = ROOT / 'consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl'
- preferred = [LIB / 'thirdparty' / ('jackson-' + name + '-2.19.4.jar')
-              for name in ('core', 'annotations', 'databind')]
--preferred += [LIB / 'OBDX_FW_LIB' / name for name in (
--    'jakarta.ws.rs-api-2.1.6.jar', 'jersey-client.jar', 'jersey-common.jar',
--    'jersey-hk2.jar', 'hk2-api-2.6.1.jar', 'hk2-utils-2.6.1.jar',
--    'hk2-locator-2.6.1.jar', 'jakarta.inject-2.6.1.jar',
--    'jakarta.annotation-api-1.3.5.jar', 'javassist-3.25.0-GA.jar')]
-+preferred += [LIB / 'thirdparty' / name for name in (
-+    'jackson-datatype-jsr310-2.19.4.jar', 'jakarta.ws.rs-api-3.1.0.jar',
-+    'h2h-common-client-0.1.0.jar', 'h2h-common-api-0.1.0.jar',
-+    'dsp-ms-support-api-0.1.0.jar', 'dsp-ms-support-client-0.1.0.jar',
-+    'feign-core-13.6.jar', 'feign-jackson-13.6.jar', 'feign-jaxrs-13.6-jakarta.jar',
-+    'feign-okhttp-13.6.jar', 'feign-slf4j-13.6.jar', 'slf4j-api-2.0.17.jar',
-+    'okhttp-4.12.0.jar', 'logging-interceptor-4.12.0.jar', 'okio-jvm-3.6.0.jar',
-+    'kotlin-stdlib-1.9.25.jar', 'kotlin-stdlib-jdk8-1.9.25.jar',
-+    'kotlin-stdlib-jdk7-1.9.25.jar', 'fastjson2-2.0.61.jar')]
- CP = os.pathsep.join(str(path) for path in preferred + sorted(set(LIB.rglob('*.jar')) - set(preferred)))
--RUNTIME_CP = os.pathsep.join(str(path) for path in preferred + [
--    LIB / 'OBDX_FW_LIB/jakarta.activation-api-1.2.1.jar',
--    LIB / 'OBDX_FW_LIB/aopalliance-repackaged-2.6.1.jar',
--    LIB / 'OBDX_FW_LIB/osgi-resource-locator-1.0.3.jar'])
-+RUNTIME_CP = os.pathsep.join(str(path) for path in preferred)
-+SDK_SOURCE = SOURCE.parents[2] / 'microservice/api/dsp'
- 
- HARNESS = r'''
- 
-@@ -37,11 +39,16 @@ import java.util.concurrent.*;
- import java.util.concurrent.atomic.*;
- import java.util.prefs.*;
- import javax.net.ssl.*;
--import javax.ws.rs.client.*;
--import javax.ws.rs.core.Response;
-+import feign.Response;
-+import com.hkbea.common.header.CommonHeader;
-+import com.hkbea.dsp.model.ClientValidationParam;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.DspClient;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.factory.DSPApiClientFactory;
-+import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.impl.DSPCommonHeaderImpl;
-+import com.ofss.fc.infra.config.ConfigurationFactory;
- 
- public class DspTransportTest {
--  static final String PREFIX="HTH_API_PASSWORD.DSP_";
-+  static final String PREFIX="DSP.";
-   static final ObjectMapper MAPPER=new ObjectMapper();
-   static class MemoryPreferences extends AbstractPreferences {
-     final Map<String, String> values = new HashMap<>();
-@@ -73,16 +80,27 @@ public class DspTransportTest {
-     AtomicInteger calls=new AtomicInteger(),status=new AtomicInteger(200),delay=new AtomicInteger();
-     AtomicReference<String> response=new AtomicReference<>("{\"status\":\"000000\"}");
-     AtomicReference<JsonNode> request=new AtomicReference<>();
-+    Set<String> messages=ConcurrentHashMap.newKeySet();
-+    AtomicInteger clientValidationCalls=new AtomicInteger();
-     AtomicReference<Throwable> assertion=new AtomicReference<>();
-     server.createContext("/", exchange->{
-       try {
-         calls.incrementAndGet();
-         check("POST".equals(exchange.getRequestMethod()),"POST required");
-         check("BCO".equals(exchange.getRequestHeaders().getFirst("Channel")),"Missing Channel");
--        UUID.fromString(exchange.getRequestHeaders().getFirst("Message-Id"));
-+        String messageId=exchange.getRequestHeaders().getFirst("Message-Id");
-+        UUID.fromString(messageId);
-+        check(messages.add(messageId),"Message-Id reused after header reset");
-         check("fixture-id".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Id")),"Missing subscription ID");
-         check("fixture-secret".equals(exchange.getRequestHeaders().getFirst("X-IBM-Client-Secret")),"Missing subscription secret");
-         request.set(MAPPER.readTree(exchange.getRequestBody()));
-+        check(exchange.getRequestURI().getPath().startsWith("/catalog/shared/"),"APIC base path lost");
-+        if(exchange.getRequestURI().getPath().endsWith("/client/v1/validate")){
-+          clientValidationCalls.incrementAndGet();
-+          byte[] valid="{\"clientId\":\"business-client\",\"valid\":true,\"validationTime\":1}".getBytes(StandardCharsets.UTF_8);
-+          exchange.getResponseHeaders().set("Content-Type","application/json");
-+          exchange.sendResponseHeaders(200,valid.length);exchange.getResponseBody().write(valid);return;
-+        }
-         check(!request.get().has("protocol") && !request.get().has("queryOnly")
-             && !request.get().has("requestId"),"Private DSP protocol leaked");
-         if (exchange.getRequestURI().getPath().endsWith("/public-key")) {
-@@ -98,33 +116,38 @@ public class DspTransportTest {
-       finally {exchange.close();}
-     });
-     ExecutorService executor=Executors.newCachedThreadPool();server.setExecutor(executor);server.start();
--    Client http=ClientBuilder.newBuilder().property("jersey.config.disableAutoDiscovery",true)
--      .property("jersey.config.disableMetainfServicesLookup",true).build();
+@@ -119,16 +119,20 @@ public class DspTransportTest {
      try {
--      MemoryPreferences config=new MemoryPreferences();String url="https://localhost:"+server.getAddress().getPort();
--      config.put(PREFIX+"PUBLIC_KEY_URL",url+"/password/v1/public-key");
--      config.put(PREFIX+"MODIFICATION_URL",url+"/password/v1/modification");
--      config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
--      DspApiPasswordClient client=new DspApiPasswordClient(http,config);
-+      MemoryPreferences config=new MemoryPreferences();
-+      String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
-+      config.put(PREFIX+"SERVICE_URL","https://obsolete-dsp.invalid");
-+      config.put(PREFIX+"APIC_CLIENT_ID","obsolete-dsp-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","obsolete-dsp-secret");
-+      config.put(PREFIX+"CHANNEL","obsolete-channel");
-+      MemoryPreferences inq01=new MemoryPreferences();
-+      inq01.put("H2H.CLIENT_ID","fixture-id");inq01.put("H2H.CLIENT_SECRET","fixture-secret");
-+      inq01.put("H2H.SERVICE_URL",url+"/");
-+      ConfigurationFactory.preferences=config;ConfigurationFactory.inq01=inq01;
-+      DspClient client=DSPApiClientFactory.getDspClient();
-+      check(client==DSPApiClientFactory.getDspClient(),"Factory did not reuse SDK client");
-+      CommonHeader header=client.getCommonHeader();
+       MemoryPreferences config=new MemoryPreferences();
+       String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
+-      config.put(PREFIX+"SERVICE_URL","https://obsolete-dsp.invalid");
+-      config.put(PREFIX+"APIC_CLIENT_ID","obsolete-dsp-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","obsolete-dsp-secret");
+-      config.put(PREFIX+"CHANNEL","obsolete-channel");
++      config.put(PREFIX+"SERVICE_URL",url+"/");
++      config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
++      // Leave DSP.CHANNEL unset to verify the original BCO default.
+       MemoryPreferences inq01=new MemoryPreferences();
+-      inq01.put("H2H.CLIENT_ID","fixture-id");inq01.put("H2H.CLIENT_SECRET","fixture-secret");
+-      inq01.put("H2H.SERVICE_URL",url+"/");
++      inq01.put("H2H.CLIENT_ID","unrelated-inquiry-id");inq01.put("H2H.CLIENT_SECRET","unrelated-inquiry-secret");
++      inq01.put("H2H.SERVICE_URL","https://unrelated-inquiry.invalid");
+       ConfigurationFactory.preferences=config;ConfigurationFactory.inq01=inq01;
+       DspClient client=DSPApiClientFactory.getDspClient();
+       check(client==DSPApiClientFactory.getDspClient(),"Factory did not reuse SDK client");
+       CommonHeader header=client.getCommonHeader();
++      // Existing BM validation works before password calls and still works afterwards.
++      ClientValidationParam bmBefore=new ClientValidationParam();bmBefore.setClientId("business-client");
++      check(Boolean.TRUE.equals(client.clientApi().validateClientId(bmBefore).getValid()),"BM validation changed");
++      header.reset();
        HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
        int initial=calls.get();
        check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
--      for(String operation:new String[]{"SETUP","RESET"}){
--        fails(()->adapter.requireWriteSupported(operation),false);
--        fails(()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),operation,
--              "synthetic-ciphertext","314159"),false);
--      }
--      check(calls.get()==initial,"Unsupported operation issued an HTTP request");
-+      for(String operation:new String[]{"SETUP","RESET"}){ adapter.requireWriteSupported(operation); }
-+      fails(()->adapter.requireWriteSupported("OTHER"),false);
-+      check(calls.get()==initial,"Operation validation issued an HTTP request");
-       String nonceHash="77d803e4073d578f460f6b48b1c755285b0766a4fb5fae39e510b68005d88c57";
-       response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
-+      header.setAccessToken("fixture-token");
-       check("test-public-key".equals(adapter.publicKey(nonceHash)),"Key missing");
-+      check(header.getAccessToken()==null,"Success did not reset thread headers");
-       check(request.get().size()==1 && nonceHash.equals(request.get().path("hashValue").asText()),"Nonce hash changed");
-       int before=calls.get();
-       fails(()->adapter.publicKey("invalid"),false);
-       check(calls.get()==before,"Invalid nonce hash sent");
-       Attempt query=()->adapter.publicKey(nonceHash);
-       for(int code:new int[]{400,401,403,404,405,422,450,460,470,490,500,502,302}){
--        status.set(code);before=calls.get();fails(query,false);
-+        status.set(code);before=calls.get();header.setAccessToken("fixture-token");fails(query,false);
-+        check(header.getAccessToken()==null,"HTTP failure did not reset thread headers");
-         check(calls.get()==before+1,"Unexpected redirect or retry");
-       }
-       status.set(200);
-@@ -132,25 +155,45 @@ public class DspTransportTest {
-         response.set(malformed);fails(query,false);
-       }
-       response.set("{\"status\":\"000000\",\"publicKey\":\"test-public-key\"}");
--      before=calls.get();config.put(PREFIX+"PUBLIC_KEY_URL","http://localhost/password/v1/public-key");
--      fails(query,false); check(calls.get()==before,"Insecure URL invoked");
--      config.put(PREFIX+"PUBLIC_KEY_URL",url+"/password/v1/public-key");
--      config.put(PREFIX+"READ_TIMEOUT_MS","100");delay.set(400);fails(query,false);
-+      for(String badUrl:new String[]{"http://localhost", "https://user@localhost", url+"?query=1", url+"#fragment"}){
-+        before=calls.get();DspClient invalid=new DspClient();invalid.setServiceUrl(badUrl);invalid.setCommonHeader(header);
-+        fails(()->new HthDspApiCredentialAdapter(invalid).publicKey(nonceHash),false);
-+        check(calls.get()==before,"Invalid URL invoked");
-+      }
-+      before=calls.get();
-+      DspClient slow=new DspClient(){
-+        protected okhttp3.OkHttpClient getOkHttpClient(){return super.getOkHttpClient().newBuilder()
-+          .readTimeout(100,TimeUnit.MILLISECONDS).build();}
-+      };
-+      slow.setServiceUrl(url);slow.setCommonHeader(header);
-+      delay.set(400);fails(()->new HthDspApiCredentialAdapter(slow).publicKey(nonceHash),false);
-       check(calls.get()==before+1,"Timeout retried");
--      // Low-level APIC plumbing for the documented A/M endpoint only. Not a CM password write:
--      // synthetic data is sent to this local fixture; the CM adapter remains blocked above.
--      config.put(PREFIX+"READ_TIMEOUT_MS","15000");delay.set(0);response.set("{\"status\":\"000000\"}");
--      for(String function:new String[]{"A","M"}){
--        Map<String,Object> body=new LinkedHashMap<>();body.put("function",function);
--        body.put("newEncryptedPassword","fixture-ciphertext");body.put("randomNumber","314159");
--        body.put("clientId","business-client");body.put("closeId","USER@PARTY");
--        if("M".equals(function))body.put("oldEncryptedPassword","fixture-old-ciphertext");
--        try(Response result=client.send(body,true)){check(result.getStatus()==200,"Modification route transport failed");}
--        check(function.equals(request.get().path("function").asText()),"Documented function changed");
-+      delay.set(0);response.set("{\"status\":\"000000\"}");
-+      for(String operation:new String[]{"SETUP","RESET"}){
-+        adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),operation,
-+            "fixture-ciphertext","314159");
-+        check(("SETUP".equals(operation)?"A":"M").equals(request.get().path("function").asText()),"Wrong function");
-+        check(request.get().size()==5 && !request.get().has("oldEncryptedPassword"),"Reset must not require old password");
-       }
--      check(assertion.get()==null,"Server request assertion failed");
--      System.out.println("PASS: provider public-key contract, APIC headers, A/M transport fixture, strict response, no retry/redirect; UNKNOWN status and SETUP/RESET blocked without HTTP writes");
--    }finally{http.close();server.stop(0);executor.shutdownNow();}
-+      Attempt write=()->adapter.modify("business-client","USER@PARTY",UUID.randomUUID().toString(),"RESET","fixture-ciphertext","314159");
-+      for(int code:new int[]{400,401,403,404,450,460}) { status.set(code);fails(write,false); }
-+      for(int code:new int[]{470,500,502,302}) { status.set(code);before=calls.get();fails(write,true);check(calls.get()==before+1,"Write retried or redirected"); }
-+      status.set(200);
-+      for(String bad:new String[]{"{}","not-json","{\"status\":\"FAILED\"}"}) {response.set(bad);fails(write,true);}
-+      response.set("{\"status\":\"000000\"}");
-+      delay.set(400);before=calls.get();
-+      fails(()->new HthDspApiCredentialAdapter(slow).modify("business-client","USER@PARTY","request","RESET","fixture-ciphertext","314159"),true);
-+      check(calls.get()==before+1,"Password write timed out and retried");delay.set(0);
-+      // Existing SDK client validation still uses its original interface and route.
-+      ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
-+      check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
-+      header.reset();check(clientValidationCalls.get()==1,"Existing client route changed");
-+      // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
-+      DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
-+      fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
-+      check(assertion.get()==null,"Server request assertion failed: "+assertion.get());
-+      System.out.println("PASS: SDK factory, shared INQ01 base URL/authentication, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
-+    }finally{server.stop(0);executor.shutdownNow();}
+@@ -187,12 +191,12 @@ public class DspTransportTest {
+       // Existing SDK client validation still uses its original interface and route.
+       ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
+       check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
+-      header.reset();check(clientValidationCalls.get()==1,"Existing client route changed");
++      header.reset();check(clientValidationCalls.get()==2,"Existing client route changed");
+       // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
+       DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
+       fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
+       check(assertion.get()==null,"Server request assertion failed: "+assertion.get());
+-      System.out.println("PASS: SDK factory, shared INQ01 base URL/authentication, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
++      System.out.println("PASS: SDK factory, original BM DSP base URL/authentication, unrelated INQ01 configuration ignored, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
+     }finally{server.stop(0);executor.shutdownNow();}
    }
  }
- '''
-@@ -175,7 +218,7 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
-     common = ROOT / 'consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter'
-     checked([str(JAVA / 'javac'), '--release', '8', '-proc:none', '-encoding', 'UTF-8',
-                     '-cp', CP, '-d', temporary,
--                    str(SOURCE / 'DspApiPasswordClient.java'),
-+                    *[str(path) for path in SDK_SOURCE.rglob('*.java')],
-                     str(SOURCE / 'HthDspApiCredentialAdapter.java'),
-                     str(common / 'IHthApiCredentialAdapter.java'),
-                     str(common / 'HthApiCredentialWriteException.java')])
-@@ -183,6 +226,25 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
-     exception = tmp / 'Exception.java'
-     exception.write_text('package com.ofss.digx.infra.exceptions; public class Exception extends java.lang.Exception { public Exception(String code) { super(code); } }')
-     checked([str(JAVA / 'javac'), '--release', '8', '-proc:none', '-d', temporary, str(exception)])
-+    # Replace only environment-owned preference/thread storage, retaining production factory/header code.
-+    config_stub=tmp/'ConfigurationFactory.java'
-+    config_stub.write_text('''package com.ofss.fc.infra.config;
-+public class ConfigurationFactory {
-+ public static java.util.prefs.Preferences preferences,inq01;
-+ public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
-+ public java.util.prefs.Preferences getConfigurations(String category){
-+  if("H2HApiAdapterImplConfig".equals(category))return inq01;
-+  throw new AssertionError("Wrong configuration category");
-+ }
-+}''')
-+    thread_stub=tmp/'ThreadAttribute.java'
-+    thread_stub.write_text('''package com.ofss.fc.infra.thread;
-+public class ThreadAttribute {
-+ private static final ThreadLocal<java.util.Map<String,Object>> VALUES=ThreadLocal.withInitial(java.util.HashMap::new);
-+ public static Object get(String key){return VALUES.get().get(key);}
-+ public static void set(String key,Object value){if(value==null)VALUES.get().remove(key);else VALUES.get().put(key,value);}
-+}''')
-+    checked([str(JAVA/'javac'),'--release','8','-proc:none','-d',temporary,str(config_stub),str(thread_stub)])
-     # The local HTTPS harness uses the JDK httpserver test module; production remains Java 8.
-     checked([str(JAVA / 'javac'), '-proc:none', '-encoding', 'UTF-8',
-                     '-cp', temporary + os.pathsep + CP, '-d', temporary, str(harness)])
-diff --git a/consulting/tests/hth1955/verify_code_lifecycle.py b/consulting/tests/hth1955/verify_code_lifecycle.py
-index a3325c0eb090f4b9d20741eaa3e1a9ebff07a4ff..f1482f0730042d9406a3d6253c86218522baa57f 100644
---- a/consulting/tests/hth1955/verify_code_lifecycle.py
-+++ b/consulting/tests/hth1955/verify_code_lifecycle.py
-@@ -16,9 +16,13 @@ def method(text,name):
-     return m[0]
- methods='\n'.join(method(service,n) for n in ['string','validateAndReserveCode','complete','fail','findCodeRequest'])
- queries='\n'.join(method(adapter,n) for n in ['findUsableCipher','findLatestExpiredCipher','recordFailedAttempt','reserve','consume','failReservation','findRequest'])
-+state_source=(BASE/'domain/hosttohost/entity/repository/adapter/HthApiPasswordStateRepository.java').read_text()
-+state_source=state_source[state_source.index('public final class'):].replace('public final class','final class',1)
- sql=(ROOT/'consulting/db/release/HTH_FIRST_DEPLOY.sql').read_text()
- schema=re.search(r'CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CODE \(.*?\);',sql,re.S)[0]
- schema=re.sub(r'VARCHAR2\((\d+) BYTE\)',r'VARCHAR(\1)',schema)
-+profile_schema=re.search(r'CREATE TABLE HTH_BEA.HTH_USER_PROFILE \(.*?\);',sql,re.S)[0]
-+profile_schema=re.sub(r'VARCHAR2\((\d+) BYTE\)',r'VARCHAR(\1)',profile_schema)
- JAVA_SOURCE=r"""
- import java.sql.*;import java.util.*;import java.util.logging.*;
- import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordCrypto;
-@@ -34,10 +38,13 @@ class Query {
- }
- class Session {final Connection connection;Session(Connection c){connection=c;}Query createSQLQuery(String sql){return new Query(connection,sql);}}
- class Repository { QUERIES }
-+STATE_SOURCE
- public class CodeLifecycleTest {
-+ static final String SETUP="SETUP";
-+ final HthApiPasswordStateRepository passwordStateRepository=new HthApiPasswordStateRepository();
-  static final String URL="jdbc:h2:mem:codes;MODE=Oracle;DB_CLOSE_DELAY=-1";
-  static final Logger LOGGER=Logger.getLogger("CodeTest");final Repository codeRepository=new Repository();
-- static class Identity {String partyId="PARTY",userId="USER",uamClientId="client";}
-+ static class Identity {String partyId="PARTY",userId="USER",uamClientId="client",profileUserId="USER@PARTY";}
-  static class SessionLease {Session session;boolean closed;SessionLease() throws Exception {try{Connection c=DriverManager.getConnection(URL);c.setAutoCommit(false);session=new Session(c);}catch(java.lang.Exception e){throw new Exception(e);}}
-  void close(boolean commit) throws Exception {if(closed)return;try{if(commit)session.connection.commit();else session.connection.rollback();session.connection.close();closed=true;}catch(java.lang.Exception e){throw new Exception(e);}}}
-  SessionLease openIndependent() throws Exception{return new SessionLease();} SessionLease open(boolean write) throws Exception{return new SessionLease();}
-@@ -49,27 +56,50 @@ public class CodeLifecycleTest {
-  static String scalar(String expression) throws java.lang.Exception {try(ResultSet r=db.createStatement().executeQuery(expression)){r.next();return r.getString(1);}}
-  static void seed(String purpose,boolean expired) throws java.lang.Exception {
-  db.createStatement().execute("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE");
-+ db.createStatement().execute("DELETE FROM HTH_BEA.HTH_USER_PROFILE");
-+ db.createStatement().execute("INSERT INTO HTH_BEA.HTH_USER_PROFILE (PARTY_ID,CLOSE_ID,API_PASSWORD_STATE,API_PASSWORD_CLIENT_ID) VALUES ('PARTY','USER@PARTY','"+("SETUP".equals(purpose)?"NOT_SETUP":"ACTIVE")+"','client')");
-  try(PreparedStatement p=db.prepareStatement("INSERT INTO HTH_BEA.HTH_API_PASSWORD_CODE (ID,PARTY_ID,USER_NAME,CODE_CIPHER,STATUS,EXPIRY_TIME,CREATED_BY,LAST_UPDATED_BY,PURPOSE) VALUES ('CODE','PARTY','USER@PARTY',?,'ACTIVE',?,'AP','AP',?)")){
-  p.setString(1,HthApiPasswordCrypto.encrypt("314159",HthApiPasswordCrypto.codeCipherKey()));p.setTimestamp(2,new Timestamp(System.currentTimeMillis()+(expired?-60000:60000)));p.setString(3,purpose);p.executeUpdate();}}
-  static String reserve(String purpose,String code,String request) throws Exception{return service.validateAndReserveCode("PARTY","USER",purpose,code,request,"client");}
-  static String status() throws java.lang.Exception{return scalar("SELECT STATUS FROM HTH_BEA.HTH_API_PASSWORD_CODE");}
-  public static void main(String[] args) throws java.lang.Exception {
-  db=DriverManager.getConnection(URL);db.createStatement().execute("CREATE SCHEMA HTH_BEA");db.createStatement().execute(java.nio.file.Files.readString(java.nio.file.Path.of(args[0])));
-+ db.createStatement().execute(java.nio.file.Files.readString(java.nio.file.Path.of(args[1])));
-  for(String purpose:new String[]{"SETUP","RESET"}){
-  seed(purpose,false);String request=UUID.randomUUID().toString();
-  fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"000000",request));
-  check("1".equals(scalar("SELECT ATTEMPT_COUNT FROM HTH_BEA.HTH_API_PASSWORD_CODE")),"Failed attempt not committed");
-  reserve(purpose,"314159",request);check("IN_PROGRESS".equals(status()),"Not reserved");
-- service.complete("USER",request,"CODE");check("USED".equals(status()),"Not consumed after success");
-+ service.complete(new Identity(),request,"CODE");check("USED".equals(status()),"Not consumed after success");
-+ check("ACTIVE".equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"State not updated with consume");
-  check("USED".equals(service.findCodeRequest(request,new Identity(),purpose)),"Replay result missing");
-  fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"314159",UUID.randomUUID().toString()));
-- seed(purpose,false);reserve(purpose,"314159",request);service.fail("USER",request,"CODE",false);check("ACTIVE".equals(status()),"Definite DSP rejection consumed Code");
-- reserve(purpose,"314159",request);service.fail("USER",request,"CODE",true);check("UNKNOWN".equals(status()),"Uncertain DSP write released Code");
-+ seed(purpose,false);reserve(purpose,"314159",request);service.fail(new Identity(),purpose,request,"CODE",false);check("ACTIVE".equals(status()),"Definite DSP rejection consumed Code");
-+ reserve(purpose,"314159",request);service.fail(new Identity(),purpose,request,"CODE",true);check("UNKNOWN".equals(status()),"Uncertain DSP write released Code");
-+ check("UNKNOWN".equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"Uncertain state incorrectly active");
-  fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"314159",request));
-  seed(purpose,true);fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"000000",request));fails("DIGX_CZ_HTH_API_PASSWORD_003",()->reserve(purpose,"314159",request));
-  seed(purpose,false);for(int i=0;i<5;i++)fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"000000",request));check("INVALID".equals(status()),"No lockout");
-  }
-  seed("RESET",false);fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve("SETUP","314159",UUID.randomUUID().toString()));
-+ // Two simultaneous submits must not both reserve the same user's password operation.
-+ seed("SETUP",false);
-+ var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
-+ var start=new java.util.concurrent.CountDownLatch(1);
-+ java.util.concurrent.Callable<Boolean> submit=()->{start.await();try{reserve("SETUP","314159",UUID.randomUUID().toString());return true;}catch(Exception rejected){return false;}};
-+ var first=pool.submit(submit);var second=pool.submit(submit);start.countDown();
-+ try{check((first.get(10,java.util.concurrent.TimeUnit.SECONDS)?1:0)+(second.get(10,java.util.concurrent.TimeUnit.SECONDS)?1:0)==1,"Concurrent submits both reserved");}
-+ finally{pool.shutdownNow();}
-+ // Failed local consume rolls back the state update in the same transaction.
-+ seed("SETUP",false);String req=UUID.randomUUID().toString();reserve("SETUP","314159",req);
-+ db.createStatement().execute("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS='INVALID'");
-+ fails("DIGX_CZ_HTH_API_PASSWORD_007",()->service.complete(new Identity(),req,"CODE"));
-+ check("IN_PROGRESS".equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"State committed despite failed consume");
-+ seed("RESET",false);Session inspect=new Session(db);
-+ check("UNKNOWN".equals(service.passwordStateRepository.read(inspect,"PARTY","USER","different-client")),"Wrong client binding accepted");
-+ check("NOT_SETUP".equals(service.passwordStateRepository.readForCodeGeneration(inspect,"PARTY","NEWUSER","client")),"New-user pending Code unavailable");
-+ db.createStatement().execute("UPDATE HTH_BEA.HTH_USER_PROFILE SET API_PASSWORD_STATE='UNKNOWN'");
-+ check("UNKNOWN".equals(service.passwordStateRepository.readForCodeGeneration(inspect,"PARTY","USER","client")),"Legacy user guessed as unset");
-  // Actual session RSA implementation: matching key works; cross-session and expired keys fail.
-  var key=HthApiPasswordTransport.create("USER",System.currentTimeMillis());
-  var pub=java.security.KeyFactory.getInstance("RSA").generatePublic(new java.security.spec.RSAPublicKeySpec(new java.math.BigInteger(key.getModulus(),16),new java.math.BigInteger(key.getPublicExponent(),16)));
-@@ -81,9 +111,9 @@ public class CodeLifecycleTest {
-  System.out.println("PASS: real Code AES/RSA, production SQL and transaction bodies: SETUP/RESET reserve/consume/replay, release/unknown, mismatch-before-expiry, lockout, purpose and session isolation");db.close();
-  }
- }
--""".replace('QUERIES',queries).replace('METHODS',methods)
-+""".replace('STATE_SOURCE',state_source).replace('QUERIES',queries).replace('METHODS',methods)
- with tempfile.TemporaryDirectory(prefix='hth1955-code-') as directory:
-- work=Path(directory);(work/'schema.sql').write_text(schema);(work/'CodeLifecycleTest.java').write_text(JAVA_SOURCE)
-+ work=Path(directory);(work/'schema.sql').write_text(schema);(work/'profile.sql').write_text(profile_schema);(work/'CodeLifecycleTest.java').write_text(JAVA_SOURCE)
-  (work/'ConfigurationFactory.java').write_text("""package com.ofss.fc.infra.config;
- public class ConfigurationFactory {
+@@ -233,7 +237,7 @@ public class ConfigurationFactory {
+  public static java.util.prefs.Preferences preferences,inq01;
   public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
-@@ -96,4 +126,4 @@ public class ConfigurationFactory {
-  };}
- }""")
-  subprocess.run([str(JAVA/'javac'),'-proc:none','-cp',str(H2),'-d',directory,str(work/'CodeLifecycleTest.java'),str(work/'ConfigurationFactory.java'),str(BASE/'app/hosttohost/util/HthApiPasswordCrypto.java'),str(BASE/'app/hosttohost/util/HthApiPasswordTransport.java')],check=True)
-- subprocess.run([str(JAVA/'java'),'-cp',directory+os.pathsep+str(H2),'CodeLifecycleTest',str(work/'schema.sql')],check=True)
-+ subprocess.run([str(JAVA/'java'),'-cp',directory+os.pathsep+str(H2),'CodeLifecycleTest',str(work/'schema.sql'),str(work/'profile.sql')],check=True)
-diff --git a/consulting/tests/hth1955/verify_contract_guard.py b/consulting/tests/hth1955/verify_contract_guard.py
-index 198f2f36539d6868a3388ff4de1380a32aa328a3..de0872823ae888e081fa53b532b341069436f2c1 100644
---- a/consulting/tests/hth1955/verify_contract_guard.py
-+++ b/consulting/tests/hth1955/verify_contract_guard.py
-@@ -1,5 +1,6 @@
- """Compile the production change() body and actual DSP adapter; fixture only OBDX boundaries.
--Proves unsupported setup/reset cannot reserve a Code, issue a password write or report replay success.
-+Exercises setup/reset success and definite/uncertain failures using the unchanged production change() body.
-+DSP HTTP and Code/State SQL have separate integration tests; those boundaries are fixtures here.
- """
- from pathlib import Path
- import os, re, subprocess, tempfile
-@@ -16,11 +17,13 @@ HARNESS=r'''
- package com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl;
- import com.ofss.digx.infra.exceptions.Exception;
- import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.IHthApiCredentialAdapter;
-+import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException;
- class Base {void checkAccessPolicy(Object... args){} void checkResponsePolicy(Object... args){} }
- public class ContractGuardTest extends Base {
-  static final String SETUP="SETUP",RESET="RESET";
-- int lookups,reserves,completes,releases,successes,rejections,notifications;
-- String phase;
-+ int reserves,completes,releases,successes,rejections,notifications,writes;
-+ boolean replay,badCode,commitFailure,writeFailure,uncertain;
-+ String phase,state,codeState="ACTIVE",initialState;
-  static class SessionContext {String getUserId(){return "USER@PARTY";}}
-  static class HostToHostApiPasswordRequestDTO {
-   String encrypted="synthetic-code-envelope",password="synthetic-dsp-cipher";
-@@ -29,41 +32,64 @@ public class ContractGuardTest extends Base {
+  public java.util.prefs.Preferences getConfigurations(String category){
+-  if("H2HApiAdapterImplConfig".equals(category))return inq01;
++  if("DSPApiAdapterImplConfig".equals(category))return preferences;
+   throw new AssertionError("Wrong configuration category");
   }
-  static class Status {void setReferenceNumber(String value){}void setExternalReferenceNumber(String value){} }
-  static class HostToHostApiPasswordResponseDTO {
--  Status getStatus(){return new Status();}void setSetupState(String value){}void setResetAllowed(boolean value){}
-+  String state;Status getStatus(){return new Status();}void setSetupState(String value){state=value;}void setResetAllowed(boolean value){}
-  }
-  static class HthOnboardingAudit {static class Entry {Entry put(String key,Object value){return this;} }}
-  static class Identity {String userId="USER",partyId="PARTY",uamClientId="client",profileUserId="USER@PARTY";}
-  static class Interaction {static int begins,closes;static void begin(SessionContext c){begins++;}static void close(){closes++;}}
-- static class ThreadAttribute {static Object get(String key){return null;}}
-+ static class ThreadAttribute {static Object get(String key){return new KeyMaterial();}}
-  static class HthApiPasswordTransport {static String THREAD_ATTRIBUTE="fixture";}
-  static class KeyMaterial {String getRandomNumber(){return "314159";}}
-  boolean isFeatureEnabled(){return true;}void validateRequest(HostToHostApiPasswordRequestDTO r){}
-  Identity identity(SessionContext c,boolean required){return new Identity();}
-  HostToHostApiPasswordResponseDTO response(){return new HostToHostApiPasswordResponseDTO();}
-- IHthApiCredentialAdapter dspAdapter(){return new HthDspApiCredentialAdapter((DspApiPasswordClient)null);}
-- String findCodeRequest(String id,Identity identity,String operation){lookups++;return "USED";}
-- String credentialState(Identity i,boolean unknown){return "NOT_SETUP";}
-+ IHthApiCredentialAdapter dspAdapter(){return new IHthApiCredentialAdapter(){
-+  public String getStatus(String client,String user){throw new AssertionError("DSP has no status API");}
-+  public void requireWriteSupported(String operation){}
-+  public String publicKey(String h){return "fixture";}
-+  public void modify(String client,String close,String req,String operation,String hash,String nonce) throws Exception {
-+   check("IN_PROGRESS".equals(codeState),"DSP called before Code reservation");writes++;
-+   if(writeFailure)throw new HthApiCredentialWriteException(uncertain);
-+  }
-+ };}
-+ String findCodeRequest(String id,Identity identity,String operation){return replay?"USED":null;}
-+ String credentialState(Identity i,boolean unknown){return state;}
-  String decryptCode(HostToHostApiPasswordRequestDTO r,String user,String operation,Identity i){return "314159";}
-- String validateAndReserveCode(String party,String user,String operation,String code,String request,String client){reserves++;return "CODE";}
-- void fail(String user,String request,String code,boolean unknown) throws Exception{releases++;}
-- void complete(String user,String request,String code) throws Exception{completes++;}
-+ String validateAndReserveCode(String party,String user,String operation,String code,String request,String client) throws Exception {
-+  if(badCode)throw new Exception("DIGX_CZ_HTH_API_PASSWORD_002");reserves++;codeState="IN_PROGRESS";state="IN_PROGRESS";return "CODE";
-+ }
-+ void fail(Identity i,String operation,String request,String code,boolean unknown) throws Exception {
-+  releases++;codeState=unknown?"UNKNOWN":"ACTIVE";state=unknown?"UNKNOWN":initialState;
-+ }
-+ void complete(Identity i,String request,String code) throws Exception {
-+  if(commitFailure)throw new Exception("commit failure");completes++;codeState="USED";state="ACTIVE";
-+ }
-  void recordCRM(SessionContext c,String operation,boolean success,Identity i){if(success)successes++;else rejections++;}
-  void notifySetupSuccess(SessionContext c,Identity i){notifications++;}void notifyResetSuccess(SessionContext c,Identity i){notifications++;}
-  void logPhaseFailure(String stage,java.lang.Exception e){phase=stage;}
-  BODY
-  static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
-+ static ContractGuardTest create(String operation){ContractGuardTest s=new ContractGuardTest();s.initialState=SETUP.equals(operation)?"NOT_SETUP":"ACTIVE";s.state=s.initialState;return s;}
-+ void invoke(String operation,String expectedError) throws java.lang.Exception {
-+  HostToHostApiPasswordRequestDTO r=new HostToHostApiPasswordRequestDTO();
-+  try{HostToHostApiPasswordResponseDTO result=change(new SessionContext(),r,operation,"service",new HthOnboardingAudit.Entry());
-+   check(expectedError==null,"Expected failure "+expectedError);check("ACTIVE".equals(result.state),"Wrong success state");
-+  }catch(Exception e){check(expectedError!=null && expectedError.equals(e.getMessage()),"Unexpected result: "+e.getMessage());}
-+  check(r.encrypted==null && r.password==null,"Request buffers not cleared");
-+ }
-  public static void main(String[] args) throws java.lang.Exception {
--  for(String operation:new String[]{SETUP,RESET}){
--   ContractGuardTest service=new ContractGuardTest();HostToHostApiPasswordRequestDTO request=new HostToHostApiPasswordRequestDTO();
--   try{service.change(new SessionContext(),request,operation,"service",new HthOnboardingAudit.Entry());throw new AssertionError("Unsupported flow returned success");}
--   catch(Exception e){check("DIGX_CZ_HTH_API_PASSWORD_009".equals(e.getMessage()),"Wrong unavailable error");}
--   check("DSP_CONTRACT".equals(service.phase),"Guard did not reject before Code handling");
--   check(service.lookups==0 && service.reserves==0 && service.completes==0 && service.releases==0,"Code lifecycle touched");
--   check(service.successes==0 && service.notifications==0 && service.rejections==1,"Wrong success/audit behaviour");
--   check(request.encrypted==null && request.password==null,"Request secrets not cleared");
-+  for(String op:new String[]{SETUP,RESET}){
-+   ContractGuardTest s=create(op);s.invoke(op,null);check(s.writes==1&&s.completes==1&&s.notifications==1&&s.successes==1,"Success incomplete");
-+   s=create(op);s.badCode=true;s.invoke(op,"DIGX_CZ_HTH_API_PASSWORD_002");check(s.writes==0&&s.reserves==0&&s.notifications==0,"Wrong Code reached DSP");
-+   for(boolean unknown:new boolean[]{false,true}){s=create(op);s.writeFailure=true;s.uncertain=unknown;s.invoke(op,"DIGX_CZ_HTH_API_PASSWORD_009");
-+    check(s.completes==0&&s.notifications==0&&s.releases==1,"DSP failure reported success");check((unknown?"UNKNOWN":s.initialState).equals(s.state),"Wrong failure state");}
-+   s=create(op);s.commitFailure=true;s.invoke(op,"DIGX_CZ_HTH_API_PASSWORD_009");check("UNKNOWN".equals(s.state)&&s.notifications==0,"Lost local commit allowed retry");
-+   s=create(op);s.replay=true;s.state="ACTIVE";s.invoke(op,null);check(s.writes==0&&s.reserves==0&&s.notifications==0,"Replay wrote or notified again");
-+   s=create(op);s.replay=true;s.state="UNKNOWN";s.invoke(op,"DIGX_CZ_HTH_API_PASSWORD_007");check(s.writes==0,"Stale replay overwrote ambiguous state");
-+   s=create(op);s.state="UNKNOWN";s.invoke(op,SETUP.equals(op)?"DIGX_CZ_HTH_API_PASSWORD_005":"DIGX_CZ_HTH_API_PASSWORD_006");check(s.writes==0,"Unknown state written");
-   }
--  check(Interaction.begins==2 && Interaction.closes==2,"Interaction not closed");
--  System.out.println("PASS: production setup/reset guard rejects before USED replay, Code lookup/reserve/consume and success notification; request buffers cleared");
-+  check(Interaction.begins==Interaction.closes,"Interaction leaked");
-+  System.out.println("PASS: production setup/reset flow: success, invalid Code, known rejection, timeout, local completion failure, replay, unknown state, notifications and buffer clearing");
-  }
- }
- '''.replace('BODY',body)
-@@ -74,6 +100,6 @@ with tempfile.TemporaryDirectory(prefix='hth1955-guard-') as directory:
-  harness=tmp/'ContractGuardTest.java';harness.write_text(HARNESS)
-  subprocess.run([str(JAVA/'javac'),'--release','8','-proc:none','-encoding','UTF-8','-cp',CP,'-d',directory,
-   str(exception),str(COMMON/'IHthApiCredentialAdapter.java'),str(COMMON/'HthApiCredentialWriteException.java'),
--  str(SOURCE/'DspApiPasswordClient.java'),str(SOURCE/'HthDspApiCredentialAdapter.java'),str(harness)],check=True)
-+  *[str(path) for path in (SOURCE.parents[2]/'microservice/api/dsp').rglob('*.java')],str(SOURCE/'HthDspApiCredentialAdapter.java'),str(harness)],check=True)
-  subprocess.run([str(JAVA/'java'),'-cp',directory+os.pathsep+CP,
-   'com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.ContractGuardTest'],check=True)
+ }''')

@@ -119,16 +119,20 @@ public class DspTransportTest {
     try {
       MemoryPreferences config=new MemoryPreferences();
       String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
-      config.put(PREFIX+"SERVICE_URL","https://obsolete-dsp.invalid");
-      config.put(PREFIX+"APIC_CLIENT_ID","obsolete-dsp-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","obsolete-dsp-secret");
-      config.put(PREFIX+"CHANNEL","obsolete-channel");
+      config.put(PREFIX+"SERVICE_URL",url+"/");
+      config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
+      // Leave DSP.CHANNEL unset to verify the original BCO default.
       MemoryPreferences inq01=new MemoryPreferences();
-      inq01.put("H2H.CLIENT_ID","fixture-id");inq01.put("H2H.CLIENT_SECRET","fixture-secret");
-      inq01.put("H2H.SERVICE_URL",url+"/");
+      inq01.put("H2H.CLIENT_ID","unrelated-inquiry-id");inq01.put("H2H.CLIENT_SECRET","unrelated-inquiry-secret");
+      inq01.put("H2H.SERVICE_URL","https://unrelated-inquiry.invalid");
       ConfigurationFactory.preferences=config;ConfigurationFactory.inq01=inq01;
       DspClient client=DSPApiClientFactory.getDspClient();
       check(client==DSPApiClientFactory.getDspClient(),"Factory did not reuse SDK client");
       CommonHeader header=client.getCommonHeader();
+      // Existing BM validation works before password calls and still works afterwards.
+      ClientValidationParam bmBefore=new ClientValidationParam();bmBefore.setClientId("business-client");
+      check(Boolean.TRUE.equals(client.clientApi().validateClientId(bmBefore).getValid()),"BM validation changed");
+      header.reset();
       HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
       int initial=calls.get();
       check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
@@ -187,12 +191,12 @@ public class DspTransportTest {
       // Existing SDK client validation still uses its original interface and route.
       ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
       check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
-      header.reset();check(clientValidationCalls.get()==1,"Existing client route changed");
+      header.reset();check(clientValidationCalls.get()==2,"Existing client route changed");
       // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
       DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
       fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
       check(assertion.get()==null,"Server request assertion failed: "+assertion.get());
-      System.out.println("PASS: SDK factory, shared INQ01 base URL/authentication, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
+      System.out.println("PASS: SDK factory, original BM DSP base URL/authentication, unrelated INQ01 configuration ignored, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
     }finally{server.stop(0);executor.shutdownNow();}
   }
 }
@@ -233,7 +237,7 @@ public class ConfigurationFactory {
  public static java.util.prefs.Preferences preferences,inq01;
  public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
  public java.util.prefs.Preferences getConfigurations(String category){
-  if("H2HApiAdapterImplConfig".equals(category))return inq01;
+  if("DSPApiAdapterImplConfig".equals(category))return preferences;
   throw new AssertionError("Wrong configuration category");
  }
 }''')

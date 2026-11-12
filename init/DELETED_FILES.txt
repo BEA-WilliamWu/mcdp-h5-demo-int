@@ -1,5 +1,5 @@
-需从 CM 目标源码移除的旧文件。完整补丁及增量补丁分别包含其基线上的删除。
-手工复制时，以下不存在的文件可忽略；存在时须删除，避免编译残留。
+需从 CM 目标源码清理的旧文件（不存在可忽略）。
+恢复原 BM 的 DSPApiClientFactory.java 必须复制覆盖，不能删除。
 
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredential.orm.xml
 bco-applicaion-main/consulting/config/orm/eclipselink/mappings/cz/hosttohost/HthApiPasswordCredentialKey-embeddable.orm.xml

@@ -47,7 +47,7 @@ index f2b1f3400929ae940bd35c6d91813e566e5eb158..55c96f979b0bdeac54cc3c75f90e3d11
      sb.append("    clientId: ").append(toIndentedString(clientId)).append("\n");
      sb.append("}");
 diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
-index f6091dec79a2e23d2c26669af63e0f24ae1e86b8..8e839f1f8339b71e569bbbcaae6ae959303b6272 100644
+index f6091dec79a2e23d2c26669af63e0f24ae1e86b8..62ae317bba453856a8dc6101ff27c775ee117851 100644
 --- a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
 +++ b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
 @@ -3,7 +3,12 @@ openapi: 3.0.3
@@ -57,7 +57,7 @@ index f6091dec79a2e23d2c26669af63e0f24ae1e86b8..8e839f1f8339b71e569bbbcaae6ae959
 -    API documentation for Password.
 +    Internal CM password setup/reset. CM validates user entitlement and the approved one-time Code.
 +    Only the configured CM APIC subscription is accepted; Channel alone is not authorization.
-+    Deploy with dsp.password.cm-client-id/secret set to the existing INQ01 CM subscription.
++    Deploy with dsp.password.cm-client-id/secret set to the existing BM DSP subscription (DSP.APIC_CLIENT_ID/SECRET in CM).
 +    A creates a password; M replaces an existing active password without an old password.
 +    Password hash format is Base64(raw SHA-256(UTF-8(password))), stored without rehashing.
 +    OAEP SHA-256, MGF1 SHA-256, empty label; encrypted bytes use Base64.
@@ -344,7 +344,7 @@ index 7e31f3e97de334d84b58b5dcd278551a3ab479ab..e2d171f56cbc7a8f3125367ed4cf100f
      }
  }
 diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
-index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..05fccba0b97a4d547f17cbf361360f42315f47ca 100644
+index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..c607f3df299fe358a5690248626575ccffa9e02f 100644
 --- a/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
 +++ b/dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml
 @@ -35,6 +35,8 @@ logging:
@@ -363,7 +363,7 @@ index 4adb284be692cbf7f0b27dc20a9e46e1b4ce40b0..05fccba0b97a4d547f17cbf361360f42
 -      enabled: true
 \ No newline at end of file
 +      enabled: true
-+# Same internal APIC subscription as CM's released INQ01 call. Inject using deployment secrets.
++# Same internal APIC subscription as BM's existing DSP client validation. Inject using deployment secrets.
 +# Empty values reject both password APIs; no fallback to a customer subscription.
 +dsp:
 +  password:

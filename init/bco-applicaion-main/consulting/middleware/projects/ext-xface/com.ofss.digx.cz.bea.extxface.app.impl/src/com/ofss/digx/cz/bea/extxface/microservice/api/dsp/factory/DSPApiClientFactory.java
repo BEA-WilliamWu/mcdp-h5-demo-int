@@ -9,13 +9,12 @@ import java.util.prefs.Preferences;
 
 public class DSPApiClientFactory {
 
-    // Reuse the released INQ01 internal APIC base, subscription and channel.
-    private static final String CONFIG_CATEGORY = "H2HApiAdapterImplConfig";
+    private static final String CONFIG_CATEGORY = "DSPApiAdapterImplConfig";
 
-    private static final String PROP_SERVICE_URL = "H2H.SERVICE_URL";
-    private static final String PROP_APIC_CLIENT_ID = "H2H.CLIENT_ID";
-    private static final String PROP_APIC_CLIENT_SECRET = "H2H.CLIENT_SECRET";
-    private static final String PROP_CHANNEL = "H2H.CHANNEL";
+    private static final String PROP_SERVICE_URL = "DSP.SERVICE_URL";
+    private static final String PROP_APIC_CLIENT_ID = "DSP.APIC_CLIENT_ID";
+    private static final String PROP_APIC_CLIENT_SECRET = "DSP.APIC_CLIENT_SECRET";
+    private static final String PROP_CHANNEL = "DSP.CHANNEL";
 
     private static final String DEFAULT_CHANNEL = "BCO";
     private static final String EMPTY_STR = "";

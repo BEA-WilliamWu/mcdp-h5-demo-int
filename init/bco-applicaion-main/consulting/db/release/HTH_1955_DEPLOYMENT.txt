@@ -12,8 +12,11 @@ BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码
    oldEncryptedPassword 是兼容保留字段，已不参与本接口校验；没有新增 R、queryOnly 或状态查询 API。
 4. DSP 解密后检查是否为规范的 32 字节 SHA-256 Base64 字符串，原样保存，不再次 Hash。
    修正 DSP_AUTH_CREDENTIAL 的 MyBatis mapper namespace；保存失败不得返回成功。
-5. CM 仍复用已上线 INQ01 的 H2HApiAdapterImplConfig：
-   H2H.SERVICE_URL、H2H.CLIENT_ID、H2H.CLIENT_SECRET、H2H.CHANNEL（本流程为 BCO）。
+5. CM 密码接口沿用原 BM Client ID 校验的 DSPApiAdapterImplConfig：
+   DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（原默认 BCO）。
+   DSPApiClientFactory 已恢复为 QTES2 同步版本原样；BM 校验页面和 HostToHostManagement 调用代码未改。
+   H2H.* 继续用于原 Inquiry，密码接口不读取或回退到该配置。
+   密码方法在 DspClient 中独立增加，共用原工厂、Header 和 SDK 底层传输，原 clientApi() 保持 SDK 实现。
    密码调用禁用请求体日志、自动重试和重定向；其余 Inquiry 逻辑不改。
 
 授权与部署配置
@@ -21,9 +24,9 @@ BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码
 - DSP 的两个密码接口额外验证 BCO Channel 和受信任 CM 的 APIC client ID/secret。
   不能仅凭调用方可自行填写的 Channel=BCO 就允许重设。
 - 在 DSP 部署环境注入 HTH_CM_APIC_CLIENT_ID、HTH_CM_APIC_CLIENT_SECRET。
-  值复用现有 CM INQ01 的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
+  值使用原 BM DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET 对应的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
   这两个值为空时接口拒绝请求。API 网关必须校验并向 DSP 转发相应凭据，或由网关维护等价可信身份。
-- APIC 路由继续复用原 H2H.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
+- APIC 路由继续复用原 BM DSP.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
 - DSP application.yaml 对密码接口排除通用请求体审计日志；应用日志只记阶段、结果及异常类型。
   部署配置不得另行打开这两个接口的 HTTP body 调试日志。
 
@@ -52,6 +55,8 @@ CM 不保存密码或密码 Hash。现有 HTH_USER_PROFILE ORM 不映射这四�
 
 SQL 执行
 生产首次上线（只有 BCO + Inquiry）：执行合并的 HTH_FIRST_DEPLOY.sql。
+  section 18 仅补缺失的原 BM DSP.* 配置，已有值不覆盖；不会修改 H2H.*。
+  已有 UAT DSP.* 配置继续沿用，只需确认同一 APIC 订阅可访问两个密码路径。
 已有 UAT：执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次，先加四列再部署 CM。
   脚本让已有 profile 保持 UNKNOWN，随后新建 profile 默认 NOT_SETUP。
   若四列已存在，不要重复执行 ALTER ADD；先查询 USER_TAB_COLUMNS/ALL_TAB_COLUMNS 确认。
@@ -77,7 +82,7 @@ HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本�
 - 实际 CM 浏览器 transport.js + WebCrypto -> 实际 DSP 解密/保存逻辑，验证准确的 Base64 Hash。
 - CM 实际 change() 方法：成功、Code 拒绝、DSP 拒绝/超时、本地完成失败、重复请求、通知及敏感字段清理。
 - CM 实际状态/Code SQL 与 H2：预约/消费原子性、UNKNOWN 门控、错误次数、先匹配再判断过期、用途和会话隔离。
-- 本地 HTTPS：共用 INQ01 配置、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
+- 本地 HTTPS：共用原 BM DSP 配置（测试同时提供不同的 H2H 配置，确认不读取它）、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
 - DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
   新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
   DSP 本次共 17 项测试通过（无失败、无跳过）。

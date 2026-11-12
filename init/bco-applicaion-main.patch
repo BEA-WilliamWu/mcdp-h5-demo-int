@@ -394,10 +394,10 @@ index 7302df2af8a47b3eed117e7ad856edd975d11576..00000000000000000000000000000000
 -</entity-mappings>
 diff --git a/consulting/db/release/HTH_1955_DEPLOYMENT.txt b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
 new file mode 100644
-index 0000000000000000000000000000000000000000..be0c001b57323497e0a82e7e39dee55b0425780a
+index 0000000000000000000000000000000000000000..987f3e79306b3e55f72cb2813a3fdab3e7678ab7
 --- /dev/null
 +++ b/consulting/db/release/HTH_1955_DEPLOYMENT.txt
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,108 @@
 +BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码 Hash
 +2026-11-12
 +
@@ -412,8 +412,11 @@ index 0000000000000000000000000000000000000000..be0c001b57323497e0a82e7e39dee55b
 +   oldEncryptedPassword 是兼容保留字段，已不参与本接口校验；没有新增 R、queryOnly 或状态查询 API。
 +4. DSP 解密后检查是否为规范的 32 字节 SHA-256 Base64 字符串，原样保存，不再次 Hash。
 +   修正 DSP_AUTH_CREDENTIAL 的 MyBatis mapper namespace；保存失败不得返回成功。
-+5. CM 仍复用已上线 INQ01 的 H2HApiAdapterImplConfig：
-+   H2H.SERVICE_URL、H2H.CLIENT_ID、H2H.CLIENT_SECRET、H2H.CHANNEL（本流程为 BCO）。
++5. CM 密码接口沿用原 BM Client ID 校验的 DSPApiAdapterImplConfig：
++   DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（原默认 BCO）。
++   DSPApiClientFactory 已恢复为 QTES2 同步版本原样；BM 校验页面和 HostToHostManagement 调用代码未改。
++   H2H.* 继续用于原 Inquiry，密码接口不读取或回退到该配置。
++   密码方法在 DspClient 中独立增加，共用原工厂、Header 和 SDK 底层传输，原 clientApi() 保持 SDK 实现。
 +   密码调用禁用请求体日志、自动重试和重定向；其余 Inquiry 逻辑不改。
 +
 +授权与部署配置
@@ -421,9 +424,9 @@ index 0000000000000000000000000000000000000000..be0c001b57323497e0a82e7e39dee55b
 +- DSP 的两个密码接口额外验证 BCO Channel 和受信任 CM 的 APIC client ID/secret。
 +  不能仅凭调用方可自行填写的 Channel=BCO 就允许重设。
 +- 在 DSP 部署环境注入 HTH_CM_APIC_CLIENT_ID、HTH_CM_APIC_CLIENT_SECRET。
-+  值复用现有 CM INQ01 的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
++  值使用原 BM DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET 对应的 APIC 凭据，不新建另一组凭据，不写进 Git 或日志。
 +  这两个值为空时接口拒绝请求。API 网关必须校验并向 DSP 转发相应凭据，或由网关维护等价可信身份。
-+- APIC 路由继续复用原 H2H.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
++- APIC 路由继续复用原 BM DSP.SERVICE_URL，发布上述两个路径到该内部订阅；不得对客户订阅开放。
 +- DSP application.yaml 对密码接口排除通用请求体审计日志；应用日志只记阶段、结果及异常类型。
 +  部署配置不得另行打开这两个接口的 HTTP body 调试日志。
 +
@@ -452,6 +455,8 @@ index 0000000000000000000000000000000000000000..be0c001b57323497e0a82e7e39dee55b
 +
 +SQL 执行
 +生产首次上线（只有 BCO + Inquiry）：执行合并的 HTH_FIRST_DEPLOY.sql。
++  section 18 仅补缺失的原 BM DSP.* 配置，已有值不覆盖；不会修改 H2H.*。
++  已有 UAT DSP.* 配置继续沿用，只需确认同一 APIC 订阅可访问两个密码路径。
 +已有 UAT：执行 HTH_1955_LOCAL_STATE_UPGRADE.sql 一次，先加四列再部署 CM。
 +  脚本让已有 profile 保持 UNKNOWN，随后新建 profile 默认 NOT_SETUP。
 +  若四列已存在，不要重复执行 ALTER ADD；先查询 USER_TAB_COLUMNS/ALL_TAB_COLUMNS 确认。
@@ -477,7 +482,7 @@ index 0000000000000000000000000000000000000000..be0c001b57323497e0a82e7e39dee55b
 +- 实际 CM 浏览器 transport.js + WebCrypto -> 实际 DSP 解密/保存逻辑，验证准确的 Base64 Hash。
 +- CM 实际 change() 方法：成功、Code 拒绝、DSP 拒绝/超时、本地完成失败、重复请求、通知及敏感字段清理。
 +- CM 实际状态/Code SQL 与 H2：预约/消费原子性、UNKNOWN 门控、错误次数、先匹配再判断过期、用途和会话隔离。
-+- 本地 HTTPS：共用 INQ01 配置、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
++- 本地 HTTPS：共用原 BM DSP 配置（测试同时提供不同的 H2H 配置，确认不读取它）、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
 +- DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
 +  新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
 +  DSP 本次共 17 项测试通过（无失败、无跳过）。
@@ -554,7 +559,7 @@ index 0000000000000000000000000000000000000000..78464df4f856f09f118b05943088f16b
 +COMMIT;
 diff --git a/consulting/db/release/HTH_1955_UAT_UPGRADE.sql b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
 new file mode 100644
-index 0000000000000000000000000000000000000000..655c3df7c428e5bb4eb4b7e1c3c89a4ba25233cd
+index 0000000000000000000000000000000000000000..e3ba71a464f5100778c34cf05fb5c5f0c8f730a3
 --- /dev/null
 +++ b/consulting/db/release/HTH_1955_UAT_UPGRADE.sql
 @@ -0,0 +1,9 @@
@@ -566,9 +571,9 @@ index 0000000000000000000000000000000000000000..655c3df7c428e5bb4eb4b7e1c3c89a4b
 +-- Historical request rows with no confirmed DSP client binding cannot be replayed as successes.
 +-- Reconcile any IN_PROGRESS/UNKNOWN reservations with DSP before reusing affected users.
 +-- The new local status columns are in HTH_1955_LOCAL_STATE_UPGRADE.sql; apply that once as well.
-+-- Transport reuses H2HApiAdapterImplConfig / H2H.SERVICE_URL, CLIENT_ID, CLIENT_SECRET, CHANNEL.
++-- Transport reuses the original BM DSPApiAdapterImplConfig / DSP.SERVICE_URL, APIC_CLIENT_ID, APIC_CLIENT_SECRET, CHANNEL.
 diff --git a/consulting/db/release/HTH_FIRST_DEPLOY.sql b/consulting/db/release/HTH_FIRST_DEPLOY.sql
-index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba006a2921 100644
+index e2c69eff369fab32d5fa93087a2c6785953cba1c..1c31858fa06fa89781ca6c8e58fa97e9ea071e7c 100644
 --- a/consulting/db/release/HTH_FIRST_DEPLOY.sql
 +++ b/consulting/db/release/HTH_FIRST_DEPLOY.sql
 @@ -1,5 +1,5 @@
@@ -578,7 +583,17 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  -- One file, ordinary DDL/DML. No historical story scripts need to be run first/afterwards.
  -- Oracle SQLcl / SQL*Plus script mode, UTF-8. Do not run just the selected current statement.
  -- Use a dedicated deployment session in the OBDX configuration schema; stop applications first.
-@@ -22,19 +22,18 @@ ACCEPT HTH_RUNTIME_OWNER CHAR PROMPT 'HTH runtime database schema: '
+@@ -9,8 +9,7 @@
+ -- On any error: STOP; do not resume blindly. Inspect partial DDL before preparing recovery.
+ -- Supply production values from the approved release configuration, not UAT credentials.
+ -- No output/spooling of secrets. Existing DSP configuration is preserved by section 18.
+--- Optional DSP success JSON pointer/value must match the delivered API response; blank means
+--- only synchronous empty-body 200/201/204 is accepted. Never treat a business error as success.
++-- Password writes require HTTP 200 and DSP status 000000; never treat a business error as success.
+ SET ECHO OFF
+ SET VERIFY OFF
+ SET FEEDBACK ON
+@@ -22,19 +21,18 @@ ACCEPT HTH_RUNTIME_OWNER CHAR PROMPT 'HTH runtime database schema: '
  ACCEPT BM_MAKER_POLICY CHAR PROMPT 'Approved BM maker policy ID: '
  ACCEPT BM_APPROVER_POLICY CHAR PROMPT 'Approved BM approver policy ID: '
  ACCEPT HTH_CODE_KEY CHAR PROMPT 'Production AES-256 Code key (Base64): ' HIDE
@@ -590,13 +605,13 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
 -ACCEPT DSP_PERSIST_CLIENT_SECRET CHAR PROMPT 'DSP persist APIC secret: ' HIDE
 -ACCEPT DSP_SUCCESS_JSON_POINTER CHAR DEFAULT '' PROMPT 'Confirmed DSP success JSON pointer (blank for empty response): '
 -ACCEPT DSP_SUCCESS_JSON_VALUE CHAR DEFAULT '' PROMPT 'Confirmed DSP success JSON value (blank for empty response): '
-+-- DSP reuses the released INQ01 APIC base, client ID, secret and channel; no DSP settings are inserted.
-+PROMPT Check: Existing INQ01 APIC base, client ID and secret must be provisioned
-+SELECT CASE WHEN COUNT(DISTINCT PROP_ID)=3 THEN 1 ELSE 1/0 END AS CHECK_OK
-+FROM DIGX_FW_CONFIG_ADAPTER_PROP_V
-+WHERE CATEGORY_ID='H2HApi' AND PROP_ID IN ('H2H.SERVICE_URL','H2H.CLIENT_ID','H2H.CLIENT_SECRET')
-+  AND TRIM(PROP_VALUE) IS NOT NULL
-+  AND (PROP_ID<>'H2H.SERVICE_URL' OR PROP_VALUE LIKE 'https://%');
++-- Reuse the original BM DSP configuration. Existing rows are preserved in section 18.
++ACCEPT DSP_MGMT_URL CHAR PROMPT 'Production DSP internal APIC base URL (BM and password APIs): '
++ACCEPT DSP_MGMT_CLIENT_ID CHAR PROMPT 'Existing BM DSP APIC client ID: ' HIDE
++ACCEPT DSP_MGMT_CLIENT_SECRET CHAR PROMPT 'Existing BM DSP APIC client secret: ' HIDE
++PROMPT Check: Supplied DSP defaults must be HTTPS with nonempty subscription credentials
++SELECT CASE WHEN '&&DSP_MGMT_URL' LIKE 'https://%' AND TRIM('&&DSP_MGMT_CLIENT_ID') IS NOT NULL
++  AND TRIM('&&DSP_MGMT_CLIENT_SECRET') IS NOT NULL THEN 1 ELSE 1/0 END AS CHECK_OK FROM DUAL;
  
  -- 00 / Stop on failed baseline checks BEFORE any DDL
  PROMPT Check: No new HTH tables may exist for this first-install script
@@ -606,7 +621,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  
  PROMPT Check: Required BCO task sources
  SELECT CASE WHEN N=7 THEN 1 ELSE 1/0 END AS CHECK_OK
-@@ -139,33 +138,9 @@ PROMPT Check: Supplied new Code encryption key is Base64 AES-256
+@@ -139,33 +137,9 @@ PROMPT Check: Supplied new Code encryption key is Base64 AES-256
  SELECT CASE WHEN REGEXP_LIKE(V,'^[A-Za-z0-9+/]{43}=$','c') AND UTL_RAW.LENGTH(UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(V)))=32 THEN 1 ELSE 1/0 END AS CHECK_OK
  FROM (SELECT '&&HTH_CODE_KEY' V FROM DUAL);
  
@@ -642,7 +657,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  
  PROMPT Check: Existing Code encryption key, if provisioned, must equal the approved release key
  SELECT CASE WHEN N=0 THEN 1 ELSE 1/0 END AS CHECK_OK
-@@ -444,6 +419,11 @@ COMMENT ON COLUMN HTH_BEA.HTH_CERTIFICATE_REQUEST.PEM_CONTENT IS 'Uploaded PEM p
+@@ -444,6 +418,11 @@ COMMENT ON COLUMN HTH_BEA.HTH_CERTIFICATE_REQUEST.PEM_CONTENT IS 'Uploaded PEM p
  CREATE TABLE HTH_BEA.HTH_USER_PROFILE (
    PARTY_ID VARCHAR2(64 BYTE) NOT NULL,
    CLOSE_ID VARCHAR2(255 BYTE) NOT NULL,
@@ -654,7 +669,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
    CONSTRAINT PK_HTH_USER_PROFILE PRIMARY KEY (PARTY_ID, CLOSE_ID)
  );
  
-@@ -456,6 +436,15 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.PARTY_ID IS
+@@ -456,6 +435,15 @@ COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.PARTY_ID IS
  COMMENT ON COLUMN HTH_BEA.HTH_USER_PROFILE.CLOSE_ID IS
    'HTH CloseID associated with the corporate user.';
  
@@ -670,7 +685,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  CREATE TABLE HTH_BEA.HTH_USER_ACCESS_ACCOUNT (
    ID                    VARCHAR2(36 BYTE)  NOT NULL,
    PARTY_ID              VARCHAR2(64 BYTE)  NOT NULL,
-@@ -608,6 +597,7 @@ CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CODE (
+@@ -608,6 +596,7 @@ CREATE TABLE HTH_BEA.HTH_API_PASSWORD_CODE (
    LAST_UPDATE_DATE DATE               DEFAULT SYSDATE NOT NULL,
    PURPOSE VARCHAR2(8 BYTE) DEFAULT 'SETUP' NOT NULL,
    REQUEST_ID VARCHAR2(36 BYTE),
@@ -678,7 +693,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
    MAX_ATTEMPTS NUMBER(3) DEFAULT 5 NOT NULL,
    CONSTRAINT CK_HTH_API_PWD_PURPOSE CHECK (PURPOSE IN ('SETUP','RESET')),
    CONSTRAINT CK_HTH_API_PWD_ATTEMPTS CHECK (ATTEMPT_COUNT >= 0 AND MAX_ATTEMPTS > 0 AND ATTEMPT_COUNT <= MAX_ATTEMPTS),
-@@ -630,113 +620,21 @@ CREATE UNIQUE INDEX HTH_BEA.UX_HTH_API_PWD_CODE_LIVE
+@@ -630,113 +619,21 @@ CREATE UNIQUE INDEX HTH_BEA.UX_HTH_API_PWD_CODE_LIVE
            THEN SUBSTR(USER_NAME, 1, LENGTH(USER_NAME)-LENGTH(PARTY_ID)-1) ELSE USER_NAME END END,
        CASE WHEN OBJECT_STATUS = 'A' AND STATUS IN ('ACTIVE','IN_PROGRESS','UNKNOWN') THEN PURPOSE END);
  
@@ -795,7 +810,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  COMMENT ON TABLE HTH_BEA.HTH_API_PASSWORD_CODE IS
    'One-time HTH API password setup code generated by a maker; usable only after the original user-maintenance flow is approved.';
  
-@@ -2618,54 +2516,6 @@ SELECT DISTINCT TARGET_ENT.ENTITLEMENT_ID, SOURCE_POLICY.POLICY_ID
+@@ -2618,54 +2515,6 @@ SELECT DISTINCT TARGET_ENT.ENTITLEMENT_ID, SOURCE_POLICY.POLICY_ID
      UNION ALL SELECT 'com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword.reset_Perform' FROM DUAL
    ) TARGET_ENT;
  
@@ -850,12 +865,7 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  INSERT ALL
    INTO DIGX_FW_ERROR_MESSAGES
      (ERROR_CODE, ERROR_MESSAGE, USER_LOCALE, FACTORY_SHIPPED_FLAG, SUMMARY_TEXT,
-@@ -3584,99 +3434,22 @@ UPDATE DIGX_CZ_FW_CONFIG_ALL_O
-  AND INSTR(',' || REPLACE(PROP_VALUE,' ','') || ',', ',PP_N_HTH_CERT_UPL,')=0;
- 
- -- ============================================================================
---- 18 / Production DSP / encryption settings (insert missing keys only)
-+-- 18 / Production encryption settings (insert missing keys only)
+@@ -3588,95 +3437,18 @@ UPDATE DIGX_CZ_FW_CONFIG_ALL_O
  -- ============================================================================
  SET DEFINE ON
  
@@ -951,37 +961,15 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  
  INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
   (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-@@ -3714,29 +3487,6 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
+@@ -3714,6 +3486,7 @@ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
   WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
   WHERE HOST_ID='HthApiCredentialAdapterConfig' AND TRANSACTION_TYPE='HTH_API_PASSWORD' AND PROP_ID='POLICY_SPACES_ALLOWED');
  
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','APIC_CLIENT_ID','&&DSP_MGMT_CLIENT_ID',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_ID');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','APIC_CLIENT_SECRET','&&DSP_MGMT_CLIENT_SECRET',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='APIC_CLIENT_SECRET');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','SERVICE_URL','&&DSP_MGMT_URL',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='SERVICE_URL');
--
--INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
-- (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
-- SELECT 'DSPApi','DSP','CHANNEL','BCO',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
-- WHERE NOT EXISTS (SELECT 1 FROM DIGX_FW_CONFIG_ADAPTER_PROP_B
-- WHERE HOST_ID='DSPApi' AND TRANSACTION_TYPE='DSP' AND PROP_ID='CHANNEL');
- 
- SET DEFINE OFF
- 
-@@ -3771,12 +3521,6 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON HTH_BEA.HTH_USER_ACCESS_ACCOUNT_API TO &&HT
++
+ INSERT INTO DIGX_FW_CONFIG_ADAPTER_PROP_B
+  (HOST_ID,TRANSACTION_TYPE,PROP_ID,PROP_VALUE,CREATED_BY,CREATION_DATE,LAST_UPDATED_BY,LAST_UPDATED_DATE,OBJECT_STATUS,OBJECT_VERSION_NUMBER)
+  SELECT 'DSPApi','DSP','APIC_CLIENT_ID','&&DSP_MGMT_CLIENT_ID',USER,SYSTIMESTAMP,USER,SYSTIMESTAMP,'A',1 FROM DUAL
+@@ -3771,12 +3544,6 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON HTH_BEA.HTH_USER_ACCESS_ACCOUNT_API TO &&HT
  
  GRANT SELECT,INSERT,UPDATE,DELETE ON HTH_BEA.HTH_API_PASSWORD_CODE TO &&HTH_RUNTIME_OWNER;
  
@@ -994,14 +982,14 @@ index e2c69eff369fab32d5fa93087a2c6785953cba1c..3bc349e53e51d8ef203c61607d7118ba
  SET DEFINE OFF
  
  COMMIT;
-@@ -3785,6 +3529,5 @@ SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='HTH_BEA' AND TABLE_NAME LIKE 'HTH
+@@ -3785,6 +3552,5 @@ SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='HTH_BEA' AND TABLE_NAME LIKE 'HTH
  SELECT COD_EVENT_ID,TXT_DEST_TYP,LOCALE,COD_MSG_TMPL_ID,SUBSCRIBER_TYPE
   FROM DIGX_EP_EVT_REC_B WHERE COD_EVENT_ID LIKE 'HTH_%' ORDER BY COD_EVENT_ID,TXT_DEST_TYP,LOCALE;
  SELECT ID,NAME FROM DIGX_CM_TASK WHERE ID LIKE '%HTH%' OR ID LIKE '%HAP%' OR ID LIKE '%HUA%' ORDER BY ID;
 -UNDEFINE HTH_CODE_KEY DSP_MGMT_CLIENT_ID DSP_MGMT_CLIENT_SECRET DSP_PERSIST_CLIENT_ID DSP_PERSIST_CLIENT_SECRET
 -UNDEFINE HTH_RUNTIME_OWNER BM_MAKER_POLICY BM_APPROVER_POLICY DSP_PERSIST_URL DSP_MGMT_URL
 -UNDEFINE DSP_SUCCESS_JSON_POINTER DSP_SUCCESS_JSON_VALUE
-+UNDEFINE HTH_CODE_KEY
++UNDEFINE HTH_CODE_KEY DSP_MGMT_CLIENT_ID DSP_MGMT_CLIENT_SECRET DSP_MGMT_URL
 +UNDEFINE HTH_RUNTIME_OWNER BM_MAKER_POLICY BM_APPROVER_POLICY
 diff --git a/consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java b/consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java
 index 53ac2301f69329e4927231721b6e34cf062c5612..8242f3534f526a3abf7a1a78a83a83f25939e415 100644
@@ -1820,29 +1808,6 @@ index 0000000000000000000000000000000000000000..16ac8904376b676264aecc8ae6a5cd82
 +    @Produces("application/json")
 +    Response modifyPassword(Map<String, Object> request);
 +}
-diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
-index a9e79213da35e196c1f9953df0d910ce6a8bd9e7..d90079b97d9a20d3325970260dec0f861c9904ce 100644
---- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
-+++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java
-@@ -9,12 +9,13 @@ import java.util.prefs.Preferences;
- 
- public class DSPApiClientFactory {
- 
--    private static final String CONFIG_CATEGORY = "DSPApiAdapterImplConfig";
-+    // Reuse the released INQ01 internal APIC base, subscription and channel.
-+    private static final String CONFIG_CATEGORY = "H2HApiAdapterImplConfig";
- 
--    private static final String PROP_SERVICE_URL = "DSP.SERVICE_URL";
--    private static final String PROP_APIC_CLIENT_ID = "DSP.APIC_CLIENT_ID";
--    private static final String PROP_APIC_CLIENT_SECRET = "DSP.APIC_CLIENT_SECRET";
--    private static final String PROP_CHANNEL = "DSP.CHANNEL";
-+    private static final String PROP_SERVICE_URL = "H2H.SERVICE_URL";
-+    private static final String PROP_APIC_CLIENT_ID = "H2H.CLIENT_ID";
-+    private static final String PROP_APIC_CLIENT_SECRET = "H2H.CLIENT_SECRET";
-+    private static final String PROP_CHANNEL = "H2H.CHANNEL";
- 
-     private static final String DEFAULT_CHANNEL = "BCO";
-     private static final String EMPTY_STR = "";
 diff --git a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java b/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
 index b54eb410a294eead352de5ccb9a07f3d8fcfec99..c2b3916225487516f52faceed8dde4265cb12713 100644
 --- a/consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java
@@ -4109,10 +4074,10 @@ index 0000000000000000000000000000000000000000..60df24ef1a0cddc824ff12f17c18127e
 +})().catch(error => { console.error(error); process.exitCode = 1; });
 diff --git a/consulting/tests/hth1955/verify_apic_transport.py b/consulting/tests/hth1955/verify_apic_transport.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..83afed40694bd53e1e439d7c5d885edac1368627
+index 0000000000000000000000000000000000000000..0562724c4dad406312daf9a5d6e190f995374fda
 --- /dev/null
 +++ b/consulting/tests/hth1955/verify_apic_transport.py
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,265 @@
 +from pathlib import Path
 +import os
 +import subprocess
@@ -4234,16 +4199,20 @@ index 0000000000000000000000000000000000000000..83afed40694bd53e1e439d7c5d885eda
 +    try {
 +      MemoryPreferences config=new MemoryPreferences();
 +      String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
-+      config.put(PREFIX+"SERVICE_URL","https://obsolete-dsp.invalid");
-+      config.put(PREFIX+"APIC_CLIENT_ID","obsolete-dsp-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","obsolete-dsp-secret");
-+      config.put(PREFIX+"CHANNEL","obsolete-channel");
++      config.put(PREFIX+"SERVICE_URL",url+"/");
++      config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
++      // Leave DSP.CHANNEL unset to verify the original BCO default.
 +      MemoryPreferences inq01=new MemoryPreferences();
-+      inq01.put("H2H.CLIENT_ID","fixture-id");inq01.put("H2H.CLIENT_SECRET","fixture-secret");
-+      inq01.put("H2H.SERVICE_URL",url+"/");
++      inq01.put("H2H.CLIENT_ID","unrelated-inquiry-id");inq01.put("H2H.CLIENT_SECRET","unrelated-inquiry-secret");
++      inq01.put("H2H.SERVICE_URL","https://unrelated-inquiry.invalid");
 +      ConfigurationFactory.preferences=config;ConfigurationFactory.inq01=inq01;
 +      DspClient client=DSPApiClientFactory.getDspClient();
 +      check(client==DSPApiClientFactory.getDspClient(),"Factory did not reuse SDK client");
 +      CommonHeader header=client.getCommonHeader();
++      // Existing BM validation works before password calls and still works afterwards.
++      ClientValidationParam bmBefore=new ClientValidationParam();bmBefore.setClientId("business-client");
++      check(Boolean.TRUE.equals(client.clientApi().validateClientId(bmBefore).getValid()),"BM validation changed");
++      header.reset();
 +      HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
 +      int initial=calls.get();
 +      check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
@@ -4302,12 +4271,12 @@ index 0000000000000000000000000000000000000000..83afed40694bd53e1e439d7c5d885eda
 +      // Existing SDK client validation still uses its original interface and route.
 +      ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
 +      check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
-+      header.reset();check(clientValidationCalls.get()==1,"Existing client route changed");
++      header.reset();check(clientValidationCalls.get()==2,"Existing client route changed");
 +      // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
 +      DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
 +      fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
 +      check(assertion.get()==null,"Server request assertion failed: "+assertion.get());
-+      System.out.println("PASS: SDK factory, shared INQ01 base URL/authentication, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
++      System.out.println("PASS: SDK factory, original BM DSP base URL/authentication, unrelated INQ01 configuration ignored, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
 +    }finally{server.stop(0);executor.shutdownNow();}
 +  }
 +}
@@ -4348,7 +4317,7 @@ index 0000000000000000000000000000000000000000..83afed40694bd53e1e439d7c5d885eda
 + public static java.util.prefs.Preferences preferences,inq01;
 + public static ConfigurationFactory getInstance(){return new ConfigurationFactory();}
 + public java.util.prefs.Preferences getConfigurations(String category){
-+  if("H2HApiAdapterImplConfig".equals(category))return inq01;
++  if("DSPApiAdapterImplConfig".equals(category))return preferences;
 +  throw new AssertionError("Wrong configuration category");
 + }
 +}''')

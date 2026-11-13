@@ -95,5 +95,17 @@
     "commit": "a366c89ce7ced88804f956ef3b74d331222cf488",
     "base": "f9378dac0baf5f58713360722819b5932bf6c359",
     "previous_init_commit": "c603fd2125530cfc034cfa87086698a76bbce4e6"
+  },
+  {
+    "repository": "hth-batch-job",
+    "source_repository": "hth-dsp",
+    "source_directory": "hth-batch-job",
+    "commit": "a366c89ce7ced88804f956ef3b74d331222cf488",
+    "implementation_commit": "e3fa3b7a5c0bb61a4ddf0237e48c8136fb783e12",
+    "project_tree": "53bf118ecb98765e9eab7dffdd036de50366de41",
+    "delivery_directory": "hth-batch-job",
+    "delivery_type": "full-project",
+    "tracked_file_count": 38,
+    "validation": "HTH_BATCH_JOB_VALIDATION_20261113.txt"
   }
 ]

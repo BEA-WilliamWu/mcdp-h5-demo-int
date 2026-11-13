@@ -1,3 +1,19 @@
+HTH 独立 Batch 工程完整同步 — 2026-11-13
+
+新目录：hth-batch-job/（完整工程，不是增量补丁）
+来源：/Users/devs/CProj/hth-dsp/hth-batch-job
+已核对与原实现提交 e3fa3b7 完全一致，38 个受版本控制文件没有丢失。
+源码、启动脚本、外部配置模板、测试、CSV 校验工具和说明均已包含。
+该工程独立使用 Maven / Java 21；构建与部署步骤见 hth-batch-job/README.md。
+它不属于下方 bco-applicaion-main 或 hth-dsp 的密码补丁；请单独构建和部署。
+
+校验：在新目录执行 mvn -B -ntp clean verify 和 Python unittest，13 项 Java
+测试、12 项 Python 测试全部通过。未进行真实 Oracle / AIX 联调。
+来源、文件清单与哈希已登记在 SOURCE_COMMITS.json、FILES.tsv、SHA256SUMS。
+详见 HTH_BATCH_JOB_VALIDATION_20261113.txt。
+
+Earlier delivery notes:
+
 HTH 密码诊断日志统一公共方法 — 2026-11-13
 源代码：bco-applicaion-main commit 52357486ea5d5b5c6cb33600993bad54c97d8d8b，基线 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39。
 

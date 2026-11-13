@@ -1,0 +1,3 @@
+bin/*.sh text eol=lf
+bin/*.bat text eol=crlf
+hth-mtb/src/test/resources/golden/*.csv -text whitespace=-blank-at-eol

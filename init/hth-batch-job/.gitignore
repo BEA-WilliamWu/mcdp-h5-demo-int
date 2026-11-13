@@ -1,0 +1,6 @@
+**/target/
+**/logs/
+/output/
+/error/
+/temp/
+**/__pycache__/

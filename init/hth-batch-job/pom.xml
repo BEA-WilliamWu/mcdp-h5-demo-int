@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hkbea.hth</groupId>
+    <artifactId>hth-batch-job</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>HTH Batch Job</name>
+    <description>Parent project for HTH batch jobs</description>
+
+    <modules>
+        <module>hth-mtb</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+
+        <!-- Dependency versions -->
+        <ojdbc11.version>23.26.1.0.0</ojdbc11.version>
+        <logback.version>1.5.21</logback.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <commons-lang3.version>3.17.0</commons-lang3.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.oracle.database.jdbc</groupId>
+                <artifactId>ojdbc11</artifactId>
+                <version>${ojdbc11.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <distributionManagement>
+        <repository>
+            <id>cdc-mvn</id>
+            <url>https://${env.JF_HOST}/artifactory/hkbea-mvn-beta-local</url>
+        </repository>
+        <snapshotRepository>
+            <id>cdc-mvn</id>
+            <url>https://${env.JF_HOST}/artifactory/hkbea-mvn-beta-local</url>
+        </snapshotRepository>
+    </distributionManagement>
+</project>

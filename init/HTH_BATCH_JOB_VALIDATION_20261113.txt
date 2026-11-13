@@ -1,0 +1,36 @@
+HTH batch delivery validation - 2026-11-13
+
+Source repository: /Users/devs/CProj/hth-dsp (local only)
+Source directory: hth-batch-job
+Source HEAD: a366c89ce7ced88804f956ef3b74d331222cf488
+Implementation baseline: e3fa3b7a5c0bb61a4ddf0237e48c8136fb783e12
+Project Git tree (HEAD and baseline): 53bf118ecb98765e9eab7dffdd036de50366de41
+Destination: mcdp-h5-demo-int/init/hth-batch-job
+
+Integrity checks:
+- git diff e3fa3b7 -- hth-batch-job: no changes.
+- git status --short -- hth-batch-job: clean source project.
+- All 38 tracked source files copied; content bytes and permission modes match.
+- All three shell scripts use LF; Windows launcher retains its CRLF checkout form.
+- Four bin scripts explicitly included despite the delivery repository's bin ignore rule.
+- Source repository and pre-existing BCO / DSP delivery payloads left unchanged.
+- Build outputs, logs and Python caches excluded from delivery / Git.
+
+Verification executed in the destination project:
+1. mvn -B -ntp clean verify
+   BUILD SUCCESS; 13 tests, 0 failures, 0 errors, 0 skipped.
+   Includes real JDBC queries in H2 Oracle mode, date boundaries, CSV contracts,
+   rerun / failure / locking behavior, native configuration and Java CLI exit codes.
+2. python3 -m unittest discover -s tools -p 'test_*.py'
+   12 tests passed (CSV validation and launchers).
+
+Runtime scope preserved:
+- Reads HTH_BEA.HTH_CRM_EVENT; no BCO event table / BCO runtime dependency.
+- Preserves 61-column CSV, header / trailer and zero-data file behavior.
+- Separate Maven / Java 21 application and deployment configuration.
+- No Control-M / SFTP integration added by this delivery.
+
+Limitations:
+- No real Oracle, remote AIX or production deployment was performed.
+- Runtime JDBC credentials and actual database privileges require environment setup.
+- No source changes were needed during this verification / sync.

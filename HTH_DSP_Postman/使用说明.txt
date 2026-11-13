@@ -1,0 +1,27 @@
+三个当前 DSP Support 接口，统一通过 Internal APIC。
+
+导入 Windows Postman 10.18.11：Import → 选择 postman.json。
+Collection → Variables → Current Value 填 apicClientId、apicClientSecret、clientId；保存密码还要填 closeId。
+apicClientId/apicClientSecret 取现有 DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET；clientId 是待校验/保存的业务 Client ID，两者不同。
+baseUrl 默认使用当前 SIT internal APIC 前缀；末尾不加 /。channel 默认 BCO。
+
+01：检查业务 Client ID。当前用 /client/v1/exists；旧 /client/v1/validate 仅供比较，未额外增加请求。
+02：获取公钥。Pre-request Script 自动生成 6 位 randomNumber，并将 SHA256(randomNumber) 的小写 Hex 放入 hashValue；成功后将 publicKey 存入 Collection Variables。
+03：保存密码。function=A 首次设置，M 重设已有密码。按当前本地 DSP 合同不带 oldEncryptedPassword。
+
+保存密码步骤：
+1. 先发送 02，成功后复制 Response（或其中 publicKey）。
+2. 用 Windows Edge/Chrome 打开随附 dsp-password-helper.html，粘贴响应、公钥和输入测试新密码，生成密文。
+3. 将密文填入 Collection Variables 的 newEncryptedPassword Current Value，设置 function、clientId、closeId 后发送 03。
+4. 02/03 之间不要重新生成 nonce；重新发送 02 会清空旧密文，需要重新加密。
+
+密码处理：Base64(raw SHA256(UTF-8(password))) → RSA-OAEP SHA-256 / MGF1 SHA-256 / empty label → Base64(ciphertext)。
+辅助页完全本地运算，无外部脚本或网络请求；Postman 10.18.11 不需安装 RSA 包。
+这是 DSP 接口直测：03 会实际修改 DSP 密码，不执行 CM Code 校验，也不更新 CM HTH_USER_PROFILE 状态。
+
+排查 404：对比三条请求的完整 URL、HTTP 状态及 Response；Client ID 正常而 public-key 为404时检查 APIC password 路由与 support 部署版本。
+如果遇到与服务器相同的证书信任问题，可在该请求 Settings 关闭 SSL certificate verification，仅用于此次 UAT 对照测试。
+未在文件中预置任何实际 APIC secret、用户密码或业务账户。
+格式参考：https://schema.postman.com/json/collection/v2.1.0/docs/index.html
+
+验证：Collection v2.1 schema、本地模拟接口及 RSA-OAEP 解密核对；未连接银行内网或执行真实密码修改。

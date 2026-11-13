@@ -1,0 +1,351 @@
+{
+  "info": {
+    "_postman_id": "b730e762-d9d3-45e0-a36d-20755992ff37",
+    "name": "HTH DSP - Client ID and Password (Postman 10)",
+    "description": "三个当前 DSP Support 接口，统一通过 Internal APIC。\n\n导入 Windows Postman 10.18.11：Import → 选择 postman.json。\nCollection → Variables → Current Value 填 apicClientId、apicClientSecret、clientId；保存密码还要填 closeId。\napicClientId/apicClientSecret 取现有 DSP.APIC_CLIENT_ID / DSP.APIC_CLIENT_SECRET；clientId 是待校验/保存的业务 Client ID，两者不同。\nbaseUrl 默认使用当前 SIT internal APIC 前缀；末尾不加 /。channel 默认 BCO。\n\n01：检查业务 Client ID。当前用 /client/v1/exists；旧 /client/v1/validate 仅供比较，未额外增加请求。\n02：获取公钥。Pre-request Script 自动生成 6 位 randomNumber，并将 SHA256(randomNumber) 的小写 Hex 放入 hashValue；成功后将 publicKey 存入 Collection Variables。\n03：保存密码。function=A 首次设置，M 重设已有密码。按当前本地 DSP 合同不带 oldEncryptedPassword。\n\n保存密码步骤：\n1. 先发送 02，成功后复制 Response（或其中 publicKey）。\n2. 用 Windows Edge/Chrome 打开随附 dsp-password-helper.html，粘贴响应、公钥和输入测试新密码，生成密文。\n3. 将密文填入 Collection Variables 的 newEncryptedPassword Current Value，设置 function、clientId、closeId 后发送 03。\n4. 02/03 之间不要重新生成 nonce；重新发送 02 会清空旧密文，需要重新加密。\n\n密码处理：Base64(raw SHA256(UTF-8(password))) → RSA-OAEP SHA-256 / MGF1 SHA-256 / empty label → Base64(ciphertext)。\n辅助页完全本地运算，无外部脚本或网络请求；Postman 10.18.11 不需安装 RSA 包。\n这是 DSP 接口直测：03 会实际修改 DSP 密码，不执行 CM Code 校验，也不更新 CM HTH_USER_PROFILE 状态。\n\n排查 404：对比三条请求的完整 URL、HTTP 状态及 Response；Client ID 正常而 public-key 为404时检查 APIC password 路由与 support 部署版本。\n如果遇到与服务器相同的证书信任问题，可在该请求 Settings 关闭 SSL certificate verification，仅用于此次 UAT 对照测试。\n未在文件中预置任何实际 APIC secret、用户密码或业务账户。\n格式参考：https://schema.postman.com/json/collection/v2.1.0/docs/index.html\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://eam-intgw-test.intranet.hkbea.com:443/hkbea/sit-int/dsp/api",
+      "type": "string",
+      "description": "统一 APIC 前缀，末尾不要加 /"
+    },
+    {
+      "key": "apicClientId",
+      "value": "",
+      "type": "string",
+      "description": "DSP.APIC_CLIENT_ID；APIC 订阅 ID"
+    },
+    {
+      "key": "apicClientSecret",
+      "value": "",
+      "type": "string",
+      "description": "DSP.APIC_CLIENT_SECRET；只在本机 Current Value 填写"
+    },
+    {
+      "key": "channel",
+      "value": "BCO",
+      "type": "string",
+      "description": "沿用 CM/BM DSP Channel"
+    },
+    {
+      "key": "clientId",
+      "value": "",
+      "type": "string",
+      "description": "业务 Client ID，注意不同于 apicClientId"
+    },
+    {
+      "key": "closeId",
+      "value": "",
+      "type": "string",
+      "description": "业务用户 closeId，按实际 HTH 用户资料填写"
+    },
+    {
+      "key": "function",
+      "value": "M",
+      "type": "string",
+      "description": "M=重设已有密码，A=首次设置"
+    },
+    {
+      "key": "randomNumber",
+      "value": "",
+      "type": "string",
+      "description": "请求02自动生成；请求03复用，保留前导零"
+    },
+    {
+      "key": "hashValue",
+      "value": "",
+      "type": "string",
+      "description": "请求02自动生成 SHA256(randomNumber) 小写 Hex"
+    },
+    {
+      "key": "publicKey",
+      "value": "",
+      "type": "string",
+      "description": "请求02成功后自动保存 Base64 SPKI 公钥"
+    },
+    {
+      "key": "newEncryptedPassword",
+      "value": "",
+      "type": "string",
+      "description": "用随附本地辅助页生成后填入 Current Value"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "可选；默认 Authorization Header 禁用"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Client ID exists",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-IBM-Client-Id",
+            "value": "{{apicClientId}}",
+            "description": "Internal APIC subscription ID; not the business clientId in the body."
+          },
+          {
+            "key": "X-IBM-Client-Secret",
+            "value": "{{apicClientSecret}}"
+          },
+          {
+            "key": "Channel",
+            "value": "{{channel}}"
+          },
+          {
+            "key": "Message-Id",
+            "value": "{{$guid}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "disabled": true,
+            "description": "Optional. Enable only if your gateway requires a bearer token."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/client/v1/exists",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "client",
+            "v1",
+            "exists"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"{{clientId}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "检查业务 Client ID。正常返回 {\"exists\":true} 或 {\"exists\":false}；服务异常与 false 要分别判断。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('exists is boolean', function () { pm.expect(pm.response.json().exists).to.be.a('boolean'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 - Password public key",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-IBM-Client-Id",
+            "value": "{{apicClientId}}",
+            "description": "Internal APIC subscription ID; not the business clientId in the body."
+          },
+          {
+            "key": "X-IBM-Client-Secret",
+            "value": "{{apicClientSecret}}"
+          },
+          {
+            "key": "Channel",
+            "value": "{{channel}}"
+          },
+          {
+            "key": "Message-Id",
+            "value": "{{$guid}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "disabled": true,
+            "description": "Optional. Enable only if your gateway requires a bearer token."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/password/v1/public-key",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "password",
+            "v1",
+            "public-key"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hashValue\": \"{{hashValue}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "自动生成随机数及其 SHA-256 Hex。成功后将响应粘贴到 dsp-password-helper.html 生成密码密文；每次发送都会清空旧密文。"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Postman 10.x built-in module. No CDN, npm package or pm.require needed.",
+              "const dspCrypto = require('crypto-js');",
+              "['publicKey', 'newEncryptedPassword', 'randomNumber', 'hashValue'].forEach(function (name) {",
+              "    pm.collectionVariables.set(name, '');",
+              "});",
+              "// Six-digit correlation nonce, matching the DSP contract.",
+              "const guidHash = dspCrypto.SHA256(pm.variables.replaceIn('{{$guid}}')).toString(dspCrypto.enc.Hex);",
+              "const randomNumber = ('000000' + (parseInt(guidHash.substring(0, 8), 16) % 1000000)).slice(-6);",
+              "const hashValue = dspCrypto.SHA256(randomNumber).toString(dspCrypto.enc.Hex);",
+              "pm.collectionVariables.set('randomNumber', randomNumber);",
+              "pm.collectionVariables.set('hashValue', hashValue);",
+              "pm.variables.set('hashValue', hashValue);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+              "let body;",
+              "try { body = pm.response.json(); } catch (error) { body = null; }",
+              "pm.test('DSP status=000000 and publicKey present', function () {",
+              "    pm.expect(body).to.be.an('object');",
+              "    pm.expect(body.status).to.eql('000000');",
+              "    pm.expect(body.publicKey).to.be.a('string').and.not.empty;",
+              "});",
+              "if (pm.response.code === 200 && body && body.status === '000000' && typeof body.publicKey === 'string' && body.publicKey.length) {",
+              "    pm.collectionVariables.set('publicKey', body.publicKey);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 - Password modification (writes DSP)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-IBM-Client-Id",
+            "value": "{{apicClientId}}",
+            "description": "Internal APIC subscription ID; not the business clientId in the body."
+          },
+          {
+            "key": "X-IBM-Client-Secret",
+            "value": "{{apicClientSecret}}"
+          },
+          {
+            "key": "Channel",
+            "value": "{{channel}}"
+          },
+          {
+            "key": "Message-Id",
+            "value": "{{$guid}}"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "disabled": true,
+            "description": "Optional. Enable only if your gateway requires a bearer token."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/password/v1/modification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "password",
+            "v1",
+            "modification"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"function\": \"{{function}}\",\n  \"newEncryptedPassword\": \"{{newEncryptedPassword}}\",\n  \"randomNumber\": \"{{randomNumber}}\",\n  \"closeId\": \"{{closeId}}\",\n  \"clientId\": \"{{clientId}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "发送前需成功执行02并用对应公钥加密。A首次设置，M重设；按当前 DSP 合同无需旧密码。实际写入 DSP，CM 的 Code/状态不在该直测请求范围内。"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Use the nonce from request 02; do not generate a new one here.",
+              "const nonce = pm.collectionVariables.get('randomNumber');",
+              "const ciphertext = pm.collectionVariables.get('newEncryptedPassword');",
+              "if (!/^\\d{6}$/.test(nonce || '') || !ciphertext) {",
+              "    throw new Error('Run 02 successfully, encrypt with dsp-password-helper.html, then fill collection variable newEncryptedPassword.');",
+              "}",
+              "pm.variables.set('randomNumber', nonce);",
+              "pm.variables.set('newEncryptedPassword', ciphertext);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('DSP status=000000', function () { pm.expect(pm.response.json().status).to.eql('000000'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

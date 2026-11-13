@@ -50,7 +50,6 @@
       {
         "name": "password-submit-errors-20261113",
         "base": "c1cfe1323bd9854339fc902c8acd654ddc83d118",
-        "source_state": "uncommitted_working_tree",
         "patch": "UPDATE_PASSWORD_SUBMIT_20261113.patch",
         "paths": [
           "consulting/channel/extensions/components/host-to-host/api-password/api-password.js",
@@ -58,12 +57,12 @@
           "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java",
           "consulting/tests/hth1955/ui-errors.cjs",
           "consulting/tests/hth1955/verify_apic_transport.py"
-        ]
+        ],
+        "commit": "1d827f71948fdbdbc2a0d63df577e75c2e8d3b39"
       },
       {
         "name": "dsp-original-tls-compat-20261113",
         "base": "c1cfe1323bd9854339fc902c8acd654ddc83d118",
-        "source_state": "uncommitted_working_tree",
         "required_patches": [
           "UPDATE_PASSWORD_SUBMIT_20261113.patch"
         ],
@@ -71,7 +70,8 @@
         "paths": [
           "consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java",
           "consulting/tests/hth1955/verify_apic_transport.py"
-        ]
+        ],
+        "commit": "1d827f71948fdbdbc2a0d63df577e75c2e8d3b39"
       }
     ]
   },

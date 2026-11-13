@@ -1,5 +1,5 @@
 DSP TLS compatibility verification — 2026-11-13
-Source working tree based on c1cfe1323; not committed.
+Source commit 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39, based on c1cfe1323.
 
 Production scope: DspClient.java only. Restored getOkHttpClient method is byte-for-byte
 identical after newline normalization to the supplied QTES2 Java method.
@@ -28,7 +28,7 @@ Fixture correction: pin the loopback IP so disabled retries cannot select localh
 unbound IPv6 route after a prior timeout. This does not change production DNS or retries.
 
 PASS: incremental patch applies after UPDATE_PASSWORD_SUBMIT_20261113.patch on
-c1cfe1323 and reproduces all six current working-tree changes exactly.
+c1cfe1323 and reproduces all six committed source files exactly.
 PASS: delivery FILE hashes/SHA256SUMS and source whitespace validated.
 
 Limits: tests use local HTTPS fixtures, not the bank APIC/DSP; no full application

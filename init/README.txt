@@ -1,5 +1,5 @@
 DSP 原请求 TLS 行为恢复 — 2026-11-13
-源代码：bco-applicaion-main 工作区，基线 c1cfe1323；本次尚未 commit。
+源代码：bco-applicaion-main commit 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39，基线 c1cfe1323。
 
 按用户确认恢复 QTES2 原 DspClient.getOkHttpClient()，方法内容与 QTES2 一致：
 - 继续使用 SDK 的 OkHttp 连接池、超时配置和原 DSP.* 地址/APIC 请求头。
@@ -30,8 +30,8 @@ DspClient 和 Feign/OkHttp 客户端失效。无须执行 SQL。
 Earlier delivery notes:
 
 HTH API password submit error dialog and DSP diagnostics — 2026-11-13
-Source: bco-applicaion-main working tree, base c1cfe1323bd9854339fc902c8acd654ddc83d118.
-This update is not committed yet; the source state is recorded in SOURCE_COMMITS.json.
+Source: bco-applicaion-main commit 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39,
+base c1cfe1323bd9854339fc902c8acd654ddc83d118. Commit includes both updates above.
 
 Three production files and two regression scripts only:
 - api-password.js: submission errors use the existing BCO message dialog and keep
@@ -51,7 +51,8 @@ transport=true only reads local state and does not prove DSP connectivity.
 The observed UAT 400/009 root cause is still unconfirmed without backend evidence.
 
 Apply AFTER UPDATE_FRONTEND_ESLINT_20261113.patch, by copying the five full files
-listed in the latest SOURCE_COMMITS.json entry, preserving paths, OR applying
+listed in SOURCE_COMMITS.json under password-submit-errors-20261113,
+preserving paths, OR applying
 UPDATE_PASSWORD_SUBMIT_20261113.patch at the application repository root.
 Run git apply --check first. The patch is validated against c1cfe1323.
 Rebuild frontend, extxface.app.impl and hosttohost modules. No SQL, shared BCO

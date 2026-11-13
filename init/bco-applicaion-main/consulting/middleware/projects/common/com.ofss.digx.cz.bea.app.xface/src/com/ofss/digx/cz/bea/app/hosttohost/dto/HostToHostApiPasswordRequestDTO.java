@@ -1,6 +1,6 @@
 package com.ofss.digx.cz.bea.app.hosttohost.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ofss.digx.app.common.dto.DomainObjectDTO;
 
@@ -35,7 +35,7 @@ public class HostToHostApiPasswordRequestDTO extends DomainObjectDTO {
     this.requestId = requestId;
   }
 
-  @JsonIgnore
+  @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
   private String dspEncryptedPassword;
   public String getDspEncryptedPassword() { return dspEncryptedPassword; }
   public void setDspEncryptedPassword(String value) { dspEncryptedPassword = value; }

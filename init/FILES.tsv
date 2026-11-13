@@ -20,7 +20,7 @@ bco-applicaion-main	A	FILE	consulting/db/branch_change_history/hosttohost/story/
 bco-applicaion-main	A	FILE	consulting/db/branch_change_history/hosttohost/story/20261112-BCOHTH-1955/HTH_1955_UAT_UPGRADE.sql	77af8552d052839b861dab6e3b2f99d705efa28f6b507cee63cced5a8703a6ff
 bco-applicaion-main	D	DELETE	consulting/db/release/HTH_FIRST_DEPLOY.sql	-
 bco-applicaion-main	D	DELETE	consulting/db/release/HTH_ONBOARDING_UI_TOGGLES.sql	-
-bco-applicaion-main	M	FILE	consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java	4ffcb8b8f1584704145e3acc7e9ec6b328fc0f35ba84f2fa6954cb470ef584f2
+bco-applicaion-main	M	FILE	consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java	21d9dffd330574cafd1952504006334784c1aae5dc5c57264ffe9a52849c5dcb
 bco-applicaion-main	M	FILE	consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/IHthApiCredentialAdapter.java	488c36972baecd264848688737df02a704bdbf1e84c99cd98d41bacf5737652d
 bco-applicaion-main	M	FILE	consulting/middleware/projects/endpoint/com.ofss.digx.cz.bea.appx.service.rest/src/com/ofss/digx/cz/bea/appx/hosttohost/service/HostToHostApiPassword.java	b5ed34541644f2c7b3cbed844bc4b67449a4a5c3f92f557671ba7ba865f3ec28
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordPersistClient.java	-

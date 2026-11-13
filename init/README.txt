@@ -1,3 +1,25 @@
+HTH API Password reset/setup 请求 DTO 修复 — 2026-11-13
+
+来源：bco-applicaion-main commit 492eb4ee5845b23d76b7d66c49195f60b437a4fa
+基线：52357486ea5d5b5c6cb33600993bad54c97d8d8b
+
+修复前端已传 dspEncryptedPassword、但 CM 因 @JsonIgnore 丢弃该字段，
+导致 validateRequest 返回 DIGX_CZ_HTH_API_PASSWORD_001 / HTTP 400 的问题。
+改用 @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)：允许接收密文，
+JSON 输出仍不包含密文。生产源码仅改一个 HTH DTO 的两行。
+
+完整文件已更新到 bco-applicaion-main/consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java。
+可按原路径覆盖完整文件，或在上一版应用工程根目录执行以下补丁，二选一：
+  git apply --check <补丁路径>/UPDATE_PASSWORD_REQUEST_DTO_20261113.patch
+  git apply <补丁路径>/UPDATE_PASSWORD_REQUEST_DTO_20261113.patch
+
+重新编译并部署 com.ofss.digx.cz.bea.app.xface 对应的 DTO jar 到 CM 应用，
+重新加载应用，确保实际加载的新 DTO 类生效。无须修改数据库、前端、DSP 或 APIC。
+本地已用实际 DTO 和 Jackson 2.11.0 / 2.19.4 验证输入接收及输出不包含密文。
+仍需在 UAT 验证后续 Code 校验、DSP 保存和成功页面，详见 PASSWORD_REQUEST_DTO_VALIDATION_20261113.txt。
+
+Earlier delivery notes:
+
 HTH Internal APIC 密码接口路由 — 2026-11-13
 
 来源：hth-dsp commit 657e50f6fc71043a04c3a4795c19dfe178133733

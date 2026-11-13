@@ -87,6 +87,16 @@
           "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java",
           "consulting/tests/hth1955/verify_apic_transport.py"
         ]
+      },
+      {
+        "name": "password-request-dto-20261113",
+        "commit": "492eb4ee5845b23d76b7d66c49195f60b437a4fa",
+        "base": "52357486ea5d5b5c6cb33600993bad54c97d8d8b",
+        "patch": "UPDATE_PASSWORD_REQUEST_DTO_20261113.patch",
+        "paths": [
+          "consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java"
+        ],
+        "validation": "PASSWORD_REQUEST_DTO_VALIDATION_20261113.txt"
       }
     ]
   },

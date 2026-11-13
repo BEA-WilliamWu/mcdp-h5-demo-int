@@ -72,6 +72,21 @@
           "consulting/tests/hth1955/verify_apic_transport.py"
         ],
         "commit": "1d827f71948fdbdbc2a0d63df577e75c2e8d3b39"
+      },
+      {
+        "name": "password-common-logger-20261113",
+        "commit": "52357486ea5d5b5c6cb33600993bad54c97d8d8b",
+        "base": "1d827f71948fdbdbc2a0d63df577e75c2e8d3b39",
+        "required_patches": [
+          "UPDATE_PASSWORD_SUBMIT_20261113.patch",
+          "UPDATE_DSP_TLS_COMPAT_20261113.patch"
+        ],
+        "patch": "UPDATE_PASSWORD_COMMON_LOGGER_20261113.patch",
+        "paths": [
+          "consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java",
+          "consulting/tests/hth1955/verify_apic_transport.py"
+        ]
       }
     ]
   },

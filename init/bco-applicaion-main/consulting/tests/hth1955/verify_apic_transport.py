@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 
@@ -21,6 +22,9 @@ preferred += [LIB / 'thirdparty' / name for name in (
 CP = os.pathsep.join(str(path) for path in preferred + sorted(set(LIB.rglob('*.jar')) - set(preferred)))
 RUNTIME_CP = os.pathsep.join(str(path) for path in preferred)
 SDK_SOURCE = SOURCE.parents[2] / 'microservice/api/dsp'
+LOGGER_SOURCE = ROOT / 'consulting/middleware/projects/framework/com.ofss.digx.cz.bea.appcore.logger/src/com/ofss/digx/cz/bea/app/logger/BeaSystemOut.java'
+SERVICE_SOURCE = ROOT / 'consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java'
+LIFECYCLE_LOG_METHOD = re.search(r'  private static void logPhaseFailure\(.*?\n  }', SERVICE_SOURCE.read_text(), re.S)[0]
 
 HARNESS = r'''
 
@@ -38,7 +42,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.prefs.*;
-import java.util.logging.*;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import javax.net.ssl.*;
 import feign.Response;
 import com.hkbea.common.header.CommonHeader;
@@ -49,6 +53,7 @@ import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.impl.DSPCommonHeaderIm
 import com.ofss.fc.infra.config.ConfigurationFactory;
 
 public class DspTransportTest {
+  __LIFECYCLE_LOG_METHOD__
   static final String PREFIX="DSP.";
   static final ObjectMapper MAPPER=new ObjectMapper();
   static final List<String> diagnostics=new ArrayList<>();
@@ -78,15 +83,20 @@ public class DspTransportTest {
     for(String field:expected)check(diagnostic.contains(field),"Missing diagnostic field: "+field);
   }
   public static void main(String[] args) throws Exception {
-    Logger logger=Logger.getLogger(HthDspApiCredentialAdapter.class.getName());
-    logger.setUseParentHandlers(false);
-    logger.addHandler(new Handler(){
-      public void publish(LogRecord record){
-        check(record.getThrown()==null,"Throwable message could expose DSP response");
-        diagnostics.add(record.getMessage());
+    PrintStream originalOut=System.out;
+    System.setOut(new PrintStream(originalOut,true,"UTF-8"){
+      @Override public void println(String line){
+        if(line.contains("HTH_API_PASSWORD")){
+          check(line.startsWith("[< fixture-trace-1955 >] "),"Missing common logger request trace");
+          diagnostics.add(line);
+        }else{super.println(line);}
       }
-      public void flush(){} public void close(){}
     });
+    logPhaseFailure("DSP_ADAPTER",new IOException("sensitive-fixture-message",
+        new IllegalStateException("sensitive-fixture-message")));
+    check(diagnostics.size()==1 && diagnostics.get(0).contains("stage=DSP_ADAPTER")
+        && diagnostics.get(0).contains("java.io.IOException -> java.lang.IllegalStateException"),
+        "Lifecycle helper lost stage or nested exception types");
     KeyStore keys=KeyStore.getInstance("PKCS12");
     try(InputStream input=Files.newInputStream(Paths.get(args[0]))){keys.load(input,"test-store-only".toCharArray());}
     KeyManagerFactory km=KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
@@ -253,11 +263,11 @@ public class DspTransportTest {
       String allDiagnostics=String.join("\n",diagnostics);
       for(String secret:new String[]{nonceHash,"fixture-id","fixture-secret","fixture-token",
           "fixture-ciphertext","business-client","USER@PARTY","314159","test-public-key",
-          "hashValue","newEncryptedPassword","not-json","http://","https://"}) {
+          "hashValue","newEncryptedPassword","not-json","http://","https://","sensitive-fixture-message"}) {
         check(!allDiagnostics.contains(secret),"Sensitive input or response leaked to diagnostic log");
       }
       System.out.println("PASS: original DSP TLS behavior: untrusted certificate and mismatched hostname accepted for BM validate/exists and both password APIs, without JVM trustStore override; strict-client controls reject both cases");
-      System.out.println("PASS: safe DSP diagnostics distinguish HTTP status, malformed/missing result, missing public key, local configuration and timeout; no request/body/header/secret logging");
+      System.out.println("PASS: shared BeaSystemOut request trace retained for adapter and lifecycle diagnostics; safe DSP diagnostics distinguish HTTP status, malformed/missing result, missing public key, local configuration and timeout; no request/body/header/secret logging");
       System.out.println("PASS: SDK factory, original BM DSP base URL/authentication, unrelated INQ01 configuration ignored, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
     }finally{server.stop(0);executor.shutdownNow();}
   }
@@ -280,12 +290,12 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
                     '-storetype', 'PKCS12', '-keystore', str(store),
                     '-storepass', 'test-store-only', '-keypass', 'test-store-only', '-noprompt'])
     harness = tmp / 'DspTransportTest.java'
-    harness.write_text(HARNESS)
+    harness.write_text(HARNESS.replace('__LIFECYCLE_LOG_METHOD__', LIFECYCLE_LOG_METHOD))
     common = ROOT / 'consulting/middleware/projects/common/com.ofss.digx.cz.bea.extxface/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter'
     checked([str(JAVA / 'javac'), '--release', '8', '-proc:none', '-encoding', 'UTF-8',
                     '-cp', CP, '-d', temporary,
                     *[str(path) for path in SDK_SOURCE.rglob('*.java')],
-                    str(SOURCE / 'HthDspApiCredentialAdapter.java'),
+                    str(SOURCE / 'HthDspApiCredentialAdapter.java'), str(LOGGER_SOURCE),
                     str(common / 'IHthApiCredentialAdapter.java'),
                     str(common / 'HthApiCredentialWriteException.java')])
     # Replace only the bank exception bootstrap; production policy, adapter and HTTP are unchanged.
@@ -310,7 +320,13 @@ public class ThreadAttribute {
  public static Object get(String key){return VALUES.get().get(key);}
  public static void set(String key,Object value){if(value==null)VALUES.get().remove(key);else VALUES.get().put(key,value);}
 }''')
-    checked([str(JAVA/'javac'),'--release','8','-proc:none','-d',temporary,str(config_stub),str(thread_stub)])
+    trace_stub=tmp/'ThreadContext.java'
+    trace_stub.write_text('''package com.ofss.fc.infra.thread;
+public class ThreadContext {
+ public static ThreadContext getThreadInstance(){return new ThreadContext();}
+ public String getTraceReferenceNumber(){return "fixture-trace-1955";}
+}''')
+    checked([str(JAVA/'javac'),'--release','8','-proc:none','-d',temporary,str(config_stub),str(thread_stub),str(trace_stub)])
     # The local HTTPS harness uses the JDK httpserver test module; production remains Java 8.
     checked([str(JAVA / 'javac'), '-proc:none', '-encoding', 'UTF-8',
                     '-cp', temporary + os.pathsep + CP, '-d', temporary, str(harness)])

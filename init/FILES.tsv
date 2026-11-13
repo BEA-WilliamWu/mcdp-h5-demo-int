@@ -26,11 +26,11 @@ bco-applicaion-main	M	FILE	consulting/middleware/projects/endpoint/com.ofss.digx
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordPersistClient.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordResponsePolicy.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthApiCredentialAdapter.java	-
-bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java	741e941f47c1ed4bb5534230858f297b89a9883b53099a4bc28a6dc888a30ab0
+bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java	86e0e025d71f316417a16c4c4d3c8c45ca58918271d42b742ae36a0547a20f4a
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/dto/DspApiPasswordPersistRequest.java	-
 bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java	29fe8a5d33506d43621b851120bd5598328c83404ee2a4d611afdfddd7d1835c
 bco-applicaion-main	A	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java	677b09c572200bf06bb9b61ae2402e778edeb0bd63b1b2b3c61c36352d76b75c
-bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java	05b84c3ca377249e318ceeae70b2bc97e7dace2c824c85946e33d39f1286cb9d
+bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java	3e924116449bac43a919cdb7e4e433ae387407244d6d34aa899c455a6201ba76
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HthApiPasswordStorage.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordHash.java	-
 bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordTransport.java	33540d02e6d8161a8bae91b6658ccc21264a63bc143bd3c44e344b23a4a9ed37
@@ -55,7 +55,7 @@ bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordStateRepositoryAdapter.java	-
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/browser-interop.cjs	1cebdad8bab17fcfc3bdbd146d4a202e8e1d265f8da6c1eb84a1947e43ca0f32
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/ui-errors.cjs	ec41ab5377f0d1da8ffb24cd9bdb1c1355e97c0890a06f5f0c1022e58bc7932d
-bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_apic_transport.py	0ea60b14d1fc0fd5042cefddd76a3400365d99938d5b9e23c3dacd1e79fcc291
+bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_apic_transport.py	eccab8bafd447e3b1b16f0d898672e766a57fe09dc64ff75330f917170a702e4
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_code_lifecycle.py	80dd1ecbdc12dde78621fd044f5a3f25ee5f8aff0261c5e5889f4261e61d92ac
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_contract_guard.py	f29d14f6fe536cd3d79a6e9cea812283bfc66abff7e51f6b3bd69de24ca8ba83
 bco-applicaion-main	RESTORE	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java	bb99e41a03e69fe51fcea70ff24bcffe122a9cb7da834975dcb6e6f2944c487f

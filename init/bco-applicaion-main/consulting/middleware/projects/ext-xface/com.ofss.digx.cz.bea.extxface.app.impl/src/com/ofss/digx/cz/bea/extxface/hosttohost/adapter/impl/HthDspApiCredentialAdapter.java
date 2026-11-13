@@ -7,7 +7,7 @@ import com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteExc
 import com.ofss.digx.infra.exceptions.Exception;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.logging.Logger;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import feign.Response;
 import com.hkbea.common.header.CommonHeader;
 import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.DspClient;
@@ -15,7 +15,6 @@ import com.ofss.digx.cz.bea.extxface.microservice.api.dsp.factory.DSPApiClientFa
 
 /** Caller of the provider-owned DSP contract; no private DSP protocol extensions. */
 public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
-  private static final Logger LOGGER = Logger.getLogger(HthDspApiCredentialAdapter.class.getName());
   private final DspClient client;
   public HthDspApiCredentialAdapter() { this(null); }
   HthDspApiCredentialAdapter(DspClient client) { this.client = client; }
@@ -40,7 +39,7 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
     JsonNode result = sendPublicKey(request);
     String key = result.path("publicKey").asText();
     if (key.isEmpty()) {
-      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=PUBLIC_KEY reason=MISSING_PUBLIC_KEY httpStatus=200");
+      BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=PUBLIC_KEY reason=MISSING_PUBLIC_KEY httpStatus=200");
       throw new HthApiCredentialWriteException(false);
     }
     return key;
@@ -80,7 +79,7 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
       response = write ? dspClient.passwordApi().modifyPassword(request)
           : dspClient.passwordApi().queryPublicKey(request);
       if (response.status() != 200 || response.body() == null) {
-        LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+        BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
             + " reason=" + (response.status() != 200 ? "HTTP_STATUS" : "EMPTY_BODY")
             + " httpStatus=" + response.status());
         throw new HthApiCredentialWriteException(write && !definiteRejection(response.status()));
@@ -88,7 +87,7 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
       phase = "READ_BODY";
       JsonNode body = new ObjectMapper().readTree(response.body().asInputStream());
       if (body == null || !"000000".equals(body.path("status").asText())) {
-        LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+        BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
             + " reason=INVALID_STATUS httpStatus=" + response.status());
         throw new HthApiCredentialWriteException(write);
       }
@@ -105,7 +104,7 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
         types.append(cause.getClass().getSimpleName());
         cause = cause.getCause();
       }
-      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+      BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
           + " reason=EXCEPTION phase=" + phase
           + " httpStatus=" + (response == null ? "NONE" : String.valueOf(response.status()))
           + " exceptionTypes=" + types);

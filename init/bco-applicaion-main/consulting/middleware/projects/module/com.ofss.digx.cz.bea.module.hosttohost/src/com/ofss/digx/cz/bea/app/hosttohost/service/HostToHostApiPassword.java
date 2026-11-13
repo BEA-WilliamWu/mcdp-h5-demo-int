@@ -1,6 +1,7 @@
 package com.ofss.digx.cz.bea.app.hosttohost.service;
 
 import com.ofss.digx.cz.bea.common.audit.HthOnboardingAudit;
+import com.ofss.digx.cz.bea.app.logger.BeaSystemOut;
 import com.ofss.digx.cz.bea.app.crm.adapter.ICRMAsserterCallAdapter;
 import com.ofss.digx.cz.bea.common.framework.crm.CRMInputData;
 import com.ofss.digx.cz.bea.common.framework.crm.CRMConstants;
@@ -417,9 +418,8 @@ public class HostToHostApiPassword extends AbstractApplication
       types.append(cause.getClass().getName());
       cause = cause.getCause();
     }
-    LOGGER.log(Level.WARNING,
-        "HTH_API_PASSWORD lifecycle: stage={0}, exceptionTypes={1}",
-        new Object[] {stage, types.toString()});
+    BeaSystemOut.println("HTH_API_PASSWORD lifecycle: stage=" + stage
+        + ", exceptionTypes=" + types);
   }
 
   private Identity identity(SessionContext sessionContext, boolean required) throws Exception {

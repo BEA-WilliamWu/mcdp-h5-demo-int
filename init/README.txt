@@ -1,3 +1,25 @@
+HTH 密码诊断日志统一公共方法 — 2026-11-13
+源代码：bco-applicaion-main commit 52357486ea5d5b5c6cb33600993bad54c97d8d8b，基线 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39。
+
+HthDspApiCredentialAdapter 的四处诊断输出，以及 HostToHostApiPassword 内的
+logPhaseFailure()，统一调用现有 BeaSystemOut.println()，由公共方法添加请求追踪号。
+保留 HTH_API_PASSWORD、stage、operation、reason、phase、httpStatus 和异常类型链。
+仍只输出诊断分类，不输出密码、Code、密钥、请求/响应正文或原始异常消息。
+只修改两个业务 Java 文件和已有测试；公共日志类本身、TLS、业务流程与 SQL 未改。
+
+已按原路径更新 bco-applicaion-main/ 下完整文件；也可在上一版基础上应用
+UPDATE_PASSWORD_COMMON_LOGGER_20261113.patch。完整文件覆盖与补丁应用二选一。
+本补丁须在 UPDATE_PASSWORD_SUBMIT_20261113.patch 和
+UPDATE_DSP_TLS_COMPAT_20261113.patch 后应用。
+重新编译部署 extxface.app.impl 与 module.hosttohost，并重新加载应用。无须执行 SQL。
+
+验证：实际公共日志类与 DSP Java 源码通过 Java 8 编译；本地 HTTPS 回归通过。
+实际执行 adapter 与从服务源码提取的 lifecycle 日志方法，验证请求追踪号、
+异常类型链与敏感字段不输出。完整应用构建与 UAT 未执行。
+详见 PASSWORD_COMMON_LOGGER_VALIDATION_20261113.txt。
+
+Earlier delivery notes:
+
 DSP 原请求 TLS 行为恢复 — 2026-11-13
 源代码：bco-applicaion-main commit 1d827f71948fdbdbc2a0d63df577e75c2e8d3b39，基线 c1cfe1323。
 

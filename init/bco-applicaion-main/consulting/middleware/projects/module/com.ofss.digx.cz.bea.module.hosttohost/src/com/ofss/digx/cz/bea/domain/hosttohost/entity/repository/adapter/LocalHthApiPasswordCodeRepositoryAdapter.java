@@ -339,7 +339,8 @@ public class LocalHthApiPasswordCodeRepositoryAdapter
         "UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET STATUS = ?, LAST_UPDATED_BY = ?, "
             + "LAST_UPDATE_DATE = SYSDATE WHERE ID = ? AND STATUS = 'IN_PROGRESS' "
             + "AND REQUEST_ID = ?");
-    code.setParameter(1, uncertain ? "UNKNOWN" : "ACTIVE");
+    // An unconfirmed DSP outcome must retain the reservation until reconciled.
+    code.setParameter(1, uncertain ? "IN_PROGRESS" : "ACTIVE");
     code.setParameter(2, userId);
     code.setParameter(3, codeId);
     code.setParameter(4, requestId);

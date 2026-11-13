@@ -78,6 +78,16 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
       phase = "REQUEST";
       response = write ? dspClient.passwordApi().modifyPassword(request)
           : dspClient.passwordApi().queryPublicKey(request);
+      if (response.status() == 417 && response.body() != null) {
+        phase = "READ_ERROR_BODY";
+        JsonNode error = new ObjectMapper().readTree(response.body().asInputStream());
+        String errorCode = businessErrorCode(error);
+        boolean rejected = definiteBusinessRejection(errorCode);
+        BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+            + " reason=BUSINESS_ERROR httpStatus=417 errCode=" + errorCode
+            + " classification=" + (rejected ? "DEFINITE_REJECTION" : "PENDING_CONFIRMATION"));
+        throw new HthApiCredentialWriteException(write && !rejected);
+      }
       if (response.status() != 200 || response.body() == null) {
         BeaSystemOut.println("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
             + " reason=" + (response.status() != 200 ? "HTTP_STATUS" : "EMPTY_BODY")
@@ -114,8 +124,25 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
       finally { if (header != null) { header.reset(); } }
     }
   }
+  private String businessErrorCode(JsonNode error) {
+    if (error == null || !error.isObject()) { return "UNRECOGNIZED"; }
+    JsonNode code = error.path("errCode");
+    if (!code.isIntegralNumber() && !code.isTextual()) { return "UNRECOGNIZED"; }
+    String value = code.asText();
+    return value.matches("[0-9]{6}") ? value : "UNRECOGNIZED";
+  }
+
+  private boolean definiteBusinessRejection(String code) {
+    // Verified against DSP PasswordApiServiceImpl and the common request validators.
+    // These errors reject before the password write; other 417 errors may follow a write.
+    return "400100".equals(code) || "400101".equals(code) || "400105".equals(code)
+        || "500000".equals(code) || "500001".equals(code) || "500002".equals(code)
+        || "500003".equals(code) || "500004".equals(code) || "500005".equals(code)
+        || "500006".equals(code) || "500007".equals(code) || "600052".equals(code);
+  }
+
   private boolean definiteRejection(int status) {
-    // DSP's parameter/service errors are transactional rejections; gateway/system failures are uncertain.
+    // Preserve existing HTTP rejection handling; DSP 417 requires the business code check above.
     return status == 400 || status == 401 || status == 403 || status == 404 || status == 450 || status == 460;
   }
 }

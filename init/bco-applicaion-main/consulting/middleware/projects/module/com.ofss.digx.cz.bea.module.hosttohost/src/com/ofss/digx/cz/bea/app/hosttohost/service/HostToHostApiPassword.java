@@ -1294,7 +1294,7 @@ public class HostToHostApiPassword extends AbstractApplication
     boolean success = false;
     try {
       passwordStateRepository.finish(lease.session, identity.partyId, identity.userId,
-          identity.uamClientId, requestId, uncertain ? "UNKNOWN" : SETUP.equals(operation) ? "NOT_SETUP" : "ACTIVE");
+          identity.uamClientId, requestId, uncertain ? "IN_PROGRESS" : SETUP.equals(operation) ? "NOT_SETUP" : "ACTIVE");
       if (codeRepository.failReservation(lease.session, identity.profileUserId, requestId, codeId, uncertain) != 1) {
         throw new Exception("DIGX_CZ_HTH_API_PASSWORD_007");
       }

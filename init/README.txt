@@ -1,3 +1,33 @@
+HTH Code 状态提示与 DSP 417 分类修复 — 2026-11-14
+
+来源：bco-applicaion-main commit f026eb9fe027ff2769662afc314453ba52961c50
+基线：7c4dafeec068dd7b6743f291f88fae1ef0a82b7b（本次用户同步的 main）
+
+本次修改
+- 编辑用户页补充 UNKNOWN / IN_PROGRESS 状态与待确认提示，提供英文、简体及繁体文案。
+  这两种状态不放开 Generate/ReGenerate 或 Code 查看；BCO 用户界面保持原流程。
+- 密码保存遇到 HTTP 417 时读取 DSP errCode。仅已核对的写入前拒绝恢复预约：
+  400100/400101/400105、500000 至 500007、600052。
+  Code 恢复 ACTIVE；profile 恢复原设置状态（SETUP 为 NOT_SETUP，RESET 为 ACTIVE）。
+- 超时、系统错误、未知/无效错误响应或 DSP 成功后的本地提交失败，
+  Code 与 profile 保留 IN_PROGRESS，不再改写 UNKNOWN，也不自动重发保存。
+- 新日志继续使用 BeaSystemOut，仅输出 HTTP 状态、错误码、判断结果，无密码/密文/原始响应。
+- 已有 UNKNOWN 数据不自动修复；需与 DSP 核对实际保存结果。本次无 SQL、DSP、APIC 修改。
+
+部署
+- 完整文件在 bco-applicaion-main/ 下，按原路径合入当前工程。
+- 或从上述 main 基线应用 UPDATE_PASSWORD_CODE_STATUS_20261114.patch；完整文件与补丁二选一：
+  git apply --check <补丁路径>/UPDATE_PASSWORD_CODE_STATUS_20261114.patch
+  git apply <补丁路径>/UPDATE_PASSWORD_CODE_STATUS_20261114.patch
+- 本包为基于已有 HTH 交付的增量，未重新导出整个 main。
+- 前端发布 update-panel.html、user-management.js 以及两份 translations 的编译产物。
+- 后端重新编译并部署 com.ofss.digx.cz.bea.module.hosttohost 与
+  com.ofss.digx.cz.bea.extxface.app.impl；接口签名和数据库结构不变。
+- 本地测试及 ESLint 已通过；尚未进行真实 UAT/Oracle/APIC 部署验证。
+  详见 PASSWORD_CODE_STATUS_VALIDATION_20261114.txt。
+
+Earlier delivery notes:
+
 HTH API Password reset/setup 请求 DTO 修复 — 2026-11-13
 
 来源：bco-applicaion-main commit 492eb4ee5845b23d76b7d66c49195f60b437a4fa

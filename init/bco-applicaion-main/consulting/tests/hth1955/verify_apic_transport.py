@@ -243,6 +243,25 @@ public class DspTransportTest {
         status.set(code);failsLogged(write,false,"operation=MODIFICATION","reason=HTTP_STATUS","httpStatus="+code);
       }
       for(int code:new int[]{470,500,502,302}) { status.set(code);before=calls.get();fails(write,true);check(calls.get()==before+1,"Write retried or redirected"); }
+      status.set(417);
+      for(int code:new int[]{400100,400101,400105,500000,500001,500002,500003,500004,500005,500006,500007,600052}) {
+        for(boolean quoted:new boolean[]{false,true}) {
+          response.set("{\"errCode\":"+(quoted?"\""+code+"\"":String.valueOf(code))+",\"message\":\"sensitive-fixture-message\"}");
+          before=calls.get();header.setAccessToken("fixture-token");
+          failsLogged(write,false,"operation=MODIFICATION","httpStatus=417","errCode="+code,"classification=DEFINITE_REJECTION");
+          check(calls.get()==before+1 && header.getAccessToken()==null,"417 retried or leaked headers");
+        }
+      }
+      for(String bad:new String[]{"{}","null","[]","", "not-json", "{\"errCode\":700000}",
+          "{\"errCode\":600053}","{\"errCode\":600000}","{\"errCode\":500050}","{\"errCode\":900000}",
+          "{\"errCode\":600052.0}","{\"errCode\":true}","{\"errCode\":{\"value\":600052}}",
+          "{\"errCode\":\"600052sensitive-fixture-message\"}","{\"errCode\":\" 600052\"}"}) {
+        response.set(bad);before=calls.get();header.setAccessToken("fixture-token");
+        failsLogged(write,true,"operation=MODIFICATION","httpStatus=417");
+        check(calls.get()==before+1 && header.getAccessToken()==null,"Uncertain 417 retried or leaked headers");
+      }
+      response.set("{\"errCode\":700000}");
+      failsLogged(query,false,"operation=PUBLIC_KEY","httpStatus=417","classification=PENDING_CONFIRMATION");
       status.set(200);
       for(String bad:new String[]{"{}","not-json","{\"status\":\"FAILED\"}"}) {response.set(bad);fails(write,true);}
       response.set("{\"status\":\"000000\"}");

@@ -47,9 +47,13 @@ CM 不保存密码或密码 Hash。现有 HTH_USER_PROFILE ORM 不映射这四�
 - 校验正确 Code 后，在同一个本地事务中将状态与 Code 预约为 IN_PROGRESS。
   profile 行锁让同一用户的并发提交只放行一笔；Code 仍使用原有状态和条件更新。
 - DSP 返回明确成功后，同一个本地事务更新状态 ACTIVE 并将 Code 标为 USED，再执行成功通知。
-- DSP 明确拒绝：释放预约，保留原设置状态；用户可重新获取公钥再提交。
-- 网络超时、5xx、无效响应或 DSP 成功后的本地提交失败：保留 UNKNOWN 或 IN_PROGRESS，
+- DSP 明确拒绝：Code 恢复 ACTIVE，profile 恢复原设置状态（SETUP 为 NOT_SETUP，RESET 为 ACTIVE）；用户可重新获取公钥再提交。
+  HTTP 417 按 errCode 判断：400100/400101/400105、500000 至 500007、600052 是已核对的写入前拒绝。
+  其他 417（包括系统错误、缺失或无法解析的 errCode）仍视为结果待确认，不能仅凭 HTTP 417 释放预约。
+- 网络超时、5xx、无效响应或 DSP 成功后的本地提交失败：Code 和 profile 均保留 IN_PROGRESS，不再写成 UNKNOWN，
   阻止再写及自动选取 Code 用途，人工与 DSP 核对后恢复；不自动重发，不伪报成功。
+- 编辑用户页对 UNKNOWN / IN_PROGRESS 显示状态与待确认提示，不允许生成或查看 Code。
+  本次不变更表结构、不自动修复已有 UNKNOWN；历史数据仍需与 DSP 核实后处理。
 - 相同已完成 requestId 只返回成功，不再次写 DSP 或通知；当前状态已不确定时拒绝旧成功重放。
 - 本地 ACTIVE 仅表示 CM 确认过成功，不能自动感知 DSP 外部停用/删改密码。
   业务 clientId 改变或出现重复 profile 时返回 UNKNOWN，需核对。
@@ -97,7 +101,7 @@ AC 核对及验收边界
 - 1955 AC1：首次 setup 的 Hash 加密传输及 DSP 保存已实现，本地成功测试通过。
 - 1955 AC2：不需要旧密码的 Code reset、替换 DSP 旧 Hash 已实现，本地成功测试通过。
 - 1955 AC3：传输/保存失败返回错误，页面显示失败；不消费为成功、不发送成功通知。
-  结果不明时保留 UNKNOWN/IN_PROGRESS，需要对账，不自动重试。
+  结果不明时保留 IN_PROGRESS，需要对账，不自动重试；已有 UNKNOWN 不自动修改。
 - 1955 AC4：现有 DSP 登录校验读取最新 Hash；本地验证新密码通过、旧密码被拒绝。
   仍需在 UAT 用实际 API 客户端、签名密钥、APIC 和 UAM 完成获取 token 的验收。
 - 788/790 原有页面的密码规则、两次输入一致性校验，以及后端 Code 的正确性/过期/次数校验保留。

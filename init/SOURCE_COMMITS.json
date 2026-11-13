@@ -97,6 +97,29 @@
           "consulting/middleware/projects/common/com.ofss.digx.cz.bea.app.xface/src/com/ofss/digx/cz/bea/app/hosttohost/dto/HostToHostApiPasswordRequestDTO.java"
         ],
         "validation": "PASSWORD_REQUEST_DTO_VALIDATION_20261113.txt"
+      },
+      {
+        "name": "password-code-status-20261114",
+        "commit": "f026eb9fe027ff2769662afc314453ba52961c50",
+        "base": "7c4dafeec068dd7b6743f291f88fae1ef0a82b7b",
+        "patch": "UPDATE_PASSWORD_CODE_STATUS_20261114.patch",
+        "paths": [
+          "consulting/channel/extensions/partials/admin/update-panel.html",
+          "consulting/channel/extensions/resources/nls/user-management.js",
+          "consulting/db/branch_change_history/hosttohost/story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt",
+          "consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/IHthApiPasswordCodeRepositoryAdapter.java",
+          "consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordCodeRepositoryAdapter.java",
+          "consulting/tests/hth1955/user-code-status.cjs",
+          "consulting/tests/hth1955/verify_apic_transport.py",
+          "consulting/tests/hth1955/verify_code_lifecycle.py",
+          "consulting/tests/hth1955/verify_contract_guard.py",
+          "consulting/translations/extensions/resources/nls/zh-CN/user-management.js",
+          "consulting/translations/extensions/resources/nls/zh-Hant/user-management.js"
+        ],
+        "validation": "PASSWORD_CODE_STATUS_VALIDATION_20261114.txt",
+        "note": "Incremental change on the latest synchronized main frontend; complete files included. Existing UNKNOWN data is not changed."
       }
     ]
   },

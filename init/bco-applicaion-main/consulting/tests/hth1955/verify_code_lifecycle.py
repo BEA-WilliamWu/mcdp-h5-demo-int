@@ -75,8 +75,15 @@ public class CodeLifecycleTest {
  check("USED".equals(service.findCodeRequest(request,new Identity(),purpose)),"Replay result missing");
  fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"314159",UUID.randomUUID().toString()));
  seed(purpose,false);reserve(purpose,"314159",request);service.fail(new Identity(),purpose,request,"CODE",false);check("ACTIVE".equals(status()),"Definite DSP rejection consumed Code");
- reserve(purpose,"314159",request);service.fail(new Identity(),purpose,request,"CODE",true);check("UNKNOWN".equals(status()),"Uncertain DSP write released Code");
- check("UNKNOWN".equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"Uncertain state incorrectly active");
+ check((SETUP.equals(purpose)?"NOT_SETUP":"ACTIVE").equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"Definite rejection did not restore profile state");
+ String expiry=scalar("SELECT EXPIRY_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE");
+ reserve(purpose,"314159",request);service.fail(new Identity(),purpose,request,"CODE",true);check("IN_PROGRESS".equals(status()),"Uncertain DSP write lost reservation");
+ check("IN_PROGRESS".equals(scalar("SELECT API_PASSWORD_STATE FROM HTH_BEA.HTH_USER_PROFILE")),"Uncertain profile lost reservation");
+ check(request.equals(scalar("SELECT REQUEST_ID FROM HTH_BEA.HTH_API_PASSWORD_CODE")),"Code request binding lost");
+ check(request.equals(scalar("SELECT API_PASSWORD_REQUEST_ID FROM HTH_BEA.HTH_USER_PROFILE")),"Profile request binding lost");
+ check(expiry.equals(scalar("SELECT EXPIRY_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE")),"Failure extended Code validity");
+ check(scalar("SELECT USED_TIME FROM HTH_BEA.HTH_API_PASSWORD_CODE")==null,"Unconfirmed Code consumed");
+ check("0".equals(scalar("SELECT ATTEMPT_COUNT FROM HTH_BEA.HTH_API_PASSWORD_CODE")),"DSP failure counted as wrong Code");
  fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"314159",request));
  seed(purpose,true);fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"000000",request));fails("DIGX_CZ_HTH_API_PASSWORD_003",()->reserve(purpose,"314159",request));
  seed(purpose,false);for(int i=0;i<5;i++)fails("DIGX_CZ_HTH_API_PASSWORD_002",()->reserve(purpose,"000000",request));check("INVALID".equals(status()),"No lockout");
@@ -108,7 +115,7 @@ public class CodeLifecycleTest {
  check("[test-code-envelope]".equals(HthApiPasswordTransport.decrypt(key,"USER",key.getKeyId(),ciphertext,System.currentTimeMillis())),"Session decrypt mismatch");
  try{HthApiPasswordTransport.decrypt(key,"OTHER",key.getKeyId(),ciphertext,System.currentTimeMillis());throw new AssertionError("Wrong owner accepted");}catch(java.security.GeneralSecurityException expected){}
  try{HthApiPasswordTransport.decrypt(key,"USER",key.getKeyId(),ciphertext,System.currentTimeMillis()+301000);throw new AssertionError("Expired key accepted");}catch(java.security.GeneralSecurityException expected){}
- System.out.println("PASS: real Code AES/RSA, production SQL and transaction bodies: SETUP/RESET reserve/consume/replay, release/unknown, mismatch-before-expiry, lockout, purpose and session isolation");db.close();
+ System.out.println("PASS: real Code AES/RSA, production SQL and transaction bodies: SETUP/RESET reserve/consume/replay, release/pending confirmation, mismatch-before-expiry, lockout, purpose and session isolation");db.close();
  }
 }
 """.replace('STATE_SOURCE',state_source).replace('QUERIES',queries).replace('METHODS',methods)

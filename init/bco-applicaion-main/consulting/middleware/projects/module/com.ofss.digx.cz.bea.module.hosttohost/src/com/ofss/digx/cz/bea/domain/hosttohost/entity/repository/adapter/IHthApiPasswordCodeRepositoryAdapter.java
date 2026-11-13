@@ -54,7 +54,7 @@ public interface IHthApiPasswordCodeRepositoryAdapter
   /** Consumes only the IN_PROGRESS Code held by the specified request. Uses the supplied session. */
   int consume(Session session, String userId, String codeId, String requestId) throws Exception;
 
-  /** Marks an uncertain request UNKNOWN, or releases a confirmed failed reservation. Uses the supplied session. */
+  /** Keeps an uncertain request IN_PROGRESS, or releases a confirmed failed reservation. Uses the supplied session. */
   int failReservation(Session session, String userId, String requestId, String codeId, boolean uncertain) throws Exception;
 
   /** Supersedes only PENDING Codes belonging to this owner and purpose. Uses the supplied session. */

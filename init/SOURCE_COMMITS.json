@@ -94,7 +94,24 @@
     "repository": "hth-dsp",
     "commit": "a366c89ce7ced88804f956ef3b74d331222cf488",
     "base": "f9378dac0baf5f58713360722819b5932bf6c359",
-    "previous_init_commit": "c603fd2125530cfc034cfa87086698a76bbce4e6"
+    "previous_init_commit": "c603fd2125530cfc034cfa87086698a76bbce4e6",
+    "supplemental_changes": [
+      {
+        "name": "internal-apic-password-routes-20261113",
+        "commit": "657e50f6fc71043a04c3a4795c19dfe178133733",
+        "base": "247bd547708a96c19898ffbeef521b82c39e9798",
+        "source_directory": "pd-hth-internal",
+        "patch": "UPDATE_APIC_PASSWORD_20261113.patch",
+        "patch_apply_directory": "pd-hth-internal",
+        "delivery_type": "incremental-files",
+        "paths": [
+          "pd-hth-internal/app_1.0.0.yaml",
+          "pd-hth-internal/sc-hth-dsp-password-openapi_1.0.0.yaml"
+        ],
+        "validation": "APIC_PASSWORD_VALIDATION_20261113.txt",
+        "note": "Existing APIC baseline imported locally in the base commit; delivery changes only the password API YAML and Product registration."
+      }
+    ]
   },
   {
     "repository": "hth-batch-job",

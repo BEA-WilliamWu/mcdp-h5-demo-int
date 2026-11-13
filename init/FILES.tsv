@@ -126,3 +126,5 @@ hth-batch-job	A	FILE	pom.xml	c4dda894ac295097709d34f23da95584477650592698ebd55e2
 hth-batch-job	A	FILE	tools/test_batch_launcher.py	dd6ef76f80a5bacdb1f18dde5832f3b7be09eb51a42444fab742b4903acb5ca8
 hth-batch-job	A	FILE	tools/test_verify_hth_crm_csv.py	00459f76f87e468290404a95c1ee80c073625780668d2d58e56c4c48d4c847a5
 hth-batch-job	A	FILE	tools/verify_hth_crm_csv.py	115a04e0280c856d381cb980df51152f59e45d4e9c65242822eea7b45cc56d04
+hth-dsp	M	FILE	pd-hth-internal/app_1.0.0.yaml	50b98192faad67ad2959030e78f86ebcdb89620a67f53ff9e9681e34465cd108
+hth-dsp	A	FILE	pd-hth-internal/sc-hth-dsp-password-openapi_1.0.0.yaml	4570aae91a56a6eee8eba089bade7951eee5b23613d7ba61e89586d933731778

@@ -1,0 +1,88 @@
+info:
+  version: 1.0.1
+  title: PD HTH
+  name: pd-hth-openapi-openapi
+gateways:
+- datapower-gateway
+product: 1.0.0
+visibility:
+  view:
+    enabled: true
+    type: public
+    tags: []
+    orgs: []
+  subscribe:
+    enabled: true
+    type: authenticated
+    tags: []
+    orgs: []
+plans:
+  test-plan:
+    title: Test Plan
+    description: Test Plan
+    rate-limits:
+      default:
+        value: 160/1second
+        hard-limit: true
+    burst-limits:
+      default:
+        value: 160/1second
+  standard-plan:
+    title: Standard Plan
+    description: Standard Plan
+    rate-limits:
+      default:
+        value: 160/1second
+        hard-limit: true
+    burst-limits:
+      default:
+        value: 160/1second
+  high-plan:
+    title: High Plan
+    description: High Plan
+    approval: true
+    rate-limits:
+      default:
+        value: 160/1second
+        hard-limit: true
+    burst-limits:
+      default:
+        value: 160/1second
+  premium-plan:
+    title: Premium Plan
+    description: Premium Plan
+    approval: true
+    rate-limits:
+      default:
+        value: 160/1second
+        hard-limit: true
+    burst-limits:
+      default:
+        value: 160/1second
+apis:
+  SC-HTH  HTH SUPPORT ACCOUNT Service:
+    $ref: sc-hth-account-openapi_1.0.0.yaml
+  SC-HTH  UAM  Service:
+    $ref: sc-hth-uam-openapi_1.0.0.yaml
+  SC-HTH  DSP  Service:
+    $ref: sc-hth-dsp-openapi_1.0.0.yaml
+  SC-HTH  DSP Client Service:
+    $ref: sc-hth-dsp-client-openapi_1.0.0.yaml
+  SC-HTH  DSP Password Service:
+    $ref: sc-hth-dsp-password-openapi_1.0.0.yaml
+  SC-HTH  HTH SUPPORT AUDITLOG Service:
+    $ref: sc-hth-auditlog-openapi_1.0.0.yaml
+  SC-HTH  DSP SUPPORT AUDITLOG Service:
+    $ref: sc-hth-dsp-auditlog-openapi_1.0.0.yaml
+  SC-HTH  DSP SUPPORT VALIDATOR Service:
+    $ref: sc-hth-dsp-validator-openapi.yaml
+  SC-HTH  HTH SUPPORT FX Service:
+    $ref: sc-hth-fx-openapi_1.0.0.yaml
+  SC-HTH  HTH SUPPORT LOCALPAYMENT Service:
+    $ref: sc-hth-localPayment-openapi_1.0.0.yaml
+  SC-HTH  HTH SUPPORT LOGON Service:
+    $ref: sc-hth-logon-openapi_1.0.0.yaml
+  SC-HTH  NEW UAM  Service:
+    $ref: sc-hth-new-uam-openapi_1.0.0.yaml
+  SC-HTH  DOCUMENT  Service:
+    $ref: sc-hth-document-openapi_1.0.0.yaml

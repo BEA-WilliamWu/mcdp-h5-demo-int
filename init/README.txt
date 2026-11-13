@@ -1,3 +1,36 @@
+HTH Internal APIC 密码接口路由 — 2026-11-13
+
+来源：hth-dsp commit 657e50f6fc71043a04c3a4795c19dfe178133733
+APIC 原始基线：247bd547708a96c19898ffbeef521b82c39e9798（首次保存用户提供的 pd-hth-internal）
+
+本次增量文件位于 hth-dsp/pd-hth-internal/：
+- sc-hth-dsp-password-openapi_1.0.0.yaml：新增 Swagger 2.0 定义。
+- app_1.0.0.yaml：仅增加 DSP Password API 引用。
+包含 POST /dsp/api/password/v1/public-key 与 POST /dsp/api/password/v1/modification。
+沿用 Client ID API 的 APIC client ID/secret 鉴权、icp-url 转发、ssl-client TLS 和超时。
+DSP Java、CM Java/JS、SQL、本次 Product 版本和订阅映射未变。
+
+这是 APIC 增量交付，目录内不包含 Product 所引用的其他原有 API YAML。
+请将这两个文件按原文件名合入已有 pd-hth-internal/APIC 工程，再发布 Product。
+也可在已有 APIC 工程根目录（含 app_1.0.0.yaml）应用补丁，二选一：
+  git apply --check <补丁路径>/UPDATE_APIC_PASSWORD_20261113.patch
+  git apply <补丁路径>/UPDATE_APIC_PASSWORD_20261113.patch
+若在 hth-dsp 根目录应用，则追加 --directory=pd-hth-internal。
+
+发布前在安装了 IBM APIC toolkit 的环境执行：
+  apic validate sc-hth-dsp-password-openapi_1.0.0.yaml
+  apic validate app_1.0.0.yaml
+当前源码 Jenkinsfile 默认 catalog=uat-int；用户测试 URL 使用 /hkbea/sit-int/。
+本次未修改 pipeline，发布时必须选中与测试 URL 一致的 Catalog。
+APIC 发布后再用 Postman 验证两个路径；若仍404，检查 Catalog icp-url 后端及 support 部署版本。
+发布流程参考：https://www.ibm.com/docs/en/api-connect/cloud/10.0.x_saas?topic=cli-validating-yaml-json-definition-api-product
+
+本地 Swagger、引用、路径冲突、合同和请求示例校验已通过。
+本机没有 APIC toolkit，尚未进行原生 APIC 校验、发布或真实 DSP 写入。
+详见 APIC_PASSWORD_VALIDATION_20261113.txt。
+
+Earlier delivery notes:
+
 HTH 独立 Batch 工程完整同步 — 2026-11-13
 
 新目录：hth-batch-job/（完整工程，不是增量补丁）

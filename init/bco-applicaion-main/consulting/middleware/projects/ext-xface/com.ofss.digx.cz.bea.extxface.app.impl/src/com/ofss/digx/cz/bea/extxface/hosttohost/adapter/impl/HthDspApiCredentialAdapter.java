@@ -39,7 +39,10 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
     request.put("hashValue", nonceHash);
     JsonNode result = sendPublicKey(request);
     String key = result.path("publicKey").asText();
-    if (key.isEmpty()) { throw new HthApiCredentialWriteException(false); }
+    if (key.isEmpty()) {
+      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=PUBLIC_KEY reason=MISSING_PUBLIC_KEY httpStatus=200");
+      throw new HthApiCredentialWriteException(false);
+    }
     return key;
   }
 
@@ -68,16 +71,25 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
   private JsonNode send(Map<String, Object> request, boolean write) throws Exception {
     Response response = null;
     CommonHeader header = null;
+    String operation = write ? "MODIFICATION" : "PUBLIC_KEY";
+    String phase = "CLIENT_INIT";
     try {
       DspClient dspClient = client == null ? DSPApiClientFactory.getDspClient() : client;
       header = dspClient.getCommonHeader();
+      phase = "REQUEST";
       response = write ? dspClient.passwordApi().modifyPassword(request)
           : dspClient.passwordApi().queryPublicKey(request);
       if (response.status() != 200 || response.body() == null) {
+        LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+            + " reason=" + (response.status() != 200 ? "HTTP_STATUS" : "EMPTY_BODY")
+            + " httpStatus=" + response.status());
         throw new HthApiCredentialWriteException(write && !definiteRejection(response.status()));
       }
+      phase = "READ_BODY";
       JsonNode body = new ObjectMapper().readTree(response.body().asInputStream());
       if (body == null || !"000000".equals(body.path("status").asText())) {
+        LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+            + " reason=INVALID_STATUS httpStatus=" + response.status());
         throw new HthApiCredentialWriteException(write);
       }
       return body;
@@ -85,7 +97,18 @@ public class HthDspApiCredentialAdapter implements IHthApiCredentialAdapter {
       throw failure;
     } catch (java.lang.Exception failure) {
       // Timeout, malformed response or network loss may follow a committed DSP write.
-      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE exceptionType=" + failure.getClass().getSimpleName());
+      // Log categories only: exception messages/bodies may contain credentials or keys.
+      StringBuilder types = new StringBuilder();
+      Throwable cause = failure;
+      for (int depth = 0; cause != null && depth < 8; depth++) {
+        if (depth > 0) { types.append("->"); }
+        types.append(cause.getClass().getSimpleName());
+        cause = cause.getCause();
+      }
+      LOGGER.warning("HTH_API_PASSWORD stage=DSP_RESPONSE operation=" + operation
+          + " reason=EXCEPTION phase=" + phase
+          + " httpStatus=" + (response == null ? "NONE" : String.valueOf(response.status()))
+          + " exceptionTypes=" + types);
       throw new HthApiCredentialWriteException(write);
     } finally {
       try { if (response != null) { response.close(); } }

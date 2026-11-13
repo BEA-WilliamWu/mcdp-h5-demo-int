@@ -1,0 +1,198 @@
+diff --git a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
+index 41afdf4e8093a3bc3ea29619fa534a028dc62897..abb84981a68876278f1dfa76996e2e165e3e53cf 100644
+--- a/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
++++ b/consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java
+@@ -11,14 +11,53 @@ import feign.Retryer;
+ import feign.jackson.JacksonEncoder;
+ import feign.jaxrs.JAXRSContract;
+ import java.net.URI;
++import java.security.SecureRandom;
++import java.security.cert.X509Certificate;
++import javax.net.ssl.SSLContext;
++import javax.net.ssl.SSLSocketFactory;
++import javax.net.ssl.TrustManager;
++import javax.net.ssl.X509TrustManager;
+ import java.util.concurrent.TimeUnit;
+ import okhttp3.OkHttpClient;
+ import okhttp3.logging.HttpLoggingInterceptor;
+ 
+-/** Uses the DSP SDK transport and the application trust store without bypassing TLS checks. */
++/** Reuses the original BCO DSP transport, including its certificate/hostname verification bypass. */
+ public class DspClient extends DspSupportClient {
+     private volatile DspPasswordApi passwordApi;
+ 
++    /** Preserve the original QTES2 TLS behavior for all DSP APIs using this client. */
++    @Override
++    protected OkHttpClient getOkHttpClient() {
++        OkHttpClient okHttpClient = super.getOkHttpClient();
++        try {
++            final X509TrustManager trustAllCerts = new X509TrustManager() {
++                @Override
++                public void checkClientTrusted(X509Certificate[] chain, String authType) {
++                }
++
++                @Override
++                public void checkServerTrusted(X509Certificate[] chain, String authType) {
++                }
++
++                @Override
++                public X509Certificate[] getAcceptedIssuers() {
++                    return new X509Certificate[]{};
++                }
++            };
++
++            final SSLContext sslContext = SSLContext.getInstance("TLS");
++            sslContext.init(null, new TrustManager[]{trustAllCerts}, new SecureRandom());
++            final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
++
++            return okHttpClient.newBuilder()
++                    .sslSocketFactory(sslSocketFactory, trustAllCerts)
++                    .hostnameVerifier((hostname, session) -> true)
++                    .build();
++        } catch (Exception e) {
++            throw new RuntimeException("Failed to initialize OkHttpClient with SSL bypass", e);
++        }
++    }
++
+     /** Use the same SDK transport, APIC base URL and headers as the old client API. */
+     public DspClientExistenceApi clientExistenceApi() {
+         return getFeignConfig(DspClientExistenceApi.class);
+@@ -55,7 +94,7 @@ public class DspClient extends DspSupportClient {
+         required(header.getApicClientSecret());
+         required(header.getChannel());
+ 
+-        // Keep the SDK's pool, timeouts and TLS validation. Only password calls suppress
++        // Reuse the original DSP pool, timeouts and TLS bypass. Only password calls suppress
+         // the old SDK's BODY logger and automatic retries/redirects; other APIs are unchanged.
+         OkHttpClient.Builder transport = getOkHttpClient().newBuilder()
+                 .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false);
+diff --git a/consulting/tests/hth1955/verify_apic_transport.py b/consulting/tests/hth1955/verify_apic_transport.py
+index 0b036f4d3fe87240ad53fd5620546ed0fd6da6a9..b98f894e45ab16773d5732713da73e62f74fe61b 100644
+--- a/consulting/tests/hth1955/verify_apic_transport.py
++++ b/consulting/tests/hth1955/verify_apic_transport.py
+@@ -98,7 +98,7 @@ public class DspTransportTest {
+     AtomicReference<String> response=new AtomicReference<>("{\"status\":\"000000\"}");
+     AtomicReference<JsonNode> request=new AtomicReference<>();
+     Set<String> messages=ConcurrentHashMap.newKeySet();
+-    AtomicInteger clientValidationCalls=new AtomicInteger();
++    AtomicInteger clientValidationCalls=new AtomicInteger(),clientExistenceCalls=new AtomicInteger();
+     AtomicReference<Throwable> assertion=new AtomicReference<>();
+     server.createContext("/", exchange->{
+       try {
+@@ -118,6 +118,12 @@ public class DspTransportTest {
+           exchange.getResponseHeaders().set("Content-Type","application/json");
+           exchange.sendResponseHeaders(200,valid.length);exchange.getResponseBody().write(valid);return;
+         }
++        if(exchange.getRequestURI().getPath().endsWith("/client/v1/exists")){
++          clientExistenceCalls.incrementAndGet();
++          byte[] exists="{\"exists\":true}".getBytes(StandardCharsets.UTF_8);
++          exchange.getResponseHeaders().set("Content-Type","application/json");
++          exchange.sendResponseHeaders(200,exists.length);exchange.getResponseBody().write(exists);return;
++        }
+         check(!request.get().has("protocol") && !request.get().has("queryOnly")
+             && !request.get().has("requestId"),"Private DSP protocol leaked");
+         if (exchange.getRequestURI().getPath().endsWith("/public-key")) {
+@@ -127,7 +133,7 @@ public class DspTransportTest {
+         if(delay.get()>0)Thread.sleep(delay.get());
+         byte[] bytes=response.get().getBytes(StandardCharsets.UTF_8);
+         exchange.getResponseHeaders().set("Content-Type","application/json");
+-        exchange.getResponseHeaders().set("Location","https://localhost:"+server.getAddress().getPort()+"/password/v1/modification");
++        exchange.getResponseHeaders().set("Location","https://127.0.0.1:"+server.getAddress().getPort()+"/password/v1/modification");
+         exchange.sendResponseHeaders(status.get(),bytes.length);exchange.getResponseBody().write(bytes);
+       }catch(Throwable error){if(!(error instanceof IOException))assertion.set(error);}
+       finally {exchange.close();}
+@@ -135,7 +141,24 @@ public class DspTransportTest {
+     ExecutorService executor=Executors.newCachedThreadPool();server.setExecutor(executor);server.start();
+     try {
+       MemoryPreferences config=new MemoryPreferences();
+-      String url="https://localhost:"+server.getAddress().getPort()+"/catalog/shared";
++      // Pin the loopback address: disabled retries must not select an unbound IPv6 localhost route.
++      String url="https://127.0.0.1:"+server.getAddress().getPort()+"/catalog/shared";
++      // Controls: this server is neither trusted by the default JVM nor named localhost.
++      // A normal client must reject it; the original BCO DSP transport must still work.
++      okhttp3.Request tlsProbe=new okhttp3.Request.Builder().url(url).build();
++      okhttp3.OkHttpClient strict=new okhttp3.OkHttpClient.Builder().retryOnConnectionFailure(false).build();
++      try (okhttp3.Response ignored=strict.newCall(tlsProbe).execute()) {
++        throw new AssertionError("Fixture certificate unexpectedly trusted by default JVM");
++      } catch (SSLHandshakeException expected) { }
++      TrustManagerFactory trust=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
++      trust.init(keys);
++      SSLContext trusted=SSLContext.getInstance("TLS");trusted.init(null,trust.getTrustManagers(),null);
++      okhttp3.OkHttpClient verifyHostname=strict.newBuilder()
++          .sslSocketFactory(trusted.getSocketFactory(),(X509TrustManager)trust.getTrustManagers()[0]).build();
++      try (okhttp3.Response ignored=verifyHostname.newCall(tlsProbe).execute()) {
++        throw new AssertionError("Fixture hostname unexpectedly accepted by default verifier");
++      } catch (SSLPeerUnverifiedException expected) { }
++      check(calls.get()==0,"TLS control unexpectedly reached HTTP handler");
+       config.put(PREFIX+"SERVICE_URL",url+"/");
+       config.put(PREFIX+"APIC_CLIENT_ID","fixture-id"); config.put(PREFIX+"APIC_CLIENT_SECRET","fixture-secret");
+       // Leave DSP.CHANNEL unset to verify the original BCO default.
+@@ -150,6 +173,8 @@ public class DspTransportTest {
+       ClientValidationParam bmBefore=new ClientValidationParam();bmBefore.setClientId("business-client");
+       check(Boolean.TRUE.equals(client.clientApi().validateClientId(bmBefore).getValid()),"BM validation changed");
+       header.reset();
++      check(Boolean.TRUE.equals(client.clientExistenceApi().checkClientIdExists(bmBefore).get("exists")),"BM exists failed with original TLS transport");
++      header.reset();
+       HthDspApiCredentialAdapter adapter=new HthDspApiCredentialAdapter(client);
+       int initial=calls.get();
+       check("UNKNOWN".equals(adapter.getStatus("business-client","USER@PARTY")),"Invented credential state");
+@@ -189,10 +214,10 @@ public class DspTransportTest {
+       before=calls.get();
+       DspClient slow=new DspClient(){
+         protected okhttp3.OkHttpClient getOkHttpClient(){return super.getOkHttpClient().newBuilder()
+-          .readTimeout(100,TimeUnit.MILLISECONDS).build();}
++          .readTimeout(1000,TimeUnit.MILLISECONDS).build();}
+       };
+       slow.setServiceUrl(url);slow.setCommonHeader(header);
+-      delay.set(400);
++      delay.set(2500);
+       failsLogged(()->new HthDspApiCredentialAdapter(slow).publicKey(nonceHash),false,
+           "operation=PUBLIC_KEY","reason=EXCEPTION phase=REQUEST","httpStatus=NONE","SocketTimeoutException");
+       check(calls.get()==before+1,"Timeout retried");
+@@ -211,13 +236,16 @@ public class DspTransportTest {
+       status.set(200);
+       for(String bad:new String[]{"{}","not-json","{\"status\":\"FAILED\"}"}) {response.set(bad);fails(write,true);}
+       response.set("{\"status\":\"000000\"}");
+-      delay.set(400);before=calls.get();
+-      fails(()->new HthDspApiCredentialAdapter(slow).modify("business-client","USER@PARTY","request","RESET","fixture-ciphertext","314159"),true);
+-      check(calls.get()==before+1,"Password write timed out and retried");delay.set(0);
++      delay.set(2500);before=calls.get();
++      failsLogged(()->new HthDspApiCredentialAdapter(slow).modify("business-client","USER@PARTY","request","RESET","fixture-ciphertext","314159"),true,
++          "operation=MODIFICATION","reason=EXCEPTION phase=REQUEST","SocketTimeoutException");
++      check(calls.get()==before+1,"Password timeout request count: before="+before+", after="+calls.get()+", handlerFailure="+assertion.get()+", diagnostic="+diagnostics.get(diagnostics.size()-1));delay.set(0);
+       // Existing SDK client validation still uses its original interface and route.
+       ClientValidationParam validate=new ClientValidationParam();validate.setClientId("business-client");
+       check(Boolean.TRUE.equals(client.clientApi().validateClientId(validate).getValid()),"Existing SDK API failed");
+       header.reset();check(clientValidationCalls.get()==2,"Existing client route changed");
++      check(Boolean.TRUE.equals(client.clientExistenceApi().checkClientIdExists(validate).get("exists")),"BM exists failed after password calls");
++      header.reset();check(clientExistenceCalls.get()==2,"Existing exists route changed");
+       // Separate instances must not inherit the first password proxy's URL from the SDK's static cache.
+       DspClient separate=new DspClient();separate.setServiceUrl("http://localhost");separate.setCommonHeader(header);
+       fails(()->new HthDspApiCredentialAdapter(separate).publicKey(nonceHash),false);
+@@ -228,6 +256,7 @@ public class DspTransportTest {
+           "hashValue","newEncryptedPassword","not-json","http://","https://"}) {
+         check(!allDiagnostics.contains(secret),"Sensitive input or response leaked to diagnostic log");
+       }
++      System.out.println("PASS: original DSP TLS behavior: untrusted certificate and mismatched hostname accepted for BM validate/exists and both password APIs, without JVM trustStore override; strict-client controls reject both cases");
+       System.out.println("PASS: safe DSP diagnostics distinguish HTTP status, malformed/missing result, missing public key, local configuration and timeout; no request/body/header/secret logging");
+       System.out.println("PASS: SDK factory, original BM DSP base URL/authentication, unrelated INQ01 configuration ignored, public-key and A/M HTTPS routes, header cleanup, strict errors, no retry/redirect, existing client validation; no-old-password SETUP/RESET writes and definite/uncertain failure classification");
+     }finally{server.stop(0);executor.shutdownNow();}
+@@ -247,7 +276,7 @@ with tempfile.TemporaryDirectory(prefix='hth-dsp-https-') as temporary:
+     store = tmp / 'test.p12'
+     checked([str(JAVA / 'keytool'), '-genkeypair', '-alias', 'local-test',
+                     '-keyalg', 'RSA', '-keysize', '2048', '-validity', '2',
+-                    '-dname', 'CN=localhost', '-ext', 'SAN=dns:localhost,ip:127.0.0.1',
++                    '-dname', 'CN=fixture.invalid', '-ext', 'SAN=dns:fixture.invalid',
+                     '-storetype', 'PKCS12', '-keystore', str(store),
+                     '-storepass', 'test-store-only', '-keypass', 'test-store-only', '-noprompt'])
+     harness = tmp / 'DspTransportTest.java'
+@@ -286,8 +315,7 @@ public class ThreadAttribute {
+     checked([str(JAVA / 'javac'), '-proc:none', '-encoding', 'UTF-8',
+                     '-cp', temporary + os.pathsep + CP, '-d', temporary, str(harness)])
+     try:
+-        result = subprocess.run([str(JAVA / 'java'), '-Djavax.net.ssl.trustStore=' + str(store),
+-                             '-Djavax.net.ssl.trustStorePassword=test-store-only',
++        result = subprocess.run([str(JAVA / 'java'),
+                              '-cp', temporary + os.pathsep + RUNTIME_CP,
+                              'com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.DspTransportTest',
+                              str(store)], capture_output=True, text=True, timeout=40)

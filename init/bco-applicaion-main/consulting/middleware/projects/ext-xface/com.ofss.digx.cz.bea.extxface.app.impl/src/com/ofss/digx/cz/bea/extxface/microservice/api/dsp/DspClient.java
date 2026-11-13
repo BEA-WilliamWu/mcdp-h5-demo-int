@@ -11,13 +11,52 @@ import feign.Retryer;
 import feign.jackson.JacksonEncoder;
 import feign.jaxrs.JAXRSContract;
 import java.net.URI;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.util.concurrent.TimeUnit;
 import okhttp3.OkHttpClient;
 import okhttp3.logging.HttpLoggingInterceptor;
 
-/** Uses the DSP SDK transport and the application trust store without bypassing TLS checks. */
+/** Reuses the original BCO DSP transport, including its certificate/hostname verification bypass. */
 public class DspClient extends DspSupportClient {
     private volatile DspPasswordApi passwordApi;
+
+    /** Preserve the original QTES2 TLS behavior for all DSP APIs using this client. */
+    @Override
+    protected OkHttpClient getOkHttpClient() {
+        OkHttpClient okHttpClient = super.getOkHttpClient();
+        try {
+            final X509TrustManager trustAllCerts = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[]{};
+                }
+            };
+
+            final SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{trustAllCerts}, new SecureRandom());
+            final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
+            return okHttpClient.newBuilder()
+                    .sslSocketFactory(sslSocketFactory, trustAllCerts)
+                    .hostnameVerifier((hostname, session) -> true)
+                    .build();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize OkHttpClient with SSL bypass", e);
+        }
+    }
 
     /** Use the same SDK transport, APIC base URL and headers as the old client API. */
     public DspClientExistenceApi clientExistenceApi() {
@@ -55,7 +94,7 @@ public class DspClient extends DspSupportClient {
         required(header.getApicClientSecret());
         required(header.getChannel());
 
-        // Keep the SDK's pool, timeouts and TLS validation. Only password calls suppress
+        // Reuse the original DSP pool, timeouts and TLS bypass. Only password calls suppress
         // the old SDK's BODY logger and automatic retries/redirects; other APIs are unchanged.
         OkHttpClient.Builder transport = getOkHttpClient().newBuilder()
                 .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false);

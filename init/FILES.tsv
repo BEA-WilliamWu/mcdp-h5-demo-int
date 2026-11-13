@@ -1,6 +1,6 @@
 repository	action	delivery	path	sha256
 bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.html	ab3ca4bf66f8171c761d2933fd106e2f919684adcf40bad7fcb915d542b657d7
-bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.js	dd26cc0be2bd6417861eb21cb643d1b7ec4ca476c997cc5355fecdab2c18687f
+bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/api-password.js	ad1eb5cf3d588b0194cf2df5443729c671720aac0e5b9b3028499b19a5717f5d
 bco-applicaion-main	M	FILE	consulting/channel/extensions/components/host-to-host/api-password/transport.js	8fa5e2c6e947de517241564b576ad70c1da5378ed8de4022a4a0c5542c8087b7
 bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/hth-api-password.js	e6bc47ba7a20e6e6ce0bd05bed541fe05d626831e0f1342923842ad4aa671d62
 bco-applicaion-main	M	FILE	consulting/channel/extensions/resources/nls/zh-CN/hth-api-password.js	c0ba19eca383d56b298347be9b14280b0731ca8242cc666afe9223d3d28c577a
@@ -26,11 +26,11 @@ bco-applicaion-main	M	FILE	consulting/middleware/projects/endpoint/com.ofss.digx
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordPersistClient.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/DspApiPasswordResponsePolicy.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthApiCredentialAdapter.java	-
-bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java	03e6928f56f33e307d6a23f30d7cb5ca3eec2bb9a134c33f1708d5b2bfcd7497
+bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/HthDspApiCredentialAdapter.java	741e941f47c1ed4bb5534230858f297b89a9883b53099a4bc28a6dc888a30ab0
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/hosttohost/adapter/impl/dto/DspApiPasswordPersistRequest.java	-
-bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java	dacce8129df796a7fea14024731881fa21d02ac05edeb540d804948e5475917f
+bco-applicaion-main	M	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/DspClient.java	29fe8a5d33506d43621b851120bd5598328c83404ee2a4d611afdfddd7d1835c
 bco-applicaion-main	A	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/api/DspPasswordApi.java	677b09c572200bf06bb9b61ae2402e778edeb0bd63b1b2b3c61c36352d76b75c
-bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java	8390ede76b2f0021174182f3a9244d9ecc9a115d2394b2ddbf4c127bb6996636
+bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HostToHostApiPassword.java	05b84c3ca377249e318ceeae70b2bc97e7dace2c824c85946e33d39f1286cb9d
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/service/HthApiPasswordStorage.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordHash.java	-
 bco-applicaion-main	M	FILE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/app/hosttohost/util/HthApiPasswordTransport.java	33540d02e6d8161a8bae91b6658ccc21264a63bc143bd3c44e344b23a4a9ed37
@@ -54,8 +54,8 @@ bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordOperationRepositoryAdapter.java	-
 bco-applicaion-main	D	DELETE	consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.hosttohost/src/com/ofss/digx/cz/bea/domain/hosttohost/entity/repository/adapter/LocalHthApiPasswordStateRepositoryAdapter.java	-
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/browser-interop.cjs	1cebdad8bab17fcfc3bdbd146d4a202e8e1d265f8da6c1eb84a1947e43ca0f32
-bco-applicaion-main	A	FILE	consulting/tests/hth1955/ui-errors.cjs	e062e73220314b0a8a7b58392cf4f7c1da3c8b40faa151d5e38a515bf64c93ec
-bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_apic_transport.py	6ff9917450b5d7f3dd818e249d00b04423ad933eeb8b425abca4884b7deb7c31
+bco-applicaion-main	A	FILE	consulting/tests/hth1955/ui-errors.cjs	ec41ab5377f0d1da8ffb24cd9bdb1c1355e97c0890a06f5f0c1022e58bc7932d
+bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_apic_transport.py	0ea60b14d1fc0fd5042cefddd76a3400365d99938d5b9e23c3dacd1e79fcc291
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_code_lifecycle.py	80dd1ecbdc12dde78621fd044f5a3f25ee5f8aff0261c5e5889f4261e61d92ac
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/verify_contract_guard.py	f29d14f6fe536cd3d79a6e9cea812283bfc66abff7e51f6b3bd69de24ca8ba83
 bco-applicaion-main	RESTORE	FILE	consulting/middleware/projects/ext-xface/com.ofss.digx.cz.bea.extxface.app.impl/src/com/ofss/digx/cz/bea/extxface/microservice/api/dsp/factory/DSPApiClientFactory.java	bb99e41a03e69fe51fcea70ff24bcffe122a9cb7da834975dcb6e6f2944c487f

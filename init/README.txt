@@ -1,3 +1,82 @@
+DSP 原请求 TLS 行为恢复 — 2026-11-13
+源代码：bco-applicaion-main 工作区，基线 c1cfe1323；本次尚未 commit。
+
+按用户确认恢复 QTES2 原 DspClient.getOkHttpClient()，方法内容与 QTES2 一致：
+- 继续使用 SDK 的 OkHttp 连接池、超时配置和原 DSP.* 地址/APIC 请求头。
+- 恢复跳过服务器证书信任校验和主机名校验；这替代此前默认 JVM 校验的行为。
+- BM validate/exists 以及两个密码 API 均通过这个 getOkHttpClient() 创建请求客户端。
+- 密码接口保留自己的 Feign 包装，以禁止自动重试、重定向和 BODY 日志；
+  该包装继承上述原 TLS 配置，没有另建不带该配置的底层客户端。
+- 不修改 JVM 全局信任库、SDK jar、DSP 服务端、数据库或接口业务参数。
+
+本次仅修改 DspClient.java 和 verify_apic_transport.py 两个源文件。
+完整文件已按原路径更新到 bco-applicaion-main/，准确路径见最后一条
+SOURCE_COMMITS.json supplemental_changes。增量补丁：
+  UPDATE_DSP_TLS_COMPAT_20261113.patch
+先应用上一轮 UPDATE_PASSWORD_SUBMIT_20261113.patch，再应用本补丁；
+两个补丁已按顺序在临时 Git index 验证，结果与当前全部六个改动文件一致。
+如果上一轮已经应用，仅应用本补丁。完整文件复制与补丁应用二选一。
+
+本次需重新编译部署 extxface.app.impl 模块，并重启/重新加载应用使已缓存的
+DspClient 和 Feign/OkHttp 客户端失效。无须执行 SQL。
+上一轮错误弹窗及诊断日志仍需部署其 frontend 和 hosttohost 模块。
+
+验证：Java 8 编译通过；本地 HTTPS 使用不受默认 JVM 信任、且主机名不匹配
+的证书，未设置 JVM trustStore。普通客户端分别拒绝证书/主机名；本次恢复的
+客户端在 BM validate/exists、公钥和 SETUP/RESET 请求中均成功。
+同时验证 APIC 头、请求路径、失败分类、日志脱敏、超时不重试和不跟随重定向。
+见 DSP_TLS_COMPAT_VALIDATION_20261113.txt。尚未验证 UAT 实际连接。
+
+Earlier delivery notes:
+
+HTH API password submit error dialog and DSP diagnostics — 2026-11-13
+Source: bco-applicaion-main working tree, base c1cfe1323bd9854339fc902c8acd654ddc83d118.
+This update is not committed yet; the source state is recorded in SOURCE_COMMITS.json.
+
+Three production files and two regression scripts only:
+- api-password.js: submission errors use the existing BCO message dialog and keep
+  the input form visible; only a successful save shows confirmation. Password/Code
+  clearing and the request ID used for retry remain unchanged. The initial UNKNOWN
+  state guard remains unchanged. Shared framework session/503 handling is unchanged.
+- HthDspApiCredentialAdapter.java: safe diagnostic categories for PUBLIC_KEY and
+  MODIFICATION failures. Logs contain reason, HTTP status and exception class chain,
+  with no request/response bodies, passwords, Code, keys or APIC header values.
+- HostToHostApiPassword.java: log DSP_ADAPTER if loading the HTH DSP adapter fails.
+- UI error/retry integration tests and the local HTTPS transport test are included.
+
+Submit still first calls GET status?requestId=...&transport=true to prepare session
+and DSP public keys, then POST setup / PUT reset to save encrypted credentials.
+A 009 error during the first call prevents the save call. Ordinary status without
+transport=true only reads local state and does not prove DSP connectivity.
+The observed UAT 400/009 root cause is still unconfirmed without backend evidence.
+
+Apply AFTER UPDATE_FRONTEND_ESLINT_20261113.patch, by copying the five full files
+listed in the latest SOURCE_COMMITS.json entry, preserving paths, OR applying
+UPDATE_PASSWORD_SUBMIT_20261113.patch at the application repository root.
+Run git apply --check first. The patch is validated against c1cfe1323.
+Rebuild frontend, extxface.app.impl and hosttohost modules. No SQL, shared BCO
+framework/client, DSP server or endpoint-contract changes are included.
+
+Search the CM backend logs around the failing request time for:
+  HTH_API_PASSWORD stage=DSP_RESPONSE
+  HTH_API_PASSWORD lifecycle: stage=DSP_ADAPTER
+  Exception while invoking HTH API password operation 'status'
+New log reasons:
+  HTTP_STATUS: non-200 from the gateway/DSP; inspect httpStatus.
+  EMPTY_BODY / INVALID_STATUS / MISSING_PUBLIC_KEY: response does not match contract.
+  EXCEPTION: inspect phase and exceptionTypes for configuration, connection/TLS,
+             timeout or JSON parsing failures. httpStatus=NONE means no response
+             object was obtained by the adapter, not proof the remote was untouched.
+  DSP_ADAPTER: the HTH DSP implementation could not be loaded/instantiated.
+The browser's HTTP 400 is CM's error mapping; it is not necessarily DSP's HTTP status.
+
+Validation: UI error mapping and 14 SETUP/RESET failure-and-retry flows passed;
+57 changed channel JS files passed BCO ESLint (0 errors, 6 pre-existing warnings);
+local HTTPS transport/diagnostic tests passed, including existing BM SDK regression.
+See PASSWORD_SUBMIT_VALIDATION_20261113.txt. No full build or UAT connection verified.
+
+Earlier delivery notes:
+
 HTH frontend ESLint build-error fix — 2026-11-13
 Source: bco-applicaion-main c1cfe1323bd9854339fc902c8acd654ddc83d118 (base 5e7c6ed3).
 

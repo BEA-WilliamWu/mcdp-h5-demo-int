@@ -1,0 +1,36 @@
+DSP TLS compatibility verification — 2026-11-13
+Source working tree based on c1cfe1323; not committed.
+
+Production scope: DspClient.java only. Restored getOkHttpClient method is byte-for-byte
+identical after newline normalization to the supplied QTES2 Java method.
+The method derives the SDK transport with the original trust-all trust manager and
+hostname verifier. PasswordApi derives from that same method and keeps its existing
+no-retry/no-redirect/no-BODY-log handling. SDK/factory/header sources were not edited.
+
+Command:
+JAVA_HOME=/opt/homebrew/opt/openjdk@21 python3 consulting/tests/hth1955/verify_apic_transport.py
+
+PASS: production Java sources compile with --release 8 against bundled SDK jars.
+PASS: generated HTTPS fixture uses CN/SAN fixture.invalid, accessed via 127.0.0.1;
+      no JVM trustStore override is supplied to the test process.
+PASS: default client rejects untrusted certificate (SSLHandshakeException).
+PASS: client trusting the fixture CA still rejects mismatched hostname
+      (SSLPeerUnverifiedException). Neither control reaches the HTTP handler.
+PASS: actual DspClient succeeds on legacy /client/v1/validate, current /client/v1/exists,
+      /password/v1/public-key and /password/v1/modification (A/M) against that fixture.
+PASS: base path, APIC ID/secret/channel/message ID headers and header cleanup retained.
+PASS: invalid HTTP/JSON/status responses retain existing rejection classification.
+PASS: each password read timeout sends exactly one HTTP request, with no automatic
+      retry or redirect. Both public-key and modification timeout paths are exercised.
+PASS: diagnostics do not contain request/body/header/credential or key values.
+
+Fixture correction: pin the loopback IP so disabled retries cannot select localhost's
+unbound IPv6 route after a prior timeout. This does not change production DNS or retries.
+
+PASS: incremental patch applies after UPDATE_PASSWORD_SUBMIT_20261113.patch on
+c1cfe1323 and reproduces all six current working-tree changes exactly.
+PASS: delivery FILE hashes/SHA256SUMS and source whitespace validated.
+
+Limits: tests use local HTTPS fixtures, not the bank APIC/DSP; no full application
+build or UAT deployment performed. TLS bypass restores the explicitly requested
+original behavior and does not establish the actual UAT RetryableException cause.

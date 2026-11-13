@@ -144,15 +144,12 @@ define([
                     ? response.status : response),
                 message = status && status.message,
                 code = message && typeof message.code === "string" ? message.code : null,
+                fallback = error && error.hthSyncFailure ? self.nls.syncFailureMessage : self.nls.submissionError,
                 text = error && error.hthInputError ? error.hthInputError
-                    : (code && self.nls.submissionErrors[code]) || self.nls.submissionError;
+                    : (code && self.nls.submissionErrors[code]) || fallback;
 
-            if (code === "DIGX_CZ_HTH_API_PASSWORD_009" ||
-                (error && error.hthSyncFailure && !/^DIGX_CZ_HTH_API_PASSWORD_(00[1-8]|010)$/.test(code || ""))) {
-                self.showSyncFailure(true);
-            } else {
-                params.baseModel.showMessages(null, [text], "ERROR");
-            }
+            // Submission failures stay on the form; only a successful write shows confirmation.
+            params.baseModel.showMessages(null, [text], "ERROR");
         };
 
         self.submit = function () {

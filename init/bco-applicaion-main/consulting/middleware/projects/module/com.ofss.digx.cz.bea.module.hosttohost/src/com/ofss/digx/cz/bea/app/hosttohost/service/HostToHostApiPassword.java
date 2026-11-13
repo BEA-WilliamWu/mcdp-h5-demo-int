@@ -583,6 +583,7 @@ public class HostToHostApiPassword extends AbstractApplication
       return (IHthApiCredentialAdapter) Class.forName(
           "com.ofss.digx.cz.bea.extxface.hosttohost.adapter.impl.HthDspApiCredentialAdapter").newInstance();
     } catch (java.lang.Exception failure) {
+      logPhaseFailure("DSP_ADAPTER", failure);
       throw new com.ofss.digx.cz.bea.extxface.hosttohost.adapter.HthApiCredentialWriteException(false);
     }
   }

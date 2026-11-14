@@ -143,6 +143,21 @@
         ],
         "validation": "APIC_PASSWORD_VALIDATION_20261113.txt",
         "note": "Existing APIC baseline imported locally in the base commit; delivery changes only the password API YAML and Product registration."
+      },
+      {
+        "name": "dsp-password-key-cache-20261114",
+        "commit": "a059f6595bc990200c3f817e5a1fe25b30d77eb9",
+        "base": "657e50f6fc71043a04c3a4795c19dfe178133733",
+        "patch": "UPDATE_DSP_PASSWORD_KEY_CACHE_20261114.patch",
+        "patch_apply_directory": "hth-dsp",
+        "delivery_type": "incremental-files",
+        "paths": [
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/dto/CryptKeyDto.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/dto/CryptKeyDtoTest.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java"
+        ],
+        "validation": "DSP_PASSWORD_KEY_CACHE_VALIDATION_20261114.txt",
+        "note": "One DSP production DTO constructor fix plus regression tests; Redis wire format unchanged. No CM, APIC or SQL changes."
       }
     ]
   },

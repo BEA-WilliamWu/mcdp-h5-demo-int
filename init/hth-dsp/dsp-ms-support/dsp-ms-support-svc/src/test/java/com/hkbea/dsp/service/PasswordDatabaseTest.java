@@ -26,10 +26,14 @@ import org.springframework.transaction.annotation.AnnotationTransactionAttribute
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.client.handler.State;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Real DSP service, MyBatis mapper and transaction manager. H2 replaces Oracle; Redis is an in-memory cache. */
+/** Real DSP service, MyBatis mapper and transaction manager. H2 replaces Oracle; Redis storage is replaced by an in-memory map with the real Redisson JSON codec. */
 class PasswordDatabaseTest {
     private PasswordApiServiceImpl service;
     private DspAuthCredentialRepoService repo;
@@ -38,9 +42,26 @@ class PasswordDatabaseTest {
     private String publicKey;
     static final String NONCE="314159";
     static class Keys extends PasswordAppService {
-        final Map<String,CryptKeyDto> cache=new HashMap<>(); boolean failAfterWrite;
-        @Override public CryptKeyDto getCryptoKeyDto(String h) { return cache.computeIfAbsent(h, x->super.getCryptoKeyDto(x)); }
-        @Override public CryptKeyDto findCryptoKeyDto(String h) { return cache.get(h); }
+        final Map<String,byte[]> cache=new HashMap<>(); boolean failAfterWrite;
+        final JsonJacksonCodec codec=new JsonJacksonCodec();
+        @Override public CryptKeyDto getCryptoKeyDto(String h) {
+            if(cache.containsKey(h)) return findCryptoKeyDto(h);
+            CryptKeyDto keys=super.getCryptoKeyDto(h);
+            try {
+                ByteBuf encoded=codec.getValueEncoder().encode(keys);
+                try { byte[] bytes=new byte[encoded.readableBytes()]; encoded.readBytes(bytes); cache.put(h,bytes); }
+                finally { encoded.release(); }
+            } catch(java.io.IOException e) { throw new IllegalStateException("Cache encoding failed",e); }
+            return keys;
+        }
+        @Override public CryptKeyDto findCryptoKeyDto(String h) {
+            byte[] bytes=cache.get(h);
+            if(bytes==null) return null;
+            ByteBuf encoded=Unpooled.wrappedBuffer(bytes);
+            try { return (CryptKeyDto)codec.getValueDecoder().decode(encoded,new State()); }
+            catch(java.io.IOException e) { throw new IllegalStateException("Cache decoding failed",e); }
+            finally { encoded.release(); }
+        }
         @Override public void removeCryptoKeyDto(String h) { cache.remove(h); if(failAfterWrite) throw new IllegalStateException(); }
     }
     @BeforeEach void init() throws Exception {

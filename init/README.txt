@@ -1,3 +1,27 @@
+DSP 密码密钥缓存反序列化修复 — 2026-11-14
+
+来源：hth-dsp commit a059f6595bc990200c3f817e5a1fe25b30d77eb9
+基线：657e50f6fc71043a04c3a4795c19dfe178133733
+
+修复原因
+- DSP modification 从 Redis 读取 CryptKeyDto 时出现 InvalidDefinitionException：没有可用的构造方法。
+- CacheErrorHandler 将读失败降级为未找到密钥，最终返回 600052 / HTTP 417；此时尚未写入密码。
+- 仅在 CryptKeyDto 现有构造方法补上 @JsonCreator / @JsonProperty，保留 final 字段与原有缓存格式。
+- 增加 Jackson/Redisson 缓存读写回归，并让密码数据库测试经过真实 Redisson JSON 编解码。
+
+部署
+- 完整文件已同步至 hth-dsp/dsp-ms-support/dsp-ms-support-svc/，按原目录合入工程。
+- 或在已有 hth-dsp 工程根目录应用 UPDATE_DSP_PASSWORD_KEY_CACHE_20261114.patch，与完整文件复制二选一：
+  git apply --check <补丁路径>/UPDATE_DSP_PASSWORD_KEY_CACHE_20261114.patch
+  git apply <补丁路径>/UPDATE_DSP_PASSWORD_KEY_CACHE_20261114.patch
+- 重新编译、部署 dsp-ms-support-svc，再从 CM 页面重新获取公钥并提交。
+- 不需要执行 SQL、清空共享 Redis 缓存或变更 APIC；本次不改 CM 和公共 Redis 配置。
+- 这份修复只解决密钥缓存读取失败；RESET 仍要求 DSP 中存在有效的密码记录。
+- 本地 20 个不同回归测试已通过（首次 19 项通过，另 1 项配置 CM 脚本后补跑通过）。
+  未进行 UAT Redis/Oracle/APIC 实际部署验证。详见 DSP_PASSWORD_KEY_CACHE_VALIDATION_20261114.txt。
+
+Earlier delivery notes:
+
 HTH Code 状态提示与 DSP 417 分类修复 — 2026-11-14
 
 来源：bco-applicaion-main commit f026eb9fe027ff2769662afc314453ba52961c50

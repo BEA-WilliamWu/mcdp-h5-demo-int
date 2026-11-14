@@ -67,7 +67,7 @@ hth-dsp	M	FILE	dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/ser
 hth-dsp	M	PATCH_ONLY	dsp-ms-support/dsp-ms-support-svc/src/main/resources/application.yaml	4dbdd7fd20b29bf3803f9b453a2318afb1213bd09c01060e17afba7f9acd87dd
 hth-dsp	M	FILE	dsp-ms-support/dsp-ms-support-svc/src/main/resources/mapper/DspAuthCredentialMapper.xml	6cd7e8060a77f49cc33763acc4bea30d488ad76762f1b7adf65ce9c3fee9627d
 hth-dsp	M	FILE	dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java	d16dc305400cc48c2f8bf98626e6dfaf22ddd2309ef8c865636b409955bdc0f4
-hth-dsp	A	FILE	dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java	620a43fa3820bbe3995111b8ab647e56e852ec4397be27922bc648e73c07b948
+hth-dsp	A	FILE	dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java	c890f353b67c1286448cfa72df9bc47c344f52850bbd32d36edf78dad721faf7
 bco-applicaion-main	D	DELETE	consulting/db/release/HTH_1955_DEPLOYMENT.txt	-
 bco-applicaion-main	D	DELETE	consulting/db/release/HTH_1955_LOCAL_STATE_UPGRADE.sql	-
 bco-applicaion-main	D	DELETE	consulting/db/release/HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql	-
@@ -132,3 +132,5 @@ bco-applicaion-main	M	FILE	consulting/channel/extensions/partials/admin/update-p
 bco-applicaion-main	A	FILE	consulting/tests/hth1955/user-code-status.cjs	a4cf4d24fae9bacab1f519c062ff0341536ef7fca49168114b26d62b211ad799
 bco-applicaion-main	M	FILE	consulting/translations/extensions/resources/nls/zh-CN/user-management.js	44734530337327e5b71ef9620774513601cb22cb06715195dd4852a56a1e0e70
 bco-applicaion-main	M	FILE	consulting/translations/extensions/resources/nls/zh-Hant/user-management.js	b4502d9cff4ea745fec42c64561f663fba703350f3e06621b100fa5597c4b396
+hth-dsp	M	FILE	dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/dto/CryptKeyDto.java	edc4bfb6f913107c484d092d46f7d2eba2263f4947e83bbfabf9c4c3fcc17ff0
+hth-dsp	A	FILE	dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/dto/CryptKeyDtoTest.java	68f51692aea6f0f4df63ced5177c7d475dfb014a3b41d41ff401b1c9f6e29a4d

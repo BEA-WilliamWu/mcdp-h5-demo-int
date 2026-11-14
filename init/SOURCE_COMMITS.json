@@ -158,6 +158,24 @@
         ],
         "validation": "DSP_PASSWORD_KEY_CACHE_VALIDATION_20261114.txt",
         "note": "One DSP production DTO constructor fix plus regression tests; Redis wire format unchanged. No CM, APIC or SQL changes."
+      },
+      {
+        "name": "dsp-legacy-reset-first-credential-20261114",
+        "commit": "1f65afd633c01cf36510c989b9b6367a8df9056a",
+        "base": "a059f6595bc990200c3f817e5a1fe25b30d77eb9",
+        "patch": "UPDATE_DSP_LEGACY_RESET_20261114.patch",
+        "patch_apply_directory": "hth-dsp",
+        "delivery_type": "incremental-files",
+        "paths": [
+          "dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java",
+          "dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml",
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java"
+        ],
+        "validation": "DSP_LEGACY_RESET_VALIDATION_20261114.txt",
+        "note": "RESET creates a credential only when the exact clientId + closeId pair has no records; inactive records are rejected. Requires database uniqueness for concurrent insert protection. CM and APIC unchanged."
       }
     ]
   },

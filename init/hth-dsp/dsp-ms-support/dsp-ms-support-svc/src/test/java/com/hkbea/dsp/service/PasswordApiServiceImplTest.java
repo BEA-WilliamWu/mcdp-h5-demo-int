@@ -75,9 +75,36 @@ class PasswordApiServiceImplTest {
         assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
         verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
     }
-    @Test void resetRequiresExistingActiveCredential() throws Exception {
-        cached(); assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
+    @Test void legacyResetCreatesFirstCredentialWithoutOldPassword() throws Exception {
+        cached(); String digest = hash("Reset1234");
+        assertEquals("000000", service.modifyPassword(request("M", encrypt(digest))).getStatus());
+        verify(repo).existsForClientAndCloseId("USER@PARTY", "test-client");
+        verify(repo).insert(argThat(row -> digest.equals(row.getPasswordHash())
+                && "test-client".equals(row.getClientId()) && "USER@PARTY".equals(row.getCloseId())
+                && "A".equals(row.getObjectStatus()) && row.getCreationDate() != null));
         verify(repo, never()).updatePassword(any());
+        verify(keys).removeCryptoKeyDto(HashUtils.sha256(NONCE));
+    }
+    @Test void legacyResetDoesNotReactivateInactiveCredential() throws Exception {
+        cached(); when(repo.existsForClientAndCloseId("USER@PARTY", "test-client")).thenReturn(true);
+        ServiceException failure = assertThrows(ServiceException.class,
+                () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
+        assertEquals(com.hkbea.dsp.exception.DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, failure.getErrCode());
+        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
+        verify(keys, never()).removeCryptoKeyDto(anyString());
+    }
+    @Test void failedExistenceQueryCannotBecomeFirstCreation() throws Exception {
+        cached(); when(repo.existsForClientAndCloseId("USER@PARTY", "test-client")).thenThrow(new IllegalStateException());
+        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
+        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
+        verify(keys, never()).removeCryptoKeyDto(anyString());
+    }
+    @Test void legacyResetStillRequiresValidEncryptionAndDigest() throws Exception {
+        cached();
+        assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", "not-base64")));
+        assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", encrypt("not-a-password-hash"))));
+        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
+        verify(keys, never()).removeCryptoKeyDto(anyString());
     }
     @Test void rejectsPlaintextAndHexInsteadOfBase64Digest() throws Exception {
         cached();
@@ -119,7 +146,9 @@ class PasswordApiServiceImplTest {
     }
     @Test void databaseFailureIsNotReportedAsSuccess() throws Exception {
         cached(); doThrow(new IllegalStateException()).when(repo).insert(any());
-        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
+        for (String operation : new String[]{"A", "M"}) {
+            assertThrows(IllegalStateException.class, () -> service.modifyPassword(request(operation, encrypt(hash("Setup1234")))));
+        }
         verify(keys, never()).removeCryptoKeyDto(anyString());
     }
     @Test void requestStringDoesNotLeakSecrets() {

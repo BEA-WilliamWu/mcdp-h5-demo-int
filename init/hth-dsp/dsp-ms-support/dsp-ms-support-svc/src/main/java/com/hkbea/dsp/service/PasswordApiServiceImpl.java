@@ -150,7 +150,8 @@ public class PasswordApiServiceImpl implements PasswordApi {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCommit() {
-                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={}", function);
+                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={} action={}",
+                            function, dspAuthCredential == null ? "INSERT" : "UPDATE");
                 }
             });
         }
@@ -233,10 +234,15 @@ public class PasswordApiServiceImpl implements PasswordApi {
     }
 
     private void modifyPassword(PasswordModificationRequest request, CryptKeyDto cryptoKeyDto, DspAuthCredential dspAuthCredential) {
-        // no user
         if (dspAuthCredential == null) {
-            LOGGER.error("no active record");
-            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
+            // Legacy CM users can already be in RESET before their first DSP credential exists.
+            // Do not treat inactive records or a failed query as an absent credential.
+            if (dspAuthCredentialRepoService.existsForClientAndCloseId(request.getCloseId(), request.getClientId())) {
+                LOGGER.warn("HTH_API_PASSWORD stage=DSP_SAVE result=REJECTED function=M reason=NO_ACTIVE_CREDENTIAL");
+                throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
+            }
+            newPassword(request, cryptoKeyDto, null);
+            return;
         }
 
         // The browser already computed Base64(SHA-256(UTF-8(password))). Do not hash it again.

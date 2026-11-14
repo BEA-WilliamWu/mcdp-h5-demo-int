@@ -1,0 +1,65 @@
+DSP legacy CM RESET compatibility verification — 2026-11-14
+Source commit: 1f65afd633c01cf36510c989b9b6367a8df9056a
+Base commit: a059f6595bc990200c3f817e5a1fe25b30d77eb9
+
+Runtime scope: PasswordApiServiceImpl + DspAuthCredentialRepoService only.
+Also updated: password API Java documentation / OpenAPI operation description and two test files.
+No CM, frontend, APIC route, token API implementation, schema or user-data changes.
+
+Behavior:
+- M with an active exact clientId + closeId pair updates its password.
+- M with no records at all for that pair creates its first active credential in the same transaction.
+- M with only inactive records rejects before writing; does not reactivate or overwrite them.
+- Query errors are propagated, not interpreted as absence. No M-to-A client retry or duplicate-write fallback.
+- A cannot overwrite an existing active password. RSA/SHA-256 protocol unchanged.
+- Successful database commit logs function=M action=INSERT or action=UPDATE without secrets.
+- Code validation/consumption and profile state handling remain CM responsibilities.
+
+Validation (one offline Maven reactor run, all 34 passed, zero skipped):
+- PasswordApiServiceImplTest: 16 passed; legacy creation, inactive rejection, failed lookup,
+  malformed encryption/digest rejection, insert failure, old setup/reset regressions, actual CM browser encryption.
+- PasswordDatabaseTest: 10 passed; real DSP service, MyBatis SQL, transaction manager and Redisson
+  JSON codec, with H2 replacing Oracle and an in-memory map replacing Redis storage.
+  Covers first RESET insert, repeated RESET updates same row, replay rejection, exact pair scoping,
+  inactive record preservation, insert/update rollback, two concurrent inserts and token verification.
+  Concurrent requests both read absence, then race: unique constraint permits one insert only;
+  loser raises DuplicateKeyException, never overwrites the winner or reports success.
+  Existing token flow verifies the first legacy-reset password, rejects it after reset, accepts the new one;
+  external UAM and its public-key lookup are test fixtures.
+- CryptKeyDtoTest: 2 passed (real Jackson and Redisson encoding/decoding).
+- DspAuthCredentialRepoServiceTest: 6 passed (existing repository regressions).
+
+Command (JDK 21; local offline reactor, no source POM changes):
+  mvn -o -f /tmp/hth-cache-reactor-20261114.xml -pl :dsp-ms-support-svc -am
+    -Dtest=CryptKeyDtoTest,PasswordApiServiceImplTest,PasswordDatabaseTest,DspAuthCredentialRepoServiceTest
+    -Dcm.browser.interop=<CM repository>/consulting/tests/hth1955/browser-interop.cjs
+    -Dsurefire.failIfNoSpecifiedTests=false -Dexec.skip=true -Djacoco.skip=true test
+Local log: /tmp/hth-legacy-reset-20261114.log (not a deployment artifact).
+
+Database prerequisite — READ ONLY, run against the DSP schema before rollout:
+The repository contains no production DSP_AUTH_CREDENTIAL DDL. H2 tests use
+UNIQUE(CLIENT_ID,CLOSE_ID,OBJECT_STATUS). Verify an equivalent VALID unique index / enabled
+unique constraint prevents multiple active rows per exact pair. The ID primary key alone is insufficient.
+If absent, have the DSP database owner resolve duplicates and add an appropriate constraint;
+this delivery deliberately does not guess or modify the production schema.
+
+SELECT CLIENT_ID, CLOSE_ID, COUNT(*) AS ACTIVE_COUNT
+FROM DSP_AUTH_CREDENTIAL
+WHERE OBJECT_STATUS = 'A'
+GROUP BY CLIENT_ID, CLOSE_ID
+HAVING COUNT(*) > 1;
+
+SELECT i.OWNER, i.INDEX_NAME, i.UNIQUENESS, i.STATUS,
+       c.COLUMN_POSITION, c.COLUMN_NAME
+FROM ALL_INDEXES i
+JOIN ALL_IND_COLUMNS c
+  ON c.INDEX_OWNER = i.OWNER AND c.INDEX_NAME = i.INDEX_NAME
+WHERE i.TABLE_OWNER = UPPER(:dsp_owner)
+  AND i.TABLE_NAME = 'DSP_AUTH_CREDENTIAL'
+ORDER BY i.INDEX_NAME, c.COLUMN_POSITION;
+
+Delivery verification:
+- Incremental patch recreates the exact source commit tree using an isolated Git index.
+- Complete files match source bytes; FILES.tsv and SHA256SUMS updated.
+- git diff --check passes with CRLF handling; original source file line endings retained.
+Limits: no live Oracle/Redis/APIC/UAM or deployed UAT verification. No credentials or user state changed.

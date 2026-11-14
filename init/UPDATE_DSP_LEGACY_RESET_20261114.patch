@@ -1,0 +1,287 @@
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
+index 5526cd3..d1616d2 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java
+@@ -18,7 +18,7 @@ import jakarta.ws.rs.Produces;
+ public interface PasswordApi {
+ 
+     /**
+-     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Base64(raw SHA-256(UTF-8(password))) must be converted into ASCII bytes; OAEP and MGF1 both use SHA-256, empty label. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - This endpoint accepts only the internal CM subscription. M resets with an approved Code validated by CM; no old password is required. - newEncryptedPassword is always mandatory.
++     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Base64(raw SHA-256(UTF-8(password))) must be converted into ASCII bytes; OAEP and MGF1 both use SHA-256, empty label. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - This endpoint accepts only the internal CM subscription. M resets with an approved Code validated by CM; no old password is required. For legacy CM users, M creates the first credential if no record exists for the exact clientId + closeId pair; inactive records are not reactivated. - newEncryptedPassword is always mandatory.
+      *
+      * @param passwordModificationRequest 
+      * @return Password modification completed.
+diff --git a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+index 0f7e6af..c38b3ff 100644
+--- a/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
++++ b/dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml
+@@ -333,7 +333,11 @@ components:
+ 
+             A - Add password
+ 
+-            M - Modify password
++            M - Reset password after CM validates the approved Code. Update the active
++            credential for the exact clientId + closeId pair, or create its first
++            credential when no record exists for that pair (legacy CM compatibility).
++            If only inactive records exist, reject the request without reactivating them.
++            Query failures and write failures must not trigger a fallback insert or retry.
+           example: "M"
+ 
+         oldEncryptedPassword:
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
+index f1ddbcf..9e66338 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
+@@ -29,6 +29,14 @@ public class DspAuthCredentialRepoService {
+         return dspAuthCredentialMapper.selectOne(queryWrapper);
+     }
+ 
++    /** Includes inactive records so a reset cannot silently reactivate an existing credential. */
++    public boolean existsForClientAndCloseId(String closeId, String clientId) {
++        LambdaQueryWrapper<DspAuthCredential> queryWrapper = Wrappers.lambdaQuery();
++        queryWrapper.eq(DspAuthCredential::getClientId, clientId)
++                .eq(DspAuthCredential::getCloseId, closeId);
++        return dspAuthCredentialMapper.selectCount(queryWrapper) > 0;
++    }
++
+     public void insert(DspAuthCredential dspAuthCredential) {
+         int row = dspAuthCredentialMapper.insert(dspAuthCredential);
+         if (row != 1) {
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+index fdaebd9..0755d22 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+@@ -150,7 +150,8 @@ public class PasswordApiServiceImpl implements PasswordApi {
+         if (TransactionSynchronizationManager.isSynchronizationActive()) {
+             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                 @Override public void afterCommit() {
+-                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={}", function);
++                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={} action={}",
++                            function, dspAuthCredential == null ? "INSERT" : "UPDATE");
+                 }
+             });
+         }
+@@ -233,10 +234,15 @@ public class PasswordApiServiceImpl implements PasswordApi {
+     }
+ 
+     private void modifyPassword(PasswordModificationRequest request, CryptKeyDto cryptoKeyDto, DspAuthCredential dspAuthCredential) {
+-        // no user
+         if (dspAuthCredential == null) {
+-            LOGGER.error("no active record");
+-            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
++            // Legacy CM users can already be in RESET before their first DSP credential exists.
++            // Do not treat inactive records or a failed query as an absent credential.
++            if (dspAuthCredentialRepoService.existsForClientAndCloseId(request.getCloseId(), request.getClientId())) {
++                LOGGER.warn("HTH_API_PASSWORD stage=DSP_SAVE result=REJECTED function=M reason=NO_ACTIVE_CREDENTIAL");
++                throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
++            }
++            newPassword(request, cryptoKeyDto, null);
++            return;
+         }
+ 
+         // The browser already computed Base64(SHA-256(UTF-8(password))). Do not hash it again.
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+index 6029569..aba9a5a 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+@@ -75,9 +75,36 @@ class PasswordApiServiceImplTest {
+         assertThrows(ServiceException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
+         verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
+     }
+-    @Test void resetRequiresExistingActiveCredential() throws Exception {
+-        cached(); assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
++    @Test void legacyResetCreatesFirstCredentialWithoutOldPassword() throws Exception {
++        cached(); String digest = hash("Reset1234");
++        assertEquals("000000", service.modifyPassword(request("M", encrypt(digest))).getStatus());
++        verify(repo).existsForClientAndCloseId("USER@PARTY", "test-client");
++        verify(repo).insert(argThat(row -> digest.equals(row.getPasswordHash())
++                && "test-client".equals(row.getClientId()) && "USER@PARTY".equals(row.getCloseId())
++                && "A".equals(row.getObjectStatus()) && row.getCreationDate() != null));
+         verify(repo, never()).updatePassword(any());
++        verify(keys).removeCryptoKeyDto(HashUtils.sha256(NONCE));
++    }
++    @Test void legacyResetDoesNotReactivateInactiveCredential() throws Exception {
++        cached(); when(repo.existsForClientAndCloseId("USER@PARTY", "test-client")).thenReturn(true);
++        ServiceException failure = assertThrows(ServiceException.class,
++                () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
++        assertEquals(com.hkbea.dsp.exception.DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, failure.getErrCode());
++        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
++        verify(keys, never()).removeCryptoKeyDto(anyString());
++    }
++    @Test void failedExistenceQueryCannotBecomeFirstCreation() throws Exception {
++        cached(); when(repo.existsForClientAndCloseId("USER@PARTY", "test-client")).thenThrow(new IllegalStateException());
++        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("M", encrypt(hash("Reset1234")))));
++        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
++        verify(keys, never()).removeCryptoKeyDto(anyString());
++    }
++    @Test void legacyResetStillRequiresValidEncryptionAndDigest() throws Exception {
++        cached();
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", "not-base64")));
++        assertThrows(ServiceException.class, () -> service.modifyPassword(request("M", encrypt("not-a-password-hash"))));
++        verify(repo, never()).insert(any()); verify(repo, never()).updatePassword(any());
++        verify(keys, never()).removeCryptoKeyDto(anyString());
+     }
+     @Test void rejectsPlaintextAndHexInsteadOfBase64Digest() throws Exception {
+         cached();
+@@ -119,7 +146,9 @@ class PasswordApiServiceImplTest {
+     }
+     @Test void databaseFailureIsNotReportedAsSuccess() throws Exception {
+         cached(); doThrow(new IllegalStateException()).when(repo).insert(any());
+-        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("A", encrypt(hash("Setup1234")))));
++        for (String operation : new String[]{"A", "M"}) {
++            assertThrows(IllegalStateException.class, () -> service.modifyPassword(request(operation, encrypt(hash("Setup1234")))));
++        }
+         verify(keys, never()).removeCryptoKeyDto(anyString());
+     }
+     @Test void requestStringDoesNotLeakSecrets() {
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java
+index 24becf7..fe841fa 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java
+@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
+ import java.security.*;
+ import java.security.spec.*;
+ import java.util.*;
++import java.util.concurrent.*;
+ import javax.crypto.Cipher;
+ import javax.crypto.spec.*;
+ import org.apache.ibatis.builder.xml.XMLMapperBuilder;
+@@ -36,13 +37,14 @@ import static org.mockito.Mockito.*;
+ /** Real DSP service, MyBatis mapper and transaction manager. H2 replaces Oracle; Redis storage is replaced by an in-memory map with the real Redisson JSON codec. */
+ class PasswordDatabaseTest {
+     private PasswordApiServiceImpl service;
++    private PasswordApiServiceImpl target;
+     private DspAuthCredentialRepoService repo;
+     private DspAuthCredentialMapper mapper;
+     private Keys keys;
+     private String publicKey;
+     static final String NONCE="314159";
+     static class Keys extends PasswordAppService {
+-        final Map<String,byte[]> cache=new HashMap<>(); boolean failAfterWrite;
++        final Map<String,byte[]> cache=new ConcurrentHashMap<>(); boolean failAfterWrite;
+         final JsonJacksonCodec codec=new JsonJacksonCodec();
+         @Override public CryptKeyDto getCryptoKeyDto(String h) {
+             if(cache.containsKey(h)) return findCryptoKeyDto(h);
+@@ -81,7 +83,7 @@ class PasswordDatabaseTest {
+         repo=new DspAuthCredentialRepoService();ReflectionTestUtils.setField(repo,"dspAuthCredentialMapper",mapper);
+         keys=new Keys();
+         // APIC authenticates upstream; exercise the actual service without APIC headers or credential settings.
+-        PasswordApiServiceImpl target=new PasswordApiServiceImpl();
++        target=new PasswordApiServiceImpl();
+         ReflectionTestUtils.setField(target,"passwordAppService",keys);ReflectionTestUtils.setField(target,"dspAuthCredentialRepoService",repo);
+         ProxyFactory proxy=new ProxyFactory(target);proxy.setProxyTargetClass(true);
+         proxy.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(data),new AnnotationTransactionAttributeSource()));
+@@ -89,13 +91,16 @@ class PasswordDatabaseTest {
+     }
+     String hash(String p) throws Exception { return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(p.getBytes(StandardCharsets.UTF_8))); }
+     PasswordModificationRequest request(String f,String password) throws Exception {
+-        PublicKeyQueryRequest query=new PublicKeyQueryRequest();query.setHashValue(HashUtils.sha256(NONCE));
++        return request(f, password, NONCE);
++    }
++    PasswordModificationRequest request(String f,String password,String nonce) throws Exception {
++        PublicKeyQueryRequest query=new PublicKeyQueryRequest();query.setHashValue(HashUtils.sha256(nonce));
+         publicKey=service.queryPublicKey(query).getPublicKey();
+         Cipher cipher=Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+         cipher.init(Cipher.ENCRYPT_MODE,KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicKey))),
+             new OAEPParameterSpec("SHA-256","MGF1",MGF1ParameterSpec.SHA256,PSource.PSpecified.DEFAULT));
+         return new PasswordModificationRequest().function(PasswordModificationRequest.FunctionEnum.fromValue(f)).clientId("client").closeId("USER@PARTY")
+-            .randomNumber(NONCE).newEncryptedPassword(Base64.getEncoder().encodeToString(cipher.doFinal(hash(password).getBytes(StandardCharsets.US_ASCII))));
++            .randomNumber(nonce).newEncryptedPassword(Base64.getEncoder().encodeToString(cipher.doFinal(hash(password).getBytes(StandardCharsets.US_ASCII))));
+     }
+     String stored() { DspAuthCredential row=repo.queryWithStatus("USER@PARTY","client","A");return row==null?null:row.getPasswordHash(); }
+     @Test void setupAndResetPersistExactHashWithoutApicHeaders() throws Exception {
+@@ -106,11 +111,81 @@ class PasswordDatabaseTest {
+         var r=request("A","First123");service.modifyPassword(r);
+         assertThrows(RuntimeException.class,()->service.modifyPassword(r));assertEquals(hash("First123"),stored());
+     }
+-    @Test void duplicateSetupAndAbsentResetDoNotWrite() throws Exception {
+-        assertThrows(RuntimeException.class,()->service.modifyPassword(request("M","First123")));assertNull(stored());
+-        service.modifyPassword(request("A","First123"));
++    @Test void duplicateSetupDoesNotOverwriteLegacyResetCredential() throws Exception {
++        service.modifyPassword(request("M","First123"));
+         assertThrows(RuntimeException.class,()->service.modifyPassword(request("A","Other123")));assertEquals(hash("First123"),stored());
+     }
++    @Test void legacyResetCreatesCredentialThenUpdatesSameRowAndConsumesKey() throws Exception {
++        var first = request("M", "First123");
++        assertEquals("000000", service.modifyPassword(first).getStatus());
++        assertEquals(hash("First123"), stored());
++        Long id = repo.queryWithStatus("USER@PARTY", "client", "A").getId();
++        assertThrows(RuntimeException.class, () -> service.modifyPassword(first));
++        assertEquals(hash("First123"), stored());
++        assertEquals("000000", service.modifyPassword(request("M", "Second456")).getStatus());
++        assertEquals(id, repo.queryWithStatus("USER@PARTY", "client", "A").getId());
++        assertEquals(hash("Second456"), stored());
++        assertEquals(1L, mapper.selectCount(null));
++    }
++    @Test void inactiveCredentialBlocksResetWithoutChangingStoredData() throws Exception {
++        DspAuthCredential inactive = new DspAuthCredential();
++        inactive.setClientId("client"); inactive.setCloseId("USER@PARTY");
++        inactive.setObjectStatus("I"); inactive.setPasswordHash(hash("First123"));
++        repo.insert(inactive);
++        assertThrows(com.hkbea.common.exception.ServiceException.class,
++                () -> service.modifyPassword(request("M", "Second456")));
++        assertNull(stored());
++        assertEquals(hash("First123"), repo.queryWithStatus("USER@PARTY", "client", "I").getPasswordHash());
++        assertEquals(1L, mapper.selectCount(null));
++    }
++    @Test void legacyCreationUsesExactClientAndCloseIdPair() throws Exception {
++        // An unrelated inactive credential with either the same client or the same close ID must not be changed.
++        for (String[] pair : new String[][]{{"other-client", "USER@PARTY"}, {"client", "OTHER@PARTY"}}) {
++            DspAuthCredential other = new DspAuthCredential();
++            other.setClientId(pair[0]); other.setCloseId(pair[1]); other.setObjectStatus("I");
++            other.setPasswordHash(hash("Other123")); repo.insert(other);
++        }
++        service.modifyPassword(request("M", "First123"));
++        assertEquals(hash("First123"), stored());
++        assertEquals(hash("Other123"), repo.queryWithStatus("USER@PARTY", "other-client", "I").getPasswordHash());
++        assertEquals(hash("Other123"), repo.queryWithStatus("OTHER@PARTY", "client", "I").getPasswordHash());
++        assertEquals(3L, mapper.selectCount(null));
++    }
++    @Test void failureAfterLegacyInsertRollsBackRealTransaction() throws Exception {
++        keys.failAfterWrite = true;
++        assertThrows(IllegalStateException.class, () -> service.modifyPassword(request("M", "First123")));
++        assertNull(stored()); assertEquals(0L, mapper.selectCount(null));
++    }
++    @Test void uniqueConstraintPreventsConcurrentLegacyInsertWithoutOverwritingWinner() throws Exception {
++        var first = request("M", "First123", "314159");
++        var second = request("M", "Second456", "271828");
++        var raceRepo = spy(repo);
++        var barrier = new CyclicBarrier(2);
++        doAnswer(invocation -> {
++            boolean exists = (Boolean) invocation.callRealMethod();
++            assertFalse(exists);
++            barrier.await(10, TimeUnit.SECONDS);
++            return false;
++        }).when(raceRepo).existsForClientAndCloseId("USER@PARTY", "client");
++        ReflectionTestUtils.setField(target, "dspAuthCredentialRepoService", raceRepo);
++        ExecutorService executor = Executors.newFixedThreadPool(2);
++        try {
++            List<Future<Boolean>> results = new ArrayList<>();
++            for (var request : List.of(first, second)) {
++                results.add(executor.submit(() -> {
++                    try { return "000000".equals(service.modifyPassword(request).getStatus()); }
++                    catch (org.springframework.dao.DuplicateKeyException conflict) { return false; }
++                }));
++            }
++            boolean firstWon = results.get(0).get(15, TimeUnit.SECONDS);
++            boolean secondWon = results.get(1).get(15, TimeUnit.SECONDS);
++            assertNotEquals(firstWon, secondWon);
++            assertEquals(hash(firstWon ? "First123" : "Second456"), stored());
++            assertEquals(1L, mapper.selectCount(null));
++            assertNull(keys.findCryptoKeyDto(HashUtils.sha256(firstWon ? "314159" : "271828")));
++            assertNotNull(keys.findCryptoKeyDto(HashUtils.sha256(firstWon ? "271828" : "314159")));
++        } finally { executor.shutdownNow(); }
++    }
+     @Test void runtimeFailureAfterUpdateRollsBackRealTransaction() throws Exception {
+         service.modifyPassword(request("A","First123"));keys.failAfterWrite=true;
+         assertThrows(IllegalStateException.class,()->service.modifyPassword(request("M","Second456")));
+@@ -153,7 +228,8 @@ class PasswordDatabaseTest {
+         signer.update(hash("First123").getBytes(StandardCharsets.UTF_8));
+         String previousSignature = Base64.getEncoder().encodeToString(signer.sign());
+ 
+-        service.modifyPassword(request("A", "First123"));
++        // A legacy CM RESET first creates its DSP credential, which must work with the existing token API.
++        service.modifyPassword(request("M", "First123"));
+         login.setPasswordSignature(previousSignature);
+         assertEquals("fixture-token", tokens.getCorporateToken(login).getAccessToken());
+ 

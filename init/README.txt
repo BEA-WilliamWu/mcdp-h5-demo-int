@@ -1,3 +1,30 @@
+DSP 兼容已有 CM 用户首次保存密码 — 2026-11-14
+
+来源：hth-dsp commit 1f65afd633c01cf36510c989b9b6367a8df9056a
+基线：a059f6595bc990200c3f817e5a1fe25b30d77eb9
+
+本次行为
+- CM 继续使用 RESET / function=M，仍由 CM 校验用户权限及审批后的有效 Code。
+- DSP 对相同 clientId + closeId：有有效记录则更新；完全无记录则首次创建有效密码记录。
+- 只有停用/失效记录时拒绝，不自动恢复。查询异常不当成无记录，保存失败不自动重试。
+- A 首次设置仍不能覆盖已有有效密码。RSA、公钥缓存及密码 Hash 格式沿用现有实现。
+- 事务提交后日志：HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function=M action=INSERT 或 UPDATE。
+- 本次不改 CM、前端、APIC、Token 接口和用户数据库状态；已有 UNKNOWN/IN_PROGRESS 不自动恢复。
+
+部署
+- 完整文件位于 hth-dsp/ 下，按原目录合入工程，重新构建并部署 DSP support 服务。
+- 或在 hth-dsp 工程根目录应用 UPDATE_DSP_LEGACY_RESET_20261114.patch，与完整文件复制二选一：
+  git apply --check <补丁路径>/UPDATE_DSP_LEGACY_RESET_20261114.patch
+  git apply <补丁路径>/UPDATE_DSP_LEGACY_RESET_20261114.patch
+- 仍需保留上一版 CryptKeyDto Redis 反序列化修复；本补丁已以该版本为基线。
+- 数据库前提：应已有唯一约束/唯一索引，保证同一 clientId + closeId 最多一条有效记录。
+  本地并发测试使用 UNIQUE(CLIENT_ID,CLOSE_ID,OBJECT_STATUS)。生产建表脚本不在仓库，
+  本次无法确认现网约束；上线前按 DSP_LEGACY_RESET_VALIDATION_20261114.txt 中只读 SQL 核对。
+  若没有等效唯一约束，需由 DSP 数据库负责人补齐；仅主键 ID 或 Java 事务不能保证并发不重复。
+- 本次未自动执行或变更数据库；本地 34 项测试通过，未进行 UAT Oracle/Redis/APIC 实际联调。
+
+Earlier delivery notes:
+
 DSP 密码密钥缓存反序列化修复 — 2026-11-14
 
 来源：hth-dsp commit a059f6595bc990200c3f817e5a1fe25b30d77eb9

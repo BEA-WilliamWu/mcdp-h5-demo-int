@@ -7,3 +7,7 @@
 bco-applicaion-main/consulting/db/branch_change_history/hosttohost/story/.DS_Store
 hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/CmPasswordCallerGuard.java
 hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/CmPasswordCallerGuardTest.java
+
+2026-11-14 最新 DSP 同步基线已删除以下旧测试；交付包同步移除，避免配合最新 POM 时恢复 H2 测试依赖冲突。
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/dto/CryptKeyDtoTest.java
+hth-dsp/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java

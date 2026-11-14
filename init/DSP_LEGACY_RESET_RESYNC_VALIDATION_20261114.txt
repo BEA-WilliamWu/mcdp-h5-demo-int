@@ -1,0 +1,53 @@
+DSP reset compatibility reapplication on synchronized baseline — 2026-11-14
+Source: 85b80fbb1de01578991f7c3124eff80b22096461
+Base: e76cf797d151991d3809d5273c725795c5004c11
+
+Findings against previous 1f65afd:
+- Legacy RESET missing-credential insertion and repository existence lookup were overwritten.
+- Default shared RSA decrypt replaced explicit OAEP/MGF1 parameters. This does not match the current CM WebCrypto contract.
+- Setup/reset rehashed the decrypted browser digest into hex, violating exact Base64(raw SHA-256(password)) storage.
+- API generator refreshed DTO comments and removed request.toString redaction.
+- JacksonFeature registration, runtime configuration, generated DTO metadata and test suite were supplied upstream changes.
+
+Fix scope: six files (service, repository, API documentation, request DTO, OpenAPI, existing service tests).
+Preserved latest JerseyConfig/application configuration/POM and unrelated generated DTOs; no common crypto changes.
+Current CryptKeyDto @JsonCreator fix already remained in the supplied baseline.
+
+Tests: 41 distinct passed, zero skipped, across two runs.
+1. Repository build: PasswordApiServiceImplTest 23 + DspAuthCredentialRepoServiceTest 6 = 29 passed.
+   Preserves supplied validation scenarios, uses fresh RSA keys and encrypted digests instead of static ciphertext,
+   verifies legacy first RESET, active reset, inactive rejection, failed query, malformed digest/cipher/MGF1-SHA1 rejection,
+   failed insert without retry, request redaction, and actual current CM browser-interop.cjs encryption.
+   The test fixture initializes the existing error message mapping before asserting parameter messages.
+2. Isolated regression build: PasswordDatabaseTest 10 + CryptKeyDtoTest 2 = 12 passed.
+   Runs current production source/MyBatis mapper with Spring transactions, H2 and the real Redisson JSON codec.
+   Exercises legacy insert, subsequent reset update, consumed-key replay, exact identity scoping, inactive rejection,
+   insert/update rollback, competing inserts constrained by DB uniqueness, and existing token authentication behavior.
+   UAM issuance and public-key retrieval are fixtures; no real token or user password was used.
+   These two regression sources were read from commit 1f65afd into /tmp only, with a temporary test-only H2 dependency.
+   They were NOT restored to the repository or delivery, respecting the latest upstream deletions and POM.
+
+Commands:
+  JAVA_HOME=<JDK21> mvn -o -f /tmp/hth-cache-reactor-20261114.xml -pl :dsp-ms-support-svc -am
+    -Dtest=PasswordApiServiceImplTest,DspAuthCredentialRepoServiceTest
+    -Dcm.browser.interop=<CM repository>/consulting/tests/hth1955/browser-interop.cjs
+    -Dsurefire.failIfNoSpecifiedTests=false -Dexec.skip=true -Djacoco.skip=true test
+  JAVA_HOME=<JDK21> mvn -o -f /tmp/hth-reset-resync-validation-20261114/pom.xml -pl :dsp-ms-support-svc -am
+    -Dtest=CryptKeyDtoTest,PasswordDatabaseTest
+    -Dsurefire.failIfNoSpecifiedTests=false -Dexec.skip=true -Djacoco.skip=true test
+Local logs: /tmp/hth-reset-resync-unit-20261114.log and /tmp/hth-reset-resync-database-20261114.log.
+
+Packaging:
+- Patch from the latest e76cf79 base reconstructs the exact source commit tree in an isolated Git index.
+- Six full source files synchronized. Existing delivered POM refreshed to the latest user baseline.
+- Old delivered CryptKeyDtoTest and PasswordDatabaseTest removed to match user source deletions.
+- FILES.tsv, SHA256SUMS and deletion lists refreshed. Historical patches retained for traceability only.
+- YAML parses; source and delivered files pass git diff --check with CRLF handling.
+  Raw patch artifacts retain the baseline context whitespace verbatim and are checked by exact-tree replay,
+  not by treating their context/deletion lines as newly written source. Original line endings preserved.
+
+Limitations:
+No live UAT Oracle/Redis/APIC/UAM deployment verification and no database/user-state updates.
+Concurrent insertion requires an effective database uniqueness guarantee for the active clientId + closeId pair;
+H2 has UNIQUE(CLIENT_ID,CLOSE_ID,OBJECT_STATUS), but production DDL is not in the repository.
+Use read-only preflight SQL in DSP_LEGACY_RESET_VALIDATION_20261114.txt before rollout.

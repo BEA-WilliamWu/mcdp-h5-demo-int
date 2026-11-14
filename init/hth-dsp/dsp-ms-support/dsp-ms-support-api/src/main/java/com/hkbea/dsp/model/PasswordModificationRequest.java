@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 
 
 @JsonTypeName("PasswordModificationRequest")
-@jakarta.annotation.Generated(value = "org.openapitools.codegen.languages.JavaJAXRSSpecServerCodegen", date = "2026-11-11T14:33:41.773790700+08:00[Asia/Shanghai]", comments = "Generator version: 7.17.0")
+@jakarta.annotation.Generated(value = "org.openapitools.codegen.languages.JavaJAXRSSpecServerCodegen", date = "2026-11-13T17:02:37.540287100+08:00[Asia/Shanghai]", comments = "Generator version: 7.17.0")
 public class PasswordModificationRequest   {
   public enum FunctionEnum {
 
@@ -85,7 +85,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * Password operation type.  A - Add password  M - Modify password 
+   * Password operation type.  A - Add password  M - Reset an active password, or create the first credential for an absent clientId + closeId pair; inactive records are not reactivated
    **/
   public PasswordModificationRequest function(FunctionEnum function) {
     this.function = function;
@@ -104,7 +104,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Deprecated compatibility field; ignored. CM must validate an approved HTH Code for function M.
+   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Deprecated and ignored; approved-Code reset does not require the old password.
    **/
   public PasswordModificationRequest oldEncryptedPassword(String oldEncryptedPassword) {
     this.oldEncryptedPassword = oldEncryptedPassword;
@@ -123,7 +123,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64(raw SHA-256(UTF-8(password))) must first be converted to ASCII bytes. OAEP and MGF1 both use SHA-256 with an empty label.  Base64 encoded encrypted bytes.
+   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64(raw SHA-256(UTF-8(password))) must first be converted into ASCII bytes. OAEP and MGF1 both use SHA-256 with an empty label.  Base64 encoded encrypted bytes.
    **/
   public PasswordModificationRequest newEncryptedPassword(String newEncryptedPassword) {
     this.newEncryptedPassword = newEncryptedPassword;

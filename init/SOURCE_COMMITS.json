@@ -176,6 +176,31 @@
         ],
         "validation": "DSP_LEGACY_RESET_VALIDATION_20261114.txt",
         "note": "RESET creates a credential only when the exact clientId + closeId pair has no records; inactive records are rejected. Requires database uniqueness for concurrent insert protection. CM and APIC unchanged."
+      },
+      {
+        "name": "dsp-legacy-reset-resync-20261114",
+        "commit": "85b80fbb1de01578991f7c3124eff80b22096461",
+        "base": "e76cf797d151991d3809d5273c725795c5004c11",
+        "patch": "UPDATE_DSP_LEGACY_RESET_RESYNC_20261114.patch",
+        "patch_apply_directory": "hth-dsp",
+        "delivery_type": "incremental-files",
+        "paths": [
+          "dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java",
+          "dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java",
+          "dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml",
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java"
+        ],
+        "refresh_from_synced_baseline": [
+          "dsp-ms-support/dsp-ms-support-svc/pom.xml"
+        ],
+        "removed_from_synced_baseline": [
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/dto/CryptKeyDtoTest.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java"
+        ],
+        "validation": "DSP_LEGACY_RESET_RESYNC_VALIDATION_20261114.txt",
+        "note": "Reapplied on user-synchronized e76cf79. Preserves JacksonFeature registration, runtime configuration and supplied POM. Restores CM OAEP SHA-256/MGF1 SHA-256 and exact Base64 SHA-256 hash persistence. Use this patch on the new baseline, not the earlier legacy-reset patch."
       }
     ]
   },

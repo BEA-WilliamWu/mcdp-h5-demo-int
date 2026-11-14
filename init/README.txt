@@ -1,3 +1,35 @@
+DSP 最新同步版本上的重新修复 — 2026-11-14
+
+来源：hth-dsp commit 85b80fbb1de01578991f7c3124eff80b22096461
+本次基线：e76cf797d151991d3809d5273c725795c5004c11（用户最新同步版本）
+
+本次修改
+- 恢复 RESET / M 对旧 CM 用户的兼容：DSP 完全无该 clientId + closeId 的记录时首次创建，
+  有有效记录时更新，只有停用记录时拒绝；查询异常不作为不存在处理。
+- 最新同步版本恢复了默认 RSA 参数及对解密结果再次 Hash，会与当前 CM 加密脚本不兼容。
+  仅在 DSP 密码服务恢复 OAEP SHA-256 + MGF1 SHA-256；验证并直接保存
+  Base64(raw SHA-256(UTF-8(password)))，不再次 Hash，不修改公共加密类。
+- 同步接口说明，恢复 request.toString() 对密码密文及随机数的脱敏。
+- 保留最新 JacksonFeature 注册、运行配置及生产 POM；未修改 CM、APIC、Token 接口实现。
+- 保留最新 PasswordApiServiceImplTest 的参数校验用例，更新加密样本并补充兼容回归。
+- 你最新同步中已删除的 CryptKeyDtoTest、PasswordDatabaseTest 不恢复到源码；
+  init 也移除这两份旧文件，并刷新最新 POM，避免重新带入已移除的 H2 依赖。
+
+使用方式
+- 请基于上述最新同步版本合入 init/hth-dsp/ 对应完整文件，然后构建并部署 DSP support。
+- 或在该基线的 hth-dsp 根目录应用 UPDATE_DSP_LEGACY_RESET_RESYNC_20261114.patch（与完整文件复制二选一）：
+  git apply --check <补丁路径>/UPDATE_DSP_LEGACY_RESET_RESYNC_20261114.patch
+  git apply <补丁路径>/UPDATE_DSP_LEGACY_RESET_RESYNC_20261114.patch
+- 旧 UPDATE_DSP_LEGACY_RESET_20261114.patch 及此前补丁仅作历史留存，不要再叠加到本次最新基线。
+  新补丁已用隔离 Git index 验证可以完整重建本次源码提交，不包含用户同步带来的配置变动。
+- 当前 CryptKeyDto 的 Redis 反序列化修复仍在，未修改。
+- 本地 41 项不同测试通过（仓库单测 29 项 + 隔离数据库/Redis 编解码回归 12 项）。
+- 并发保护仍依赖 DSP 表存在等效唯一约束；生产 DDL 不在仓库，需核对。
+  只读 SQL 见 DSP_LEGACY_RESET_VALIDATION_20261114.txt。本次未执行数据库操作。
+- 已有 UNKNOWN/IN_PROGRESS 数据不自动改写；尚未进行 UAT Oracle/Redis/APIC 实际联调。
+
+Earlier delivery notes (historical; use the latest baseline/patch above):
+
 DSP 兼容已有 CM 用户首次保存密码 — 2026-11-14
 
 来源：hth-dsp commit 1f65afd633c01cf36510c989b9b6367a8df9056a

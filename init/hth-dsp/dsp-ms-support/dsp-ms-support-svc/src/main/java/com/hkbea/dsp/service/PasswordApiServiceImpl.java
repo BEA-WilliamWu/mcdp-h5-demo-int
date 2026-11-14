@@ -1,5 +1,8 @@
 package com.hkbea.dsp.service;
 
+import com.hkbea.common.cipher.AsymmetricCipher;
+import com.hkbea.common.cipher.config.RsaCryptoConfig;
+import com.hkbea.common.cipher.impl.RsaCryptoCipher;
 import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.dsp.api.PasswordApi;
@@ -22,15 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Base64;
-import java.util.Arrays;
-import java.security.KeyFactory;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.MGF1ParameterSpec;
-import javax.crypto.Cipher;
-import javax.crypto.spec.OAEPParameterSpec;
-import javax.crypto.spec.PSource;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.util.regex.Pattern;
 
 
@@ -54,6 +48,8 @@ public class PasswordApiServiceImpl implements PasswordApi {
     private static final int VALID_RANDOM_DIGITS = 6;
 
     private static final Pattern PATTERN = Pattern.compile(String.format("^\\d{%d}$", VALID_RANDOM_DIGITS));
+
+    private final AsymmetricCipher<RsaCryptoConfig> rsa = new RsaCryptoCipher();
 
     /**
      * no need use spring to inject this
@@ -147,14 +143,6 @@ public class PasswordApiServiceImpl implements PasswordApi {
         }
 
         passwordAppService.removeCryptoKeyDto(hashKey);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() {
-                    LOGGER.info("HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function={} action={}",
-                            function, dspAuthCredential == null ? "INSERT" : "UPDATE");
-                }
-            });
-        }
 
         // return
         PasswordModificationResponse response = new PasswordModificationResponse();
@@ -222,7 +210,7 @@ public class PasswordApiServiceImpl implements PasswordApi {
         DspAuthCredential authCredential = new DspAuthCredential();
         authCredential.setClientId(request.getClientId());
         authCredential.setCloseId(request.getCloseId());
-        authCredential.setPasswordHash(decrypted);
+        authCredential.setPasswordHash(HashUtils.sha256(decrypted));
         authCredential.setObjectStatus(DspAuthCredentialRepoService.AUTH_STATUS_ACTIVE);
         authCredential.setCreatedBy(ADMIN_CREATOR);
         authCredential.setLastUpdatedBy(ADMIN_CREATOR);
@@ -235,18 +223,18 @@ public class PasswordApiServiceImpl implements PasswordApi {
 
     private void modifyPassword(PasswordModificationRequest request, CryptKeyDto cryptoKeyDto, DspAuthCredential dspAuthCredential) {
         if (dspAuthCredential == null) {
-            // Legacy CM users can already be in RESET before their first DSP credential exists.
-            // Do not treat inactive records or a failed query as an absent credential.
+            // Legacy CM RESET can be the first DSP save; do not reactivate an inactive credential.
             if (dspAuthCredentialRepoService.existsForClientAndCloseId(request.getCloseId(), request.getClientId())) {
-                LOGGER.warn("HTH_API_PASSWORD stage=DSP_SAVE result=REJECTED function=M reason=NO_ACTIVE_CREDENTIAL");
+                LOGGER.error("no active record");
                 throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
             }
             newPassword(request, cryptoKeyDto, null);
             return;
         }
 
-        // The browser already computed Base64(SHA-256(UTF-8(password))). Do not hash it again.
-        String newHash = decrypt(cryptoKeyDto.getPrivateKey(), request.getNewEncryptedPassword());
+        // update new password
+        String decrypted = decrypt(cryptoKeyDto.getPrivateKey(), request.getNewEncryptedPassword());
+        String newHash = HashUtils.sha256(decrypted);
 
         // update
         dspAuthCredential.setPasswordHash(newHash);
@@ -264,29 +252,9 @@ public class PasswordApiServiceImpl implements PasswordApi {
      * @return UTF8 String
      */
     private String decrypt(String key, String encryptedText) {
-        byte[] clear = null;
-        byte[] digest = null;
-        byte[] keyBytes = null;
-        try {
-            keyBytes = Base64.getDecoder().decode(key);
-            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
-            cipher.init(Cipher.DECRYPT_MODE,
-                    KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(keyBytes)),
-                    new OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT));
-            clear = cipher.doFinal(Base64.getDecoder().decode(encryptedText));
-            String hash = new String(clear, StandardCharsets.US_ASCII);
-            digest = Base64.getDecoder().decode(hash);
-            if (digest.length != 32 || !Base64.getEncoder().encodeToString(digest).equals(hash)) {
-                throw new IllegalArgumentException();
-            }
-            return hash;
-        } catch (java.lang.Exception failure) {
-            LOGGER.warn("HTH_API_PASSWORD stage=DSP_DECRYPT exceptionType={}", failure.getClass().getSimpleName());
-            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
-        } finally {
-            if (clear != null) { Arrays.fill(clear, (byte) 0); }
-            if (digest != null) { Arrays.fill(digest, (byte) 0); }
-            if (keyBytes != null) { Arrays.fill(keyBytes, (byte) 0); }
-        }
+        byte[] keyBytes = Base64.getDecoder().decode(key);
+        byte[] encryptedBytes = Base64.getDecoder().decode(encryptedText);
+        byte[] decryptedBytes = rsa.decrypt(keyBytes, encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
     }
 }

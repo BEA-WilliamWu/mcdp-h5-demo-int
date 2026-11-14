@@ -95,6 +95,17 @@ console.log('PASS: ' + cases + ' localized response cases, AC wording, SQL align
     const jwk = pair.publicKey.export({format: 'jwk'});
     const transportSource = read(channel + 'extensions/components/host-to-host/api-password/transport.js');
     const modelSource = read(channel + 'extensions/components/host-to-host/api-password/model.js');
+    let BigInteger, encryptForDsp;
+    const cryptoGlobals = {
+        TextEncoder, Uint8Array, Promise, navigator: {appName: 'Netscape'},
+        window: {crypto: crypto.webcrypto, atob: value => Buffer.from(value, 'base64').toString('binary')}
+    };
+    vm.runInNewContext(read(channel + 'framework/js/plugins/encryption/libs/js-big-integer.js'), {
+        ...cryptoGlobals, define: (_, factory) => { BigInteger = factory(); }
+    });
+    vm.runInNewContext(read(channel + 'extensions/components/host-to-host/api-password/dsp-encrypt.js'), {
+        ...cryptoGlobals, define: (_, factory) => { encryptForDsp = factory(BigInteger); }
+    });
     const template = read(channel + 'extensions/components/host-to-host/api-password/api-password.html');
     let nls;
     vm.runInNewContext(read(channel + 'extensions/resources/nls/hth-api-password.js'), {define: value => { nls = value.root; }});
@@ -164,7 +175,7 @@ console.log('PASS: ' + cases + ' localized response cases, AC wording, SQL align
                 document: {getElementById: id => id === 'hthApiPasswordTracker' ? {} : null}
             };
             vm.runInNewContext(modelSource, {...globals, define: (_, factory) => { Model = factory({getInstance: () => baseService}); }});
-            vm.runInNewContext(transportSource, {...globals, define: (_, factory) => { Encrypt = factory({getInstance: () => baseService}, RSAKey); }});
+            vm.runInNewContext(transportSource, {...globals, define: (_, factory) => { Encrypt = factory({getInstance: () => baseService}, RSAKey, encryptForDsp); }});
             vm.runInNewContext(source, {...globals, define: (_, factory) => { ViewModel = factory({observable}, Model, Encrypt, nls); }});
             const form = new ViewModel({data: {embedded: true, mode}, dashboard: {
                 switchModule: () => { navigating++; }, loadComponent: () => { navigating++; }

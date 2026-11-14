@@ -16,14 +16,25 @@ class RSAKey {
     }
 }
 const context = {
+    navigator: { appName: "Netscape" },
     TextEncoder, Uint8Array, Promise, Error, encodeURIComponent,
     window: { crypto: crypto.webcrypto, atob: s => Buffer.from(s, "base64").toString("binary"), btoa: s => Buffer.from(s, "binary").toString("base64") },
     define: (deps, factory) => { encrypt = factory({ getInstance: () => ({ fetch: request => {
         assert.ok(request.url.endsWith("requestId=" + requestId));
         return Promise.resolve({ transportKey: { keyId: "test-key", modulus: Buffer.from(jwk.n,"base64url").toString("hex"),
             publicExponent: "010001", dspPublicKey: process.argv[2] } });
-    } }) }, RSAKey); }
+    } }) }, RSAKey, dspEncrypt); }
 };
+// Load the actual HTH OAEP encoder and BCO public RSA arithmetic, not test replacements.
+function loadAmd(relative, dependencies) {
+    let result;
+    vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,relative),"utf8"), {
+        ...context, define: (_deps, factory) => { result = factory(...dependencies); }
+    });
+    return result;
+}
+const bigInteger = loadAmd("../../channel/framework/js/plugins/encryption/libs/js-big-integer.js",[]);
+const dspEncrypt = loadAmd("../../channel/extensions/components/host-to-host/api-password/dsp-encrypt.js",[bigInteger]);
 vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,"../../channel/extensions/components/host-to-host/api-password/transport.js"),"utf8"),context);
 encrypt(process.argv[3] || "Browser123","314159",requestId,process.argv[4] || "SETUP").then(result => {
     assert.equal(envelope[0],"HTH3"); assert.equal(envelope[1],process.argv[4] || "SETUP");

@@ -29,7 +29,6 @@ public class DspAuthCredentialRepoService {
         return dspAuthCredentialMapper.selectOne(queryWrapper);
     }
 
-    /** Includes inactive records so a reset cannot silently reactivate an existing credential. */
     public boolean existsForClientAndCloseId(String closeId, String clientId) {
         LambdaQueryWrapper<DspAuthCredential> queryWrapper = Wrappers.lambdaQuery();
         queryWrapper.eq(DspAuthCredential::getClientId, clientId)

@@ -1,16 +1,21 @@
 BCOH2H-1955 — Code 重设无需旧密码；HTH 保存状态，DSP 保存密码 Hash
-2026-11-12
+2026-11-14（CM 配合最新 TL DSP e76cf79 的最小适配）
 
 本次实现
 1. CM 保持 Code + 新密码 + 确认密码的页面。Code 的审批、24 小时有效期、错误次数和一次性使用校验保留。
-2. 浏览器计算 Base64(raw SHA-256(UTF-8(password)))，再使用 DSP 公钥加密该字符串。
-   RSA-OAEP 的 OAEP、MGF1 都为 SHA-256，label 为空，密文使用 Base64。
+2. 浏览器直接将新密码 UTF-8 字节用 DSP 公钥加密，不先计算密码 Hash，也不先 Base64 编码密码。
+   匹配 TL RsaCryptoCipher 的 SunJCE 参数：OAEP SHA-256、MGF1 SHA-1、空 label，密文使用 Base64。
+   仅 HTH 页面新增 dsp-encrypt.js；复用 BCO 公共 RSA 大整数运算，不修改公共加密文件。
+   CM 后端只处理 Code 信封及 DSP 密文，仍不取得密码明文。
 3. 两个 DSP 接口路径不变：POST /password/v1/public-key、POST /password/v1/modification。
    取公钥仍传 hashValue = lowercase hex SHA-256(六位 randomNumber)。
    保存仍传 function、clientId、closeId、newEncryptedPassword、randomNumber。
-   SETUP -> A：仅允许不存在有效密码时创建。RESET -> M：仅允许存在有效密码时替换，无需旧密码。
+   SETUP -> A：仅允许不存在有效密码时创建。RESET -> M：有有效密码时替换；完全没有该 clientId + closeId 记录时首次创建，无需旧密码。
+   只有停用记录时拒绝；查询异常不作为不存在处理。不修改 TL 的 A 创建分支。
    oldEncryptedPassword 是兼容保留字段，已不参与本接口校验；没有新增 R、queryOnly 或状态查询 API。
-4. DSP 解密后检查是否为规范的 32 字节 SHA-256 Base64 字符串，原样保存，不再次 Hash。
+4. DSP 保留 TL 实现：解密后 HashUtils.sha256(decrypted)，保存 64 位小写 hex SHA-256。
+   DSP 源码 YAML 的 Base64(password) / MGF1 SHA-256 说明与该实现不一致，本次按实码对齐。
+   本轮未更改 TL 的 API/DTO/YAML、公共 RSA、Hash、配置及 POM。
    修正 DSP_AUTH_CREDENTIAL 的 MyBatis mapper namespace；保存失败不得返回成功。
 5. CM 密码接口沿用原 BM Client ID 校验的 DSPApiAdapterImplConfig：
    DSP.SERVICE_URL、DSP.APIC_CLIENT_ID、DSP.APIC_CLIENT_SECRET、DSP.CHANNEL（原默认 BCO）。
@@ -79,39 +84,42 @@ HTH_1955_RETIRE_LOCAL_PASSWORD_TABLES.sql 是原有单独的删除脚本；本�
 发布顺序
 1. 数据库升级并核对已有 UAT 状态。
 2. 部署 DSP（API + service），确认 internal APIC 的路由及订阅权限；DSP 无需再注入重复的 APIC 凭据。
-3. 部署 CM 的 HTH module 和 ext-xface 实现，保留先前 1955 前端加密组件；清除旧客户端缓存/重启。
+3. 先前 CM 的 HTH module 和 ext-xface 修复保留；本轮必须同步部署 transport.js + dsp-encrypt.js，清除旧缓存。
+   旧前端的 Hash + MGF1 SHA-256 加密不能与最新 TL DSP 混用。
 4. 在 UAT 测试首次 setup、Code reset、错误/过期/已用 Code，验证 DSP 记录与 HTH 状态一致。
-5. 获取 token 的客户端必须使用相同 Base64 SHA-256 Hash 生成签名；旧 hex Hash 记录不会被本次 SQL 批量转换。
-   不要把旧 hex 或二次 Hash 数据仅改状态当作已完成迁移。
+5. 获取 token 的客户端使用 lowercase hex SHA-256(UTF-8(password)) 字符串生成密码签名，匹配 TL 保存值。
+   不批量改写已有密码；此前按 Base64 Hash 保存的测试用户需成功重设密码后再用此格式认证。
+6. 并发首次创建依赖 DSP 表已有等效唯一约束（同一 clientId + closeId 最多一条有效记录）；需核对生产 DDL。
 
 已完成本地验证
 - DSP 实际服务、MyBatis SQL、H2 数据库和 Spring 事务：setup/reset 保存、旧值替换、重复 setup 拒绝、
-  不存在密码时 reset 拒绝、密钥使用后失效、更新后异常回滚。
-- 实际 CM 浏览器 transport.js + WebCrypto -> 实际 DSP 解密/保存逻辑，验证准确的 Base64 Hash。
+  不存在密码时 reset 首次创建、停用记录拒绝、密钥使用后失效、插入/更新后异常回滚。
+- 实际 CM transport.js + dsp-encrypt.js -> TL 实际 DSP 解密/保存逻辑，验证准确的 hex SHA-256 Hash。
+  verify_tl_dsp_transport.py 可复现 Java SunJCE 互通、SETUP/RESET、UTF-8、长度、随机性及无效公钥测试。
 - CM 实际 change() 方法：成功、Code 拒绝、DSP 拒绝/超时、本地完成失败、重复请求、通知及敏感字段清理。
 - CM 实际状态/Code SQL 与 H2：预约/消费原子性、UNKNOWN 门控、错误次数、先匹配再判断过期、用途和会话隔离。
 - 本地 HTTPS：共用原 BM DSP 配置（测试同时提供不同的 H2H 配置，确认不读取它）、A/M 请求无旧密码、错误分类、不重试/重定向、header 清理及原 client validate。
 - DSP 现有 getCorporateToken 入口 + 实际数据库和签名校验：setup 后密码可通过；reset 后旧密码签名被拒绝，
   新密码签名通过。仅 UAM 发 token 和签名公钥来源使用测试替身，未修改生产登录校验代码。
-  移除重复 APIC 校验后，DSP 本地密码回归共 18 项通过（无失败、无跳过）。
+  本轮 DSP 仓库单测 25 项通过；隔离数据库/缓存编解码回归 12 项通过，未向 TL POM 添加 H2 依赖。
   实际密码服务不注入 APIC 请求头或重复凭据配置，公钥、setup/reset、持久化及事务测试仍通过。
 这些是本地集成测试；没有连接 UAT 的 Oracle、Redis、WebLogic 或 APIC，也没有宣称实际 UAT token 已验证。
 
 AC 核对及验收边界
-- 1955 AC1：首次 setup 的 Hash 加密传输及 DSP 保存已实现，本地成功测试通过。
+- 1955 AC1：首次 setup 保存成功，本地验证通过；本轮按用户确认优先匹配 TL 协议。
+  若逐字要求“浏览器先 Hash 再加密、DSP 原样保存 Hash”，该条与 TL 实现存在差异，不能宣称完全一致。
 - 1955 AC2：不需要旧密码的 Code reset、替换 DSP 旧 Hash 已实现，本地成功测试通过。
 - 1955 AC3：传输/保存失败返回错误，页面显示失败；不消费为成功、不发送成功通知。
   结果不明时保留 IN_PROGRESS，需要对账，不自动重试；已有 UNKNOWN 不自动修改。
 - 1955 AC4：现有 DSP 登录校验读取最新 Hash；本地验证新密码通过、旧密码被拒绝。
   仍需在 UAT 用实际 API 客户端、签名密钥、APIC 和 UAM 完成获取 token 的验收。
 - 788/790 原有页面的密码规则、两次输入一致性校验，以及后端 Code 的正确性/过期/次数校验保留。
-  密码规则和两次输入一致性在浏览器校验；CM/DSP 只接收 Hash/密文，不能声称后端另行验证了明文密码强度。
-  若要求防绕过前端的服务端密码强度校验，需要与目前“仅传 Hash”的架构另行协调。
+  密码规则和两次输入一致性仍在浏览器校验；TL DSP 解密后 Hash，但没有另行验证密码强度。
 - 当前交付为源码和 SQL，未部署 UAT、未执行远程数据库脚本，也不代表全部 AC 已完成 UAT 验收。
 
 日志定位
 CM：HTH_API_PASSWORD lifecycle: stage=...
     INPUT_DECRYPT / CODE_RESERVE / DSP_WRITE / CODE_COMPLETE / LOCAL_PASSWORD_STATUS
-DSP：HTH_API_PASSWORD stage=DSP_SAVE result=SUCCESS function=A 或 M
-     HTH_API_PASSWORD stage=DSP_DECRYPT exceptionType=...
+DSP：PasswordApiServiceImpl；can't find any key information / no active record / already exists active record。
+     本轮保留 TL 日志；不依赖之前版本新增的 DSP_SAVE / DSP_DECRYPT 标记。
 不要打印 Code、密码、Hash、请求密文、私钥或 APIC secret。

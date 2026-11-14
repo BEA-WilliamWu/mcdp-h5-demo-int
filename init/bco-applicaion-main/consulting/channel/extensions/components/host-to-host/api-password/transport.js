@@ -1,7 +1,8 @@
 define([
     "baseService",
-    "framework/js/plugins/encryption/rsa-encrypt"
-], function (BaseService, RSAKey) {
+    "framework/js/plugins/encryption/rsa-encrypt",
+    "./dsp-encrypt"
+], function (BaseService, RSAKey, encryptForDsp) {
     "use strict";
 
     const baseService = BaseService.getInstance(),
@@ -10,7 +11,7 @@ define([
             return window.btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
         };
 
-    // The password hash is encrypted for DSP; CM can decrypt only the approval Code envelope.
+    // DSP decrypts and hashes the password; CM can decrypt only the approval Code envelope.
     return function (password, code, requestId, operation) {
         const crypto = window.crypto;
 
@@ -34,23 +35,7 @@ define([
 
             rsa.setPublic(key.modulus, key.publicExponent);
 
-            const publicBytes = Uint8Array.from(window.atob(key.dspPublicKey), function (character) {
-                return character.charCodeAt(0);
-            });
-
-            return Promise.all([
-                crypto.subtle.importKey("spki", publicBytes, {
-                    name: "RSA-OAEP",
-                    hash: "SHA-256"
-                }, false, ["encrypt"]),
-                crypto.subtle.digest("SHA-256", encoder.encode(password))
-            ]).then(function (values) {
-                if (values[0].algorithm.modulusLength !== 2048) {
-                    throw new Error("Unexpected DSP key size");
-                }
-
-                return crypto.subtle.encrypt({ name: "RSA-OAEP" }, values[0], encoder.encode(base64(values[1])));
-            }).then(function (ciphertext) {
+            return encryptForDsp(key.dspPublicKey, password).then(function (ciphertext) {
                 const dspEncryptedPassword = base64(ciphertext);
 
                 return crypto.subtle.digest("SHA-256", encoder.encode(dspEncryptedPassword)).then(function (digest) {

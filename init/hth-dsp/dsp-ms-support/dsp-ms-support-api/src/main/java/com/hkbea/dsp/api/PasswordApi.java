@@ -22,7 +22,7 @@ import java.util.List;
 public interface PasswordApi {
 
     /**
-     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Base64(raw SHA-256(UTF-8(password))) must first be converted into ASCII bytes. OAEP and MGF1 both use SHA-256 with an empty label. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - No old password is required. CM must first validate the approved HTH reset Code. M creates the first credential only when the exact clientId + closeId pair has no records; inactive records are not reactivated. - newEncryptedPassword is always mandatory.
+     * Add or modify user password.  Encryption Information:  Algorithm: `RSA`  Algorithm Transformation: `RSA/ECB/OAEPWithSHA-256AndMGF1Padding`  Password Rules:  - Base64(UTF-8(password)) must first be converted into UTF-8 bytes. - RSA encryption must be performed on the UTF-8 bytes. - Encrypted bytes must be encoded using Base64. - No old password is required. CM must first validate the approved HTH reset Code. - newEncryptedPassword is always mandatory. 
      *
      * @param passwordModificationRequest 
      * @return Password modification completed.

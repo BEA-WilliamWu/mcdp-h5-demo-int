@@ -120,8 +120,25 @@
         ],
         "validation": "PASSWORD_CODE_STATUS_VALIDATION_20261114.txt",
         "note": "Incremental change on the latest synchronized main frontend; complete files included. Existing UNKNOWN data is not changed."
+      },
+      {
+        "name": "cm-tl-dsp-transport-20261114",
+        "commit": "aae418afb0458bd74321b4c1441c259d7cafc322",
+        "base": "f026eb9fe027ff2769662afc314453ba52961c50",
+        "patch": "UPDATE_CM_TL_DSP_TRANSPORT_20261114.patch",
+        "paths": [
+          "consulting/channel/extensions/components/host-to-host/api-password/dsp-encrypt.js",
+          "consulting/channel/extensions/components/host-to-host/api-password/transport.js",
+          "consulting/db/branch_change_history/hosttohost/story/20261112-BCOHTH-1955/HTH_1955_DEPLOYMENT.txt",
+          "consulting/tests/hth1955/browser-interop.cjs",
+          "consulting/tests/hth1955/ui-errors.cjs",
+          "consulting/tests/hth1955/verify_tl_dsp_transport.py"
+        ],
+        "validation": "DSP_TL_CM_ALIGNMENT_VALIDATION_20261114.txt",
+        "note": "HTH-only browser transport matches TL SunJCE OAEP SHA-256/MGF1 SHA-1 and DSP hash-on-decrypt. CM backend, database, APIC and common BCO libraries unchanged."
       }
-    ]
+    ],
+    "latest_supplemental_commit": "aae418afb0458bd74321b4c1441c259d7cafc322"
   },
   {
     "repository": "hth-dsp",
@@ -175,7 +192,8 @@
           "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java"
         ],
         "validation": "DSP_LEGACY_RESET_VALIDATION_20261114.txt",
-        "note": "RESET creates a credential only when the exact clientId + closeId pair has no records; inactive records are rejected. Requires database uniqueness for concurrent insert protection. CM and APIC unchanged."
+        "note": "RESET creates a credential only when the exact clientId + closeId pair has no records; inactive records are rejected. Requires database uniqueness for concurrent insert protection. CM and APIC unchanged.",
+        "superseded_by": "dsp-tl-minimal-reset-20261114"
       },
       {
         "name": "dsp-legacy-reset-resync-20261114",
@@ -200,9 +218,30 @@
           "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordDatabaseTest.java"
         ],
         "validation": "DSP_LEGACY_RESET_RESYNC_VALIDATION_20261114.txt",
-        "note": "Reapplied on user-synchronized e76cf79. Preserves JacksonFeature registration, runtime configuration and supplied POM. Restores CM OAEP SHA-256/MGF1 SHA-256 and exact Base64 SHA-256 hash persistence. Use this patch on the new baseline, not the earlier legacy-reset patch."
+        "note": "Reapplied on user-synchronized e76cf79. Preserves JacksonFeature registration, runtime configuration and supplied POM. Restores CM OAEP SHA-256/MGF1 SHA-256 and exact Base64 SHA-256 hash persistence. Use this patch on the new baseline, not the earlier legacy-reset patch.",
+        "superseded_by": "dsp-tl-minimal-reset-20261114"
+      },
+      {
+        "name": "dsp-tl-minimal-reset-20261114",
+        "commit": "c00cd5c0dc9067552e4c0d1f64628d1bb6914561",
+        "base": "e76cf797d151991d3809d5273c725795c5004c11",
+        "patch": "UPDATE_DSP_TL_MINIMAL_20261114.patch",
+        "patch_apply_directory": "hth-dsp",
+        "paths": [
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java",
+          "dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java"
+        ],
+        "restored_to_TL_baseline": [
+          "dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java",
+          "dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/model/PasswordModificationRequest.java",
+          "dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml"
+        ],
+        "validation": "DSP_TL_CM_ALIGNMENT_VALIDATION_20261114.txt",
+        "note": "Only two runtime files differ from TL baseline: missing-pair RESET first creation and exact-pair existence query. Existing TL RSA, Hash, API, DTO, YAML, shared cipher, configuration and POM retained. Deploy together with CM transport update."
       }
-    ]
+    ],
+    "latest_supplemental_commit": "c00cd5c0dc9067552e4c0d1f64628d1bb6914561"
   },
   {
     "repository": "hth-batch-job",

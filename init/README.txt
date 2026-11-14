@@ -1,3 +1,43 @@
+最新交付：CM 配合 TL DSP，最小兼容旧用户 RESET — 2026-11-14
+
+CM：aae418afb0458bd74321b4c1441c259d7cafc322（基线 f026eb9fe027ff2769662afc314453ba52961c50）
+DSP：c00cd5c0dc9067552e4c0d1f64628d1bb6914561（基线 e76cf797d151991d3809d5273c725795c5004c11，TL 最新同步）
+
+本轮上线代码范围
+- DSP 仅两个 Java 文件相对 TL 基线有变化：PasswordApiServiceImpl、DspAuthCredentialRepoService。
+  RESET / M：有效记录存在则更新；完全没有同一 clientId + closeId 记录则调用原 newPassword 创建；
+  只有停用记录仍拒绝，查询异常不按无记录处理。另补一个原有测试类。
+- 保留 TL 的 RSA 解密、HashUtils.sha256、API/DTO/YAML、公共包、配置、POM。
+  本包 API/DTO/YAML 三份完整文件已恢复 TL 原样，撤回上一版对此三文件的修改。
+- CM 仅两个 HTH 前端运行文件：修改 transport.js，新增同目录 dsp-encrypt.js。
+  浏览器用 DSP 公钥加密原始 UTF-8 密码；适配 TL SunJCE OAEP SHA-256 / MGF1 SHA-1。
+  DSP 解密后按 TL 原代码计算小写 hex SHA-256；CM 后端仅转发密码密文，仍不获得明文密码。
+  CM 后端、SQL、APIC、BCO 公共加密文件本轮未变；另更新测试及部署说明。
+
+部署方式（必须同步部署 CM 前端与 DSP）
+1. 基于上列两个源码基线分别应用下列补丁，或按原目录复制完整文件，二选一：
+   CM 根目录：git apply --check <路径>/UPDATE_CM_TL_DSP_TRANSPORT_20261114.patch
+              git apply <路径>/UPDATE_CM_TL_DSP_TRANSPORT_20261114.patch
+   DSP 根目录：git apply --check <路径>/UPDATE_DSP_TL_MINIMAL_20261114.patch
+               git apply <路径>/UPDATE_DSP_TL_MINIMAL_20261114.patch
+2. DSP 只需合入最小补丁并构建 support；CM 构建前端，确认新增 dsp-encrypt.js 一起打包，清除旧缓存。
+3. 之前 UPDATE_DSP_LEGACY_RESET*.patch 及更早协议补丁已被本版替代，不能再叠加到 TL 最新基线。
+   若之前已合入大版本改动，请先恢复 TL 基线或使用本版完整文件；本版最小补丁不是基于旧补丁生成。
+4. 未自动改写 UNKNOWN / IN_PROGRESS、未执行远程数据库操作；本轮无新增 SQL。
+
+验证与边界
+- DSP 单测 25 项通过；真实 CM 加密 -> DSP 服务/数据库/缓存编解码/原认证逻辑隔离联测 12 项通过。
+- Java SunJCE 互通、错误后原页面提示及重试、CM Code/状态事务与 APIC adapter 回归通过。
+- 两个前端运行文件 ESLint：0 errors、0 warnings；补丁和交付文件校验通过。
+- 以上为本地验证，未连接 UAT Oracle/Redis/APIC/UAM，不能代替部署后的验收。
+- 本版存储格式是 TL 的 hex SHA-256；旧 Base64 Hash 测试密码需成功重设后使用 hex 格式签名认证。
+  TL YAML 中 Base64(password)/MGF1 SHA-256 的文字与实码有差异，本轮按用户确认优先匹配实码。
+  如果 AC 要求浏览器先 Hash 再加密，协议要求仍需调整，不能把当前流程宣称为逐字满足该条。
+- 并发首次创建依赖 DSP 表已有等效唯一约束；只读核对 SQL 见 DSP_LEGACY_RESET_VALIDATION_20261114.txt。
+- 详细验证：DSP_TL_CM_ALIGNMENT_VALIDATION_20261114.txt。
+
+以下旧记录仅供追溯，具体协议及部署方式以上文为准：
+
 DSP 最新同步版本上的重新修复 — 2026-11-14
 
 来源：hth-dsp commit 85b80fbb1de01578991f7c3124eff80b22096461

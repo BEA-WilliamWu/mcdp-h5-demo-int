@@ -1,0 +1,53 @@
+CM / TL DSP minimal interoperability validation — 2026-11-14
+
+CM source: aae418afb0458bd74321b4c1441c259d7cafc322
+DSP source: c00cd5c0dc9067552e4c0d1f64628d1bb6914561; TL baseline: e76cf797d151991d3809d5273c725795c5004c11
+
+Runtime diff from TL: only PasswordApiServiceImpl and DspAuthCredentialRepoService.
+DSP PasswordApiServiceImplTest retains TL fixture/parameter tests and adds legacy/reset guards.
+API/DTO/YAML, shared RSA/Hash, JerseyConfig, application.yaml and POM match TL baseline.
+CM runtime diff: HTH transport.js and new dsp-encrypt.js. Shared BCO RSA arithmetic is reused unchanged.
+Code envelope, ciphertext SHA-256 binding, CM backend/Code validation and DSP forwarding remain unchanged.
+
+Protocol measured with actual supplied cipher and OpenJDK 21 SunJCE:
+- OAEP SHA-256, MGF1 SHA-1, empty label. Public key is SPKI Base64, RSA 2048/e=65537.
+- Browser encrypts UTF-8 password bytes (no prior password hash or Base64 plaintext layer).
+- DSP HashUtils.sha256(decrypted) stores lowercase hex SHA-256, as in TL baseline.
+- Nonce remains six digits; public-key hashValue is lowercase hex SHA-256(nonce).
+- WebCrypto cannot independently set OAEP and MGF hashes. HTH-only OAEP encoding follows
+  RFC 8017 sections 7.1.1 and B.2.1, followed by unchanged BCO public RSA modular exponentiation.
+  Reference: https://www.rfc-editor.org/rfc/rfc8017.html#section-7.1.1
+- DSP YAML prose differs from runtime. It is retained per minimal TL scope; CM deployment notes explain the difference.
+
+Checks performed:
+1. DSP actual repository tests: 25 passed (19 PasswordApiServiceImplTest + 6 repository tests).
+   Command: JAVA_HOME=<JDK21> mvn -o -f /tmp/hth-cache-reactor-20261114.xml -pl :dsp-ms-support-svc -am
+     -Dtest=PasswordApiServiceImplTest,DspAuthCredentialRepoServiceTest
+     -Dsurefire.failIfNoSpecifiedTests=false -Dexec.skip=true -Djacoco.skip=true test
+   Local output: /tmp/hth-minimal-reset-20261114.log
+2. Isolated fixture: 12 passed (10 database/transaction/token + 2 CryptKeyDto JSON codec).
+   Real CM browser transport/helper -> actual TL DSP service, MyBatis mapper, Spring transaction and H2.
+   Real Redisson JsonJacksonCodec; storage replaced with in-memory map, not a live Redis test.
+   Scenarios: setup, legacy first M, repeat M same row, replay, duplicate A, inactive rejection,
+   exact client/close pair isolation, insert/update rollback, concurrent insert unique constraint,
+   existing getCorporateToken signature check accepts latest hash and rejects previous password.
+   External UAM public-key lookup/token issuance are fixtures; production token verifier is unmodified.
+   The temporary fixture reuses source files, with H2 only in /tmp POM (not restored to TL repo).
+   Command: JAVA_HOME=<JDK21> mvn -o -f /tmp/hth-reset-resync-validation-20261114/pom.xml
+     -pl :dsp-ms-support-svc -am -Dtest=PasswordDatabaseTest,CryptKeyDtoTest
+     -Dsurefire.failIfNoSpecifiedTests=false -Dexec.skip=true -Djacoco.skip=true test
+   Local output: /tmp/hth-tl-cm-chain-20261114.log
+3. Committed reproducible interop check: JAVA_HOME=<JDK21> python3 consulting/tests/hth1955/verify_tl_dsp_transport.py
+   Uses actual CM AMD modules, Java cipher defaults, SETUP/RESET, UTF-8, maximum OAEP length,
+   overlength rejection, fresh randomness, wrong key size/exponent/malformed key, Code binding.
+4. node consulting/tests/hth1955/ui-errors.cjs: 60 localized error cases, unknown-state blocking,
+   14 actual form/model/transport error-and-retry flows; failures keep form, success shows confirmation.
+5. verify_apic_transport.py, verify_contract_guard.py, verify_code_lifecycle.py all passed with JDK21.
+   Lifecycle check used H2_JAR=<local Maven H2 2.3.232 jar>.
+6. Project ESLint 5.16.0, original BCO .eslintrc.json/plugins/custom rules; no disabled rules/cache.
+   transport.js and dsp-encrypt.js: 0 errors, 0 warnings. CRLF retained in runtime files.
+7. Both patches replayed in isolated Git indexes at their stated bases; resulting trees match source commits.
+   Full delivered file SHA-256 values match source files, FILES.tsv and SHA256SUMS.
+
+Not performed: UAT deployment, live APIC/Oracle/Redis/UAM calls, full frontend build or real browser UI test.
+Existing uncertain states and historical hashes are not bulk-migrated. DSP uniqueness must be present in deployment schema.

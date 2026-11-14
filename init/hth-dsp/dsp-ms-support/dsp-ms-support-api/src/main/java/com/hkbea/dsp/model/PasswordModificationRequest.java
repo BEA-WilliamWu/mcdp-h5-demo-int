@@ -85,7 +85,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * Password operation type.  A - Add password  M - Reset an active password, or create the first credential for an absent clientId + closeId pair; inactive records are not reactivated
+   * Password operation type.  A - Add password  M - Modify password 
    **/
   public PasswordModificationRequest function(FunctionEnum function) {
     this.function = function;
@@ -104,7 +104,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Deprecated and ignored; approved-Code reset does not require the old password.
+   * Old password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64 encoded encrypted bytes.  Deprecated and ignored; approved-Code reset does not require the old password. 
    **/
   public PasswordModificationRequest oldEncryptedPassword(String oldEncryptedPassword) {
     this.oldEncryptedPassword = oldEncryptedPassword;
@@ -123,7 +123,7 @@ public class PasswordModificationRequest   {
   }
 
   /**
-   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64(raw SHA-256(UTF-8(password))) must first be converted into ASCII bytes. OAEP and MGF1 both use SHA-256 with an empty label.  Base64 encoded encrypted bytes.
+   * New password encrypted by:  RSA/ECB/OAEPWithSHA-256AndMGF1Padding  Base64(UTF-8(password)) must first be converted into UTF-8 bytes.  Base64 encoded encrypted bytes. 
    **/
   public PasswordModificationRequest newEncryptedPassword(String newEncryptedPassword) {
     this.newEncryptedPassword = newEncryptedPassword;
@@ -227,9 +227,9 @@ public class PasswordModificationRequest   {
     sb.append("class PasswordModificationRequest {\n");
     
     sb.append("    function: ").append(toIndentedString(function)).append("\n");
-    sb.append("    oldEncryptedPassword: ").append("[REDACTED]").append("\n");
-    sb.append("    newEncryptedPassword: ").append("[REDACTED]").append("\n");
-    sb.append("    randomNumber: ").append("[REDACTED]").append("\n");
+    sb.append("    oldEncryptedPassword: ").append(toIndentedString(oldEncryptedPassword)).append("\n");
+    sb.append("    newEncryptedPassword: ").append(toIndentedString(newEncryptedPassword)).append("\n");
+    sb.append("    randomNumber: ").append(toIndentedString(randomNumber)).append("\n");
     sb.append("    closeId: ").append(toIndentedString(closeId)).append("\n");
     sb.append("    clientId: ").append(toIndentedString(clientId)).append("\n");
     sb.append("}");

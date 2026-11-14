@@ -1,0 +1,121 @@
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
+index f1ddbcf..9a529dd 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/repo/DspAuthCredentialRepoService.java
+@@ -29,6 +29,13 @@ public class DspAuthCredentialRepoService {
+         return dspAuthCredentialMapper.selectOne(queryWrapper);
+     }
+ 
++    public boolean existsForClientAndCloseId(String closeId, String clientId) {
++        LambdaQueryWrapper<DspAuthCredential> queryWrapper = Wrappers.lambdaQuery();
++        queryWrapper.eq(DspAuthCredential::getClientId, clientId)
++                .eq(DspAuthCredential::getCloseId, closeId);
++        return dspAuthCredentialMapper.selectCount(queryWrapper) > 0;
++    }
++
+     public void insert(DspAuthCredential dspAuthCredential) {
+         int row = dspAuthCredentialMapper.insert(dspAuthCredential);
+         if (row != 1) {
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+index d067ca2..d345270 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/service/PasswordApiServiceImpl.java
+@@ -222,10 +222,14 @@ public class PasswordApiServiceImpl implements PasswordApi {
+     }
+ 
+     private void modifyPassword(PasswordModificationRequest request, CryptKeyDto cryptoKeyDto, DspAuthCredential dspAuthCredential) {
+-        // no user
+         if (dspAuthCredential == null) {
+-            LOGGER.error("no active record");
+-            throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
++            // Legacy CM RESET can be the first DSP save; do not reactivate an inactive credential.
++            if (dspAuthCredentialRepoService.existsForClientAndCloseId(request.getCloseId(), request.getClientId())) {
++                LOGGER.error("no active record");
++                throw new ServiceException(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION);
++            }
++            newPassword(request, cryptoKeyDto, null);
++            return;
+         }
+ 
+         // update new password
+diff --git a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+index 7b3b380..7abe0a5 100644
+--- a/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
++++ b/dsp-ms-support/dsp-ms-support-svc/src/test/java/com/hkbea/dsp/service/PasswordApiServiceImplTest.java
+@@ -28,6 +28,8 @@ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.anyString;
+ import static org.mockito.Mockito.verify;
+ import static org.mockito.Mockito.when;
++import static org.mockito.Mockito.never;
++import static org.mockito.ArgumentMatchers.argThat;
+ 
+ @ExtendWith(MockitoExtension.class)
+ public class PasswordApiServiceImplTest {
+@@ -348,7 +350,7 @@ public class PasswordApiServiceImplTest {
+     }
+ 
+     @Test
+-    void modifyPassword_ModifyPasswordNoExistingRecord_ThrowsServiceException() {
++    void modifyPassword_LegacyResetCreatesFirstCredential() {
+         // Given
+         PasswordModificationRequest request = new PasswordModificationRequest();
+         request.setFunction(PasswordModificationRequest.FunctionEnum.M);
+@@ -356,15 +358,18 @@ public class PasswordApiServiceImplTest {
+         request.setCloseId(MOCK_CLOSE_ID);
+         request.setRandomNumber(MOCK_RANDOM_NUMBER);
+         request.setNewEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
+-        request.setOldEncryptedPassword(MOCK_ENCRYPTED_OLD_PASSWORD);
+ 
+         CryptKeyDto cryptKeyDto = new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY);
+         when(passwordAppService.findCryptoKeyDto(anyString())).thenReturn(cryptKeyDto);
+         when(dspAuthCredentialRepoService.queryWithStatus(anyString(), anyString(), anyString())).thenReturn(null);
+ 
+         // When & Then
+-        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+-        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
++        assertEquals("000000", passwordApiService.modifyPassword(request).getStatus());
++        verify(dspAuthCredentialRepoService).existsForClientAndCloseId(MOCK_CLOSE_ID, MOCK_CLIENT_ID);
++        verify(dspAuthCredentialRepoService).insert(argThat(row -> MOCK_CLIENT_ID.equals(row.getClientId())
++                && MOCK_CLOSE_ID.equals(row.getCloseId()) && "A".equals(row.getObjectStatus())));
++        verify(dspAuthCredentialRepoService, never()).updatePassword(any());
++        verify(passwordAppService).removeCryptoKeyDto(HashUtils.sha256(MOCK_RANDOM_NUMBER));
+     }
+ 
+ //    no old check now
+@@ -390,4 +395,36 @@ public class PasswordApiServiceImplTest {
+ //        ServiceException exception = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
+ //        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, exception.getErrCode());
+ //    }
++    @Test
++    void modifyPassword_InactiveCredentialDoesNotBecomeFirstSetup() {
++        PasswordModificationRequest request = new PasswordModificationRequest()
++                .function(PasswordModificationRequest.FunctionEnum.M).clientId(MOCK_CLIENT_ID)
++                .closeId(MOCK_CLOSE_ID).randomNumber(MOCK_RANDOM_NUMBER)
++                .newEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
++        when(passwordAppService.findCryptoKeyDto(anyString()))
++                .thenReturn(new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY));
++        when(dspAuthCredentialRepoService.existsForClientAndCloseId(MOCK_CLOSE_ID, MOCK_CLIENT_ID)).thenReturn(true);
++        ServiceException failure = assertThrows(ServiceException.class, () -> passwordApiService.modifyPassword(request));
++        assertEquals(DspSupportErrorMapping.PASSWORD_SIGNATURE_VERIFY_EXCEPTION, failure.getErrCode());
++        verify(dspAuthCredentialRepoService, never()).insert(any());
++        verify(dspAuthCredentialRepoService, never()).updatePassword(any());
++        verify(passwordAppService, never()).removeCryptoKeyDto(anyString());
++    }
++
++    @Test
++    void modifyPassword_FailedLookupDoesNotBecomeFirstSetup() {
++        PasswordModificationRequest request = new PasswordModificationRequest()
++                .function(PasswordModificationRequest.FunctionEnum.M).clientId(MOCK_CLIENT_ID)
++                .closeId(MOCK_CLOSE_ID).randomNumber(MOCK_RANDOM_NUMBER)
++                .newEncryptedPassword(MOCK_ENCRYPTED_NEW_PASSWORD);
++        when(passwordAppService.findCryptoKeyDto(anyString()))
++                .thenReturn(new CryptKeyDto(MOCK_PUBLIC_KEY, MOCK_PRIVATE_KEY));
++        when(dspAuthCredentialRepoService.existsForClientAndCloseId(MOCK_CLOSE_ID, MOCK_CLIENT_ID))
++                .thenThrow(new IllegalStateException());
++        assertThrows(IllegalStateException.class, () -> passwordApiService.modifyPassword(request));
++        verify(dspAuthCredentialRepoService, never()).insert(any());
++        verify(dspAuthCredentialRepoService, never()).updatePassword(any());
++        verify(passwordAppService, never()).removeCryptoKeyDto(anyString());
++    }
++
+ }

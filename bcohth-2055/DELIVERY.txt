@@ -1,0 +1,44 @@
+BCOH2H-2055 follow-up - All payment types delegate balance validation to IPE
+Date: 17 November 2026
+Source repository: /Users/devs/CProj/hth-dsp
+Synchronized baseline: c99804c1a197d5786521633d3683b6990836d687
+CHATS commit: ded39e65b5a2a9dbafede8824ec4ea8e2a523c1b
+All-type extension commit: 37202976c8cf0bd02ffddc65e4c071c60ffa3722
+
+Cumulative scope: CHATS, FPS, On-Us, TT and DR.
+Remove local debtor balance queries/comparisons from all five payment flows.
+Remove unused payment balance helpers and their dependencies.
+IPE owns the funds-availability decision. Existing rejection mapping and
+persistence remain in place, including existing FPS/On-Us limit handling.
+Other account/status, amount, currency, beneficiary, service-window,
+authorization and limit checks are retained.
+Standalone account-balance enquiry remains unchanged.
+No database migration, public API/model, error-code or cache change.
+
+Contents: 13 complete Java files (7 production and 6 test files), preserving
+repository-relative paths under source/, and the updated English design.
+Includes the previous CHATS removal; apply this cumulative package to c99804c
+or a compatible successor, not older isolated 2055/2065 source snapshots.
+
+Java 21 / offline Maven / temporary reactor: BUILD SUCCESS.
+Baseline ded39e6: 195 targeted tests passed.
+Revised: 194 tests passed, 0 failures, 0 errors, 0 skipped.
+ChatsPaymentServiceTest: 27
+FpsPaymentServiceTest: 31
+OnUsPaymentServiceTest: 54
+TtPaymentServiceTest: 20
+DrPaymentServiceTest: 17
+OverseasPaymentServiceTest: 14
+PaymentCommonRoutingBuilderTest: 5
+PaymentRoutingSubmitterTest: 9
+AccountServiceImplGenericEnquiryTest: 17
+Four old per-type balance-rejection tests were replaced by eight IPE-owned
+balance-decision tests. Five tests of deleted helpers were removed.
+Logs: /tmp/hth-2055-balance-verification/all-types-baseline.log and all-types-test.log
+
+Source checks: no balance-query/comparison calls remain in payment services.
+Actual IPE balance enforcement, database integration, SIT/UAT and host
+posting/reversal were not run; verify each payment type with deployed IPE.
+
+Local DSP Git committed. No remote push or mcdp Git commit performed.
+User's unrelated files and document moves are not included.

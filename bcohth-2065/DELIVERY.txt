@@ -1,0 +1,44 @@
+BCOH2H-2065 - CHATS customer reference and IPE validation correction
+Date: 2026-11-17
+Source repository: /Users/devs/CProj/hth-dsp
+Baseline: 37202976c8cf0bd02ffddc65e4c071c60ffa3722
+Local DSP commit: 2612b18a5e656cd47ab271ebecd5b4a3b697f085
+
+Contents: four production Java files, three existing test files updated,
+and the English technical design. Java files are complete files from this
+commit, with original repository-relative paths under source/.
+These are based on the latest synced DSP code and retain the recent balance
+validation delegation to IPE; do not apply as an old isolated story snapshot.
+
+Confirmed behavior:
+- CHATS IPE endToEndId uses the customer's API input; absent/blank -> NOTPROVIDED.
+- HTH txnRef/PAYMENT_ID stays the generated group-header batch ID.
+- CHATS enquiry uses IPE batchId; other payment types retain transactionId lookup.
+- Explicit/automatic routing reselects the appropriate identifier mapping.
+- CHATS creditorName temporarily <=35; overlength -> existing500115 before submission.
+- Name values are not truncated/split. depositAccountName2 is preserved.
+- Optional CHATS townName <=35 and supplied line1/town charset follow v0.8.
+
+Verification: Java21 / Maven targeted reactor BUILD SUCCESS.
+282 tests passed;0 failures,0 errors,0 skipped.35 additional test executions.
+Test log: /tmp/hth-2065-20261117/final-test.log
+No database migration, new error code, schema/model generation or actual IPE/SIT run.
+
+Integration limitations:
+- v0.8 still permits140-character names; temporaryCHATS35 restriction approved by user.
+- Supplied IPE workbook/Swagger still limit endToEndId to23-26; deployed IPE must
+  accept customer values up to35 and NOTPROVIDED. HTH changes alone cannot ensure this.
+- Other v0.8 gaps and downstream debtor address/pacs.008 verification remain documented.
+
+Only local DSP Git was committed. No remote push or mcdp Git commit performed.
+Source inputs and unrelated user changes were left out of the code commit.
+
+Changed paths:
+- docs/BCOH2H-2065-Technical-Design.md
+- hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+- hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+- hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentModelConvert.java
+- hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentValidationSupport.java
+- hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+- hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
+- hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentServiceImplTest.java

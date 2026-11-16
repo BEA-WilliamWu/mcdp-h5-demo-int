@@ -1,0 +1,9 @@
+688b4e18c4761e62c319179ecb10d0ad29ba41027512b210b53978e1e9cabaf4  BCOH2H-2065-Technical-Design.md
+539af44a316252cfa03329bffadfcd74f7dfda0842668dbafa8b511ec00107d4  DELIVERY.txt
+a96305328ab7e000b64f6458a7d2df6e873346bdacce04d94df024e9bb8b88f9  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+62df3339f40edc3f56cf2f517ba05790bd81232a152478afd537a7a24e48b6b9  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+a01f22c26175235deb77c226547e4a858c681a42da27d5453b9ad399394f453b  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentModelConvert.java
+6e7ef861d5abf29bdce8aedd98228bc001916c916522fd79537d9c17275b3eb3  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentValidationSupport.java
+4e13356bdbd8d2f0acb0cfe929924d875d25c59120b79d063ddbf1173c460232  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+ee6bd4e299a538efd27ba5ced5aff6617bc83ed54cbf45ac0533ef991cf4923b  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
+2fee6de5c8d724eb7617fa8beee084f937c96cdcf29a7ad390fff585f7a0b8e8  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentServiceImplTest.java

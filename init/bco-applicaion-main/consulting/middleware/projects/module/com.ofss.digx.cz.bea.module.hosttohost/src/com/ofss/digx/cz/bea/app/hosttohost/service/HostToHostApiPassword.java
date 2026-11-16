@@ -1347,6 +1347,14 @@ public class HostToHostApiPassword extends AbstractApplication
   /** Approval and consume share the same row locks and status constraints. */
   private boolean activateApprovedCode(String codeId, String partyId, String userName, String purpose,
       String operator, String transactionId, int expiryHours) throws Exception {
+    // The alert adapter reads CTX and skips registration during VALIDATE. Defer the
+    // Code write too, so actual execution can activate it and register its emails.
+    SessionContext context = (SessionContext) com.ofss.fc.infra.thread.ThreadAttribute.get("CTX");
+    if (context != null
+        && context.getServiceCallContextType() == com.ofss.fc.enumeration.ServiceCallContextType.VALIDATE) {
+      BeaSystemOut.println("HTH_CODE_EMAIL stage=ACTIVATION_DEFERRED_VALIDATE, transactionId=" + transactionId);
+      return false;
+    }
     SessionLease lease = open(true);
     boolean success = false;
     try {

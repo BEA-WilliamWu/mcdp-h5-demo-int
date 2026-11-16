@@ -31,6 +31,9 @@ def method(source, name):
 source = r'''
 import java.sql.*;
 import java.util.*;
+import java.util.logging.*;
+import com.ofss.digx.app.sms.dto.user.UserDTO;
+import com.ofss.digx.datatype.complex.Party;
 import com.ofss.fc.app.context.SessionContext;
 import com.ofss.fc.enumeration.ServiceCallContextType;
 class Exception extends java.lang.Exception {
@@ -69,6 +72,32 @@ class LocalHthApiPasswordCodeRepositoryAdapter {
 }
 class BeaSystemOut {static void println(String value){System.out.println(value);}}
 public class CodeApprovalTest {
+  static final Logger LOGGER=Logger.getLogger("CodeApprovalTest");
+  static final String USER_EVENT="HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT";
+  static final String COMPANY_EVENT="HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT";
+  static final Map<String,String> recipients=new LinkedHashMap<>();
+  static int userLookups;
+  static ExistingUser existingUser;
+  static String companyEmail;
+  static class HthApiPasswordActivityLogDTO {}
+  static class ExistingUser {
+    final String email;
+    ExistingUser(String email){this.email=email;}
+    String getEmailId(){return email;}
+  }
+  ExistingUser readNotificationUser(String party,String user){userLookups++;return existingUser;}
+  static class CZPartyPreferenceDTO {String getOfficeEmailId(){return companyEmail;}}
+  static class IUserExtensionAdapter {CZPartyPreferenceDTO getPartyPreferences(String party){return new CZPartyPreferenceDTO();}}
+  static class IAdapterFactory {Object getAdapter(String key){return new IUserExtensionAdapter();}}
+  static class AdapterFactoryConfigurator {
+    static AdapterFactoryConfigurator getInstance(){return new AdapterFactoryConfigurator();}
+    IAdapterFactory getAdapterFactory(String key){return new IAdapterFactory();}
+  }
+  static class CommonAdapterFactoryConstants {static final String USER_EXTENSION_ADAPTER_FACTORY="factory";}
+  static class CommonAdapterConstants {static final String USER_EXTENSION_ADAPTER="adapter";}
+  void publishEmail(SessionContext session,String activity,String event,String party,String email,HthApiPasswordActivityLogDTO log){
+    recipients.put(event,email);
+  }
   static Connection db; static SessionContext context=new SessionContext();
   static final List<String> notifications=new ArrayList<>(); static int opened;
   final Repository codeRepository=new Repository();
@@ -81,9 +110,13 @@ public class CodeApprovalTest {
   SessionLease open(boolean write){opened++;return new SessionLease();}
   String key(String id){return id;}
   // Match the SDK event-registration boundary: VALIDATE does not register an event.
-  void notifyHthApiPasswordApproved(SessionContext ignored,HthApiPasswordCode row){
+  void notifyHthApiPasswordApproved(SessionContext ignored,HthApiPasswordCode row,String createdUserEmail){
     check("ACTIVE".equals(row.status),"notification must see refreshed ACTIVE Code");
-    if(context.getServiceCallContextType()!=ServiceCallContextType.VALIDATE)notifications.add(row.id);
+    if(context.getServiceCallContextType()!=ServiceCallContextType.VALIDATE){
+      notifications.add(row.id);
+      notifyEmailRecipients(context,"approval",USER_EVENT,COMPANY_EVENT,"PARTY","USER",
+          new HthApiPasswordActivityLogDTO(),createdUserEmail);
+    }
   }
   METHODS
   static void check(boolean condition,String message){if(!condition)throw new AssertionError(message);}
@@ -96,9 +129,11 @@ public class CodeApprovalTest {
     db.createStatement().execute("DELETE FROM HTH_BEA.HTH_API_PASSWORD_CODE");
     db.createStatement().execute("INSERT INTO HTH_BEA.HTH_API_PASSWORD_CODE (ID,PARTY_ID,USER_NAME,PURPOSE,STATUS,OBJECT_STATUS) VALUES ('new','PARTY','USER@PARTY','SETUP','PENDING','A'),('old','PARTY','USER','SETUP','ACTIVE','A')");
     db.commit();notifications.clear();opened=0;
+    recipients.clear();userLookups=0;
+    existingUser=new ExistingUser("stored@example.test");companyEmail="company@example.test";
   }
   static boolean activate(CodeApprovalTest test,String operator) throws Exception {
-    return test.activateApprovedCode("new","PARTY","USER@PARTY","SETUP",operator,"TX",24);
+    return test.activateApprovedCode("new","PARTY","USER@PARTY","SETUP",operator,"TX",24,null);
   }
   public static void main(String[] args) throws java.lang.Exception {
     db=DriverManager.getConnection("jdbc:h2:mem:approval;MODE=Oracle");db.setAutoCommit(false);
@@ -128,18 +163,43 @@ public class CodeApprovalTest {
     seed();context.setServiceCallContextType(ServiceCallContextType.NORMAL);
     check(activate(test,"AUTO_APPROVED_AP"),"direct execution without validation did not activate");
     check(notifications.size()==1,"direct execution lost notification");
+    check(userLookups==1 && "stored@example.test".equals(recipients.get(USER_EVENT)),"existing user did not use stored email");
+    // Immediate creation registers both events even when the new user cannot be read yet.
+    seed();existingUser=null;
+    UserDTO createdUser=new UserDTO();
+    createdUser.setUsername("user@PARTY");
+    Party party=new Party();party.setValue("PARTY");createdUser.setPartyId(party);
+    createdUser.setEmailId("  new-user@example.test  ");
+    String email=test.createdUserEmail(createdUser,"PARTY","USER@PARTY");
+    check(test.activateApprovedCode("new","PARTY","USER@PARTY","SETUP","AUTO_APPROVED_AP","TX",24,email),"create did not activate");
+    check(userLookups==0,"create attempted to reload user");
+    check("new-user@example.test".equals(recipients.get(USER_EVENT)),"new user email missing");
+    check("company@example.test".equals(recipients.get(COMPANY_EVENT)),"company email missing");
+    check(new ArrayList<>(recipients.keySet()).equals(Arrays.asList(USER_EVENT,COMPANY_EVENT)),"event order changed");
+    seed();existingUser=null;companyEmail=" NEW-USER@EXAMPLE.TEST ";
+    test.activateApprovedCode("new","PARTY","USER@PARTY","SETUP","CHECKER","TX",24,email);
+    check(recipients.keySet().equals(Collections.singleton(USER_EVENT)),"shared mailbox lost user route priority");
+    party.setValue("OTHER");
+    check(test.createdUserEmail(createdUser,"PARTY","USER")==null,"accepted other party email");
+    party.setValue("PARTY");createdUser.setUsername("OTHER@PARTY");
+    check(test.createdUserEmail(createdUser,"PARTY","USER")==null,"accepted other user's email");
+    createdUser.setUsername("USER@PARTY");createdUser.setEmailId(" ");
+    check(test.createdUserEmail(createdUser,"PARTY","USER")==null,"accepted blank email");
     // A rejected/missing Code cannot become active or emit the approval notification.
     seed();db.createStatement().execute("UPDATE HTH_BEA.HTH_API_PASSWORD_CODE SET OBJECT_STATUS='D' WHERE ID='new'");db.commit();
     try{activate(test,"CHECKER");throw new AssertionError("deleted Code accepted");}
     catch(Exception expected){check("DIGX_CZ_HTH_PW_008".equals(expected.getMessage()),"wrong rejection");}
     check("PENDING".equals(value("new","STATUS"))&&notifications.isEmpty(),"rejected Code changed/notified");
-    System.out.println("PASS: production activation + SQL: VALIDATE has no writes, normal auto/checker execution notifies once, direct execution, replay, rejection");
+    System.out.println("PASS: production activation + SQL: VALIDATE has no writes, normal activation/replay, creation email without DB lookup, company recipient, dedup and owner check");
     db.close();
   }
 }
 '''
 source = source.replace('QUERIES', '\n'.join(method(adapter, name) for name in ('lockForApproval', 'retireActive', 'activate')))
-source = source.replace('METHODS', '\n'.join(method(service, name) for name in ('activateApprovedCode', 'string')))
+methods = ('activateApprovedCode', 'string', 'createdUserEmail', 'normalize', 'canonicalUser',
+           'notifyEmailRecipients', 'publishUniqueEmail')
+source = source.replace('METHODS', '\n'.join(method(service, name) for name in methods)
+                        .replace('com.ofss.digx.domain.sms.entity.user.User', 'ExistingUser'))
 classpath = os.pathsep.join(map(str, [H2] + sorted((ROOT / 'consulting/middleware/lib').rglob('*.jar'))))
 with tempfile.TemporaryDirectory(prefix='hth-code-approval-') as directory:
     work = Path(directory)

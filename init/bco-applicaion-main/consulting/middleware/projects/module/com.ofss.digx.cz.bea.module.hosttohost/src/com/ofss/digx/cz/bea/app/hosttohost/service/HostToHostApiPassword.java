@@ -10,6 +10,7 @@ import com.ofss.digx.annotations.EntitlementGroup;
 import com.ofss.digx.annotations.Task;
 import com.ofss.digx.app.AbstractApplication;
 import com.ofss.digx.app.Interaction;
+import com.ofss.digx.app.sms.dto.user.UserDTO;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordTransport;
 import com.ofss.digx.cz.bea.app.hosttohost.util.HthApiPasswordTransport.KeyMaterial;
 import com.ofss.digx.cz.bea.app.hosttohost.dto.HostToHostApiPasswordPolicyDTO;
@@ -956,6 +957,12 @@ public class HostToHostApiPassword extends AbstractApplication
   /** Bind the submitted code to the actual user being approved, not just a client-supplied id. */
   public void activateOnUserApproval(String codeId, String operator, String partyId,
       String userName) throws Exception {
+    activateOnUserApproval(codeId, operator, partyId, userName, null);
+  }
+
+  /** User creation can supply its successful create response before the new user is queryable. */
+  public void activateOnUserApproval(String codeId, String operator, String partyId,
+      String userName, UserDTO createdUser) throws Exception {
     HthApiPasswordCode row = LocalHthApiPasswordCodeRepositoryAdapter.getInstance().read(key(codeId));
     if (row == null || normalize(partyId) == null || normalize(userName) == null
         || !partyId.equals(row.getPartyId())
@@ -965,7 +972,20 @@ public class HostToHostApiPassword extends AbstractApplication
     String transactionId = readTransactionId();
     // Activation refreshes the database state and registers the notification once.
     activateApprovedCode(codeId, partyId, row.getUserName(), row.getPurpose(),
-        operator, transactionId, EXPIRY_HOURS);
+        operator, transactionId, EXPIRY_HOURS, createdUserEmail(createdUser, partyId, row.getUserName()));
+  }
+
+  private String createdUserEmail(UserDTO createdUser, String partyId, String userName) {
+    if (createdUser == null) {
+      return null;
+    }
+    String createdUserName = normalize(createdUser.getUsername());
+    if (createdUser.getPartyId() == null || !partyId.equals(createdUser.getPartyId().getValue())
+        || createdUserName == null
+        || !canonicalUser(userName, partyId).equalsIgnoreCase(canonicalUser(createdUserName, partyId))) {
+      return null;
+    }
+    return normalize(createdUser.getEmailId());
   }
 
   /** The SDK invokes postPerformAction after committing approval; cleanup owns its write transaction. */
@@ -999,7 +1019,8 @@ public class HostToHostApiPassword extends AbstractApplication
   }
 
   /** BCOH2H-880: Code approval emails go only to the target API user and company. */
-  private void notifyHthApiPasswordApproved(SessionContext context, HthApiPasswordCode row) {
+  private void notifyHthApiPasswordApproved(SessionContext context, HthApiPasswordCode row,
+      String createdUserEmail) {
     BeaSystemOut.println("HTH_CODE_EMAIL stage=APPROVED, transactionId=" + readTransactionId());
     HthApiPasswordActivityLogDTO log = new HthApiPasswordActivityLogDTO();
     log.setCustomerId(row.getPartyId());
@@ -1021,20 +1042,25 @@ public class HostToHostApiPassword extends AbstractApplication
     notifyEmailRecipients(context, ACTIVITY_HTH_API_PASSWORD_APPROVED,
         UserExtensionDataConstants.HTH_API_PASSWORD_CODE_APPROVED_USER_EMAIL_EVENT,
         UserExtensionDataConstants.HTH_API_PASSWORD_CODE_APPROVED_COMPANY_EMAIL_EVENT,
-        row.getPartyId(), row.getUserName(), log);
+        row.getPartyId(), row.getUserName(), log, createdUserEmail);
   }
 
   /** Sends target user first, then company; one email per normalized mailbox in this event. */
   private void notifyEmailRecipients(SessionContext context, String activityId,
       String userEvent, String companyEvent, String partyId, String userName,
-      HthApiPasswordActivityLogDTO log) {
+      HthApiPasswordActivityLogDTO log, String createdUserEmail) {
     Set<String> mailboxes = new LinkedHashSet<String>();
     try {
-      com.ofss.digx.domain.sms.entity.user.User user = readNotificationUser(partyId, userName);
-      if (user != null) {
-        publishUniqueEmail(context, activityId, userEvent, partyId, user.getEmailId(), log, mailboxes);
+      if (createdUserEmail != null) {
+        BeaSystemOut.println("HTH_CODE_EMAIL stage=USER_EMAIL_FROM_CREATE, eventId=" + userEvent);
+        publishUniqueEmail(context, activityId, userEvent, partyId, createdUserEmail, log, mailboxes);
       } else {
-        BeaSystemOut.println("HTH_CODE_EMAIL stage=USER_NOT_FOUND, eventId=" + userEvent);
+        com.ofss.digx.domain.sms.entity.user.User user = readNotificationUser(partyId, userName);
+        if (user != null) {
+          publishUniqueEmail(context, activityId, userEvent, partyId, user.getEmailId(), log, mailboxes);
+        } else {
+          BeaSystemOut.println("HTH_CODE_EMAIL stage=USER_NOT_FOUND, eventId=" + userEvent);
+        }
       }
     } catch (java.lang.Exception e) {
       BeaSystemOut.println("HTH_CODE_EMAIL stage=USER_LOOKUP_FAILED, eventId=" + userEvent
@@ -1346,7 +1372,7 @@ public class HostToHostApiPassword extends AbstractApplication
 
   /** Approval and consume share the same row locks and status constraints. */
   private boolean activateApprovedCode(String codeId, String partyId, String userName, String purpose,
-      String operator, String transactionId, int expiryHours) throws Exception {
+      String operator, String transactionId, int expiryHours, String createdUserEmail) throws Exception {
     // The alert adapter reads CTX and skips registration during VALIDATE. Defer the
     // Code write too, so actual execution can activate it and register its emails.
     SessionContext context = (SessionContext) com.ofss.fc.infra.thread.ThreadAttribute.get("CTX");
@@ -1386,7 +1412,7 @@ public class HostToHostApiPassword extends AbstractApplication
       lease.session.refresh(activated);
       // Register through the existing BCO event framework while the approval transaction is open.
       // The Code-approved actions use the existing non-transactional dispatch configuration.
-      notifyHthApiPasswordApproved(null, activated);
+      notifyHthApiPasswordApproved(null, activated, createdUserEmail);
       success = true;
       return true;
     } catch (java.lang.Exception e) {

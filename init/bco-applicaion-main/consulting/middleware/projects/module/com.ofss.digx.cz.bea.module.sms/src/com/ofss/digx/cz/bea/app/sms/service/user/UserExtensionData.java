@@ -908,7 +908,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 				BeaSystemOut.println("Transaction Status ErrorCOde + code : "+ transactionStatus.getErrorCode() + "+" + transactionStatus.getValidationErrors());
 				if (HthProfileApproverNotification.profileUpdateSucceeded(transactionStatus, hthPinResetChanged)) {
                     // Only activate and register Code notification after the user update succeeds.
-                    activateHthApiPasswordCode(sessionContext, requestDTO);
+                    activateHthApiPasswordCode(sessionContext, requestDTO, null);
 					// User Profile update alert
 					BeaSystemOut.println("##############Executing alertUserProfileUpdate method");
                     hthProfileUpdated = true;
@@ -1481,7 +1481,7 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 					// BCOH2H-787: activate the one-time HTH API Password Code now that the
 					// original user creation flow has reached approval execution. BCO requests
 					// carry no code id and are unaffected.
-					activateHthApiPasswordCode(sessionContext, requestDTO);
+					activateHthApiPasswordCode(sessionContext, requestDTO, userResponseDTO.getUserDTO());
 				}
 			}
 
@@ -4319,8 +4319,8 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 		return null;
 	}
 	
-	private void activateHthApiPasswordCode(SessionContext sessionContext, UserExtensionDataDTO dto)
-			throws Exception {
+	private void activateHthApiPasswordCode(SessionContext sessionContext, UserExtensionDataDTO dto,
+			UserDTO createdUser) throws Exception {
 		if (dto == null || !"HTH".equals(com.ofss.digx.cz.bea.app.hosttohost.adapter
 				.IHthUserProfileAdapter.normalizeUserChannelType(dto.getUserChannelType()))) {
 			return;
@@ -4335,9 +4335,16 @@ public class UserExtensionData extends AbstractApplication implements IUserExten
 			Class<?> serviceClass = Class.forName(
 					"com.ofss.digx.cz.bea.app.hosttohost.service.HostToHostApiPassword");
 			Object service = serviceClass.getDeclaredConstructor().newInstance();
-			serviceClass.getMethod("activateOnUserApproval", String.class, String.class,
-					String.class, String.class).invoke(service, dto.getHthApiPasswordCodeId().trim(),
-					sessionContext.getUserId(), dto.getCdcNo(), dto.getUserID());
+			String codeId = dto.getHthApiPasswordCodeId().trim();
+			if (createdUser != null) {
+				serviceClass.getMethod("activateOnUserApproval", String.class, String.class,
+						String.class, String.class, UserDTO.class).invoke(service, codeId,
+						sessionContext.getUserId(), dto.getCdcNo(), dto.getUserID(), createdUser);
+			} else {
+				serviceClass.getMethod("activateOnUserApproval", String.class, String.class,
+						String.class, String.class).invoke(service, codeId,
+						sessionContext.getUserId(), dto.getCdcNo(), dto.getUserID());
+			}
 		} catch (java.lang.reflect.InvocationTargetException e) {
 			if (e.getCause() instanceof Exception) { throw (Exception) e.getCause(); }
 			throw new Exception(e);

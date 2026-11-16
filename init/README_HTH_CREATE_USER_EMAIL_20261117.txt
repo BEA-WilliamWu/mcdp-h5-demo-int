@@ -1,5 +1,20 @@
 HTH 创建用户邮件：免审核链路检查及预校验修复 — 2026-11-17
 
+2026-11-17 07:13:58 UAT 创建记录复查
+
+源码提交 b9dd071e69d1e50fd89b23ecdca54b9fede1aa0f
+UAT 日志显示 Code 已激活，用户事件记录 USER_NOT_FOUND，公司事件 REGISTERED，replyCode=0。
+新用户邮箱与公司邮箱不同。该笔用户事件在收件人查询后被跳过，尚未注册到邮件框架。
+创建成功后，HTH 通知优先使用创建响应中的邮箱，先校验公司及用户名与 Code 归属一致。
+免审核创建和 checker 审批创建经过同一入口。编辑、公司通知及同邮箱去重继续使用原路径。
+
+同步文件包括 UserExtensionData.java、HostToHostApiPassword.java 及现有回归脚本。
+请一起构建部署 module.sms 和 module.hosttohost，或先部署 hosttohost 再部署 sms。
+本地编译与回归通过。UAT 用不同邮箱新建后，检查 USER_EMAIL_FROM_CREATE 及两个事件的邮件记录。
+此修复用于后续创建，原先已激活的 Code 仍按既有规则避免重发。此次无需执行 SQL。
+
+以下是此前的预校验修复与诊断说明。
+
 来源：bco-applicaion-main / hth-integration-20261110
 本次源码提交：dae832701177c6a21c2f0ad7a6dd86066f03a56f
 前次定位日志提交：f331ca312cdc737d94213912a1faadabdcc933d8

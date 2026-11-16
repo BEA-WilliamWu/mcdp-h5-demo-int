@@ -114,21 +114,22 @@ with tempfile.TemporaryDirectory(prefix='hth-audit-exists-') as temporary:
      static final List<String> bco=Arrays.asList("MT_N_CUS","MT_N_UUS","MT_N_RUS","UAT_N_CA","UAT_N_UA","UAT_N_DA","INQ01","HTH_INQUIRY_EXISTING");
      public static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
      public static Object adapter(){return java.lang.reflect.Proxy.newProxyInstance(IHostUserDetailsInvocationAdapter.class.getClassLoader(),new Class[]{IHostUserDetailsInvocationAdapter.class},(p,m,a)->{
-      check(m.getName().equals("getCustomConfigUtilValue"),"live config bridge");check("N".equals(a[1]),"default disabled");reads++;
+      check(m.getName().equals("getCustomConfigUtilValue"),"live config bridge");check("N".equals(a[1]),"default disabled");reads++;check(a[0].equals(Boolean.TRUE.equals(com.ofss.digx.infra.thread.ThreadAttribute.get("isAdmin"))?BM:CM),"only current portal toggle read");
       if(fail)throw new IllegalStateException("fixture");return config.get(a[0]);
      });}
      static TaskRequestDTO request(boolean audit,ViewType view){TaskRequestDTO req=new TaskRequestDTO();TaskDTO t=new TaskDTO();TaskAspectDTO a=new TaskAspectDTO();a.setTaskAspect(audit?TaskAspect.AUDIT:TaskAspect.ACCOUNT_ACCESS);a.setEnabled(true);t.setAspects(new HashSet<>(Arrays.asList(a)));req.setTask(t);req.setView(view);return req;}
      static List<TaskDTO> original(){List<TaskDTO> list=new ArrayList<>();List<String> all=new ArrayList<>(bco);all.addAll(cm);all.addAll(bm);for(String id:all){TaskDTO t=new TaskDTO();t.setId(id);t.setName("unchanged");list.add(t);}return Collections.unmodifiableList(list);}
      static List<String> invoke(TaskRequestDTO req) throws Exception {List<TaskDTO> list=original();TaskListResponseDTO res=new TaskListResponseDTO();res.setTaskList(list);new CZTaskExt().postList(null,req,res);check(list.size()==bco.size()+cm.size()+bm.size(),"must not shrink cached/source list");List<String> ids=new ArrayList<>();for(TaskDTO t:res.getTaskList())ids.add(t.getId());return ids;}
      public static void main(String[] args) throws Exception {
+      com.ofss.digx.infra.thread.ThreadAttribute.set("isAdmin",Boolean.FALSE);
       for(boolean c:new boolean[]{false,true})for(boolean b:new boolean[]{false,true}){
        config.put(CM,c?"Y":"N");config.put(BM,b?"Y":"N");reads=0;
        List<String> ids=invoke(request(true,ViewType.LIST));check(ids.containsAll(bco),"BCO and inquiry retained");
-       for(String id:cm)check(ids.contains(id)==c,"CM "+id);for(String id:bm)check(ids.contains(id)==b,"BM "+id);check(reads==2,"at most one read per task group and request");
+       for(String id:cm)check(ids.contains(id)==c,"CM "+id);for(String id:bm)check(ids.contains(id)==c,"CM portal BM task "+id);check(reads==1,"one current portal read per request");
        reads=0;List<String> high=new ArrayList<>();for(com.ofss.digx.cz.bea.app.common.HighRiskTransactionDTO t:new TransactionList().fetchHighRiskTransactionList(null).getHighRiskTransactionDTOList())high.add(t.getTaskCode());
        ResourceBundle bundle=ResourceBundle.getBundle("resources.nls.HighRiskTask",Locale.ENGLISH);
        for(String id:bundle.keySet())check(high.contains(id)==(!cm.contains(id)||c),"high risk "+id);
-       check(reads==1,"high risk lazily reads only CM key in current bundle");
+       check(reads==1,"CM high risk reads only CM portal key");
       }
       config.clear();reads=0;check(invoke(request(true,ViewType.LIST)).equals(bco),"missing flags disabled");
       fail=true;check(invoke(request(true,ViewType.LIST)).equals(bco),"configuration failure preserves BCO only");fail=false;
@@ -136,17 +137,17 @@ with tempfile.TemporaryDirectory(prefix='hth-audit-exists-') as temporary:
       config.put(CM,"true");config.put(BM,"");check(invoke(request(true,ViewType.LIST)).equals(bco),"non-Y disabled");
       reads=0;for(TaskRequestDTO req:Arrays.asList(request(false,ViewType.LIST),request(true,ViewType.HIERARCHICHAL),new TaskRequestDTO(),null))check(invoke(req).size()==original().size(),"non-audit task requests unchanged");check(reads==0,"non-audit does not read toggle");
       config.put(CM,"N");HthAuditTaskVisibility off=new HthAuditTaskVisibility();check(!off.isVisible(cm.get(0)),"off");config.put(CM,"Y");check(new HthAuditTaskVisibility().isVisible(cm.get(0)),"next request uses fresh config");
-      // BM lists CM audit activities too; its toggle must also hide those choices.
+      // Both task groups follow the current portal, independently of the other flag.
       com.ofss.digx.infra.thread.ThreadAttribute.set("isAdmin",Boolean.TRUE);
       for(boolean c:new boolean[]{true,false})for(boolean b:new boolean[]{false,true}){
        config.put(CM,c?"Y":"N");config.put(BM,b?"Y":"N");reads=0;
        List<String> ids=invoke(request(true,ViewType.LIST));check(ids.containsAll(bco),"BM retains BCO and released inquiry");
-       for(String id:cm)check(ids.contains(id)==(c&&b),"BM activity CM task "+id);for(String id:bm)check(ids.contains(id)==b,"BM activity BM task "+id);
-       check(reads==(b?2:1),"BM toggle cached per request; skip CM config if BM disabled");
+       for(String id:cm)check(ids.contains(id)==b,"BM activity CM task "+id);for(String id:bm)check(ids.contains(id)==b,"BM activity BM task "+id);
+       check(reads==1,"BM reads only its own toggle");
        reads=0;List<String> high=new ArrayList<>();for(com.ofss.digx.cz.bea.app.common.HighRiskTransactionDTO t:new TransactionList().fetchHighRiskTransactionList(null).getHighRiskTransactionDTOList())high.add(t.getTaskCode());
        ResourceBundle bundle=ResourceBundle.getBundle("resources.nls.HighRiskTask",Locale.ENGLISH);
-       for(String id:bundle.keySet())check(high.contains(id)==(!cm.contains(id)||(c&&b)),"BM high risk "+id);
-       check(reads==(b?2:1),"BM high risk uses BM portal toggle and original CM toggle");
+       for(String id:bundle.keySet())check(high.contains(id)==(!cm.contains(id)||b),"BM high risk "+id);
+       check(reads==1,"BM high risk reads only BM portal key");
       }
       config.put(CM,"Y");config.remove(BM);check(invoke(request(true,ViewType.LIST)).equals(bco),"BM missing flag hides all new onboarding tasks");
       config.put(BM,"N");reads=0;

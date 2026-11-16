@@ -27,30 +27,17 @@ public final class HthAuditTaskVisibility {
             "CM_N_HAP_SETUP", "CM_N_HAP_RESET", "PP_N_HTH_CERT_UPL"));
     private static final Set<String> BM_TASKS = new HashSet<String>(Arrays.asList(
             "PP_N_HTH_ENB", "PP_N_HTH_EDT", "PP_N_HTH_DIS"));
-    private Boolean cmEnabled;
-    private Boolean bmEnabled;
+    private Boolean onboardingEnabled;
 
     public boolean isVisible(String taskId) {
-        if (CM_TASKS.contains(taskId)) {
-            // BM audit also lists CM activities; its toggle must hide these choices.
-            if (Boolean.TRUE.equals(ThreadAttribute.get("isAdmin"))) {
-                if (bmEnabled == null) {
-                    bmEnabled = readToggle("ENABLE_HTH_BM_ONBOARDING");
-                }
-                if (!bmEnabled.booleanValue()) {
-                    return false;
-                }
+        if (CM_TASKS.contains(taskId) || BM_TASKS.contains(taskId)) {
+            // Task origin does not identify the portal displaying this shared dropdown.
+            if (onboardingEnabled == null) {
+                String key = Boolean.TRUE.equals(ThreadAttribute.get("isAdmin"))
+                        ? "ENABLE_HTH_BM_ONBOARDING" : "ENABLE_HTH_CM_ONBOARDING";
+                onboardingEnabled = readToggle(key);
             }
-            if (cmEnabled == null) {
-                cmEnabled = readToggle("ENABLE_HTH_CM_ONBOARDING");
-            }
-            return cmEnabled.booleanValue();
-        }
-        if (BM_TASKS.contains(taskId)) {
-            if (bmEnabled == null) {
-                bmEnabled = readToggle("ENABLE_HTH_BM_ONBOARDING");
-            }
-            return bmEnabled.booleanValue();
+            return onboardingEnabled.booleanValue();
         }
         return true;
     }

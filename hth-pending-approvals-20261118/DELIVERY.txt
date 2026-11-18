@@ -1,0 +1,69 @@
+Pending Approvals - userChannelType 字段交付
+日期：2026-11-18
+源仓库：/Users/devs/CProj/bco-applicaion-main
+源分支：hth-integration-20261110
+原版本：b9dd071e69d1e50fd89b23ecdca54b9fede1aa0f
+本次提交：3bdbec6d5e6dbdef643e0d14b1c9ce3b83173be7
+
+范围与部署
+- 本目录 consulting/ 下的文件按原相对路径覆盖目标代码。
+- 生产改动只有两个 Java 文件，均在 com.ofss.digx.cz.bea.module.approval。
+  CZTransactionExt.java：postListTransactions 末尾增加 3 行，仅 view=approval 执行。
+  HthApprovalUserChannel.java：新增内部辅助类，补充响应字典中的用户渠道。
+- 重新编译并部署 com.ofss.digx.cz.bea.module.approval.jar（须包含新增类）。
+- 无 SQL、前端、配置或公共 DTO 修改。审批规则、审批状态和持久化数据不变。
+- consulting/tests/ 下是回归脚本，不属于服务器部署文件。
+
+接口与字段
+GET /digx/v1/transactions?view=approval&discriminator=ADMIN_MAINTENANCE
+在每条相关 transactionDTOs 记录的
+  dictionaryArray[0].nameValuePairDTOArray
+中追加或替换一项：
+{
+  "name": "userChannelType",
+  "genericName": "userChannelType",
+  "value": "HTH",
+  "datatype": "java.lang.String"
+}
+现有字典内容保留；重复补充不会在第一项字典内生成重复字段。
+
+渠道来源
+1. MT_N_CUS / MT_N_UUS（User Management 创建/编辑）：
+   优先读取交易响应已有的 UserExtensionDataDTO 快照；响应未附快照时，
+   按交易编号只读已保存的提交快照，取其中 userChannelType。
+   不查询实时用户表，也不会把完整提交快照补回列表响应。
+   明确的 HTH / BCO 分别返回 HTH / BCO；空值、未知值、缺少快照或读取失败
+   返回 UNKNOWN。该值只是渠道识别结果，与 API Password 状态无关。
+2. HTH 专用任务直接返回 HTH：
+   UAT_N_HUA_NEW / UAT_N_HUA_EDT / UAT_N_HUA_DEL
+   PP_N_HTH_CERT_UPL
+   PP_N_HTH_ENB / PP_N_HTH_EDT / PP_N_HTH_DIS
+3. 其他任务保持原响应，不新增字段。不根据名称或 HTH 前缀猜测渠道。
+
+前端对接
+- 本次后端不读取 HTH 开关、不过滤记录。
+- 前端沿用所在 CM/BM 的 HTH 开关；关闭时只过滤 value === 'HTH' 的记录。
+- BCO、UNKNOWN、没有此字段的记录保留，避免误隐藏旧审批申请。
+- transactions/count 及后端列表数量、排序、分页均未改。
+  前端过滤后的展示数量、分页需由前端一起处理；不能直接当作后端已过滤。
+- 同一 view=approval 接口的其他调用方也会得到该字段。
+  view=created / approved / history 等其他视图未接入本次补充。
+
+定位日志
+只有快照读取失败时增加一条统一 BeaSystemOut 日志：
+  HTH_PENDING_APPROVAL stage=CHANNEL_UNAVAILABLE exceptionType=...
+不打印快照、Code、密码或用户联系方式；读取失败不阻断审批列表。
+
+验证
+python3 consulting/tests/hth_onboarding/verify_pending_approval_channel.py
+使用现有 SDK / 编译依赖及 JAVA_HOME，按 Ant 的 cp1252 编码、Java 8 目标编译。
+生产扩展类编译通过；157 项定向断言通过，覆盖 HTH/BCO/UNKNOWN、创建/编辑、
+缺失快照、读取失败、HTH 专用任务、无关任务、空字典、重复调用、原字典不变、
+列表顺序和审批元数据保留，以及实际 SDK 字典 JSON 序列化。
+日志容器与数据库读取边界使用替身；未连接 UAT 数据库或执行服务器联调，
+未运行全项目 Ant 构建。
+
+同步文件
+- consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
+- consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
+- consulting/tests/hth_onboarding/verify_pending_approval_channel.py

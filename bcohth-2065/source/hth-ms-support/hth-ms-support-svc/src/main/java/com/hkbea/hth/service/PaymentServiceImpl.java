@@ -459,7 +459,7 @@ public class PaymentServiceImpl implements PaymentApi {
     }
 
     /**
-     * Maps an On-Us (INTERNAL) entity to the enquiry response model.
+     * Maps an On-Us or DR (INTERNAL table) entity to the enquiry response model.
      */
     private PaymentTransaction toPaymentTransaction(PaymentInternal entity) {
         PaymentTransaction detail = new PaymentTransaction();
@@ -476,7 +476,9 @@ public class PaymentServiceImpl implements PaymentApi {
         detail.setRemitterAccountNumber(entity.getDebitAccountId());
         detail.setRemitterAccountCurrency(entity.getDebitAccountCur());
 
-        detail.setExecutionDate(toOffsetDateTime(entity.getPaymentDate()));
+        detail.setExecutionDate(detail.getPaymentType() == PaymentTransaction.PaymentTypeEnum.DR
+                ? toRequestedExecutionDate(entity.getExecutionDate())
+                : toOffsetDateTime(entity.getPaymentDate()));
         detail.setAsOf(toOffsetDateTime(entity.getLastUpdatedDate()));
         detail.setExternalReferenceId(entity.getEndToEndId());
         detail.setNote(entity.getRemarks());
@@ -574,6 +576,19 @@ public class PaymentServiceImpl implements PaymentApi {
             return PaymentTransaction.PaymentTypeEnum.fromValue(paymentType);
         } catch (IllegalArgumentException e) {
             log.warn("Unknown stored payment type, paymentType={}", paymentType);
+            return null;
+        }
+    }
+
+    /** DR EXECUTION_DATE is the customer's requested date, not an execution timestamp. */
+    private OffsetDateTime toRequestedExecutionDate(String value) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value).atStartOfDay(ENQUIRY_ZONE).toOffsetDateTime();
+        } catch (DateTimeParseException e) {
+            log.warn("Invalid stored DR requested execution date, executionDate={}", value);
             return null;
         }
     }

@@ -1,32 +1,54 @@
-BCOH2H-2065 - CHATS name segmentation and debtor postal address
+BCOH2H-2065 - CHATS delivery with shared BCOH2H-2126 DR correction
 Date: 2026-11-18
 Source repository: /Users/devs/CProj/hth-dsp
-Local DSP commit: f70f3dd81d11f808aa11246dbb35fc4161547dbb
+Original 2065 implementation commit: f70f3dd81d11f808aa11246dbb35fc4161547dbb
+Current source snapshot commit: 7756632704e64f2557ae10eeeee8b8667213801e
 
-Cumulative delivery: 10 complete production/test files from the same DSP
-commit, preserving repository-relative paths under source/, plus updated
-English Technical Design. Includes earlier CHATS reference and enquiry
-handling as present on the current DSP baseline.
+Contents: 10 complete production/test files with repository-relative paths
+under source/. All source files now match the current snapshot commit.
+The two shared files below are byte-identical to bcohth-2126/source/:
+- hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+- hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
 
-Current correction:
-- creditorName supports up to 140 characters, split into depositAccountName1..4
-  with at most 35 characters each. Names <=35 repeat in Name1 and Name2.
+The current 2065 and 2126 packages can be copied in either order for these
+shared files without reverting the DR date correction or its tests. Older
+2065 snapshots at f70f3dd still require the newer 2126 shared files afterward.
+
+2065 behavior retained:
+- creditorName supports 140 characters, split into depositAccountName1..4
+  with at most 35 characters each; names <=35 repeat in Name1 and Name2.
 - Canonical creditor.name and creditorAccount.accountName retain the full name.
-- BCO DIGX_PI_PARTY_PREFERENCES ADDRESS1..5 is joined by debit account owner
-  PARTYID and determinant; parent party, account, CSA and product scope apply.
-- Nonblank lines are stripped, joined in order and packed into four 70-character
-  lines. townName/country unset. Missing/blank addresses remain optional.
-- More than 280 characters causes the existing debtor.postalAddress parameter
-  error; query failures stop submission.
-- Existing account status, limits and balance delegation to IPE remain.
+- BCO ADDRESS1..5 is read through debit account owner PARTYID and determinant,
+  scoped by parent party, account, CSA and product, and packed into four
+  70-character debtor address lines. townName/country remain unset.
+- Missing/blank addresses remain optional; >280 characters causes the existing
+  debtor.postalAddress parameter error. Query failures stop submission.
+- Customer End-to-End ID, generated HTH reference, CHATS batch enquiry,
+  account status/limits and balance delegation to IPE remain in place.
 
-Verification recorded for this implementation: Java 21/offline Maven,
-295 tests passed; 0 failures, 0 errors, 0 skipped. MyBatis bindings and SQL
-fixture checks passed. No tests rerun for this copy-only synchronization.
-Real Oracle data, deployed IPE acceptance and pacs.008 require SIT.
+Included 2126 correction in shared files:
+- DR executionDate uses existing HTH_PAYMENT_INTERNAL.EXECUTION_DATE, the
+  customer's requested date from settlementDate, at the start of that date
+  in the existing enquiry timezone (JVM default).
+- Missing/blank/invalid dates remain absent; invalid values are logged.
+- No fallback to payment/creation/current time. Other payment types retain
+  PAYMENT_DATE and existing null behavior. No schema or persistence changes.
+- PaymentEnquiryServiceTest includes 15 new date/regression executions.
 
-No mcdp Git commit or remote push performed. Unrelated source inputs excluded.
-SHA256SUMS covers source files, Technical Design and this delivery note.
+Verification recorded for snapshot 7756632: 323 tests passed,
+0 failures, 0 errors, 0 skipped (Support 310; BFF coverage 13).
+Logs: /tmp/hth-2126-dr-execution-date-after.log
+      /tmp/hth-2126-dr-date-bff.log
+This copy-only refresh did not rerun tests. Real Oracle/IPE/pacs.008 still
+require SIT. Byte equality against DSP and the 2126 copies was verified.
+
+BCOH2H-2065-Technical-Design.md remains the 2065 design at f70f3dd.
+The shared DR addition is documented above and in the sibling
+bcohth-2126/BCOH2H-2126-Technical-Design.md. No other 2065 source/design
+content was changed in this refresh.
+
+No DSP changes, new Git commit, mcdp Git commit or remote push performed.
+SHA256SUMS covers all 10 source files, the design and this delivery note.
 
 Synchronized source files:
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/dto/PartyPostalAddress.java

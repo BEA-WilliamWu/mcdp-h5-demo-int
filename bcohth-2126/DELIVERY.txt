@@ -1,0 +1,37 @@
+BCOH2H-2126 - DR requested execution date enquiry correction
+Date: 2026-11-18
+Source repository: /Users/devs/CProj/hth-dsp
+Baseline: f70f3dd81d11f808aa11246dbb35fc4161547dbb
+Local DSP commit: 7756632704e64f2557ae10eeeee8b8667213801e
+
+Contents: two complete Java files under source/ with repository-relative
+paths and the updated English Technical Design at the story root.
+
+Approved minimal correction:
+- DR enquiry executionDate reads existing HTH_PAYMENT_INTERNAL.EXECUTION_DATE.
+- This is the customer's requested execution date from settlementDate,
+  not a host-confirmed execution or settlement timestamp.
+- Parse yyyy-MM-dd at start of day in the existing enquiry timezone
+  (JVM default), retaining the OffsetDateTime/ISO 8601 response format.
+- Missing/blank/invalid legacy dates remain absent; invalid values are logged.
+  Do not substitute PAYMENT_DATE, creation time or current time.
+- All other payment types retain PAYMENT_DATE and existing null handling.
+- No database, submission/persistence, API model, OpenAPI or project POM change.
+
+Verification: 323 tests passed, 0 failures, 0 errors, 0 skipped.
+Support: 310 tests across 11 payment/enquiry regression suites.
+BFF PaymentServiceImplCoverageTest: 13 tests including enquiry forwarding.
+PaymentEnquiryServiceTest: 29 executions with 15 new DR/date isolation cases.
+Tests reproduced old behavior before the production fix and pass afterward.
+Java 21/offline Maven; test-failure ignoring disabled.
+Logs: /tmp/hth-2126-dr-execution-date-after.log
+      /tmp/hth-2126-dr-date-bff.log
+No live database or SIT/UAT run performed.
+
+The shared PaymentServiceImpl is based on f70f3dd and retains the existing
+2065 corrections. Apply this newer file after older 2065 story snapshots
+when combining deliveries. Files match the same DSP commit byte for byte.
+
+Local DSP Git committed; mcdp Git is left for manual submission.
+Unrelated source documents/working-tree files are excluded.
+SHA256SUMS covers source files, design and this delivery note.

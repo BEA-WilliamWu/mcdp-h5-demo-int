@@ -22,12 +22,19 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 
@@ -128,6 +135,86 @@ class PaymentEnquiryServiceTest {
                 assertLookupScopes(REF);
             }
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Pending", "Processing", "Success", "Rejected"})
+    void drExecutionDateUsesRequestedDateForEveryStatus(String status) {
+        Date paymentDate = Date.from(Instant.parse("2026-11-18T05:20:00Z"));
+        PaymentInternal entity = internalRecordWithDates("DR", status, "2026-11-17", paymentDate);
+        boolean unfinished = "Pending".equals(status) || "Processing".equals(status);
+        if (unfinished) {
+            when(localPaymentApi.queryPaymentResults(any())).thenReturn(response(new PaymentResultQueryResponse()
+                    .status(PaymentResultQueryResponse.StatusEnum.SUCCESS)
+                    .lastUpdatedAt(Date.from(Instant.parse("2026-11-19T08:00:00Z")))));
+        }
+
+        PaymentTransaction result = service.enquireTransactionRecord(REF);
+
+        assertEquals(LocalDate.of(2026, 11, 17).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime(),
+                result.getExecutionDate());
+        assertEquals(unfinished ? "Success" : status, result.getStatus().value());
+        assertEquals("2026-11-17", entity.getExecutionDate());
+        assertEquals(paymentDate, entity.getPaymentDate());
+        if (unfinished) {
+            verify(localPaymentApi).queryPaymentResults(any());
+        } else {
+            verifyNoInteractions(localPaymentApi);
+        }
+    }
+
+    @Test
+    void drExecutionDateIsReturnedWhenPaymentDateIsMissing() {
+        internalRecordWithDates("DR", "Success", "2024-02-29", null);
+
+        PaymentTransaction result = service.enquireTransactionRecord(REF);
+
+        assertEquals(LocalDate.of(2024, 2, 29).atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime(),
+                result.getExecutionDate());
+        verifyNoInteractions(localPaymentApi);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " ", "invalid", "2026-02-30", "2026-11-17T09:00:00"})
+    void drMissingOrInvalidRequestedDateRemainsAbsentWithoutUsingPaymentDate(String requestedDate) {
+        internalRecordWithDates("DR", "Success", requestedDate,
+                Date.from(Instant.parse("2026-11-18T05:20:00Z")));
+
+        PaymentTransaction result = service.enquireTransactionRecord(REF);
+
+        assertNull(result.getExecutionDate());
+        assertEquals(PaymentTransaction.StatusEnum.SUCCESS, result.getStatus());
+        verifyNoInteractions(localPaymentApi);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"INTERNAL", "FPS", "CHATS", "TT"})
+    void otherPaymentTypesContinueUsingPaymentDateIncludingExistingNullBehaviour(String type) {
+        if ("INTERNAL".equals(type)) {
+            Date date = Date.from(Instant.parse("2026-11-18T05:20:00Z"));
+            PaymentInternal entity = internalRecordWithDates(type, "Success", "2026-11-17", date);
+            assertEquals(date.toInstant(), service.enquireTransactionRecord(REF).getExecutionDate().toInstant());
+            entity.setPaymentDate(null);
+        } else {
+            PaymentPayoutRecord entity = new PaymentPayoutRecord();
+            entity.setId("ROW-DATE");
+            entity.setPaymentId(REF);
+            entity.setPartyId(PARTY);
+            entity.setPaymentType(type);
+            entity.setStatus("Success");
+            entity.setDebitAccountId(ACCOUNT);
+            entity.setExecutionDate("2026-11-17");
+            LocalDateTime date = LocalDateTime.of(2026, 11, 18, 13, 20);
+            entity.setPaymentDate(date);
+            when(uriInfo.getPath()).thenReturn(PATH);
+            when(payoutMapper.selectOne(any())).thenReturn(entity);
+            assertEquals(date.atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                    service.enquireTransactionRecord(REF).getExecutionDate());
+            entity.setPaymentDate(null);
+        }
+        assertNull(service.enquireTransactionRecord(REF).getExecutionDate());
+        verifyNoInteractions(localPaymentApi);
     }
 
     @Test
@@ -320,6 +407,22 @@ class PaymentEnquiryServiceTest {
             assertEquals(code, assertThrows(ServiceException.class, () -> service.enquireTransactionRecord(REF)).getErrCode());
             verifyNoInteractions(paymentInternalMapper, payoutMapper, localPaymentApi);
         }
+    }
+
+    private PaymentInternal internalRecordWithDates(String type, String status,
+                                                    String requestedDate, Date paymentDate) {
+        PaymentInternal entity = new PaymentInternal();
+        entity.setId("ROW-DATE");
+        entity.setPaymentId(REF);
+        entity.setPartyId(PARTY);
+        entity.setPaymentType(type);
+        entity.setStatus(status);
+        entity.setDebitAccountId(ACCOUNT);
+        entity.setExecutionDate(requestedDate);
+        entity.setPaymentDate(paymentDate);
+        when(uriInfo.getPath()).thenReturn(PATH);
+        when(paymentInternalMapper.selectOne(any())).thenReturn(entity);
+        return entity;
     }
 
     private boolean isInternal(String type) {

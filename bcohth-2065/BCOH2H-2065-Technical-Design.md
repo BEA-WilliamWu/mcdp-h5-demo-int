@@ -1,6 +1,12 @@
 # BCOH2H-2065 — HTH CHATS Payment Beneficiary Bank Verification
 
-Revision: 18 November 2026. Current DSP implementation baseline: `be3db3d`. Retains the previously delivered CHATS customer-reference correction.
+Revision: 18 November 2026. Latest shared-enquiry follow-up baseline: `7756632`. Retains the CHATS customer-reference, name-segmentation and debtor-address corrections.
+
+## Shared enquiry alignment with BCOH2H-2126
+
+The current shared PaymentServiceImpl and PaymentEnquiryServiceTest also include the approved 2126 date alignment: for FPS, CHATS, TT, DR and On-Us, enquiry executionDate reads the existing EXECUTION_DATE populated from request settlementDate. This represents the customer's requested date, at the start of that day in the existing enquiry timezone. Missing/invalid dates remain absent; PAYMENT_DATE is not a fallback. Submission/database writes, initiatedDate/asOf, account/limit validation and the 2065 CHATS mappings are retained.
+
+Both mcdp story packages carry byte-identical current copies of these two shared files. Details of the date contract are in the updated BCOH2H-2126 Technical Design. No database migration or API-model generation is introduced.
 
 ## 1. Scope and authoritative inputs
 
@@ -46,7 +52,7 @@ For explicit CHATS requests, the caller ID is present in the initial IPE routing
 
 ### Enquiry dependency
 
-`GET /payment/v1/transactions/enquiry` still looks up the HTH record by `PAYMENT_ID` and caller `PARTY_ID`. For eligible unfinished CHATS records, HTH now calls the existing IPE result API with `batchId = PAYMENT_ID`, leaving `transactionId` unset. IPE already supports batch queries and HTH submits exactly one transaction per batch.
+`GET /payment/v1/transaction-inquiry` still looks up the HTH record by `PAYMENT_ID` and caller `PARTY_ID`. For eligible unfinished CHATS records, HTH now calls the existing IPE result API with `batchId = PAYMENT_ID`, leaving `transactionId` unset. IPE already supports batch queries and HTH submits exactly one transaction per batch.
 
 This works for earlier CHATS records, where the batch and transaction identifiers were identical, and for new CHATS records, where the customer ID differs. An empty, failed, null or multi-transaction batch result is inconclusive and leaves the stored status unchanged. Other payment types retain their transaction-ID enquiry. Refresh eligibility and status mappings are unchanged.
 
@@ -106,7 +112,7 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
 | `ChatsPaymentService.java` | Retain customer-ID/reference handling; split the creditor name into four legacy fields and populate debtor postal address from BCO. |
 | `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
-| `PaymentServiceImpl.java` | Check explicit CHATS name length before routing; reapply identifiers after selection; use the existing IPE batch query for CHATS while retaining other enquiry paths. |
+| `PaymentServiceImpl.java` | Retain CHATS validation, routing identifiers and batch enquiry; share the confirmed five-type requested-execution-date mapping with 2126. |
 | `PartyPreferenceMapper.java` / `.xml` | Query all five account-owner address lines using the account/parent/product/determinant relationship. |
 | `PartyPostalAddress.java` | Internal five-line query-result DTO; no API contract change. |
 | Payment unit tests | Verify name segmentation/duplication and boundaries, debtor-address packing/missing/error cases, as well as existing reference, routing, enquiry and payment validation behavior. |
@@ -132,13 +138,13 @@ Real IPE acceptance, database integration, pacs.008 generation and transmission 
 
 ## 6. Verification and delivery
 
-Verified on 18 November 2026 with Java 21 and Maven using the local dependency cache and a temporary reactor. **295 tests passed; 0 failures, 0 errors, 0 skipped.** No project POM or dependency was changed.
+Verified on 18 November 2026 with Java 21 and Maven using the local dependency cache and a temporary reactor. **363 tests passed; 0 failures, 0 errors, 0 skipped (350 Support and 13 BFF).** No project POM or dependency was changed.
 
 | Test suite | Passed |
 | --- | ---: |
 | `ChatsPaymentServiceTest` | 55 |
 | `PaymentServiceImplTest` | 59 |
-| `PaymentEnquiryServiceTest` | 14 |
+| `PaymentEnquiryServiceTest` | 69 |
 | `PaymentCommonRoutingBuilderTest` | 5 |
 | `PaymentRoutingSubmitterTest` | 9 |
 | `FpsPaymentServiceTest` | 31 |
@@ -147,10 +153,11 @@ Verified on 18 November 2026 with Java 21 and Maven using the local dependency c
 | `OnUsPaymentServiceTest` | 54 |
 | `OverseasPaymentServiceTest` | 14 |
 | `AccountServiceImplGenericEnquiryTest` | 17 |
+| BFF `PaymentServiceImplCoverageTest` | 13 |
 
 The new tests cover creditor-name segment boundaries and short-name duplication, full canonical names, all five BCO address lines, packing at 70/71/280 characters, missing/blank lines, overflow and query failure. Existing balance-delegation and other payment tests still pass. MyBatis XML parsing and its DTO/parameter bindings were checked; the actual query was also exercised against in-memory SQLite fixtures for account-owner, parent, determinant, product and account-type isolation and duplicate rows. These fixture checks do not replace Oracle/SIT integration. External calls and persistence are mocked; no live SIT/UAT was performed.
 
-Test log: `/tmp/hth-2065-name-address-regression.log`.
+Current clean-build test log: `/tmp/hth-2126-all-execution-dates-clean.log`. The earlier BCO mapper parsing/SQL fixture checks remain applicable to the unchanged mapper. The current run also covers all five requested-date mappings and initiatedDate/asOf preservation.
 
 Reproduction with a temporary reactor containing the parent/common/DSP/support dependencies:
 

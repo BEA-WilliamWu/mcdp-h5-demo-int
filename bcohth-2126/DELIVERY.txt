@@ -1,37 +1,49 @@
-BCOH2H-2126 - DR requested execution date enquiry correction
+BCOH2H-2126 - Unified requested execution date for all five payment types
 Date: 2026-11-18
 Source repository: /Users/devs/CProj/hth-dsp
-Baseline: f70f3dd81d11f808aa11246dbb35fc4161547dbb
-Local DSP commit: 7756632704e64f2557ae10eeeee8b8667213801e
+Previous source snapshot: 7756632704e64f2557ae10eeeee8b8667213801e
+Current source snapshot / local DSP commit: 29b7856bdee2bc2254695ebeb81f8f691dc4c28d
+Original CHATS name/address implementation: f70f3dd81d11f808aa11246dbb35fc4161547dbb
 
-Contents: two complete Java files under source/ with repository-relative
-paths and the updated English Technical Design at the story root.
+Contents: 2 complete source/test files under source/ with original
+repository-relative paths, plus the updated story Technical Design.
+All source files and the design match the current DSP commit byte for byte.
 
-Approved minimal correction:
-- DR enquiry executionDate reads existing HTH_PAYMENT_INTERNAL.EXECUTION_DATE.
-- This is the customer's requested execution date from settlementDate,
-  not a host-confirmed execution or settlement timestamp.
-- Parse yyyy-MM-dd at start of day in the existing enquiry timezone
-  (JVM default), retaining the OffsetDateTime/ISO 8601 response format.
-- Missing/blank/invalid legacy dates remain absent; invalid values are logged.
-  Do not substitute PAYMENT_DATE, creation time or current time.
-- All other payment types retain PAYMENT_DATE and existing null handling.
-- No database, submission/persistence, API model, OpenAPI or project POM change.
+Approved enquiry behavior (supersedes the DR-only correction):
+- FPS, CHATS, TT, DR and On-Us/INTERNAL executionDate all read existing
+  EXECUTION_DATE, already stored from the customer's settlementDate.
+- It represents the requested execution date, not actual host execution time.
+- Parse yyyy-MM-dd and return the date at start of day in the existing
+  enquiry timezone (JVM default), retaining OffsetDateTime/ISO 8601.
+- Missing/blank/invalid historical dates remain absent; invalid values logged.
+  No fallback to PAYMENT_DATE, creation/current time or IPE lastUpdatedAt.
+- initiatedDate still uses CREATION_DATE; asOf still uses LAST_UPDATED_DATE.
+- No database/schema/backfill, persistence, API model/OpenAPI, dependency or
+  POM changes. Existing account/limit validation and status refresh retained.
+- Existing 2065 CHATS name segmentation, BCO debtor address, customer ID,
+  generated HTH reference and batch enquiry behavior are retained.
 
-Verification: 323 tests passed, 0 failures, 0 errors, 0 skipped.
-Support: 310 tests across 11 payment/enquiry regression suites.
-BFF PaymentServiceImplCoverageTest: 13 tests including enquiry forwarding.
-PaymentEnquiryServiceTest: 29 executions with 15 new DR/date isolation cases.
-Tests reproduced old behavior before the production fix and pass afterward.
-Java 21/offline Maven; test-failure ignoring disabled.
-Logs: /tmp/hth-2126-dr-execution-date-after.log
-      /tmp/hth-2126-dr-date-bff.log
-No live database or SIT/UAT run performed.
+Shared-file consistency:
+PaymentServiceImpl.java and PaymentEnquiryServiceTest.java are byte-identical
+between the current bcohth-2065/source and bcohth-2126/source directories.
+The two current packages may be copied in either order for these shared
+files. Older snapshots (f70f3dd or 7756632) must not overwrite these versions.
 
-The shared PaymentServiceImpl is based on f70f3dd and retains the existing
-2065 corrections. Apply this newer file after older 2065 story snapshots
-when combining deliveries. Files match the same DSP commit byte for byte.
+Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
+363 tests passed; 0 failures, 0 errors, 0 skipped.
+Support: 350 tests across 11 suites. BFF coverage: 13 tests.
+PaymentEnquiryServiceTest: 69 executions (20 type/status combinations,
+5 leap-day/no-payment-date cases, 30 missing/invalid date cases, 14 existing
+cases). 40 more executions than the DR-only version. Expanded cases first
+reproduced the previous mixed-date behavior and pass after the correction.
+Clean builds exclude stale compiled test classes after source sync.
+Log: /tmp/hth-2126-all-execution-dates-clean.log
+No live database, IPE integration, SIT or UAT performed.
 
-Local DSP Git committed; mcdp Git is left for manual submission.
-Unrelated source documents/working-tree files are excluded.
-SHA256SUMS covers source files, design and this delivery note.
+Local DSP Git committed. mcdp Git submission remains manual; no remote push.
+SHA256SUMS covers every source file, story design and this delivery note.
+Unrelated source inputs and working-tree changes are excluded.
+
+Synchronized source files:
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java

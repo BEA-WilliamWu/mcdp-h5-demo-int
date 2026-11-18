@@ -1,4 +1,4 @@
-70eadb72a27dc2672d7cfe88dc1264b8968ed32c276ffe29d38ad1da461da126  BCOH2H-2126-Technical-Design.md
-aeaa52a81b916c512a17e8942205f0a93e2e42cf30160ba827d205cd5d391ac8  DELIVERY.txt
-d3c81a83294b2c6aab786a824543152d7e1e4934f6d9d051251cba5cdabd489b  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
-29be5ad4876182b96979b43e8e78b7903c7fb6275ed341d3fabbe3acdde9779a  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
+c70e981c398ef3e09ef9ab796dc2785f86484b91ffc59bef69a73997c23e19a3  BCOH2H-2126-Technical-Design.md
+aa87ee490cf5fde6d0a4db95cf0f939a8fd6e55d2b738f9680955cca6273e966  DELIVERY.txt
+15fa30271882959772c90c2a38b120c0ea8a5026a2be10ef281de2ff6b50f672  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
+4d4b18e90e3cbd3ded5ae9646909ec5be7b3a13246112569faecdf11470e78e6  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java

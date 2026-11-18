@@ -1,6 +1,6 @@
 # BCOH2H-2065 — HTH CHATS Payment Beneficiary Bank Verification
 
-Revision: 17 November 2026. Implementation baseline: `3720297`.
+Revision: 18 November 2026. Current DSP implementation baseline: `be3db3d`. Retains the previously delivered CHATS customer-reference correction.
 
 ## 1. Scope and authoritative inputs
 
@@ -12,10 +12,11 @@ Sources in `jira/BCOHTH-2065/`:
 - `hth-ipe 参数长度映射_API_RZ.xlsx`: IPE field limits, especially Sheet1 rows 4–5, 37, 40–47 and 91–94.
 - `[#BCOH2H-2065] HTH CHATS payment beneficiary bank verification.pdf`: story acceptance criteria.
 
-Confirmed decisions on 17 November:
+Confirmed decisions, updated on 18 November:
 
-1. CHATS `paymentIdentification.endToEndId` must carry the API caller's value instead of HTH's generated internal number.
-2. Temporarily reject CHATS creditor names longer than 35 characters in HTH. This is an explicitly agreed compatibility restriction, **not** the v0.8 requirement: v0.8 still allows 140 characters.
+1. CHATS `paymentIdentification.endToEndId` carries the API caller's value instead of HTH's generated internal number; the earlier reference separation remains in place.
+2. Restore the 140-character CHATS creditor-name limit. Split the name sequentially into `depositAccountName1..4`, at most 35 characters per field. For a name of 35 characters or fewer, populate both Name1 and Name2 with the full name. This replaces the earlier temporary 35-character restriction and fixed Name2 value.
+3. Retrieve the debtor address from BCO `DIGX_PI_PARTY_PREFERENCES.ADDRESS1..5` using the payment account owner. Preserve its text in up to four IPE address lines of 70 characters each; leave town/country unset and permit missing addresses.
 
 This delivery is limited to CHATS and the necessary shared routing/query handling. It does not implement every difference between the latest v0.8 document and existing FPS, TT, DR or On-Us behavior.
 
@@ -55,21 +56,38 @@ The supplied workbook still defines IPE `endToEndId` as 23–26 characters and a
 
 IPE must accept the agreed customer ID range and `NOTPROVIDED`, and confirm propagation to pacs.008 `PmtId/EndToEndId`. Changing HTH cannot remove IPE's deployed validation. The external IPE Swagger is retained as supplied rather than silently rewritten. `instructionId`, which maps to `PmtId/InstrId`, is not repurposed.
 
-## 3. Temporary creditor-name restriction and address validation
+## 3. Creditor-name segmentation and debtor address
 
-The supplied sources allow 140 characters for the canonical creditor name and IPE `creditor.name` / `creditorAccount.accountName`, but only 35 for each legacy `depositAccountName1..4`. The current mapping copies the full name into `depositAccountName1`; SIT supplied a downstream rejection for a 140-character string exceeding 35.
+### Creditor name
 
-Until IPE defines a lossless mapping, the agreed temporary behavior is:
+The canonical IPE `creditor.name` and `creditorAccount.accountName` retain the full API name, up to 140 characters. Only the legacy CHATS remittance fields are segmented:
 
-- Reject a CHATS creditor name longer than 35 characters with existing error `500115` (`BENEFICIARY_ACCOUNT_NAME_INVALID`).
-- Validate before IPE routing for an explicit CHATS request, and before submission when automatic routing selects CHATS.
-- Preserve accepted names unchanged in all existing name fields. Do not truncate, split or omit them.
-- Retain `depositAccountName2 = "6304357992232185"` as previously requested.
-- Do not impose this 35-character restriction on other payment types. Their existing rules remain in effect.
+| Name length | Name1 | Name2 | Name3 | Name4 |
+| --- | --- | --- | --- | --- |
+| 1–35 | Full name | Full name | Unset | Unset |
+| 36–70 | Characters 1–35 | Characters 36–70, as present | Unset | Unset |
+| 71–105 | Characters 1–35 | Characters 36–70 | Characters 71–105, as present | Unset |
+| 106–140 | Characters 1–35 | Characters 36–70 | Characters 71–105 | Characters 106–140, as present |
 
-**Deviation from v0.8:** names of 36–140 characters are valid under the API document but are temporarily rejected for CHATS. This restriction must be revisited when IPE confirms the full-length mapping.
+More than 140 characters is rejected with existing `500115` (`BENEFICIARY_ACCOUNT_NAME_INVALID`). The explicit-CHATS entry check and selected-CHATS service check both use 140. Existing mandatory-name and character-set validation remains in place. Other payment types retain their existing rules.
 
-The CHATS address remains optional. Apply the API's bounds as well as IPE's limits, rather than widening API fields to IPE's maximum:
+### Debtor postal address from BCO
+
+`PartyPreferenceMapper.selectDebtorPostalAddress` joins `DIGX_PI_PARTY_ACCOUNTS a` to `DIGX_PI_PARTY_PREFERENCES p` on `a.PARTYID = p.PARTYID` and matching `DETERMINANT_VALUE`. The account rows are scoped by the current HTH `PARENT_PARTY_ID`, normalized external debit account number, CSA account type and resolved product code. This retrieves the account owner's preferences rather than substituting a parent company's address. Identical results from repeated account/currency rows are deduplicated; conflicting results fail instead of choosing an arbitrary address.
+
+The BCO ORM maps `ADDRESS1..5` to the party preferences address lines. Their creation/update provenance was reviewed separately; this implementation reads the stored values and does not refresh them from the host or introduce an EBK call.
+
+Mapping to `transactions[0].debtor.postalAddress`:
+
+- Ignore blank source lines, strip outer padding and join the remaining lines in source order with one space.
+- Split the combined text into `addressLine1..4`, each no longer than 70 Unicode characters, preserving the fifth source line's text.
+- Leave `townName` and `country` unset because these are not independent fields in this table. Do not infer them from address text or reuse creditor values.
+- If no preferences/address is found, omit the postal-address object and continue. Do not fall back to another company's preferences.
+- If the combined address exceeds 280 characters, reject with existing `500000` (`PARAMETER_INVALID_EXCEPTION`) prefixed by `debtor.postalAddress`, rather than truncate it. Database/query errors stop submission.
+
+No client-supplied debtor-address fields, schema migration or generated IPE model changes are needed.
+
+The CHATS creditor address remains optional. Apply the API's bounds as well as IPE's limits, rather than widening API fields to IPE's maximum:
 
 | Field | Accepted CHATS input | Existing error |
 | --- | --- | --- |
@@ -86,12 +104,14 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | File | Change |
 | --- | --- |
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
-| `ChatsPaymentService.java` | Reapply CHATS customer ID before submission; keep `txnRef`/`PAYMENT_ID` tied to the generated batch; handle a missing identification object in the response echo. |
-| `PaymentValidationSupport.java` | Add the temporary CHATS name limit; apply v0.8 town limit and supplied-address character checks; validate customer ID on the CHATS service path. |
+| `ChatsPaymentService.java` | Retain customer-ID/reference handling; split the creditor name into four legacy fields and populate debtor postal address from BCO. |
+| `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
 | `PaymentServiceImpl.java` | Check explicit CHATS name length before routing; reapply identifiers after selection; use the existing IPE batch query for CHATS while retaining other enquiry paths. |
-| Payment unit tests | Verify caller ID/default, distinct HTH reference and persistence, routing transitions, name/address boundaries and old/new CHATS enquiries. |
+| `PartyPreferenceMapper.java` / `.xml` | Query all five account-owner address lines using the account/parent/product/determinant relationship. |
+| `PartyPostalAddress.java` | Internal five-line query-result DTO; no API contract change. |
+| Payment unit tests | Verify name segmentation/duplication and boundaries, debtor-address packing/missing/error cases, as well as existing reference, routing, enquiry and payment validation behavior. |
 
-No database migration, public JSON field addition/renaming or generated-model change is required. Conditional behavior is implemented in service code; shared API types and the supplied external IPE contract are not regenerated or modified in this correction. The temporary API-name restriction is documented above.
+No database migration, public JSON field addition/renaming or generated-model change is required. Conditional behavior is implemented in service code; shared API types and the supplied external IPE contract are not regenerated or modified in this correction. The earlier temporary 35-character API-name restriction is removed by this revision.
 
 ## 5. Remaining differences and SIT checks
 
@@ -99,42 +119,46 @@ The new source documents also differ from current code in BIC applicability/expa
 
 Other 2065 integration dependencies remain:
 
-- Identify and implement the authoritative debtor-address source. HTH currently preserves an existing trusted address but does not retrieve one.
+- Validate real BCO account-owner/preference data and address freshness in SIT, including linked companies with no preferences row; the implementation now reads the stored BCO address.
 - Confirm outbound debtor-account formatting, agent mapping, member-ID resolution and charge-bearer conversion.
-- Confirm the purpose/allocation of the legacy name fields and support for names up to the v0.8 maximum of 140.
+- Confirm deployed IPE accepts the agreed four-part legacy-name mapping, including duplicated Name1/Name2 for short names, and propagates debtor address into pacs.008.
 - Confirm the remittance array/element length definition and downstream message verification/failure reporting.
 
 SIT should capture the original API request, HTH-to-IPE routing/submission payloads and actual pacs.008 XML. Verify a short customer ID, 35-character ID, omitted ID (`NOTPROVIDED`), repeated customer IDs with distinct HTH `txnRef` values, explicit/automatic CHATS routing, 35/36-character names and 35/36-character towns. Verify enquiry after submission uses the generated reference and obtains the correct single-payment batch result. Include an older CHATS record as a compatibility case.
+
+SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 140 characters and inspect all four outbound fields. Compare debtor address with the payment account owner's BCO preferences and inspect the raw pacs.008 `Dbtr/PstlAdr`. Cover missing preferences and all-blank addresses.
 
 Real IPE acceptance, database integration, pacs.008 generation and transmission are not established by mocked unit tests.
 
 ## 6. Verification and delivery
 
-Verified on 17 November 2026 with Java 21 and Maven using the local dependency cache and a temporary reactor. **282 tests passed; 0 failures, 0 errors, 0 skipped.** No project POM or dependency was changed.
+Verified on 18 November 2026 with Java 21 and Maven using the local dependency cache and a temporary reactor. **295 tests passed; 0 failures, 0 errors, 0 skipped.** No project POM or dependency was changed.
 
 | Test suite | Passed |
 | --- | ---: |
-| `ChatsPaymentServiceTest` | 44 |
-| `PaymentServiceImplTest` | 68 |
+| `ChatsPaymentServiceTest` | 55 |
+| `PaymentServiceImplTest` | 59 |
 | `PaymentEnquiryServiceTest` | 14 |
 | `PaymentCommonRoutingBuilderTest` | 5 |
 | `PaymentRoutingSubmitterTest` | 9 |
 | `FpsPaymentServiceTest` | 31 |
 | `TtPaymentServiceTest` | 20 |
-| `TtPaymentServiceSupportTest` (nested cases) | 6 |
 | `DrPaymentServiceTest` | 17 |
 | `OnUsPaymentServiceTest` | 54 |
 | `OverseasPaymentServiceTest` | 14 |
+| `AccountServiceImplGenericEnquiryTest` | 17 |
 
-The three modified suites add 35 test executions: 17 CHATS service, 16 entry and 2 enquiry. They cover customer ID/defaults, distinct batch/reference persistence, both routing transitions, name/address boundaries, old/new CHATS batch queries and ambiguous/inconclusive results. Route-time assertions run before the shared request object is enriched. Existing balance-delegation tests still pass. External calls and persistence are mocked; no live SIT/UAT was performed.
+The new tests cover creditor-name segment boundaries and short-name duplication, full canonical names, all five BCO address lines, packing at 70/71/280 characters, missing/blank lines, overflow and query failure. Existing balance-delegation and other payment tests still pass. MyBatis XML parsing and its DTO/parameter bindings were checked; the actual query was also exercised against in-memory SQLite fixtures for account-owner, parent, determinant, product and account-type isolation and duplicate rows. These fixture checks do not replace Oracle/SIT integration. External calls and persistence are mocked; no live SIT/UAT was performed.
+
+Test log: `/tmp/hth-2065-name-address-regression.log`.
 
 Reproduction with a temporary reactor containing the parent/common/DSP/support dependencies:
 
 ```sh
 mvn -o -f /path/to/verification-pom.xml -pl :hth-ms-support-svc -am \
-  -Dtest=ChatsPaymentServiceTest,PaymentServiceImplTest,PaymentEnquiryServiceTest,PaymentCommonRoutingBuilderTest,PaymentRoutingSubmitterTest,FpsPaymentServiceTest,TtPaymentServiceTest,DrPaymentServiceTest,OnUsPaymentServiceTest,OverseasPaymentServiceTest,TtPaymentServiceSupportTest \
+  -Dtest=ChatsPaymentServiceTest,PaymentServiceImplTest,PaymentEnquiryServiceTest,PaymentCommonRoutingBuilderTest,PaymentRoutingSubmitterTest,FpsPaymentServiceTest,TtPaymentServiceTest,DrPaymentServiceTest,OnUsPaymentServiceTest,OverseasPaymentServiceTest,AccountServiceImplGenericEnquiryTest \
   -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.test.failure.ignore=false \
   -Dexec.skip=true test
 ```
 
-Commit only this correction and its tests/design to local DSP Git. Sync the changed Java files under `/Users/devs/DWksp/mcdp-h5-demo-int/bcohth-2065/source/`, preserving repository-relative paths, and place this design at the story root. Source documents and unrelated working-tree changes are not included in the code commit.
+Commit only this correction and its tests/design to local DSP Git. Sync the changed Java/mapper XML files and refresh existing story-delivery sources from the same current commit under `/Users/devs/DWksp/mcdp-h5-demo-int/bcohth-2065/source/`, preserving repository-relative paths, and place this design at the story root. Source documents and unrelated working-tree changes are not included in the code commit.

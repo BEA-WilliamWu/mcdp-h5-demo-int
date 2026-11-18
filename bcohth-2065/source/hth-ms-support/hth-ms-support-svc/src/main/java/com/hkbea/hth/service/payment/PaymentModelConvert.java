@@ -187,7 +187,7 @@ public final class PaymentModelConvert {
         }
         String customerId = payment.getPaymentIdentification() == null
                 ? null : payment.getPaymentIdentification().getEndToEndId();
-        return StringUtils.hasText(customerId) ? customerId : "NOTPROVIDED";
+        return StringUtils.hasText(customerId) ? customerId : batchId;
     }
 
     private static Amount toAmount(LocalPayment payment) {

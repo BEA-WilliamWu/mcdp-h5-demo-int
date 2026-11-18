@@ -53,7 +53,7 @@ import java.util.regex.Pattern;
 
 
 /**
- * Service implementation for the payment APIs (POST /payment/v1/payment and
+ * Service implementation for the payment APIs (POST /payment/v1/initiate and
  * GET enquiry). It owns the contract-wide validation, the IPE smart-routing
  * call and the dispatch to the five payment-type services; each type-specific
  * service owns its own rules, submission and two-phase persistence.
@@ -124,7 +124,7 @@ public class PaymentServiceImpl implements PaymentApi {
     private static final ZoneId ENQUIRY_ZONE = ZoneId.systemDefault();
 
     /**
-     * POST /payment/v1/payment entry point.
+     * POST /payment/v1/initiate entry point.
      * <p>
      * Logic call chain:
      * 1. Aspects - @CrmEventLog(HTH_PAYMENT) and @FmoEventLog(PAYMENT) wrap this

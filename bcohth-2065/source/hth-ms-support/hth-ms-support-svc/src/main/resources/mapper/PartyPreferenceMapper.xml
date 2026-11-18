@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hkbea.hth.mapper.PartyPreferenceMapper">
+
+    <select id="selectCustomerNameByPartyId" resultType="java.lang.String">
+        select  DISPLAYNAME   from DIGX_PI_PARTY_ACCOUNTS a where replace(ACCOUNT_NUMBER_FORMATTED,'-','')  =#{accountNumber}
+        AND PARENT_PARTY_ID  =#{partyId}
+        AND ACCOUNT_TYPE ='CSA' AND PRODUCT_CODE  &lt;&gt;'6800'  AND ROWNUM = 1
+    </select>
+
+    <select id="selectDebtorPostalAddress" resultType="com.hkbea.hth.dto.PartyPostalAddress">
+        SELECT DISTINCT p.ADDRESS1 AS address1, p.ADDRESS2 AS address2,
+                        p.ADDRESS3 AS address3, p.ADDRESS4 AS address4, p.ADDRESS5 AS address5
+        FROM DIGX_PI_PARTY_ACCOUNTS a
+        JOIN DIGX_PI_PARTY_PREFERENCES p
+          ON p.PARTYID = a.PARTYID
+         AND p.DETERMINANT_VALUE = a.DETERMINANT_VALUE
+        WHERE a.PARENT_PARTY_ID = #{parentPartyId}
+          AND REPLACE(a.ACCOUNT_NUMBER_FORMATTED, '-', '') = #{accountNumber}
+          AND a.ACCOUNT_TYPE = 'CSA'
+          AND a.PRODUCT_CODE = #{productCode}
+    </select>
+
+    <!-- Office Email -->
+    <select id="getOfficeEmail" parameterType="java.lang.String" resultType="java.lang.String">
+        SELECT OFFICE_EMAIL
+        FROM DIGX_PI_PARTY_PREFERENCES
+        WHERE PARTYID = #{partyId}
+    </select>
+
+    <select id="getCustomerContactInfo" resultType="com.hkbea.hth.ipe.model.CustomerContactInfo">
+        SELECT
+        u.EMAIL       AS email,
+        u.MOBILENO    AS mobileNo,
+        e.MOBILE_CODE AS mobileCode
+        FROM DIGX_UM_USERPROFILE u
+        LEFT JOIN DIGX_CZ_UM_EXTENSIONDATA e
+        ON e.ID = u.U_NAME
+        WHERE u.U_NAME = #{userName}
+    </select>
+
+
+</mapper>

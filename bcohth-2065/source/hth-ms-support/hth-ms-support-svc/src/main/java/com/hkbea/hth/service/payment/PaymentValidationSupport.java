@@ -195,10 +195,10 @@ public final class PaymentValidationSupport {
         validateAddressLine2(payment);
     }
 
-    /** Temporary CHATS limit agreed for IPE depositAccountName1; do not truncate names. */
+    /** CHATS creditor names fit the canonical IPE fields and four 35-character deposit-name fields. */
     public static void validateChatsCreditorName(LocalPayment payment) {
         String name = payment.getCreditor() == null ? null : payment.getCreditor().getCreditorName();
-        validateMaxLength(name, 35, HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID);
+        validateMaxLength(name, 140, HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID);
     }
 
     /** The trusted payer name is required by IPE Debtor and must fit its limit. */

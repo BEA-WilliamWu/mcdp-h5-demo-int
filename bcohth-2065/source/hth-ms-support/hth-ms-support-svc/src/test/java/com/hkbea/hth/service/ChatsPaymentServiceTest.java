@@ -5,6 +5,7 @@ import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
 import com.hkbea.hth.constants.PaymentConstants;
+import com.hkbea.hth.dto.PartyPostalAddress;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentPayoutRecord;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -43,7 +44,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -56,7 +56,11 @@ import org.mockito.quality.Strictness;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,10 +69,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -347,35 +353,37 @@ class ChatsPaymentServiceTest {
         verify(paymentPayoutRecordMapper).updateById(any(PaymentPayoutRecord.class));
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @Test
     @DisplayName("IPE insufficient-funds rejection is returned and persisted with the existing reason fallback")
-    void ipeInsufficientFunds_returnsRejectedAndPersists(boolean hasErrorMessage) {
-        TransferModelApiResponse response = buildSubmitResponse(StatusEnum.FAILED);
-        // Synthetic IPE error fixture; no new HTH error code is introduced.
-        response.getData().setErrorCode("TEST-IPE-INSUFFICIENT-FUNDS");
-        response.getData().setErrorMessage(hasErrorMessage ? "Insufficient available balance" : null);
-        response.getData().setStatusReason("Insufficient funds including charges");
-        when(payemtRoutApi.submit(any(BatchRoutingCreditTransferRequest.class))).thenReturn(response);
-        BatchRoutingCreditTransferRequest routingRequest = buildRoutingRequest();
+    void ipeInsufficientFunds_returnsRejectedAndPersists() {
+        for (boolean hasErrorMessage : new boolean[]{true, false}) {
+            reset(payemtRoutApi, paymentPayoutRecordMapper, accountApi);
+            TransferModelApiResponse response = buildSubmitResponse(StatusEnum.FAILED);
+            // Synthetic IPE error fixture; no new HTH error code is introduced.
+            response.getData().setErrorCode("TEST-IPE-INSUFFICIENT-FUNDS");
+            response.getData().setErrorMessage(hasErrorMessage ? "Insufficient available balance" : null);
+            response.getData().setStatusReason("Insufficient funds including charges");
+            when(payemtRoutApi.submit(any(BatchRoutingCreditTransferRequest.class))).thenReturn(response);
+            BatchRoutingCreditTransferRequest routingRequest = buildRoutingRequest();
 
-        Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), routingRequest);
+            Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), routingRequest);
 
-        String expectedReason = hasErrorMessage
-                ? "Insufficient available balance" : "Insufficient funds including charges";
-        assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
-        assertEquals("TEST-IPE-INSUFFICIENT-FUNDS", result.getRejectCode());
-        assertEquals(expectedReason, result.getRejectMessage());
-        verifyNoInteractions(accountApi);
-        var updateCaptor = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        var order = inOrder(paymentPayoutRecordMapper, payemtRoutApi);
-        order.verify(paymentPayoutRecordMapper).insert(any(PaymentPayoutRecord.class));
-        order.verify(payemtRoutApi).submit(routingRequest);
-        order.verify(paymentPayoutRecordMapper).updateById(updateCaptor.capture());
-        assertEquals("Rejected", updateCaptor.getValue().getStatus());
-        assertEquals("FAILED", updateCaptor.getValue().getIpeStatus());
-        assertEquals(expectedReason, updateCaptor.getValue().getRejectMessage());
-        assertEquals("IPE-REF-CHATS-001", updateCaptor.getValue().getIpeRefNo());
+            String expectedReason = hasErrorMessage
+                    ? "Insufficient available balance" : "Insufficient funds including charges";
+            assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
+            assertEquals("TEST-IPE-INSUFFICIENT-FUNDS", result.getRejectCode());
+            assertEquals(expectedReason, result.getRejectMessage());
+            verifyNoInteractions(accountApi);
+            var updateCaptor = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
+            var order = inOrder(paymentPayoutRecordMapper, payemtRoutApi);
+            order.verify(paymentPayoutRecordMapper).insert(any(PaymentPayoutRecord.class));
+            order.verify(payemtRoutApi).submit(routingRequest);
+            order.verify(paymentPayoutRecordMapper).updateById(updateCaptor.capture());
+            assertEquals("Rejected", updateCaptor.getValue().getStatus());
+            assertEquals("FAILED", updateCaptor.getValue().getIpeStatus());
+            assertEquals(expectedReason, updateCaptor.getValue().getRejectMessage());
+            assertEquals("IPE-REF-CHATS-001", updateCaptor.getValue().getIpeRefNo());
+        }
     }
 
     // ===================== Success flow =====================
@@ -418,14 +426,14 @@ class ChatsPaymentServiceTest {
         assertEquals("Y", chatsRemittance.getPrntAdvInd());
         assertEquals("y", chatsRemittance.getLmInd());
         assertEquals("CHATS BENEFICIARY", chatsRemittance.getDepositAccountName1());
-        assertEquals("6304357992232185", chatsRemittance.getDepositAccountName2());
+        assertEquals("CHATS BENEFICIARY", chatsRemittance.getDepositAccountName2());
 
         ArgumentCaptor<PaymentPayoutRecord> insertCaptor =
                 ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).insert(insertCaptor.capture());
         PaymentPayoutRecord pending = insertCaptor.getValue();
         assertEquals(BATCH_ID, pending.getPaymentId());
-        assertEquals(BATCH_ID, pending.getEndToEndId());
+        assertEquals("E2E-CHATS", pending.getEndToEndId());
         assertEquals(CUSTOMER_TXN_ID, pending.getCustomerTransactionId());
         assertEquals("CHATS", pending.getPaymentType());
         assertEquals(MESSAGE_ID, pending.getMessageId());
@@ -541,33 +549,36 @@ class ChatsPaymentServiceTest {
 
     // ===================== BCOH2H-2065 v0.8 / IPE corrections =====================
 
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"test123456end", " ", "  payer reference  ", "12345678901234567890123456789012345"})
-    void customerEndToEndIdIsSubmittedWithoutReplacingTheHthReference(String customerId) {
-        LocalPayment input = buildChatsPayment(Currency.HKD);
-        input.getPaymentIdentification().setEndToEndId(customerId);
-        BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
-        String batchId = request.getGroupHeader().getMessageId();
-        String expectedId = customerId == null || customerId.isBlank() ? "NOTPROVIDED" : customerId;
-        // Also verify the request that would be sent to IPE routing.
-        assertEquals(expectedId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void customerEndToEndIdIsSubmittedWithoutReplacingTheHthReference() {
+        for (String customerId : Arrays.asList(null, "", "test123456end", " ", "  payer reference  ", "12345678901234567890123456789012345")) {
+            reset(payemtRoutApi, paymentPayoutRecordMapper, accountApi);
+            LocalPayment input = buildChatsPayment(Currency.HKD);
+            input.getPaymentIdentification().setEndToEndId(customerId);
+            BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
+            String batchId = request.getGroupHeader().getMessageId();
+            String expectedId = customerId == null || customerId.isBlank() ? batchId : customerId;
+            // Also verify the request that would be sent to IPE routing.
+            assertEquals(expectedId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        Payment result = chatsPaymentService.processPayment(input, request);
+            Payment result = chatsPaymentService.processPayment(input, request);
 
-        assertEquals(expectedId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-        assertEquals(batchId, result.getTxnRef());
-        assertNotEquals(expectedId, result.getTxnRef());
-        assertEquals(customerId, result.getOriginalEndtoendID());
-        assertEquals(CUSTOMER_TXN_ID, result.getOriginalTransactionID());
-        var insert = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
-        verify(paymentPayoutRecordMapper).insert(insert.capture());
-        assertEquals(batchId, insert.getValue().getPaymentId());
-        assertEquals(batchId, insert.getValue().getEndToEndId());
-        assertEquals(CUSTOMER_TXN_ID, insert.getValue().getCustomerTransactionId());
-        verify(payemtRoutApi).submit(request);
-        verifyNoInteractions(accountApi);
+            assertEquals(expectedId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            assertEquals(batchId, result.getTxnRef());
+            if (customerId != null && !customerId.isBlank()) {
+            assertNotEquals(expectedId, result.getTxnRef());
+            }
+            assertEquals(customerId, result.getOriginalEndtoendID());
+            assertEquals(CUSTOMER_TXN_ID, result.getOriginalTransactionID());
+            var insert = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
+            verify(paymentPayoutRecordMapper).insert(insert.capture());
+            assertEquals(batchId, insert.getValue().getPaymentId());
+            assertEquals(customerId, insert.getValue().getEndToEndId());
+            assertEquals(CUSTOMER_TXN_ID, insert.getValue().getCustomerTransactionId());
+            verify(payemtRoutApi).submit(request);
+            verifyNoInteractions(accountApi);
+        }
     }
 
     @Test
@@ -579,7 +590,7 @@ class ChatsPaymentServiceTest {
 
         Payment result = chatsPaymentService.processPayment(input, request);
 
-        assertEquals("NOTPROVIDED", request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+        assertEquals(request.getGroupHeader().getMessageId(), request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
         assertEquals(request.getGroupHeader().getMessageId(), result.getTxnRef());
         assertNull(result.getOriginalEndtoendID());
     }
@@ -616,17 +627,159 @@ class ChatsPaymentServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {36, 140})
-    void creditorNameAboveTemporaryLimitIsRejectedBeforeSubmission(int length) {
+    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
+    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
         LocalPayment input = buildChatsPayment(Currency.HKD);
-        input.getCreditor().setCreditorName("N".repeat(length));
+        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
+        input.getCreditor().setCreditorName(name);
+        BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        Payment result = chatsPaymentService.processPayment(input, request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        var txn = request.getTransactions().getFirst();
+        assertEquals(name, txn.getCreditor().getName());
+        assertEquals(name, txn.getCreditorAccount().getAccountName());
+        var remittance = txn.getSupplementaryData().getChatsRemittance();
+        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
+        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
+                remittance.getDepositAccountName2());
+        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
+                remittance.getDepositAccountName3());
+        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
+        verify(payemtRoutApi).submit(request);
+    }
+
+    @Test
+    void creditorNameAbove140IsRejectedBeforeSubmission() {
+        LocalPayment input = buildChatsPayment(Currency.HKD);
+        input.getCreditor().setCreditorName("N".repeat(141));
 
         ParameterException error = assertThrows(ParameterException.class,
                 () -> chatsPaymentService.processPayment(input, buildRoutingRequest()));
 
         assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID, error.getErrCode());
-        assertEquals("N".repeat(length), input.getCreditor().getCreditorName());
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper, scameterValidatorUtil);
+    }
+
+    @Test
+    void debtorAddressFromBcoPreservesAllFiveLinesInIpeRequest() {
+        PartyPostalAddress source = new PartyPostalAddress();
+        source.setAddress1("  " + "A".repeat(40) + "  ");
+        source.setAddress2("B".repeat(40));
+        source.setAddress3("C".repeat(40));
+        source.setAddress4("D".repeat(40));
+        source.setAddress5("E".repeat(40));
+        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                .thenReturn(source);
+        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        String expected = String.join(" ", "A".repeat(40), "B".repeat(40), "C".repeat(40),
+                "D".repeat(40), "E".repeat(40));
+        assertEquals(expected.substring(0, 70), address.getAddressLine1());
+        assertEquals(expected.substring(70, 140), address.getAddressLine2());
+        assertEquals(expected.substring(140), address.getAddressLine3());
+        assertNull(address.getAddressLine4());
+        assertNull(address.getTownName());
+        assertNull(address.getCountry());
+        assertEquals("Flat 12A 88 Queens Road", request.getTransactions().getFirst()
+                .getCreditor().getPostalAddress().getAddressLine1());
+        verify(partyPreferenceMapper).selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802");
+        verify(payemtRoutApi).submit(request);
+    }
+
+    @Test
+    void debtorAddressCanBeMissingOrAllBlank() {
+        for (PartyPostalAddress source : Arrays.asList(null, new PartyPostalAddress())) {
+            reset(payemtRoutApi, partyPreferenceMapper);
+            when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString(), anyString())).thenReturn("PAYER NAME");
+            if (source != null) {
+                source.setAddress1("   ");
+                source.setAddress5("");
+            }
+            when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                    .thenReturn(source);
+            BatchRoutingCreditTransferRequest request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+            Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+            assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+            assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress());
+            verify(payemtRoutApi).submit(request);
+        }
+    }
+
+    @Test
+    void debtorAddressSkipsEmptyLinesWithoutDroppingTheFifthLine() {
+        PartyPostalAddress source = new PartyPostalAddress();
+        source.setAddress2("  SECOND LINE  ");
+        source.setAddress4(" ");
+        source.setAddress5("LAST LINE");
+        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                .thenReturn(source);
+        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertEquals("SECOND LINE LAST LINE", address.getAddressLine1());
+        assertNull(address.getAddressLine2());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {70, 71, 280})
+    void debtorAddressRespectsIpeLineBoundaries(int length) {
+        PartyPostalAddress source = new PartyPostalAddress();
+        source.setAddress1("A".repeat(length));
+        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                .thenReturn(source);
+        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        String joined = Stream.of(address.getAddressLine1(), address.getAddressLine2(),
+                        address.getAddressLine3(), address.getAddressLine4())
+                .filter(Objects::nonNull).collect(Collectors.joining());
+        assertEquals("A".repeat(length), joined);
+        Stream.of(address.getAddressLine1(), address.getAddressLine2(),
+                        address.getAddressLine3(), address.getAddressLine4())
+                .filter(Objects::nonNull).forEach(line -> assertTrue(line.length() <= 70));
+    }
+
+    @Test
+    void debtorAddressBeyondFourLinesIsRejectedWithoutTruncation() {
+        PartyPostalAddress source = new PartyPostalAddress();
+        source.setAddress1("A".repeat(281));
+        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                .thenReturn(source);
+
+        ParameterException error = assertThrows(ParameterException.class,
+                () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
+
+        assertEquals(HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION, error.getErrCode());
+        assertEquals("A".repeat(281), source.getAddress1());
+        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+    }
+
+    @Test
+    void debtorAddressDatabaseFailureStopsSubmission() {
+        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                .thenThrow(new IllegalStateException("BCO address query failed"));
+
+        assertThrows(IllegalStateException.class,
+                () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
+
+        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
     }
 
     @Test
@@ -646,40 +799,44 @@ class ChatsPaymentServiceTest {
         assertEquals(name, txn.getCreditor().getName());
         assertEquals(name, txn.getCreditorAccount().getAccountName());
         assertEquals(name, txn.getSupplementaryData().getChatsRemittance().getDepositAccountName1());
-        assertEquals("6304357992232185", txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
+        assertEquals(name, txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
         assertEquals("A".repeat(70), txn.getCreditor().getPostalAddress().getAddressLine1());
         assertEquals("B".repeat(70), txn.getCreditor().getPostalAddress().getAddressLine2());
         assertEquals("T".repeat(35), txn.getCreditor().getPostalAddress().getTownName());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "Hong Kong中"})
-    void townMustFollowV08LengthAndCharset(String town) {
-        LocalPayment input = buildChatsPayment(Currency.HKD);
-        input.getCreditor().getPostalAddress().setTownName(town);
-
-        ParameterException error = assertThrows(ParameterException.class,
-                () -> chatsPaymentService.processPayment(input, buildRoutingRequest()));
-
-        assertEquals(HTHSupportErrorMapping.PAYEE_TOWN_NAME_MISSING_OR_INVALID, error.getErrCode());
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"addressLine1", "addressLine2"})
-    void oversizedOrUnsupportedAddressLinesAreRejected(String field) {
-        for (String value : List.of("A".repeat(71), "中", " ".repeat(71))) {
+    @Test
+    void townMustFollowV08LengthAndCharset() {
+        for (String town : Arrays.asList("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "Hong Kong中")) {
+            reset(payemtRoutApi, paymentPayoutRecordMapper);
             LocalPayment input = buildChatsPayment(Currency.HKD);
-            if (field.equals("addressLine1")) {
-                input.getCreditor().getPostalAddress().setAddressLine1(value);
-            } else {
-                input.getCreditor().getPostalAddress().setAddressLine2(value);
-            }
+            input.getCreditor().getPostalAddress().setTownName(town);
+
             ParameterException error = assertThrows(ParameterException.class,
                     () -> chatsPaymentService.processPayment(input, buildRoutingRequest()));
-            assertEquals(field.equals("addressLine1") ? 500141 : 500144, error.getErrCode());
+
+            assertEquals(HTHSupportErrorMapping.PAYEE_TOWN_NAME_MISSING_OR_INVALID, error.getErrCode());
+            verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
         }
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+    }
+
+    @Test
+    void oversizedOrUnsupportedAddressLinesAreRejected() {
+        for (String field : Arrays.asList("addressLine1", "addressLine2")) {
+            for (String value : List.of("A".repeat(71), "中", " ".repeat(71))) {
+                reset(payemtRoutApi, paymentPayoutRecordMapper);
+                LocalPayment input = buildChatsPayment(Currency.HKD);
+                if (field.equals("addressLine1")) {
+                    input.getCreditor().getPostalAddress().setAddressLine1(value);
+                } else {
+                    input.getCreditor().getPostalAddress().setAddressLine2(value);
+                }
+                ParameterException error = assertThrows(ParameterException.class,
+                        () -> chatsPaymentService.processPayment(input, buildRoutingRequest()));
+                assertEquals(field.equals("addressLine1") ? 500141 : 500144, error.getErrCode());
+            }
+            verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+        }
     }
 
     @Test

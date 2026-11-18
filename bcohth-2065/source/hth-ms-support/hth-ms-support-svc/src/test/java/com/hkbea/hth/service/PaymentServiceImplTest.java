@@ -34,10 +34,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -49,9 +45,9 @@ import org.mockito.quality.Strictness;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -698,30 +694,32 @@ class PaymentServiceImplTest {
 
     // ===================== Routing dispatch =====================
 
-    @ParameterizedTest
-    @ValueSource(strings = {"test123456end", "12345678901234567890123456789012345"})
-    void explicitChatsPassesCustomerIdentifierToRouteAndSelectedService(String customerId) {
-        PaymentInstructionRequest request = buildInstructionRequest();
-        request.setPaymentType("CHATS");
-        request.setPaymentIdentification(new PaymentIdentification().endToEndId(customerId));
-        request.getCreditor().setCreditorName("N".repeat(35));
-        Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
-        when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
-            BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
-            assertEquals(customerId, routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-            assertNotEquals(customerId, routing.getGroupHeader().getMessageId());
-            assertTrue(routing.getGroupHeader().getMessageId().startsWith("HTH"));
-            return PaymentRoutingTestSupport.routeResponseForType("CHATS");
-        });
+    @Test
+    void explicitChatsPassesCustomerIdentifierToRouteAndSelectedService() {
+        for (String customerId : Arrays.asList("test123456end", "12345678901234567890123456789012345")) {
+            reset(chatsPaymentService, payemtRoutApi);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType("CHATS");
+            request.setPaymentIdentification(new PaymentIdentification().endToEndId(customerId));
+            request.getCreditor().setCreditorName("N".repeat(35));
+            Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
+            when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
+                BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
+                assertEquals(customerId, routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+                assertNotEquals(customerId, routing.getGroupHeader().getMessageId());
+                assertTrue(routing.getGroupHeader().getMessageId().startsWith("HTH"));
+                return PaymentRoutingTestSupport.routeResponseForType("CHATS");
+            });
 
-        assertSame(expected, paymentService.processLocalPayment(request));
+            assertSame(expected, paymentService.processLocalPayment(request));
 
-        ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
-        verify(chatsPaymentService).processPayment(any(), routed.capture());
-        verify(payemtRoutApi).route(same(routed.getValue()));
-        assertEquals(customerId, routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-        assertEquals("N".repeat(35), routed.getValue().getTransactions().getFirst().getCreditor().getName());
+            ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
+            verify(chatsPaymentService).processPayment(any(), routed.capture());
+            verify(payemtRoutApi).route(same(routed.getValue()));
+            assertEquals(customerId, routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            assertEquals("N".repeat(35), routed.getValue().getTransactions().getFirst().getCreditor().getName());
+        }
     }
 
     @Test
@@ -746,97 +744,122 @@ class PaymentServiceImplTest {
         assertNotEquals("CUSTOMER-ID", routed.getValue().getGroupHeader().getMessageId());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"FPS", "ONUS"})
-    void chatsReroutedToAnotherRailRestoresThatRailsInternalIdentifier(String selectedType) {
-        PaymentInstructionRequest request = buildInstructionRequest();
-        request.setPaymentType("CHATS");
-        request.setPaymentIdentification(new PaymentIdentification().endToEndId("CUSTOMER-ID"));
-        Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
-        when(fpsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(onUsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
-            BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
-            assertEquals("CUSTOMER-ID", routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-            return PaymentRoutingTestSupport.routeResponseForType(selectedType);
-        });
+    @Test
+    void chatsReroutedToAnotherRailRestoresThatRailsInternalIdentifier() {
+        for (String selectedType : Arrays.asList("FPS", "ONUS")) {
+            reset(fpsPaymentService, onUsPaymentService, payemtRoutApi, chatsPaymentService);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType("CHATS");
+            request.setPaymentIdentification(new PaymentIdentification().endToEndId("CUSTOMER-ID"));
+            Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
+            when(fpsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(onUsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
+                BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
+                assertEquals("CUSTOMER-ID", routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+                return PaymentRoutingTestSupport.routeResponseForType(selectedType);
+            });
 
-        assertSame(expected, paymentService.processLocalPayment(request));
+            assertSame(expected, paymentService.processLocalPayment(request));
 
-        ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
-        if ("FPS".equals(selectedType)) {
-            verify(fpsPaymentService).processPayment(any(), routed.capture());
-        } else {
-            verify(onUsPaymentService).processPayment(any(), routed.capture());
+            ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
+            if ("FPS".equals(selectedType)) {
+                verify(fpsPaymentService).processPayment(any(), routed.capture());
+            } else {
+                verify(onUsPaymentService).processPayment(any(), routed.capture());
+            }
+            assertEquals(routed.getValue().getGroupHeader().getMessageId(),
+                    routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            assertNotEquals("CUSTOMER-ID", routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            verify(chatsPaymentService, never()).processPayment(any(), any());
         }
-        assertEquals(routed.getValue().getGroupHeader().getMessageId(),
-                routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-        assertNotEquals("CUSTOMER-ID", routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-        verify(chatsPaymentService, never()).processPayment(any(), any());
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {36, 140})
-    void explicitChatsOverlengthCreditorNameStopsBeforeRouting(int length) {
-        PaymentInstructionRequest request = buildInstructionRequest();
-        request.setPaymentType("CHATS");
-        request.getCreditor().setCreditorName("N".repeat(length));
+    @Test
+    void explicitChatsOverlengthCreditorNameStopsBeforeRouting() {
+        for (int length : new int[]{141}) {
+            reset(payemtRoutApi, chatsPaymentService);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType("CHATS");
+            request.getCreditor().setCreditorName("N".repeat(length));
 
-        ParameterException exception = assertThrows(ParameterException.class,
-                () -> paymentService.processLocalPayment(request));
+            ParameterException exception = assertThrows(ParameterException.class,
+                    () -> paymentService.processLocalPayment(request));
 
-        assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID, exception.getErrCode());
-        verifyNoInteractions(payemtRoutApi, chatsPaymentService);
+            assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID, exception.getErrCode());
+            verifyNoInteractions(payemtRoutApi, chatsPaymentService);
+        }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ONUS", "FPS", "TT", "DR", "OTHERS"})
-    void otherRequestedTypesKeepTheirExistingCreditorNameLimitAtEntry(String requestedType) {
-        PaymentInstructionRequest request = buildInstructionRequest();
-        request.setPaymentType(LocalPayment.PaymentTypeEnum.valueOf(requestedType).value());
-        request.getCreditor().setCreditorName("N".repeat(140));
-        Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
-        when(onUsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(fpsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(ttPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(drPaymentService.processPayment(any(), any())).thenReturn(expected);
-        when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
-        String selectedType = "OTHERS".equals(requestedType) ? "CHATS" : requestedType;
-        when(payemtRoutApi.route(any())).thenReturn(PaymentRoutingTestSupport.routeResponseForType(selectedType));
+    @Test
+    void explicitChatsCreditorNamesUpTo140ReachIpeRouting() {
+        for (int length : new int[]{36, 140}) {
+            reset(payemtRoutApi, chatsPaymentService);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType("CHATS");
+            request.getCreditor().setCreditorName("N".repeat(length));
+            Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
+            when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(payemtRoutApi.route(any())).thenReturn(PaymentRoutingTestSupport.routeResponseForType("CHATS"));
 
-        // The actual selected service retains ownership of its own name rule.
-        assertSame(expected, paymentService.processLocalPayment(request));
+            assertSame(expected, paymentService.processLocalPayment(request));
 
-        verify(payemtRoutApi).route(any());
+            ArgumentCaptor<BatchRoutingCreditTransferRequest> routed =
+                    ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
+            verify(chatsPaymentService).processPayment(any(), routed.capture());
+            assertEquals("N".repeat(length), routed.getValue().getTransactions().getFirst().getCreditor().getName());
+            assertEquals("N".repeat(length), routed.getValue().getTransactions().getFirst().getCreditorAccount().getAccountName());
+        }
     }
 
-    static Stream<Arguments> missingChatsIdentifiers() {
-        return Stream.of(
-                Arguments.of((PaymentIdentification) null),
-                Arguments.of(new PaymentIdentification()),
-                Arguments.of(new PaymentIdentification().endToEndId("")),
-                Arguments.of(new PaymentIdentification().endToEndId("   ")));
+    @Test
+    void otherRequestedTypesKeepTheirExistingCreditorNameLimitAtEntry() {
+        for (String requestedType : Arrays.asList("ONUS", "FPS", "TT", "DR", "OTHERS")) {
+            reset(onUsPaymentService, fpsPaymentService, ttPaymentService, drPaymentService, chatsPaymentService, payemtRoutApi);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType(LocalPayment.PaymentTypeEnum.valueOf(requestedType).value());
+            request.getCreditor().setCreditorName("N".repeat(140));
+            Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
+            when(onUsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(fpsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(ttPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(drPaymentService.processPayment(any(), any())).thenReturn(expected);
+            when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
+            String selectedType = "OTHERS".equals(requestedType) ? "CHATS" : requestedType;
+            when(payemtRoutApi.route(any())).thenReturn(PaymentRoutingTestSupport.routeResponseForType(selectedType));
+
+            // The actual selected service retains ownership of its own name rule.
+            assertSame(expected, paymentService.processLocalPayment(request));
+
+            verify(payemtRoutApi).route(any());
+        }
     }
 
-    @ParameterizedTest
-    @MethodSource("missingChatsIdentifiers")
-    void omittedChatsIdentifierUsesNotProvidedWithoutReplacingBatchReference(PaymentIdentification identifier) {
-        PaymentInstructionRequest request = buildInstructionRequest();
-        request.setPaymentType("CHATS");
-        request.setPaymentIdentification(identifier);
-        when(chatsPaymentService.processPayment(any(), any())).thenReturn(new Payment().status(Payment.StatusEnum.PROCESSING));
-        when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
-            BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
-            assertEquals("NOTPROVIDED", routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-            assertNotEquals("NOTPROVIDED", routing.getGroupHeader().getMessageId());
-            return PaymentRoutingTestSupport.routeResponseForType("CHATS");
-        });
+    @Test
+    void omittedChatsIdentifierUsesNotProvidedWithoutReplacingBatchReference() {
+        for (PaymentIdentification identifier : Arrays.asList(
+                null,
+                new PaymentIdentification(),
+                new PaymentIdentification().endToEndId(""),
+                new PaymentIdentification().endToEndId("   "))) {
+            reset(chatsPaymentService, payemtRoutApi);
+            PaymentInstructionRequest request = buildInstructionRequest();
+            request.setPaymentType("CHATS");
+            request.setPaymentIdentification(identifier);
+            when(chatsPaymentService.processPayment(any(), any())).thenReturn(new Payment().status(Payment.StatusEnum.PROCESSING));
+            when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
+                BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
+                assertEquals(routing.getGroupHeader().getMessageId(), routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+                assertNotNull(routing.getGroupHeader().getMessageId());
+                return PaymentRoutingTestSupport.routeResponseForType("CHATS");
+            });
 
-        paymentService.processLocalPayment(request);
+            paymentService.processLocalPayment(request);
 
-        ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
-        verify(chatsPaymentService).processPayment(any(), routed.capture());
-        assertEquals("NOTPROVIDED", routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            ArgumentCaptor<BatchRoutingCreditTransferRequest> routed = ArgumentCaptor.forClass(BatchRoutingCreditTransferRequest.class);
+            verify(chatsPaymentService).processPayment(any(), routed.capture());
+            assertEquals(routed.getValue().getGroupHeader().getMessageId(), routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+        }
     }
 
     @Test

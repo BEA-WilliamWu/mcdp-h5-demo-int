@@ -41,7 +41,7 @@ class PaymentEnquiryServiceTest {
     private static final String REF = "HTH20261111093000000001";
     private static final String PARTY = "PARTY-1";
     private static final String ACCOUNT = "01516868006864";
-    private static final String PATH = "payment/v1/transactions/enquiry";
+    private static final String PATH = "payment/v1/transaction-inquiry";
 
     @InjectMocks private PaymentServiceImpl service;
     @Mock private PartyResolver partyResolver;

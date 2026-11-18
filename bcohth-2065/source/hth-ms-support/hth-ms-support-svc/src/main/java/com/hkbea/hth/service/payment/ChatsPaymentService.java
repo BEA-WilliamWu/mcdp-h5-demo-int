@@ -5,6 +5,7 @@ import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.constants.PaymentConstants;
+import com.hkbea.hth.dto.PartyPostalAddress;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentPayoutRecord;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -34,6 +35,8 @@ import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Handles the complete CHATS payment flow: validation, Scameter checking,
@@ -56,8 +59,6 @@ public class ChatsPaymentService {
     //TODO Need to get the rate
     private static final BigDecimal CHATS_SERVICE_EXCHANGE_RATE = new BigDecimal("85.51068523");
     private static final String CHATS_LM_INDICATOR = "y";
-    //TODO DepositAc2 is bener address , if registered select from bco db DIGX_PY_DOMESTIC_PAYEE ADDRESS_LINE1
-    private static final String CHATS_DEPOSIT_ACCOUNT_NAME_2 = "6304357992232185";
     private static final String CHATS_DEBTOR_BANK_BIC = "BEASHKHHXXX";
     private static final String CHATS_PURPOSE = "/IFT01/";
 
@@ -142,12 +143,13 @@ public class ChatsPaymentService {
                 ? PaymentConstants.FEE_CODE_FPS_HKD : PaymentConstants.FEE_CODE_FPS_OTHER;
         txn.setCharges(PaymentRoutingPayload.charges(null, null, chargeBearer, feeCode));
 
-        // Retain any trusted debtor address already populated in the routed request.
+        // Resolve the address through the debit account owner in BCO party preferences.
         if (txn.getDebtor() == null) {
             txn.setDebtor(new Debtor());
         }
         txn.getDebtor().setType(Debtor.TypeEnum.CORPORATE);
         txn.getDebtor().setName(payerName);
+        txn.getDebtor().setPostalAddress(buildDebtorPostalAddress(localPayment, productCode));
         txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(debitInternalAccountNo,
                 debitInternalAccountNo, null, PaymentConstants.PAYER_ACCOUNT_TYPE_CSA, debitCurrency,
                 PaymentRoutingPayload.parseCompanyCode(partyAccount == null ? null : partyAccount.getCompanyCode()),
@@ -183,8 +185,15 @@ public class ChatsPaymentService {
         chatsRemittance.setChatAcTpCode(findPreDesignatedAccounts(localPayment.getPartyId(), localPayment.getToAccount().getId()));
         chatsRemittance.setPrntAdvInd(CHATS_PRINT_ADVICE_INDICATOR);
         chatsRemittance.setLmInd(CHATS_LM_INDICATOR);
-        chatsRemittance.setDepositAccountName1(creditorName);
-        chatsRemittance.setDepositAccountName2(CHATS_DEPOSIT_ACCOUNT_NAME_2);
+        chatsRemittance.setDepositAccountName1(creditorName.substring(0, Math.min(35, creditorName.length())));
+        chatsRemittance.setDepositAccountName2(creditorName.length() <= 35
+                ? creditorName : creditorName.substring(35, Math.min(70, creditorName.length())));
+        if (creditorName.length() > 70) {
+            chatsRemittance.setDepositAccountName3(creditorName.substring(70, Math.min(105, creditorName.length())));
+        }
+        if (creditorName.length() > 105) {
+            chatsRemittance.setDepositAccountName4(creditorName.substring(105));
+        }
         chatsRemittance.setPinCnt(0);
 
         SupplementaryData supplementaryData = new SupplementaryData();
@@ -198,6 +207,37 @@ public class ChatsPaymentService {
         CustomerNotificationInformRequest notification = paymentCommonService.buildCustomerNotificationInfo(
                 localPayment, PaymentConstants.NOTIFICATION_TYPE_EMAIL_SMS, localPayment.getPayeeId());
         txn.setNotification(PaymentRoutingPayload.notification(notification));
+    }
+
+    private com.hkbea.hth.ipe.model.PostalAddress buildDebtorPostalAddress(
+            LocalPayment payment, String productCode) {
+        PartyPostalAddress source = partyPreferenceMapper.selectDebtorPostalAddress(
+                payment.getPartyId(), payment.getFromAccount().getAccountNumber(), productCode);
+        if (source == null) {
+            return null;
+        }
+        String address = Stream.of(source.getAddress1(), source.getAddress2(), source.getAddress3(),
+                        source.getAddress4(), source.getAddress5())
+                .filter(StringUtils::isNotBlank)
+                .map(String::strip)
+                .collect(Collectors.joining(" "));
+        if (address.isEmpty()) {
+            return null;
+        }
+        if (address.codePointCount(0, address.length()) > 280) {
+            throw new ParameterException("debtor.postalAddress", HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION);
+        }
+        String[] lines = new String[4];
+        int start = 0;
+        for (int i = 0; i < lines.length && start < address.length(); i++) {
+            int length = Math.min(70, address.codePointCount(start, address.length()));
+            int end = address.offsetByCodePoints(start, length);
+            lines[i] = address.substring(start, end);
+            start = end;
+        }
+        return new com.hkbea.hth.ipe.model.PostalAddress()
+                .addressLine1(lines[0]).addressLine2(lines[1])
+                .addressLine3(lines[2]).addressLine4(lines[3]);
     }
 
     private String findPreDesignatedAccounts(String partyId, String toAccountId) {
@@ -334,7 +374,8 @@ public class ChatsPaymentService {
         payment.setOriginalEndtoendID(chats.getPaymentIdentification() == null
                 ? null : chats.getPaymentIdentification().getEndToEndId());
         payment.setOriginalTransactionID(chats.getTransactionID());
-        PaymentServiceSupport.updatePayoutRecord(paymentPayoutRecordMapper, log, CHATS_NETWORK, payoutId, payment, result);
+        PaymentServiceSupport.validatePaymentResult(chats, result);
+        PaymentServiceSupport.updatePayoutRecord(paymentPayoutRecordMapper, log, CHATS_NETWORK, payoutId, payment, result, chats);
         cacheHelperUtils.validatePaymentResult(result);
         return payment;
     }
@@ -348,7 +389,6 @@ public class ChatsPaymentService {
      */
     private String insertPendingPayoutRecord(LocalPayment req, BatchRoutingCreditTransferRequest routingRequest) {
         String batchId = PaymentRoutingPayload.batchId(routingRequest);
-        String customerTransactionId = batchId;
         String prodCode = PaymentRoutingPayload.debtorProductCode(routingRequest);
         String id = UUID.randomUUID().toString().replace("-", "");
 
@@ -367,9 +407,9 @@ public class ChatsPaymentService {
             entity.setId(id);
             // key identifiers (IPE_REF_NO stays null until the IPE response arrives)
             entity.setMessageId(headers.getMessageId());
-            entity.setPaymentId(customerTransactionId);
+            entity.setPaymentId(batchId);
             entity.setCustomerTransactionId(req.getTransactionID());
-            entity.setEndToEndId(batchId);
+            entity.setEndToEndId(req.getPaymentIdentification().getEndToEndId());
             entity.setExecutionDate(req.getSettlementDate());
             entity.setCreditBicCode(req.getCreditorAgent().getFinancialInstitutionId().getBicfi());
             entity.setCreditMemberId(req.getCreditorAgent().getFinancialInstitutionId().getClearingSystemMemberId());
@@ -420,12 +460,13 @@ public class ChatsPaymentService {
             entity.setIpeStatus(null);
             entity.setIpeStatusReason(null);
             entity.setStatusFlag(PaymentConstants.MOCK_OBJECT_STATUS);
+            entity.setAdcSuspiciousInd(req.getSuspiciousInd());
             paymentPayoutRecordMapper.insert(entity);
-            log.info("{} pending payout record inserted, customerTransactionId={}, status={}",
-                    CHATS_NETWORK, customerTransactionId, entity.getStatus());
+            log.info("{} pending payout record inserted, paymentId={}, status={}",
+                    CHATS_NETWORK, batchId, entity.getStatus());
         } catch (Exception e) {
-            log.error("Failed to insert {} pending payout record, customerTransactionId={}, error={}",
-                    CHATS_NETWORK, customerTransactionId, e.getMessage(), e);
+            log.error("Failed to insert {} pending payout record, paymentId={}, error={}",
+                    CHATS_NETWORK, batchId, e.getMessage(), e);
         }
         return id;
     }

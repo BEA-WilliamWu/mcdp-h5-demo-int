@@ -16,16 +16,27 @@ Default `auth_mode=signed` follows the inspected BFF contract:
 - SHA256withRSA over UTF-8 `POST\n<signing_path>\n\n<request_time>\n<exact JSON body>`, encoded as Base64.
 - RSA private key: PKCS8 PEM (`BEGIN PRIVATE KEY`), with its public key already registered for the client.
 
-Set `signing_path` if the gateway removes a prefix before the BFF sees the request. The script signs every page separately. It does not obtain/refresh tokens, provision keys or implement DPoP. Use a token valid for the complete run. Where a gateway requires DPoP or additional dynamic authentication, supply `auth_hook` pointing to an environment-specific Groovy script; it has `sampler`, `vars`, `props` and the prepared header manager available. Validate that integration with one request before load testing.
+Set `signing_path` if the gateway removes a prefix before the BFF sees the request. The script signs every page separately. GUI runs acquire one Bearer token at Start. The token must cover the planned run duration. Automatic refresh and DPoP are outside this logon flow. Where a gateway requires DPoP or additional dynamic authentication, supply `auth_hook` pointing to an environment-specific Groovy script; it has `sampler`, `vars`, `props` and the prepared header manager available. Validate that integration with one request before load testing.
 
 `auth_mode=token` is only for a route whose documented contract needs no BFF request signature, or the local fixture. It does not disable any server validation. `headers_file` adds static gateway headers; do not duplicate Authorization, Content-Type or generated signature headers. Hooks must update headers deliberately and must not change the already signed body without recomputing its signature.
 
-Environment variable alternatives: `HTH_ACCOUNT`, `HTH_TOKEN`, `HTH_CLIENT_ID`, `HTH_PRIVATE_KEY_FILE`. Credentials and private keys must remain outside version control. JTL configuration excludes request/response payloads and headers; do not enable debug payload logging for real tokens.
+The command-line properties template uses `token_source=env` with `HTH_TOKEN`. The JMX defaults to `token_source=login`. Credentials and private keys must remain outside version control. JTL configuration excludes request/response payloads and headers; do not enable debug payload logging for real tokens.
 
 ## Windows GUI quick start for S1, S5 and S6
 
-1. Set `HTH_TOKEN` to the access token without its Bearer prefix. For the signed BFF route, also set `HTH_CLIENT_ID` and `HTH_PRIVATE_KEY_FILE` to the registered client ID and its PKCS8 PEM key path. Start a new JMeter process that inherits these variables. If you set them in PowerShell, launch `jmeter.bat` from that same window. If you set Windows user variables, fully exit JMeter and relaunch after they take effect.
-2. In JMeter, select **File → Open** and open `BCOH2H-2436.jmx`. Select the **User Defined Variables** node under the test plan.
+1. Open `BCOH2H-2436.jmx` in JMeter. In **User Defined Variables**, keep `token_source=login` and fill `base_url` with the SIT HTTPS origin.
+2. Configure the logon fields below. Use the same registered identity, audience and key IDs as your working SIT logon.
+
+   | Variable | What to enter |
+   | --- | --- |
+   | `client_id`, `login_close_id` | Registered HTH client ID and authorized SIT operator Close ID |
+   | `login_audience`, `login_kid` | Exact JWT audience and the Key ID of the registered assertion key |
+   | `private_key_file` | Local RSA PKCS#8 PEM path for Request-Sign and the password signature |
+   | `login_assertion_key_file` | Local registered P-256 PKCS#8 PEM path for the default ES256 assertion. Use `login_assertion_alg=RS256` only if that algorithm is registered. In RS256 mode, leaving the assertion key path empty uses the request-signing RSA key. |
+   | `login_salt` | The exact salt used at credential registration, if applicable. The password signature signs the lowercase SHA-256 hex of UTF-8 password followed by salt. |
+   | `login_endpoint`, `login_signing_path` | Logon request path defaults to `/auth/v1/token`. Set the signing path if it differs from the external path. |
+   | `headers_file` | Local Java properties file with `X-IBM-Client-Id` and `X-IBM-Client-Secret` if required by the SIT gateway. Keep the file outside the repository and portable ZIP. |
+
 3. In the Value column of the `scenario` row, enter `S1`, `S5` or `S6`. The plan chooses the thread count automatically.
 
    | Scenario | Threads | Dates | Expected count per traversal |
@@ -47,9 +58,9 @@ Environment variable alternatives: `HTH_ACCOUNT`, `HTH_TOKEN`, `HTH_CLIENT_ID`, 
 
    For example, set `ramp_seconds=60`, `warmup_journeys=5` and `measured_journeys=30`. Each thread runs 35 traversals, for 150 measured traversals in S5 or 300 in S6 if all threads finish. Threads can be in different phases at the same time.
 
-6. Clear previous samples and click **Start**. Open **Measured pages - Aggregate Report** under **Follow server cursor → Measured pages → Page request** to view the measured workload. For a short diagnostic run, add **Listener → View Results Tree** under **Selected scenario**. The `records` in each successful journey summary should equal `expected_count`. A failed journey stops the affected thread by default, so compare completed counts with the configuration.
+6. Clear previous samples and click **Start**. Enter the SIT logon password in the masked prompt. The setup group calls the logon endpoint once before the workload. Cancelling or failing login stops the run. Open **Measured pages - Aggregate Report** under **Follow server cursor → Measured pages → Page request** to view the measured workload. For a short diagnostic run, add **Listener → View Results Tree** under **Selected scenario**. The `records` in each successful journey summary should equal `expected_count`. A failed journey stops the affected thread by default, so compare completed counts with the configuration.
 
-This workflow does not require `-q`. Explicit nonblank JMeter properties supplied through `-J` or `-q` take precedence over GUI values. Authorization always comes from `HTH_TOKEN`; there is no token field in the JMX. Keep local account values out of the shared JMX if you save the plan.
+This workflow does not require `-q`. Explicit nonblank JMeter properties supplied through `-J` or `-q` take precedence over GUI values. The login step and token response stay outside the measured report. The token is shared in JMeter process memory and cleared during normal teardown. Restart a run with a fresh login if the token expires. The CLI can use `token_source=login` with a process-scoped `HTH_LOGIN_PASSWORD` for authorized unattended runs. Keep local account values out of the shared JMX if you save the plan.
 
 ### View and export measured results
 
@@ -130,7 +141,7 @@ python mock_server.py
 # In a second terminal:
 $env:HTH_TOKEN = 'fixture-only'
 jmeter.bat -n -t BCOH2H-2436.jmx -q environment.example.properties `
-  -Jbase_url=http://127.0.0.1:18086 -Jendpoint=/ok -Jauth_mode=token `
+  -Jbase_url=http://127.0.0.1:18086 -Jendpoint=/ok -Jauth_mode=token -Jtoken_source=env `
   -Jaccount=015000000000001 -Jscenario=S1 `
   -Jto_date=2026-11-18 -Jexpected_count=101 -Jpause_ms=0 `
   -l results/mock.jtl -j results/mock.log
@@ -147,3 +158,5 @@ python verify_fixture.py --jmeter "C:/tools/apache-jmeter-5.6.3/bin/jmeter.bat"
 ```
 
 The verifier launches its own ephemeral localhost server and checks JTL content rather than trusting the JMeter exit code. It generates a temporary RSA key and verifies every signed request independently with OpenSSL. These keys are fixture-only and are never used against a real environment.
+
+To verify automatic logon against localhost, run `python verify_login_fixture.py --jmeter <path-to-jmeter>`. It generates temporary keys and checks the logon and workload signatures with OpenSSL.

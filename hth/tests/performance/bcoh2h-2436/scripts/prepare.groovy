@@ -17,20 +17,22 @@ def hm=new org.apache.jmeter.protocol.http.control.HeaderManager()
 def add={k,v -> if(v) hm.add(new Header(k,v.toString()))}
 add('Content-Type','application/json'); add('Accept','application/json')
 add('Channel',get('channel','HTH')); add('Message-Id',vars.get('message_id'))
-def token=System.getenv('HTH_TOKEN')?.trim()
-assert token: 'Set HTH_TOKEN before starting JMeter'
-def prefix=get('auth_prefix','Bearer').trim()
+def tokenSource = props.getProperty('token_source')?.trim() ?: vars.get('token_source')?.trim() ?: 'login'
+def auth = tokenSource == 'login' ? props.get('bcoh2h2436.run_auth') : null
+def token = tokenSource == 'env' ? System.getenv('HTH_TOKEN')?.trim() : auth?.token
+assert token: 'HTH token is missing'
+def prefix=auth ? 'Bearer' : get('auth_prefix','Bearer').trim()
 add('Authorization',prefix ? prefix+' '+token : token)
-def extra=get('headers_file')
+def extra=get('headers_file') ?: vars.get('headers_file')?.trim()
 if(extra){ def h=new Properties(); new File(extra).withInputStream{h.load(it)}; h.each{k,v -> add(k,v)} }
 def mode=get('auth_mode','signed')
 assert mode in ['signed','token']: 'auth_mode must be signed or token'
 if(mode=='signed'){
- def client=get('client_id',System.getenv('HTH_CLIENT_ID') ?: '')
+ def client=auth?.client ?: (props.getProperty('client_id')?.trim() ?: vars.get('client_id')?.trim() ?: System.getenv('HTH_CLIENT_ID'))
  assert client: 'client_id is required for BFF signing'
- def key=vars.getObject('signingKey')
+ def key=auth?.key ?: vars.getObject('signingKey')
  if(!key){
-  def file=get('private_key_file',System.getenv('HTH_PRIVATE_KEY_FILE') ?: '')
+  def file=props.getProperty('private_key_file')?.trim() ?: vars.get('private_key_file')?.trim() ?: System.getenv('HTH_PRIVATE_KEY_FILE')
   assert file: 'private_key_file is required for signed mode'
   def pem=new File(file).getText('UTF-8')
   assert pem.contains('BEGIN PRIVATE KEY'): 'Use PKCS8 PEM RSA private key'
@@ -50,5 +52,6 @@ sampler.setName(vars.get('scenario')+' '+vars.get('phase')+' page')
 
 } catch(Throwable e) {
  vars.put("journey_error","Request preparation failed: "+e.class.simpleName)
- throw new org.apache.jorphan.util.JMeterStopThreadException("Request preparation failed; check local credentials/configuration", e)
+ if (e instanceof org.apache.jorphan.util.JMeterStopThreadException) throw e
+ throw new org.apache.jorphan.util.JMeterStopThreadException("Request preparation failed; check local credentials/configuration")
 }

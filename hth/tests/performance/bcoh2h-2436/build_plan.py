@@ -11,6 +11,7 @@ def groovy_function(script):
 def js(parent,tag,name,file):
  e,h=el(parent,tag,name,'TestBeanGUI'); s(e,'scriptLanguage','groovy');s(e,'cacheKey','true');s(e,'filename','');s(e,'parameters','');s(e,'script',(rootdir/'scripts'/file).read_text());return e,h
 plan,ph=el(tree,'TestPlan','BCOH2H-2436 S1-S6','TestPlanGui');b(plan,'TestPlan.serialize_threadgroups',True)
+b(plan,'TestPlan.tearDown_on_shutdown',True)
 udv,_=el(ph,'Arguments','User Defined Variables','ArgumentsPanel')
 values=X.SubElement(udv,'collectionProp',name='Arguments.arguments')
 for name,value in {
@@ -19,11 +20,30 @@ for name,value in {
     'to_date':'', 'from_date':'', 'expected_count':'',
     'ramp_seconds':'1', 'warmup_journeys':'0', 'measured_journeys':'1',
     'signing_path':'',
+    'token_source':'login', 'login_endpoint':'/auth/v1/token', 'login_signing_path':'',
+    'client_id':'', 'login_close_id':'', 'login_audience':'', 'login_kid':'',
+    'private_key_file':'', 'login_assertion_alg':'ES256', 'login_assertion_key_file':'',
+    'login_salt':'', 'headers_file':'',
 }.items():
     arg=X.SubElement(values,'elementProp',name=name,elementType='Argument')
     s(arg,'Argument.name',name)
     s(arg,'Argument.value',value)
     s(arg,'Argument.metadata','=')
+
+def add_single_thread_group(tag, name, gui, on_error):
+    group, group_tree = el(ph, tag, name, gui)
+    s(group, 'ThreadGroup.on_sample_error', on_error)
+    s(group, 'ThreadGroup.num_threads', '1')
+    s(group, 'ThreadGroup.ramp_time', '0')
+    controller = X.SubElement(group, 'elementProp', name='ThreadGroup.main_controller',
+                              elementType='LoopController', guiclass='LoopControlPanel',
+                              testclass='LoopController')
+    b(controller, 'LoopController.continue_forever', False)
+    s(controller, 'LoopController.loops', '1')
+    return group_tree
+
+setup = add_single_thread_group('SetupThreadGroup', 'Set up HTH authentication', 'SetupThreadGroupGui', 'stoptest')
+js(setup, 'JSR223Sampler', 'Obtain HTH token before load', 'login.groovy')
 tg,th=el(ph,'ThreadGroup','Selected scenario','ThreadGroupGui')
 s(tg,'ThreadGroup.num_threads',
   "${__groovy(['S5':5\\,'S6':10][props.getProperty('scenario')?.trim() ?: vars.get('scenario')?.trim()] ?: 1)}")
@@ -69,4 +89,6 @@ for phase, title in [('warmup', 'Warm-up pages'), ('measure', 'Measured pages')]
 
 js(th,'JSR223Sampler','Journey summary','finish.groovy')
 pause,pa=el(th,'TestAction','Pause between journeys','TestActionGui');s(pause,'ActionProcessor.action','1');s(pause,'ActionProcessor.target','0');s(pause,'ActionProcessor.duration','${__P(pause_ms,1000)}')
+cleanup = add_single_thread_group('PostThreadGroup', 'Clear run authentication', 'PostThreadGroupGui', 'continue')
+js(cleanup, 'JSR223Sampler', 'Discard in-memory credentials', 'clear_auth.groovy')
 X.indent(r);X.ElementTree(r).write(rootdir/'BCOH2H-2436.jmx',encoding='UTF-8',xml_declaration=True)

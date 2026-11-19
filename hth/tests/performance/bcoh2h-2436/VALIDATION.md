@@ -32,3 +32,9 @@ The verifier also wrote the Aggregate Report listener's samples to a separate JT
 The embedded Groovy was checked against the source scripts, JMX parsed successfully, and Python helpers passed compilation. This is script correctness evidence only. The fixture does not prove production throughput, gateway integration, host transaction identity, real multi-currency behavior or SLA compliance. Token expiry/refresh and environment-specific DPoP require separate integration verification.
 
 Reproduce using `python verify_fixture.py --jmeter <path-to-jmeter>`. Negative fixtures intentionally produce failed samples. Do not use fixture timing as the spike baseline.
+
+## Automatic HTH logon
+
+The JMeter 5.6.3 and Java 21 localhost fixture used temporary RSA and P-256 keys and ran without `HTH_TOKEN`. It verified one logon before S1, S5 and S6 and observed 3, 25 and 50 workload page requests respectively. OpenSSL independently checked the client assertion, password signature and canonical request signature. An RS256 assertion variant also passed. A rejected logon returned one sanitized failure and sent no workload requests. Successful logon samples and credential values were absent from the normal JTL and engine log.
+
+The fixture supplied a synthetic password through the command-line test environment. The Windows GUI prompt and SIT key registration, audience, salt and gateway configuration require an environment smoke test.

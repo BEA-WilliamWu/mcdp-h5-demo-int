@@ -34,7 +34,7 @@ def run(case):
  plan=ET.parse(root/'BCOH2H-2436.jmx')
  report=plan.find(".//ResultCollector[@testname='Measured pages - Aggregate Report']")
  report.find("stringProp[@name='filename']").text=str(report_jtl)
- props={'base_url':f'http://127.0.0.1:{server.server_port}','endpoint':path,'auth_mode':'token','account':'015000000000001','scenario':scenario,'to_date':'2026-11-18','expected_count':'101' if scenario=='S1' else '201','pause_ms':'0','ramp_seconds':'1','jmeterengine.nongui.port':'0',**extra}
+ props={'base_url':f'http://127.0.0.1:{server.server_port}','endpoint':path,'auth_mode':'token','token_source':'env','account':'015000000000001','scenario':scenario,'to_date':'2026-11-18','expected_count':'101' if scenario=='S1' else '201','pause_ms':'0','ramp_seconds':'1','jmeterengine.nongui.port':'0',**extra}
  cmd=[args.jmeter,'-n','-t',str(configured),'-q',str(root/'environment.example.properties'),'-l',str(jtl),'-j',str(log)]+[f'-J{k}={v}' for k,v in props.items()]
  env={**os.environ,'HTH_TOKEN':'fixture-only'}
  if props.pop('udv_only',False):

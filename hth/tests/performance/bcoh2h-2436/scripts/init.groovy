@@ -64,7 +64,13 @@ vars.put('cursor',''); vars.put('more','true'); vars.put('page_no','0'); vars.pu
 vars.put('journey_ms',''); vars.put('journey_error',''); vars.put('complete','false'); vars.put('page_count','0')
 vars.putObject('seenCursors',new HashSet()); vars.putObject('seenRows',new HashSet())
 vars.putObject('lastDate',null); vars.putObject('started',System.nanoTime())
-assert System.getenv('HTH_TOKEN')?.trim(): 'Set HTH_TOKEN before starting JMeter'
+def tokenSource = props.getProperty('token_source')?.trim() ?: vars.get('token_source')?.trim() ?: 'login'
+if (tokenSource == 'env') {
+    assert System.getenv('HTH_TOKEN')?.trim(): 'Set HTH_TOKEN for token_source=env'
+} else {
+    def auth = props.get('bcoh2h2436.run_auth')
+    assert auth?.token && System.currentTimeMillis() < auth.expiresAt: 'HTH login did not complete or its token expired'
+}
 SampleResult.setIgnore()
 } catch(Throwable e) {
  SampleResult.setStopThread(true)

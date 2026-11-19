@@ -1,0 +1,20 @@
+BCOH2H-2436 | JMeter 5.6.3 portable package for Windows 10
+
+1. Extract the entire ZIP into a writable folder, for example C:\tools\BCOH2H-2436.
+2. Use the existing JDK 21. The launcher checks JAVA_HOME, javac on PATH, and
+   the standard Eclipse Adoptium folder under Program Files. If Java is not
+   found, set JAVA_HOME to the JDK 21 folder.
+3. Double-click "Start BCOH2H-2436.cmd". It opens BCOH2H-2436.jmx in the
+   JMeter GUI. Click Start in JMeter when your test inputs are ready.
+4. Set HTH_TOKEN to your access token without the Bearer prefix before running
+   the test. The default signed BFF mode also reads HTH_CLIENT_ID and
+   HTH_PRIVATE_KEY_FILE. If these variables are set only in PowerShell,
+   launch from that same session with: & '.\Start BCOH2H-2436.cmd'
+   To use double-click with an existing Windows user environment, open the
+   launcher from an Explorer session that has inherited the variables.
+5. Fill User Defined Variables for the run. Use the Measured pages -
+   Aggregate Report to review measured page metrics and Save Table Data
+   to export a CSV.
+
+JMeter distribution: https://jmeter.apache.org/
+Launch and installation: https://jmeter.apache.org/usermanual/get-started.html

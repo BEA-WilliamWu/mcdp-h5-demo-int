@@ -1,0 +1,7 @@
+*.local.properties
+results/
+*.jtl
+jmeter.log
+*.pem
+*.key
+__pycache__/

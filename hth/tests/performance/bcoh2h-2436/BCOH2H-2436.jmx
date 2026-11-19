@@ -1,0 +1,515 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="BCOH2H-2436 S1-S6" enabled="true">
+      <boolProp name="TestPlan.serialize_threadgroups">true</boolProp>
+    </TestPlan>
+    <hashTree>
+      <Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="scenario" elementType="Argument">
+            <stringProp name="Argument.name">scenario</stringProp>
+            <stringProp name="Argument.value">S1</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="base_url" elementType="Argument">
+            <stringProp name="Argument.name">base_url</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="endpoint" elementType="Argument">
+            <stringProp name="Argument.name">endpoint</stringProp>
+            <stringProp name="Argument.value">/account/v1/transaction-inquiry</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="account" elementType="Argument">
+            <stringProp name="Argument.name">account</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="account_type" elementType="Argument">
+            <stringProp name="Argument.name">account_type</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="currency" elementType="Argument">
+            <stringProp name="Argument.name">currency</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="to_date" elementType="Argument">
+            <stringProp name="Argument.name">to_date</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="from_date" elementType="Argument">
+            <stringProp name="Argument.name">from_date</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="expected_count" elementType="Argument">
+            <stringProp name="Argument.name">expected_count</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="ramp_seconds" elementType="Argument">
+            <stringProp name="Argument.name">ramp_seconds</stringProp>
+            <stringProp name="Argument.value">1</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="warmup_journeys" elementType="Argument">
+            <stringProp name="Argument.name">warmup_journeys</stringProp>
+            <stringProp name="Argument.value">0</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="measured_journeys" elementType="Argument">
+            <stringProp name="Argument.name">measured_journeys</stringProp>
+            <stringProp name="Argument.value">1</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="signing_path" elementType="Argument">
+            <stringProp name="Argument.name">signing_path</stringProp>
+            <stringProp name="Argument.value" />
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </Arguments>
+      <hashTree />
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Selected scenario" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">${__groovy(['S5':5\,'S6':10][props.getProperty('scenario')?.trim() ?: vars.get('scenario')?.trim()] ?: 1)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__groovy(def ramp = props.getProperty('ramp_seconds')?.trim() ?: vars.get('ramp_seconds')?.trim() ?: '1'; ramp.isInteger() &amp;&amp; ramp.toInteger() &gt;= 0 ? ramp.toInteger() : 1)}</stringProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Journeys" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">${__groovy(def legacyTotal = props.getProperty('journeys')?.trim(); if (legacyTotal) return legacyTotal.isInteger() &amp;&amp; legacyTotal.toInteger() &gt; 0 ? legacyTotal.toInteger() : 1; def warmup = props.getProperty('warmup_journeys')?.trim() ?: vars.get('warmup_journeys')?.trim() ?: '0'; def measured = props.getProperty('measured_journeys')?.trim() ?: vars.get('measured_journeys')?.trim() ?: '1'; if (!warmup.isInteger() || !measured.isInteger()) return 1; long total = warmup.toLong() + measured.toLong(); total &gt; 0 &amp;&amp; total &lt;= Integer.MAX_VALUE ? total : 1)}</stringProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Initialize journey" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename" />
+          <stringProp name="parameters" />
+          <stringProp name="script">import java.time.LocalDate
+
+try {
+if (!vars.get('inputs_captured')) {
+    ['scenario', 'base_url', 'endpoint', 'account', 'account_type', 'currency',
+     'to_date', 'from_date', 'expected_count', 'signing_path',
+     'ramp_seconds', 'warmup_journeys', 'measured_journeys'].each { name -&gt;
+        vars.put('input_' + name, vars.get(name) ?: '')
+    }
+    vars.put('inputs_captured', 'true')
+}
+def get = { String k, String d = '' -&gt; props.getProperty(k)?.trim() ?: vars.get('input_' + k)?.trim() ?: d }
+def need = { String k -&gt; def v=get(k); if (!v) throw new IllegalArgumentException('Missing configuration: '+k); v }
+def s = get('scenario','S1')
+assert s in ['S1','S2','S3','S4','S5','S6']: 'scenario must be S1..S6'
+def ramp = get('ramp_seconds', '1')
+assert ramp.isInteger() &amp;&amp; ramp.toInteger() &gt;= 0: 'ramp_seconds must be a nonnegative integer'
+def warmup = get('warmup_journeys', '0')
+assert warmup.isInteger() &amp;&amp; warmup.toInteger() &gt;= 0: 'warmup_journeys must be a nonnegative integer'
+int warmupCount = warmup.toInteger()
+def legacyTotal = props.getProperty('journeys')?.trim()
+if (legacyTotal) {
+    assert legacyTotal.isInteger() &amp;&amp; legacyTotal.toInteger() &gt; 0 &amp;&amp; legacyTotal.toInteger() &gt;= warmupCount:
+        'journeys must be a positive integer and at least warmup_journeys'
+} else {
+    def measured = get('measured_journeys', '1')
+    assert measured.isInteger() &amp;&amp; measured.toInteger() &gt;= 1: 'measured_journeys must be a positive integer'
+    assert (long) warmupCount + measured.toLong() &lt;= Integer.MAX_VALUE: 'Total journeys exceed the supported limit'
+}
+def base = new URI(need('base_url'))
+assert base.scheme in ['http','https'] &amp;&amp; base.host &amp;&amp; !base.query &amp;&amp; !base.fragment &amp;&amp; !base.userInfo: 'base_url must be an HTTP(S) origin'
+assert !base.path || base.path == '/': 'Use endpoint for context path'
+vars.put('host',base.host); vars.put('protocol',base.scheme)
+vars.put('port',String.valueOf(base.port == -1 ? (base.scheme=='https'?443:80):base.port))
+vars.put('endpoint',get('endpoint','/account/v1/transaction-inquiry'))
+assert vars.get('endpoint').startsWith('/') &amp;&amp; !vars.get('endpoint').contains('?'): 'endpoint must be a path without query'
+def account=get('account',System.getenv('HTH_ACCOUNT') ?: '')
+assert account ==~ /\d{14,15}/: 'account must be 14 or 15 digits'
+vars.put('account',account)
+['account_type', 'currency', 'signing_path'].each { name -&gt;
+    vars.put(name, get(name))
+}
+def end=LocalDate.parse(need('to_date'))
+def start=LocalDate.parse(get('from_date',end.minusDays(s=='S1'?0:s=='S4'?4:1).toString()))
+assert !start.isAfter(end) &amp;&amp; !end.isAfter(start.plusDays(60)): 'Invalid date range'
+if(s=='S1') assert start==end: 'S1 requires one day'
+if(s in ['S2','S5','S6']) assert end==start.plusDays(1): 'Use two consecutive dates for S2/S5/S6; document business-day variants separately'
+if(s=='S4') assert end==start.plusDays(4): 'S4 requires five calendar dates'
+vars.put('from_date',start.toString()); vars.put('to_date',end.toString())
+int size=get('page_size','50') as int
+assert size&gt;=1 &amp;&amp; size&lt;=50: 'page_size must be 1..50'
+if(s=='S3') assert size==50: 'S3 verifies maximum page size 50'
+int expected=need('expected_count') as int
+assert expected&gt;=0: 'expected_count must be independently verified'
+if(s=='S1') assert expected&gt;100: 'S1 requires &gt;100 transactions'
+if(s in ['S2','S5','S6']) assert expected&gt;200: 'Two-day workload requires &gt;200 transactions'
+assert (get('max_pages','1000') as int)&gt;0 &amp;&amp; (get('max_journey_ms','300000') as long)&gt;0
+vars.put('page_size',size.toString()); vars.put('expected_count',expected.toString())
+int iteration=(vars.get('iteration') ?: '0') as int
+vars.put('iteration',(iteration+1).toString())
+vars.put('phase',iteration &lt; warmupCount ? 'warmup' : 'measure')
+vars.put('scenario',s); vars.put('journey_id',UUID.randomUUID().toString())
+vars.put('cursor',''); vars.put('more','true'); vars.put('page_no','0'); vars.put('total','0')
+vars.put('journey_ms',''); vars.put('journey_error',''); vars.put('complete','false'); vars.put('page_count','0')
+vars.putObject('seenCursors',new HashSet()); vars.putObject('seenRows',new HashSet())
+vars.putObject('lastDate',null); vars.putObject('started',System.nanoTime())
+assert System.getenv('HTH_TOKEN')?.trim(): 'Set HTH_TOKEN before starting JMeter'
+SampleResult.setIgnore()
+} catch(Throwable e) {
+ SampleResult.setStopThread(true)
+ throw e
+}
+</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <WhileController guiclass="WhileControllerGui" testclass="WhileController" testname="Follow server cursor" enabled="true">
+          <stringProp name="WhileController.condition">${more}</stringProp>
+        </WhileController>
+        <hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Warm-up pages" enabled="true">
+            <stringProp name="IfController.condition">${__groovy(vars.get('phase') == 'warmup')}</stringProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Page request" enabled="true">
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">${body}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+              <stringProp name="HTTPSampler.domain">${host}</stringProp>
+              <stringProp name="HTTPSampler.port">${port}</stringProp>
+              <stringProp name="HTTPSampler.protocol">${protocol}</stringProp>
+              <stringProp name="HTTPSampler.path">${endpoint}</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,10000)}</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,60000)}</stringProp>
+              <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Per-page headers" enabled="true">
+                <collectionProp name="HeaderManager.headers" />
+              </HeaderManager>
+              <hashTree />
+              <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Prepare body and fresh signature" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="filename" />
+                <stringProp name="parameters" />
+                <stringProp name="script">import groovy.json.JsonOutput
+import org.apache.jmeter.protocol.http.control.Header
+import java.security.KeyFactory
+import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
+
+try {
+def get={String k, String d='' -&gt; props.getProperty(k,d)}
+int page=(vars.get('page_no') as int)+1
+vars.put('page_no',page.toString()); vars.put('cursor_in',vars.get('cursor'))
+def body=[accountNumber:vars.get('account'),fromDate:vars.get('from_date'),toDate:vars.get('to_date'),pageSize:vars.get('page_size') as int]
+['account_type':'accountType','currency':'currency'].each{k,v -&gt; if(vars.get(k)) body[v]=vars.get(k)}
+if(vars.get('cursor')) body.cursor=vars.get('cursor')
+vars.put('body',JsonOutput.toJson(body))
+vars.put('message_id',UUID.randomUUID().toString())
+def hm=new org.apache.jmeter.protocol.http.control.HeaderManager()
+def add={k,v -&gt; if(v) hm.add(new Header(k,v.toString()))}
+add('Content-Type','application/json'); add('Accept','application/json')
+add('Channel',get('channel','HTH')); add('Message-Id',vars.get('message_id'))
+def token=System.getenv('HTH_TOKEN')?.trim()
+assert token: 'Set HTH_TOKEN before starting JMeter'
+def prefix=get('auth_prefix','Bearer').trim()
+add('Authorization',prefix ? prefix+' '+token : token)
+def extra=get('headers_file')
+if(extra){ def h=new Properties(); new File(extra).withInputStream{h.load(it)}; h.each{k,v -&gt; add(k,v)} }
+def mode=get('auth_mode','signed')
+assert mode in ['signed','token']: 'auth_mode must be signed or token'
+if(mode=='signed'){
+ def client=get('client_id',System.getenv('HTH_CLIENT_ID') ?: '')
+ assert client: 'client_id is required for BFF signing'
+ def key=vars.getObject('signingKey')
+ if(!key){
+  def file=get('private_key_file',System.getenv('HTH_PRIVATE_KEY_FILE') ?: '')
+  assert file: 'private_key_file is required for signed mode'
+  def pem=new File(file).getText('UTF-8')
+  assert pem.contains('BEGIN PRIVATE KEY'): 'Use PKCS8 PEM RSA private key'
+  def der=Base64.decoder.decode(pem.replaceAll(/-----[^-]+-----/,'').replaceAll(/\s/,''))
+  key=KeyFactory.getInstance('RSA').generatePrivate(new PKCS8EncodedKeySpec(der)); vars.putObject('signingKey',key)
+ }
+ def time=String.valueOf(System.currentTimeMillis()-(get('clock_skew_ms','1000') as long))
+ def path=vars.get('signing_path') ?: vars.get('endpoint')
+ def content='POST\n'+path+'\n\n'+time+'\n'+vars.get('body')
+ def signer=Signature.getInstance('SHA256withRSA'); signer.initSign(key); signer.update(content.getBytes('UTF-8'))
+ add('Client-Id',client); add('Request-Time',time); add('Request-Sign',Base64.encoder.encodeToString(signer.sign()))
+}
+sampler.setProperty(new org.apache.jmeter.testelement.property.TestElementProperty(org.apache.jmeter.protocol.http.sampler.HTTPSamplerBase.HEADER_MANAGER,hm))
+// Optional dynamic gateway/DPoP hook: receives sampler, vars, props; never log credentials.
+if(get('auth_hook')) new GroovyShell(this.binding).evaluate(new File(get('auth_hook')))
+sampler.setName(vars.get('scenario')+' '+vars.get('phase')+' page')
+
+} catch(Throwable e) {
+ vars.put("journey_error","Request preparation failed: "+e.class.simpleName)
+ throw new org.apache.jorphan.util.JMeterStopThreadException("Request preparation failed; check local credentials/configuration", e)
+}
+</stringProp>
+              </JSR223PreProcessor>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate page and advance cursor" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="filename" />
+                <stringProp name="parameters" />
+                <stringProp name="script">import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
+def fail={String message -&gt;
+ AssertionResult.setFailure(true); AssertionResult.setFailureMessage(message)
+ vars.put('complete','false'); vars.put('journey_error',message); vars.put('more','false')
+}
+prev.setSampleLabel(vars.get('scenario')+' '+vars.get('phase')+' page')
+vars.put('page_count','0')
+try {
+ if(!prev.isSuccessful()) { fail('HTTP/transport failure: '+prev.getResponseCode()); return }
+ def r=new JsonSlurper().parseText(prev.getResponseDataAsString())
+ assert r.responseCode?.toString()==props.getProperty('success_code','000'): 'Non-success business response'
+ assert r.accountNumber==vars.get('account'): 'Response account mismatch'
+ def p=r.pagination
+ assert p instanceof Map &amp;&amp; p.hasMoreData instanceof Boolean &amp;&amp; p.transactions instanceof List: 'Invalid pagination schema'
+ def rows=p.transactions
+ assert rows.size()&lt;=(vars.get('page_size') as int): 'Page exceeds requested size'
+ assert p.pageSize instanceof Number &amp;&amp; p.pageSize.intValue()==rows.size(): 'pagination.pageSize differs from returned count'
+ vars.put('page_count',rows.size().toString())
+ rows.each { row -&gt;
+  assert row.date &amp;&amp; row.date&gt;=vars.get('from_date') &amp;&amp; row.date&lt;=vars.get('to_date'): 'Out-of-range or missing transaction date'
+  def last=vars.getObject('lastDate'); assert last==null || row.date&lt;=last: 'Dates not descending'
+  vars.putObject('lastDate',row.date)
+  if(vars.get('currency')) assert row.currency==vars.get('currency'): 'Currency mismatch'
+  // Full-row fingerprints flag exact repeats, not globally unique banking identity.
+  def stable=new TreeMap(row)
+  def hash=MessageDigest.getInstance('SHA-256').digest(JsonOutput.toJson(stable).getBytes('UTF-8')).encodeHex().toString()
+  if(props.getProperty('check_duplicates','true')=='true') assert vars.getObject('seenRows').add(hash): 'Exact duplicate transaction row; reconcile identity'
+ }
+ int total=(vars.get('total') as int)+rows.size(); vars.put('total',total.toString())
+ assert total&lt;=(vars.get('expected_count') as int): 'Returned count exceeds expected count'
+ if(p.hasMoreData){
+  assert rows: 'Empty page with hasMoreData=true'
+  assert p.nextCursor instanceof String &amp;&amp; p.nextCursor==~ /\d{9}/: 'Missing or invalid nextCursor (expected 9 digits)'
+  assert p.nextCursor!=vars.get('cursor') &amp;&amp; vars.getObject('seenCursors').add(p.nextCursor): 'Repeated cursor/no progress'
+  assert (vars.get('page_no') as int)&lt;(props.getProperty('max_pages','1000') as int): 'max_pages reached before completion'
+  vars.put('cursor',p.nextCursor)
+ } else {
+  assert total==(vars.get('expected_count') as int): 'Premature final page: total does not equal expected_count'
+  vars.put('complete','true'); vars.put('more','false')
+ }
+ long elapsed=(System.nanoTime()-(vars.getObject('started') as long))/1000000L
+ assert elapsed&lt;=(props.getProperty('max_journey_ms','300000') as long): 'Journey deadline exceeded'
+} catch(Throwable e){ fail(e.getMessage()?.take(500) ?: 'Response validation failed') }
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Measured pages" enabled="true">
+            <stringProp name="IfController.condition">${__groovy(vars.get('phase') == 'measure')}</stringProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Page request" enabled="true">
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">${body}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+              <stringProp name="HTTPSampler.domain">${host}</stringProp>
+              <stringProp name="HTTPSampler.port">${port}</stringProp>
+              <stringProp name="HTTPSampler.protocol">${protocol}</stringProp>
+              <stringProp name="HTTPSampler.path">${endpoint}</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,10000)}</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,60000)}</stringProp>
+              <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Per-page headers" enabled="true">
+                <collectionProp name="HeaderManager.headers" />
+              </HeaderManager>
+              <hashTree />
+              <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Prepare body and fresh signature" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="filename" />
+                <stringProp name="parameters" />
+                <stringProp name="script">import groovy.json.JsonOutput
+import org.apache.jmeter.protocol.http.control.Header
+import java.security.KeyFactory
+import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
+
+try {
+def get={String k, String d='' -&gt; props.getProperty(k,d)}
+int page=(vars.get('page_no') as int)+1
+vars.put('page_no',page.toString()); vars.put('cursor_in',vars.get('cursor'))
+def body=[accountNumber:vars.get('account'),fromDate:vars.get('from_date'),toDate:vars.get('to_date'),pageSize:vars.get('page_size') as int]
+['account_type':'accountType','currency':'currency'].each{k,v -&gt; if(vars.get(k)) body[v]=vars.get(k)}
+if(vars.get('cursor')) body.cursor=vars.get('cursor')
+vars.put('body',JsonOutput.toJson(body))
+vars.put('message_id',UUID.randomUUID().toString())
+def hm=new org.apache.jmeter.protocol.http.control.HeaderManager()
+def add={k,v -&gt; if(v) hm.add(new Header(k,v.toString()))}
+add('Content-Type','application/json'); add('Accept','application/json')
+add('Channel',get('channel','HTH')); add('Message-Id',vars.get('message_id'))
+def token=System.getenv('HTH_TOKEN')?.trim()
+assert token: 'Set HTH_TOKEN before starting JMeter'
+def prefix=get('auth_prefix','Bearer').trim()
+add('Authorization',prefix ? prefix+' '+token : token)
+def extra=get('headers_file')
+if(extra){ def h=new Properties(); new File(extra).withInputStream{h.load(it)}; h.each{k,v -&gt; add(k,v)} }
+def mode=get('auth_mode','signed')
+assert mode in ['signed','token']: 'auth_mode must be signed or token'
+if(mode=='signed'){
+ def client=get('client_id',System.getenv('HTH_CLIENT_ID') ?: '')
+ assert client: 'client_id is required for BFF signing'
+ def key=vars.getObject('signingKey')
+ if(!key){
+  def file=get('private_key_file',System.getenv('HTH_PRIVATE_KEY_FILE') ?: '')
+  assert file: 'private_key_file is required for signed mode'
+  def pem=new File(file).getText('UTF-8')
+  assert pem.contains('BEGIN PRIVATE KEY'): 'Use PKCS8 PEM RSA private key'
+  def der=Base64.decoder.decode(pem.replaceAll(/-----[^-]+-----/,'').replaceAll(/\s/,''))
+  key=KeyFactory.getInstance('RSA').generatePrivate(new PKCS8EncodedKeySpec(der)); vars.putObject('signingKey',key)
+ }
+ def time=String.valueOf(System.currentTimeMillis()-(get('clock_skew_ms','1000') as long))
+ def path=vars.get('signing_path') ?: vars.get('endpoint')
+ def content='POST\n'+path+'\n\n'+time+'\n'+vars.get('body')
+ def signer=Signature.getInstance('SHA256withRSA'); signer.initSign(key); signer.update(content.getBytes('UTF-8'))
+ add('Client-Id',client); add('Request-Time',time); add('Request-Sign',Base64.encoder.encodeToString(signer.sign()))
+}
+sampler.setProperty(new org.apache.jmeter.testelement.property.TestElementProperty(org.apache.jmeter.protocol.http.sampler.HTTPSamplerBase.HEADER_MANAGER,hm))
+// Optional dynamic gateway/DPoP hook: receives sampler, vars, props; never log credentials.
+if(get('auth_hook')) new GroovyShell(this.binding).evaluate(new File(get('auth_hook')))
+sampler.setName(vars.get('scenario')+' '+vars.get('phase')+' page')
+
+} catch(Throwable e) {
+ vars.put("journey_error","Request preparation failed: "+e.class.simpleName)
+ throw new org.apache.jorphan.util.JMeterStopThreadException("Request preparation failed; check local credentials/configuration", e)
+}
+</stringProp>
+              </JSR223PreProcessor>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate page and advance cursor" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="filename" />
+                <stringProp name="parameters" />
+                <stringProp name="script">import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
+def fail={String message -&gt;
+ AssertionResult.setFailure(true); AssertionResult.setFailureMessage(message)
+ vars.put('complete','false'); vars.put('journey_error',message); vars.put('more','false')
+}
+prev.setSampleLabel(vars.get('scenario')+' '+vars.get('phase')+' page')
+vars.put('page_count','0')
+try {
+ if(!prev.isSuccessful()) { fail('HTTP/transport failure: '+prev.getResponseCode()); return }
+ def r=new JsonSlurper().parseText(prev.getResponseDataAsString())
+ assert r.responseCode?.toString()==props.getProperty('success_code','000'): 'Non-success business response'
+ assert r.accountNumber==vars.get('account'): 'Response account mismatch'
+ def p=r.pagination
+ assert p instanceof Map &amp;&amp; p.hasMoreData instanceof Boolean &amp;&amp; p.transactions instanceof List: 'Invalid pagination schema'
+ def rows=p.transactions
+ assert rows.size()&lt;=(vars.get('page_size') as int): 'Page exceeds requested size'
+ assert p.pageSize instanceof Number &amp;&amp; p.pageSize.intValue()==rows.size(): 'pagination.pageSize differs from returned count'
+ vars.put('page_count',rows.size().toString())
+ rows.each { row -&gt;
+  assert row.date &amp;&amp; row.date&gt;=vars.get('from_date') &amp;&amp; row.date&lt;=vars.get('to_date'): 'Out-of-range or missing transaction date'
+  def last=vars.getObject('lastDate'); assert last==null || row.date&lt;=last: 'Dates not descending'
+  vars.putObject('lastDate',row.date)
+  if(vars.get('currency')) assert row.currency==vars.get('currency'): 'Currency mismatch'
+  // Full-row fingerprints flag exact repeats, not globally unique banking identity.
+  def stable=new TreeMap(row)
+  def hash=MessageDigest.getInstance('SHA-256').digest(JsonOutput.toJson(stable).getBytes('UTF-8')).encodeHex().toString()
+  if(props.getProperty('check_duplicates','true')=='true') assert vars.getObject('seenRows').add(hash): 'Exact duplicate transaction row; reconcile identity'
+ }
+ int total=(vars.get('total') as int)+rows.size(); vars.put('total',total.toString())
+ assert total&lt;=(vars.get('expected_count') as int): 'Returned count exceeds expected count'
+ if(p.hasMoreData){
+  assert rows: 'Empty page with hasMoreData=true'
+  assert p.nextCursor instanceof String &amp;&amp; p.nextCursor==~ /\d{9}/: 'Missing or invalid nextCursor (expected 9 digits)'
+  assert p.nextCursor!=vars.get('cursor') &amp;&amp; vars.getObject('seenCursors').add(p.nextCursor): 'Repeated cursor/no progress'
+  assert (vars.get('page_no') as int)&lt;(props.getProperty('max_pages','1000') as int): 'max_pages reached before completion'
+  vars.put('cursor',p.nextCursor)
+ } else {
+  assert total==(vars.get('expected_count') as int): 'Premature final page: total does not equal expected_count'
+  vars.put('complete','true'); vars.put('more','false')
+ }
+ long elapsed=(System.nanoTime()-(vars.getObject('started') as long))/1000000L
+ assert elapsed&lt;=(props.getProperty('max_journey_ms','300000') as long): 'Journey deadline exceeded'
+} catch(Throwable e){ fail(e.getMessage()?.take(500) ?: 'Response validation failed') }
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+              <ResultCollector guiclass="StatVisualizer" testclass="ResultCollector" testname="Measured pages - Aggregate Report" enabled="true">
+                <boolProp name="ResultCollector.error_logging">false</boolProp>
+                <boolProp name="saveHeaders">true</boolProp>
+                <stringProp name="filename" />
+              </ResultCollector>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+        </hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Journey summary" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename" />
+          <stringProp name="parameters" />
+          <stringProp name="script">long started=vars.getObject('started') as long
+long duration=(System.nanoTime()-started)/1000000L
+SampleResult.setSampleLabel(vars.get('scenario')+' '+vars.get('phase')+' journey')
+boolean ok=vars.get('complete')=='true' &amp;&amp; !vars.get('journey_error')
+SampleResult.setSuccessful(ok)
+SampleResult.setResponseCode(ok?'200':'500')
+SampleResult.setResponseMessage(ok?'Complete traversal':vars.get('journey_error'))
+SampleResult.setResponseData('pages='+vars.get('page_no')+',records='+vars.get('total')+',duration_ms='+duration,'UTF-8')
+vars.put('journey_ms',duration.toString())
+// Keep traversal duration separate from the summary sampler execution time.
+// JTL elapsed is summary-script time; use journey_ms for the traversal duration.
+if(!ok &amp;&amp; props.getProperty('stop_on_failure','true')=='true') SampleResult.setStopThread(true)
+</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <TestAction guiclass="TestActionGui" testclass="TestAction" testname="Pause between journeys" enabled="true">
+          <stringProp name="ActionProcessor.action">1</stringProp>
+          <stringProp name="ActionProcessor.target">0</stringProp>
+          <stringProp name="ActionProcessor.duration">${__P(pause_ms,1000)}</stringProp>
+        </TestAction>
+        <hashTree />
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

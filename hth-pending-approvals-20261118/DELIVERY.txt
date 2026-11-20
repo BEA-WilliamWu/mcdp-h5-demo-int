@@ -1,87 +1,96 @@
-Pending Approvals / My Approval List / Activity Log / Audit Log - userChannelType 字段交付
+HTH 列表后端过滤与 userChannelType 字段交付（累计包）
 日期：2026-11-20
 源仓库：/Users/devs/CProj/bco-applicaion-main
 源分支：hth-integration-20261110
 原版本：b9dd071e69d1e50fd89b23ecdca54b9fede1aa0f
-上一版提交：9eb908be3addb2e0eefd1b5febf56e141f693819
-本次提交：521b76082802d799b41d345c44aa8390f8260c8e
+上一版提交：521b76082802d799b41d345c44aa8390f8260c8e
+本次提交：03ba4c7a1ac3c72229250b62f0bb3cc0104f3bb2
 
-范围与部署
-- 本目录 consulting/ 下的文件按原相对路径覆盖目标代码。
-- 累计生产文件 4 个：approval 模块 2 个，access 模块 2 个。
-- 原有 transactions 接口的 4 个视图继续使用上一版实现，无新增改动。
-- 本次 Audit Log 仅改 2 个生产文件，均在 com.ofss.digx.cz.bea.module.access：
-  CZVoidAuditExt.java：postSearch 末尾增加 1 行调用，原过滤、翻译及 FMO 调用先照常完成。
-  HthAuditUserChannel.java：新增内部辅助类，仅补查询响应字典。
-- 本次增量需重新编译并部署 com.ofss.digx.cz.bea.module.access.jar（包含新增类）。
-  若尚未部署之前的列表改动，还需 com.ofss.digx.cz.bea.module.approval.jar。
-- 无 SQL、前端、配置或公共 DTO 修改；不修改审计落库、审批规则或业务数据。
-- consulting/tests/ 下是回归脚本，不属于服务器部署文件。
+本次行为
+- Pending Approvals、My Approval List、Activity Log（CREATED / ALL）、Audit Log
+  在原查询结果补齐 userChannelType 后，由后端根据当前调用门户的 HTH toggle 过滤。
+- 沿用请求上下文 isAdmin：true 为 BM，读取 ENABLE_HTH_BM_ONBOARDING；
+  false 为 CM，读取 ENABLE_HTH_CM_ONBOARDING。缺少标记时沿用现有 CM 默认路径。
+  标记由现有 UserTypeFilter / MACFilter 从请求 isAdmin 头设置，本次不修改门户识别逻辑。
+- 不根据交易属于 CM/BM、操作人角色或目标用户渠道选择 toggle。
+  同一列表中的 CM/BM 来源 HTH 交易均使用当前调用门户的开关。
+- 通过原有 CustomConfigUtil adapter 读取当前值，去空白后 Y（忽略大小写）为开启。
+  N、缺失或读取失败沿用现有关闭逻辑；每个结果集最多读取一次当前门户开关。
+  不读取另一门户开关，不新增跨请求缓存。
+- 开启：返回原列表记录；关闭：仅移除明确标记为 HTH 的行。
+  UNKNOWN、BCO、无渠道字段、空字典、无关任务和已上线 Inquiry 保留。
+- 沿用上一版渠道识别规则，不增加快照/用户表查询，不根据名称/URL/操作人猜测。
+- 不修改计数接口、响应中的独立计数字段、原 SQL 查询范围、排序或 BM 查询条数上限。
+  因此关闭开关后，实际返回条数可能少于标题计数；过滤后不补足原查询上限条数。
+- 仅过滤返回的列表副本，保留其余行、顺序和字典字段，不删除历史或修改审批规则。
 
-transactions 接口（此前已交付，本次保持原样）
-Pending Approvals:
-GET /digx/v1/transactions?view=approval&discriminator=ADMIN_MAINTENANCE
-My Approval List:
-GET /digx/v1/transactions?view=approved&discriminator=ADMIN_MAINTENANCE
-Activity Log（本人发起记录 / Viewer 查看记录）:
-GET /digx/v1/transactions?view=created&discriminator=ADMIN_MAINTENANCE
-GET /digx/v1/transactions?view=all&discriminator=ADMIN_MAINTENANCE
-字段位置：transactionDTOs[i].dictionaryArray[0].nameValuePairDTOArray
-- MT_N_CUS / MT_N_UUS：从已有或只读获取的提交快照中读取 userChannelType，
-  明确的 HTH / BCO 分别返回 HTH / BCO，缺少可靠依据返回 UNKNOWN。
-- UAT_N_HUA_NEW / EDT / DEL、PP_N_HTH_CERT_UPL、PP_N_HTH_ENB / EDT / DIS 返回 HTH。
-- 其他交易任务保持原响应，不新增字段。不改变列表数量、排序及计数接口。
+最小改动与部署
+本次修改 3 个生产文件：
+1. common 模块 HthAuditTaskVisibility.java：复用当前门户开关读取，增加按渠道标记过滤。
+   原有两个 Audit Log 下拉的任务范围和过滤行为保持一致。
+2. approval 模块 CZTransactionExt.java：在原 4 个视图渠道补齐之后设置过滤后的列表。
+3. access 模块 CZVoidAuditExt.java：在原 postSearch 渠道补齐之后设置过滤后的列表。
 
-Audit Log 查询结果（本次新增）
+本目录 consulting/ 下文件按原相对路径覆盖目标代码。
+累计 5 个生产文件、3 个回归脚本；上一版两个渠道标记辅助类保留在包中。
+必须一起重新编译部署以下 3 个模块，避免旧 common.jar 缺少新方法：
+- com.ofss.digx.cz.bea.module.common.jar
+- com.ofss.digx.cz.bea.module.approval.jar
+- com.ofss.digx.cz.bea.module.access.jar
+无前端、SQL、DTO、数据库表结构修改；consulting/tests/ 不属于服务器部署文件。
+
+覆盖接口
+GET /digx/v1/transactions?view=approval  （Pending Approvals）
+GET /digx/v1/transactions?view=approved  （My Approval List）
+GET /digx/v1/transactions?view=created   （本人发起的 Activity Log）
+GET /digx/v1/transactions?view=all       （Activity Log 全部视图）
+- 保持原有 discriminator、角色权限、查询条件处理；其他 view 不接入此次过滤。
+- 这些视图共用后端入口，CM/BM 调用时使用各自开关；具体门户展示哪些页面仍由原角色/页面配置决定。
 GET /digx/v1/audit?userID=...&startTime=...&endTime=...&activity=...&partyId=...
-字段位置：auditList[i].dictionaryArray[0].nameValuePairDTOArray
-每条非空审计记录追加或替换一项：
-{
-  "name": "userChannelType",
-  "genericName": "userChannelType",
-  "value": "HTH",
-  "datatype": "java.lang.String"
-}
-- 以下 15 个明确 HTH onboarding taskCode 返回 HTH，范围与现有审计下拉一致：
-  MT_N_CUS_HTH / MT_N_UUS_HTH / MT_N_RUS_HTH
-  UAT_N_HUA_NEW / UAT_N_HUA_EDT / UAT_N_HUA_DEL
-  UAT_N_HAP_GEN / UAT_N_HAP_REGEN / UAT_N_HAP_RVL
-  CM_N_HAP_SETUP / CM_N_HAP_RESET / PP_N_HTH_CERT_UPL
-  PP_N_HTH_ENB / PP_N_HTH_EDT / PP_N_HTH_DIS
-- 其他 taskCode（含空值）返回 UNKNOWN。这不是 API Password 状态。
-  审计查询列表不带目标用户快照；不能把操作人渠道当作目标用户渠道，
-  也不能仅凭旧共享 MT_N_CUS / MT_N_UUS / MT_N_RUS 判断 BCO 或 HTH。
-  本次不额外查用户表或审计详情，不反推 BCO；旧记录不会被误隐藏。
-- 已上线 Inquiry 不属于此次 HTH onboarding 标记范围，返回 UNKNOWN 并保留显示。
-- 不按活动名称、通用 HTH 前缀或请求 URL 参数猜测渠道。
-- 保留其他字典字段；重复调用不重复增加该字段；不改原列表行数、顺序、
-  taskCode、Activity 文案、操作人、状态、引用编号或审计详情。
-- 本次仅接入 postSearch 查询结果，未修改单条 audit read 或审计写入流程。
+- 仅 postSearch 查询结果；不改审计写入或单条 read。
 
-前端对接
-- 查询结果补字段不依赖开关值，后端不新增 HTH 记录过滤。
-- 前端沿用当前门户的 CM/BM HTH 开关；关闭时只隐藏 value === 'HTH' 的记录。
-- UNKNOWN、BCO、缺少字段的旧版本响应均保留。
-- 字段必须在 nameValuePairDTOArray 中按 genericName/name 找到后取 value，
-  不假定它在数组中的固定下标。
-- 原有两个 Audit Log 下拉的 HTH toggle 过滤逻辑维持原样。
-- 前端过滤后的条数、分页由前端处理；原有后端计数/查询范围未改。
+保留的渠道字段约定
+交易：transactionDTOs[i].dictionaryArray[0].nameValuePairDTOArray
+审计：auditList[i].dictionaryArray[0].nameValuePairDTOArray
+条目 name / genericName 均为 userChannelType，datatype 为 java.lang.String。
+后端读取第一份字典中名称匹配且 value 精确为 HTH 的标记后决定是否过滤。
+返回给前端的其余记录仍保留该字段，不要求前端再实现本次开关过滤。
+
+交易渠道识别（沿用上一版）
+- MT_N_CUS / MT_N_UUS：读取已有或只读取得的提交快照，明确 HTH / BCO 则返回该值；
+  没有可靠目标用户渠道时返回 UNKNOWN，不读取操作人渠道替代。
+- UAT_N_HUA_NEW / EDT / DEL、PP_N_HTH_CERT_UPL、PP_N_HTH_ENB / EDT / DIS 标记 HTH。
+- 其他任务维持原响应，不新增渠道字段。
+
+审计渠道识别（沿用上一版）
+以下 15 个明确 onboarding taskCode 标记 HTH：
+MT_N_CUS_HTH / MT_N_UUS_HTH / MT_N_RUS_HTH
+UAT_N_HUA_NEW / UAT_N_HUA_EDT / UAT_N_HUA_DEL
+UAT_N_HAP_GEN / UAT_N_HAP_REGEN / UAT_N_HAP_RVL
+CM_N_HAP_SETUP / CM_N_HAP_RESET / PP_N_HTH_CERT_UPL
+PP_N_HTH_ENB / PP_N_HTH_EDT / PP_N_HTH_DIS
+其余（含历史共享用户管理任务、Inquiry、空值）仍标记 UNKNOWN 并保留。
+审计列表没有目标用户快照，此次不追加查表来推断 BCO/HTH；UNKNOWN 不是 API Password 状态。
 
 验证
-本次运行：python3 consulting/tests/hth_onboarding/verify_audit_user_channel.py
-- 按 Ant 的 cp1252 编码、Java 8 目标编译 CZVoidAuditExt 和新辅助类通过。
-- 141 项断言通过，使用实际 SDK AuditDTO、AuditListResponseDTO、Dictionary。
-- 覆盖 15 个 HTH 任务、历史共享任务、Inquiry、空/未知任务、失败审计记录、
-  防止用操作人/标签/请求参数猜测、原字段不变、列表顺序、空字典、重复补字段、
-  共享原字典不被改写，以及完整 AuditListResponseDTO 的 JSON 字段路径和值。
-- 已核对任务名单与现有 HthAuditTaskVisibility 的 15 个任务完全一致。
-此前 transactions 实现的 157 项断言已在上一版通过，本次代码未改动该实现。
-本次未连接银行数据库/API，未进行 UAT 联调，未运行全项目 Ant 构建。
+使用仓库实际 SDK DTO/字典和依赖，按 Java 8 目标编译改动的生产类及两个列表扩展通过。
+- verify_list_channel_visibility.py：348 项断言通过。
+  覆盖 CM/BM × 两个开关全部组合、跨门户来源任务、只读取当前开关且每次请求最多一次、
+  新请求读取最新配置、关闭只移除 HTH、UNKNOWN/BCO/无标记/空值/Inquiry 保留、
+  只读源列表不被删改、原字段和行顺序保留、审计 JSON 输出、缺失或读取失败沿用 N。
+- verify_pending_approval_channel.py：157 项渠道标记断言通过。
+- verify_audit_user_channel.py：141 项渠道标记断言通过。
+- verify_audit_dropdowns_and_client_exists.py（原仓库既有脚本）：
+  666 项审计下拉回归断言通过；脚本附带的 179 项 DSP exists 回归也通过（仅本机 HTTPS）。
+- git diff 空白检查通过（保留原文件 CRLF）。
+未连接银行数据库/API，未执行 UAT 联调或全项目 Ant 构建。
 
 同步文件
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/HthAuditUserChannel.java
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
+- consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/helper/HthAuditTaskVisibility.java
 - consulting/tests/hth_onboarding/verify_audit_user_channel.py
+- consulting/tests/hth_onboarding/verify_list_channel_visibility.py
 - consulting/tests/hth_onboarding/verify_pending_approval_channel.py

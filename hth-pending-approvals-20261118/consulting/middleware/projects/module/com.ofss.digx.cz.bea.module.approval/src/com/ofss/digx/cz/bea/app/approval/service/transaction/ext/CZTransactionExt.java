@@ -101,6 +101,7 @@ import com.ofss.digx.cz.bea.app.bulkupload.fileupload.dto.BulkFileRecordDTO;
 import com.ofss.digx.cz.bea.app.bulkupload.fileupload.dto.BulkFileUploadsDTO;
 import com.ofss.digx.cz.bea.app.common.adapter.hostuserdetails.IHostUserDetailsInvocationAdapter;
 import com.ofss.digx.cz.bea.app.common.helper.AccountDetailsHelper;
+import com.ofss.digx.cz.bea.app.common.helper.HthAuditTaskVisibility;
 import com.ofss.digx.cz.bea.app.common.service.BranchDateHelper;
 import com.ofss.digx.cz.bea.app.common.util.CZCommonUtils;
 import com.ofss.digx.cz.bea.app.common.util.CZCommonValidation;
@@ -4079,6 +4080,8 @@ public class CZTransactionExt extends VoidTransactionExt {
 		if (ViewType.APPROVAL.equals(viewType) || ViewType.APPROVED.equals(viewType)
 				|| ViewType.CREATED.equals(viewType) || ViewType.ALL.equals(viewType)) {
 			new HthApprovalUserChannel().enrich(transactionListResponse.getTransactionDTOs());
+			transactionListResponse.setTransactionDTOs(new HthAuditTaskVisibility()
+					.filterByUserChannel(transactionListResponse.getTransactionDTOs()));
 		}
 	}
 

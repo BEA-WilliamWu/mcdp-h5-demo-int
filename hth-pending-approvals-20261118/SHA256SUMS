@@ -1,7 +1,9 @@
-256644dc2238143079b821210a0a2404d5ce814fbebb2ab501f71f16275e340b  DELIVERY.txt
-fac8dd8a039da6f6d19da4e823915410f4fb8404f10feefdb2bd539da7bbb7a7  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java
+6fd26ebe77f52c164d72487e56f8c76cc916fed0b7e3f5c9748f911c2b50cfe4  DELIVERY.txt
+c0624ba1a15a75821809794fd290e148bde9fa5624f262ea67256e6a69782752  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java
 72998d002d30a255ddfd94fd7ef419daf220d69b8ff85696e06db003c597767b  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/HthAuditUserChannel.java
-e95c37e43068f7035cf02ec3af1623fbbbe8b5c069951f7de232155a571a2f64  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
+85fec1bf730999e3417bc1b93ecfc6836b95025e2bd095a44d0c494c39ce8d44  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
 4f668cb9a5e73196b605f16837f26b93106732d3e45a7c7d87dbc9fb524d5332  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
+0e84b8053b26db3a74a2447487a5786c7ead546f49519bfd50e3ba592209e14d  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.common/src/com/ofss/digx/cz/bea/app/common/helper/HthAuditTaskVisibility.java
 00c7f330aef3b85b2d543f0a5ded6f1f877cb921020feb36d510553a57be862f  consulting/tests/hth_onboarding/verify_audit_user_channel.py
+61895e01a87d99bdcea98d7bae79d71174dedb3bc5666fc2ae409bff95689f1e  consulting/tests/hth_onboarding/verify_list_channel_visibility.py
 9ffcaff691435e7a7eafb72911a0864ff9d0371f5234996e5808db4c630fd5a3  consulting/tests/hth_onboarding/verify_pending_approval_channel.py

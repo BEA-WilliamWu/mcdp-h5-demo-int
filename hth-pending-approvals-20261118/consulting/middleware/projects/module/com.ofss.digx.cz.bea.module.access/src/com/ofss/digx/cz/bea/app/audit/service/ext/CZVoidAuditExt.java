@@ -12,6 +12,7 @@ import com.ofss.digx.app.audit.service.ext.VoidAuditExt;
 import com.ofss.digx.app.common.resource.task.assembler.TaskAssembler;
 import com.ofss.digx.app.common.task.dto.TaskDTO;
 import com.ofss.digx.common.constants.CommonConstants;
+import com.ofss.digx.cz.bea.app.common.helper.HthAuditTaskVisibility;
 import com.ofss.digx.cz.bea.app.common.resource.task.enricher.TaskEnricher;
 import com.ofss.digx.cz.bea.extxface.fmo.adapter.IFMOHelperCallAdapter;
 import com.ofss.digx.domain.common.resource.entity.task.Task;
@@ -101,6 +102,8 @@ public class CZVoidAuditExt extends VoidAuditExt {
 			com.ofss.digx.cz.bea.app.logger.BeaSystemOut.println("Audit Enquiry FMO called for corporate user");
 		}
 		new HthAuditUserChannel().enrich(auditResponseDTO.getAuditList());
+		auditResponseDTO.setAuditList(new HthAuditTaskVisibility()
+				.filterByUserChannel(auditResponseDTO.getAuditList()));
 	}
 
 	public boolean isFilterOut(AuditDTO input){

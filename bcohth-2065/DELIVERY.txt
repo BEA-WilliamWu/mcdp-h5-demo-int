@@ -1,57 +1,54 @@
-BCOH2H-2065 - CHATS delivery with unified payment enquiry dates
-Date: 2026-11-18
+BCOH2H-2065 - Deposit-name segmentation extended to all five payment types
+Date: 2026-11-20
 Source repository: /Users/devs/CProj/hth-dsp
-Previous source snapshot: 7756632704e64f2557ae10eeeee8b8667213801e
-Current source snapshot / local DSP commit: 29b7856bdee2bc2254695ebeb81f8f691dc4c28d
-Original CHATS name/address implementation: f70f3dd81d11f808aa11246dbb35fc4161547dbb
+Implementation baseline: be7c0a0
+Local DSP commit / cumulative delivery source snapshot: b9f065b7866301b7de4b8f2a725cbeacbad62164
 
-Contents: 10 complete source/test files under source/ with original
-repository-relative paths, plus the updated story Technical Design.
-All source files and the design match the current DSP commit byte for byte.
-
-Approved enquiry behavior (supersedes the DR-only correction):
-- FPS, CHATS, TT, DR and On-Us/INTERNAL executionDate all read existing
-  EXECUTION_DATE, already stored from the customer's settlementDate.
-- It represents the requested execution date, not actual host execution time.
-- Parse yyyy-MM-dd and return the date at start of day in the existing
-  enquiry timezone (JVM default), retaining OffsetDateTime/ISO 8601.
-- Missing/blank/invalid historical dates remain absent; invalid values logged.
-  No fallback to PAYMENT_DATE, creation/current time or IPE lastUpdatedAt.
-- initiatedDate still uses CREATION_DATE; asOf still uses LAST_UPDATED_DATE.
-- No database/schema/backfill, persistence, API model/OpenAPI, dependency or
-  POM changes. Existing account/limit validation and status refresh retained.
-- Existing 2065 CHATS name segmentation, BCO debtor address, customer ID,
-  generated HTH reference and batch enquiry behavior are retained.
-
-Shared-file consistency:
-PaymentServiceImpl.java and PaymentEnquiryServiceTest.java are byte-identical
-between the current bcohth-2065/source and bcohth-2126/source directories.
-The two current packages may be copied in either order for these shared
-files. Older snapshots (f70f3dd or 7756632) must not overwrite these versions.
+Current extension: five production Java files, four test files and Technical Design.
+TT/DR use the overseas base flow. FPS and On-Us add name-only ChatsRemittance.
+All five types share PaymentRoutingPayload.chatsRemittance(name).
+Name1 = characters 1-35; Name2 = 36-70; Name3 = 71-105; Name4 = 106-140.
+As in the existing CHATS mapping, names <=35 populate both Name1 and Name2.
+Existing full creditor/account names and DR chinaAccEnglishName are preserved.
+The existing per-type field validation applies. No schema, dependency or API-model change.
 
 Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
-363 tests passed; 0 failures, 0 errors, 0 skipped.
-Support: 350 tests across 11 suites. BFF coverage: 13 tests.
-PaymentEnquiryServiceTest: 69 executions (20 type/status combinations,
-5 leap-day/no-payment-date cases, 30 missing/invalid date cases, 14 existing
-cases). 40 more executions than the DR-only version. Expanded cases first
-reproduced the previous mixed-date behavior and pass after the correction.
-Clean builds exclude stale compiled test classes after source sync.
-Log: /tmp/hth-2126-all-execution-dates-clean.log
-No live database, IPE integration, SIT or UAT performed.
+305 tests passed, 0 failures, 0 errors, 0 skipped.
+48 new parameterized executions cover TT/DR/FPS/On-Us name lengths
+1,34,35,36,69,70,71,104,105,106,139,140 through the service entry points.
+These 48 cases failed against the prior production mapping and now pass.
+Existing CHATS and routing/payment regression suites also pass.
+Log: /tmp/hth-all-payment-names-20261120/test.log
+IPE and database calls are mocked. FPS/On-Us acceptance and use of the added
+ChatsRemittance fields require SIT verification with the deployed IPE.
 
-Local DSP Git committed. mcdp Git submission remains manual; no remote push.
-SHA256SUMS covers every source file, story design and this delivery note.
-Unrelated source inputs and working-tree changes are excluded.
+Cumulative delivery: 18 complete source/test/mapper files, refreshed from
+this single DSP commit to avoid mixing earlier story snapshots. Original
+repository-relative paths are retained under source/. The previous CHATS
+customer reference, BCO debtor address and payment enquiry changes are included
+as current source files. This delivery does not establish compatibility with
+older separate 2055/2126 source packages; use the latest DSP baseline when merging.
+
+Only local DSP Git committed. mcdp Git submission remains manual.
+SHA256SUMS covers the source files, Technical Design and this delivery note.
+Unrelated working-tree source documents and sample files are excluded.
 
 Synchronized source files:
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/dto/PartyPostalAddress.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/mapper/PartyPreferenceMapper.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/FpsPaymentService.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OnUsPaymentService.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OverseasPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentModelConvert.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentRoutingPayload.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentValidationSupport.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/resources/mapper/PartyPreferenceMapper.xml
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/DrPaymentServiceTest.java
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/FpsPaymentServiceTest.java
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/OnUsPaymentServiceTest.java
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentServiceImplTest.java
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/TtPaymentServiceTest.java

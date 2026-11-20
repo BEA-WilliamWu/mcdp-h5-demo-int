@@ -472,13 +472,13 @@ public class PaymentServiceImpl implements PaymentApi {
 
         detail.setBeneficiaryAccountNumber(entity.getCreditAccountId());
         detail.setBeneficiaryAccountName(entity.getCreditAccountName());
-        detail.setInitiatedDate(toOffsetDateTime(entity.getCreationDate()));
+        detail.setInitiatedDate(entity.getCreationDate().toLocalDate());
         detail.setRemitterAccountNumber(entity.getDebitAccountId());
         detail.setRemitterAccountCurrency(entity.getDebitAccountCur());
 
         detail.setExecutionDate(toRequestedExecutionDate(entity.getExecutionDate()));
         detail.setAsOf(toOffsetDateTime(entity.getLastUpdatedDate()));
-        detail.setExternalReferenceId(entity.getEndToEndId());
+        detail.setExternalReferenceId(entity.getCustomerTransactionId());
         detail.setNote(entity.getRemarks());
         applyRemitterDetails(detail, entity.getProductCode());
 
@@ -504,10 +504,10 @@ public class PaymentServiceImpl implements PaymentApi {
         detail.setBeneficiaryAccountNumber(entity.getCreditAccountId());
         detail.setBeneficiaryAccountName(entity.getCreditAccountName());
 
-        detail.setInitiatedDate(toOffsetDateTime(entity.getCreationDate()));
+        detail.setInitiatedDate(entity.getCreationDate().toLocalDate());
         detail.setExecutionDate(toRequestedExecutionDate(entity.getExecutionDate()));
         detail.setAsOf(toOffsetDateTime(entity.getLastUpdatedDate()));
-        detail.setExternalReferenceId(entity.getEndToEndId());
+        detail.setExternalReferenceId(entity.getCustomerTransactionId());
         detail.setNote(entity.getRemarks());
         applyRemitterDetails(detail, entity.getProdCode());
 
@@ -579,12 +579,12 @@ public class PaymentServiceImpl implements PaymentApi {
     }
 
     /** EXECUTION_DATE is the customer's requested date for every payment type. */
-    private OffsetDateTime toRequestedExecutionDate(String value) {
+    private LocalDate toRequestedExecutionDate(String value) {
         if (StringUtils.isBlank(value)) {
             return null;
         }
         try {
-            return LocalDate.parse(value).atStartOfDay(ENQUIRY_ZONE).toOffsetDateTime();
+            return LocalDate.parse(value);
         } catch (DateTimeParseException e) {
             log.warn("Invalid stored requested execution date, executionDate={}", value);
             return null;

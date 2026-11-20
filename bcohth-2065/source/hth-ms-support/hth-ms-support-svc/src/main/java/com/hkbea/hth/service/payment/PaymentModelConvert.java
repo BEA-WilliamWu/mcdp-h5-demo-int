@@ -190,6 +190,19 @@ public final class PaymentModelConvert {
         return StringUtils.hasText(customerId) ? customerId : batchId;
     }
 
+    public static String EndToEndId(LocalPayment payment) {
+        String endToEndId = payment.getPaymentIdentification() == null
+                ? null : payment.getPaymentIdentification().getEndToEndId();
+
+        if (LocalPayment.PaymentTypeEnum.TT.equals(payment.getPaymentType())
+                || LocalPayment.PaymentTypeEnum.CHATS.equals(payment.getPaymentType())
+                || LocalPayment.PaymentTypeEnum.FPS.equals(payment.getPaymentType())) {
+            return StringUtils.hasText(endToEndId) ? endToEndId : PaymentConstants.END_TO_END_ID;
+        }else {
+            return StringUtils.hasText(endToEndId) ? endToEndId : null;
+        }
+    }
+
     private static Amount toAmount(LocalPayment payment) {
         if (payment.getTxnAmount() == null) {
             return null;

@@ -42,8 +42,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -558,6 +556,9 @@ class ChatsPaymentServiceTest {
             BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
             String batchId = request.getGroupHeader().getMessageId();
             String expectedId = customerId == null || customerId.isBlank() ? batchId : customerId;
+            // Missing/blank payer references are echoed back as the NOTPROVIDED default.
+            String expectedEcho = customerId == null || customerId.isBlank()
+                    ? PaymentConstants.END_TO_END_ID : customerId;
             // Also verify the request that would be sent to IPE routing.
             assertEquals(expectedId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
             when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
@@ -569,12 +570,12 @@ class ChatsPaymentServiceTest {
             if (customerId != null && !customerId.isBlank()) {
             assertNotEquals(expectedId, result.getTxnRef());
             }
-            assertEquals(customerId, result.getOriginalEndtoendID());
+            assertEquals(expectedEcho, result.getOriginalEndtoendID());
             assertEquals(CUSTOMER_TXN_ID, result.getOriginalTransactionID());
             var insert = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
             verify(paymentPayoutRecordMapper).insert(insert.capture());
             assertEquals(batchId, insert.getValue().getPaymentId());
-            assertEquals(customerId, insert.getValue().getEndToEndId());
+            assertEquals(expectedEcho, insert.getValue().getEndToEndId());
             assertEquals(CUSTOMER_TXN_ID, insert.getValue().getCustomerTransactionId());
             verify(payemtRoutApi).submit(request);
             verifyNoInteractions(accountApi);
@@ -592,7 +593,7 @@ class ChatsPaymentServiceTest {
 
         assertEquals(request.getGroupHeader().getMessageId(), request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
         assertEquals(request.getGroupHeader().getMessageId(), result.getTxnRef());
-        assertNull(result.getOriginalEndtoendID());
+        assertEquals(PaymentConstants.END_TO_END_ID, result.getOriginalEndtoendID());
     }
 
     @Test
@@ -626,29 +627,31 @@ class ChatsPaymentServiceTest {
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
-    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
-        LocalPayment input = buildChatsPayment(Currency.HKD);
-        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
-        input.getCreditor().setCreditorName(name);
-        BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void creditorNameIsPreservedAcrossDepositNameSegments() {
+        for (int length : new int[]{1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140}) {
+            reset(payemtRoutApi);
+            LocalPayment input = buildChatsPayment(Currency.HKD);
+            String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
+            input.getCreditor().setCreditorName(name);
+            BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        Payment result = chatsPaymentService.processPayment(input, request);
+            Payment result = chatsPaymentService.processPayment(input, request);
 
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var txn = request.getTransactions().getFirst();
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(name, txn.getCreditorAccount().getAccountName());
-        var remittance = txn.getSupplementaryData().getChatsRemittance();
-        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                remittance.getDepositAccountName2());
-        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                remittance.getDepositAccountName3());
-        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
-        verify(payemtRoutApi).submit(request);
+            assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+            var txn = request.getTransactions().getFirst();
+            assertEquals(name, txn.getCreditor().getName());
+            assertEquals(name, txn.getCreditorAccount().getAccountName());
+            var remittance = txn.getSupplementaryData().getChatsRemittance();
+            assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
+            assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
+                    remittance.getDepositAccountName2());
+            assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
+                    remittance.getDepositAccountName3());
+            assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
+            verify(payemtRoutApi).submit(request);
+        }
     }
 
     @Test
@@ -734,26 +737,29 @@ class ChatsPaymentServiceTest {
         assertNull(address.getAddressLine2());
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {70, 71, 280})
-    void debtorAddressRespectsIpeLineBoundaries(int length) {
-        PartyPostalAddress source = new PartyPostalAddress();
-        source.setAddress1("A".repeat(length));
-        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                .thenReturn(source);
-        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void debtorAddressRespectsIpeLineBoundaries() {
+        for (int length : new int[]{70, 71, 280}) {
+            reset(payemtRoutApi, partyPreferenceMapper);
+            when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString(), anyString())).thenReturn("PAYER NAME");
+            PartyPostalAddress source = new PartyPostalAddress();
+            source.setAddress1("A".repeat(length));
+            when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
+                    .thenReturn(source);
+            BatchRoutingCreditTransferRequest request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        String joined = Stream.of(address.getAddressLine1(), address.getAddressLine2(),
-                        address.getAddressLine3(), address.getAddressLine4())
-                .filter(Objects::nonNull).collect(Collectors.joining());
-        assertEquals("A".repeat(length), joined);
-        Stream.of(address.getAddressLine1(), address.getAddressLine2(),
-                        address.getAddressLine3(), address.getAddressLine4())
-                .filter(Objects::nonNull).forEach(line -> assertTrue(line.length() <= 70));
+            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+            String joined = Stream.of(address.getAddressLine1(), address.getAddressLine2(),
+                            address.getAddressLine3(), address.getAddressLine4())
+                    .filter(Objects::nonNull).collect(Collectors.joining());
+            assertEquals("A".repeat(length), joined);
+            Stream.of(address.getAddressLine1(), address.getAddressLine2(),
+                            address.getAddressLine3(), address.getAddressLine4())
+                    .filter(Objects::nonNull).forEach(line -> assertTrue(line.length() <= 70));
+        }
     }
 
     @Test

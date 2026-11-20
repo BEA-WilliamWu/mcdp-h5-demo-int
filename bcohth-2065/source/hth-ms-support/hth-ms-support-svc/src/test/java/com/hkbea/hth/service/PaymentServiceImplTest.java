@@ -1104,6 +1104,7 @@ class PaymentServiceImplTest {
         entity.setCreationDate(LocalDateTime.now());
         entity.setPaymentDate(new Date());
         entity.setLastUpdatedDate(new Date());
+        entity.setCustomerTransactionId("E2E-1");
         entity.setEndToEndId("E2E-1");
         entity.setRemarks("payment remark");
         entity.setProductCode("6802");

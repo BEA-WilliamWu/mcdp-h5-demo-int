@@ -1,12 +1,12 @@
 # BCOH2H-2065 — HTH CHATS Payment Beneficiary Bank Verification
 
-Revision: 18 November 2026. Latest shared-enquiry follow-up baseline: `7756632`. Retains the CHATS customer-reference, name-segmentation and debtor-address corrections.
+Revision: 20 November 2026. Name-segmentation extension baseline: `be7c0a0`. Includes the earlier CHATS corrections and shared enquiry alignment.
 
 ## Shared enquiry alignment with BCOH2H-2126
 
 The current shared PaymentServiceImpl and PaymentEnquiryServiceTest also include the approved 2126 date alignment: for FPS, CHATS, TT, DR and On-Us, enquiry executionDate reads the existing EXECUTION_DATE populated from request settlementDate. This represents the customer's requested date, at the start of that day in the existing enquiry timezone. Missing/invalid dates remain absent; PAYMENT_DATE is not a fallback. Submission/database writes, initiatedDate/asOf, account/limit validation and the 2065 CHATS mappings are retained.
 
-Both mcdp story packages carry byte-identical current copies of these two shared files. Details of the date contract are in the updated BCOH2H-2126 Technical Design. No database migration or API-model generation is introduced.
+The earlier delivery aligned these two shared files across the 2065 and 2126 packages. The 2065 delivery is refreshed from the current DSP snapshot. Details of the date contract are in the BCOH2H-2126 Technical Design.
 
 ## 1. Scope and authoritative inputs
 
@@ -24,7 +24,7 @@ Confirmed decisions, updated on 18 November:
 2. Restore the 140-character CHATS creditor-name limit. Split the name sequentially into `depositAccountName1..4`, at most 35 characters per field. For a name of 35 characters or fewer, populate both Name1 and Name2 with the full name. This replaces the earlier temporary 35-character restriction and fixed Name2 value.
 3. Retrieve the debtor address from BCO `DIGX_PI_PARTY_PREFERENCES.ADDRESS1..5` using the payment account owner. Preserve its text in up to four IPE address lines of 70 characters each; leave town/country unset and permit missing addresses.
 
-This delivery is limited to CHATS and the necessary shared routing/query handling. It does not implement every difference between the latest v0.8 document and existing FPS, TT, DR or On-Us behavior.
+On 20 November, the user additionally requested the same deposit-name segmentation for TT, DR, FPS and On-Us. These four types now populate `supplementaryData.chatsRemittance.depositAccountName1..4` using the existing CHATS rules. `PaymentRoutingPayload.chatsRemittance` builds the shared name fields. CHATS and the TT/DR base flow retain their other remittance fields; FPS and On-Us add a name-only `chatsRemittance` block. Existing validation applies to each payment type. IPE acceptance and use of these fields for FPS and On-Us require SIT verification.
 
 ## 2. End-to-End ID and transaction reference
 
@@ -66,7 +66,7 @@ IPE must accept the agreed customer ID range and `NOTPROVIDED`, and confirm prop
 
 ### Creditor name
 
-The canonical IPE `creditor.name` and `creditorAccount.accountName` retain the full API name, up to 140 characters. Only the legacy CHATS remittance fields are segmented:
+For each payment type, the existing canonical name fields retain the full API name, up to the current 140-character validation limit. DR also retains its complete `directRemittance.chinaAccEnglishName`. All five payment types populate the legacy deposit-name fields with the following mapping:
 
 | Name length | Name1 | Name2 | Name3 | Name4 |
 | --- | --- | --- | --- | --- |
@@ -110,7 +110,10 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | File | Change |
 | --- | --- |
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
-| `ChatsPaymentService.java` | Retain customer-ID/reference handling; split the creditor name into four legacy fields and populate debtor postal address from BCO. |
+| `ChatsPaymentService.java` | Use the shared deposit-name builder; retain its CHATS remittance flags and BCO debtor-address mapping. |
+| `PaymentRoutingPayload.java` | Build Name1..4 using the existing CHATS segmentation and short-name duplication rule. |
+| `OverseasPaymentService.java` | Apply the shared name builder to both TT and DR. |
+| `FpsPaymentService.java`, `OnUsPaymentService.java` | Add the same name fields to the existing supplementary data. |
 | `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
 | `PaymentServiceImpl.java` | Retain CHATS validation, routing identifiers and batch enquiry; share the confirmed five-type requested-execution-date mapping with 2126. |
 | `PartyPreferenceMapper.java` / `.xml` | Query all five account-owner address lines using the account/parent/product/determinant relationship. |
@@ -137,6 +140,12 @@ SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 14
 Real IPE acceptance, database integration, pacs.008 generation and transmission are not established by mocked unit tests.
 
 ## 6. Verification and delivery
+
+The 20 November extension passed a Java 21 offline Maven **clean test** run: **305 tests, 0 failures, 0 errors, 0 skipped**. Four parameterized tests add 48 executions through the TT, DR, FPS and On-Us service entry points, covering name lengths 1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139 and 140. All 48 failed against the prior production mapping and pass after this extension. Assertions check the outbound IPE request, full canonical names and short-name duplication. Existing CHATS tests pass through the shared builder.
+
+The run includes all five payment-service suites, overseas validation, the common routing builder, routing submitter, payment entry service and TT support. Log: `/tmp/hth-all-payment-names-20261120/test.log`. IPE calls and persistence are mocked; deployed IPE acceptance remains to be verified in SIT.
+
+### Previous verification on 18 November
 
 Verified on 18 November 2026 with Java 21 and Maven using the local dependency cache and a temporary reactor. **363 tests passed; 0 failures, 0 errors, 0 skipped (350 Support and 13 BFF).** No project POM or dependency was changed.
 

@@ -10,14 +10,26 @@ import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentPayoutRecord;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
 import com.hkbea.hth.ipe.api.PayemtRoutApi;
-import com.hkbea.hth.ipe.model.*;
+import com.hkbea.hth.ipe.model.BatchRoutingCreditTransferRequest;
+import com.hkbea.hth.ipe.model.ChatsRemittance;
+import com.hkbea.hth.ipe.model.CustomerNotificationInformRequest;
+import com.hkbea.hth.ipe.model.Debtor;
+import com.hkbea.hth.ipe.model.DebtorAgent;
+import com.hkbea.hth.ipe.model.FinancialInstitution;
 import com.hkbea.hth.ipe.model.Purpose;
+import com.hkbea.hth.ipe.model.SupplementaryData;
+import com.hkbea.hth.ipe.model.TransferPaymentResultQueryResponse;
 import com.hkbea.hth.mapper.HthPaymentPayoutMapper;
 import com.hkbea.hth.mapper.InternalPayeeMapper;
 import com.hkbea.hth.mapper.PartyAccountMapper;
 import com.hkbea.hth.mapper.PartyPreferenceMapper;
-import com.hkbea.hth.model.*;
+import com.hkbea.hth.model.BeaAccount;
+import com.hkbea.hth.model.Currency;
+import com.hkbea.hth.model.LocalPayment;
+import com.hkbea.hth.model.Payment;
+import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
+import com.hkbea.hth.model.TxnAmount;
 import com.hkbea.hth.utils.AccountUtils;
 import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.CurrencyUtils;
@@ -181,19 +193,10 @@ public class ChatsPaymentService {
                 : null;
         localPayment.setPayeeId(payeeId);
 
-        ChatsRemittance chatsRemittance = new ChatsRemittance();
+        ChatsRemittance chatsRemittance = PaymentRoutingPayload.chatsRemittance(creditorName);
         chatsRemittance.setChatAcTpCode(findPreDesignatedAccounts(localPayment.getPartyId(), localPayment.getToAccount().getId()));
         chatsRemittance.setPrntAdvInd(CHATS_PRINT_ADVICE_INDICATOR);
         chatsRemittance.setLmInd(CHATS_LM_INDICATOR);
-        chatsRemittance.setDepositAccountName1(creditorName.substring(0, Math.min(35, creditorName.length())));
-        chatsRemittance.setDepositAccountName2(creditorName.length() <= 35
-                ? creditorName : creditorName.substring(35, Math.min(70, creditorName.length())));
-        if (creditorName.length() > 70) {
-            chatsRemittance.setDepositAccountName3(creditorName.substring(70, Math.min(105, creditorName.length())));
-        }
-        if (creditorName.length() > 105) {
-            chatsRemittance.setDepositAccountName4(creditorName.substring(105));
-        }
         chatsRemittance.setPinCnt(0);
 
         SupplementaryData supplementaryData = new SupplementaryData();
@@ -371,8 +374,7 @@ public class ChatsPaymentService {
                 payemtRoutApi, log, routingRequest, payment, null,
                 PaymentResponseSupport.RejectMessagePolicy.ERROR_MESSAGE_WITH_FALLBACK);
         payment.setTxnTime(OffsetDateTime.now().withNano(0));
-        payment.setOriginalEndtoendID(chats.getPaymentIdentification() == null
-                ? null : chats.getPaymentIdentification().getEndToEndId());
+        payment.setOriginalEndtoendID(PaymentModelConvert.EndToEndId(chats));
         payment.setOriginalTransactionID(chats.getTransactionID());
         PaymentServiceSupport.validatePaymentResult(chats, result);
         PaymentServiceSupport.updatePayoutRecord(paymentPayoutRecordMapper, log, CHATS_NETWORK, payoutId, payment, result, chats);
@@ -409,7 +411,7 @@ public class ChatsPaymentService {
             entity.setMessageId(headers.getMessageId());
             entity.setPaymentId(batchId);
             entity.setCustomerTransactionId(req.getTransactionID());
-            entity.setEndToEndId(req.getPaymentIdentification().getEndToEndId());
+            entity.setEndToEndId(PaymentModelConvert.EndToEndId(req));
             entity.setExecutionDate(req.getSettlementDate());
             entity.setCreditBicCode(req.getCreditorAgent().getFinancialInstitutionId().getBicfi());
             entity.setCreditMemberId(req.getCreditorAgent().getFinancialInstitutionId().getClearingSystemMemberId());

@@ -1,4 +1,4 @@
-c50c640dfa6d622c4081d0f70cfcadfdc7a4259eecccf69611bb6a43d8a8c9ef  DELIVERY.txt
-2bee145609c1cf3baeec754ec9b3deabf8943d49704b389a23ea7e5b1d2bfe12  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
+74fca24287d78d677302ac02b71cd41637a43ee157cf09c5ebd4ceaf0142c9da  DELIVERY.txt
+e95c37e43068f7035cf02ec3af1623fbbbe8b5c069951f7de232155a571a2f64  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
 4f668cb9a5e73196b605f16837f26b93106732d3e45a7c7d87dbc9fb524d5332  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
 9ffcaff691435e7a7eafb72911a0864ff9d0371f5234996e5808db4c630fd5a3  consulting/tests/hth_onboarding/verify_pending_approval_channel.py

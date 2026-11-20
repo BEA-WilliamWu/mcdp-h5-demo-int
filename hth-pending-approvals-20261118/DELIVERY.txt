@@ -1,23 +1,23 @@
-Pending Approvals / My Approval List - userChannelType 字段交付
-日期：2026-11-18
+Pending Approvals / My Approval List / Activity Log - userChannelType 字段交付
+日期：2026-11-20
 源仓库：/Users/devs/CProj/bco-applicaion-main
 源分支：hth-integration-20261110
 原版本：b9dd071e69d1e50fd89b23ecdca54b9fede1aa0f
-上一版提交：3bdbec6d5e6dbdef643e0d14b1c9ce3b83173be7
-本次提交：80f5a01dec5501273fdf4a8bb08323e8c2d45b3a
+上一版提交：80f5a01dec5501273fdf4a8bb08323e8c2d45b3a
+本次提交：9eb908be3addb2e0eefd1b5febf56e141f693819
 
 范围与部署
 - 本目录 consulting/ 下的文件按原相对路径覆盖目标代码。
 - 生产改动只有两个 Java 文件，均在 com.ofss.digx.cz.bea.module.approval。
-  CZTransactionExt.java：postListTransactions 末尾补字段，覆盖 view=approval / approved。
+  CZTransactionExt.java：postListTransactions 末尾补字段，覆盖 view=approval / approved / created / all。
   HthApprovalUserChannel.java：新增内部辅助类，补充响应字典中的用户渠道。
 - 重新编译并部署 com.ofss.digx.cz.bea.module.approval.jar（须包含新增类）。
 - 无 SQL、前端、配置或公共 DTO 修改。审批规则、审批状态和持久化数据不变。
 - consulting/tests/ 下是回归脚本，不属于服务器部署文件。
 
 本次最小增量
-- 相对上一版只修改 CZTransactionExt.java 一行条件，增加 ViewType.APPROVED。
-- Pending Approvals 保持原逻辑；My Approval List 复用同一渠道识别与字典写入。
+- 相对上一版只扩展 CZTransactionExt.java 的一处条件，增加 ViewType.CREATED / ALL。
+- Pending Approvals、My Approval List 保持原逻辑；Activity Log 复用同一渠道识别与字典写入。
 - HthApprovalUserChannel.java 和回归脚本沿用上一版，不需另加实现。
 
 接口与字段
@@ -25,6 +25,9 @@ Pending Approvals:
 GET /digx/v1/transactions?view=approval&discriminator=ADMIN_MAINTENANCE
 My Approval List:
 GET /digx/v1/transactions?view=approved&discriminator=ADMIN_MAINTENANCE
+Activity Log（本人发起记录 / Viewer 查看记录）:
+GET /digx/v1/transactions?view=created&discriminator=ADMIN_MAINTENANCE
+GET /digx/v1/transactions?view=all&discriminator=ADMIN_MAINTENANCE
 在每条相关 transactionDTOs 记录的
   dictionaryArray[0].nameValuePairDTOArray
 中追加或替换一项：
@@ -55,8 +58,8 @@ GET /digx/v1/transactions?view=approved&discriminator=ADMIN_MAINTENANCE
 - BCO、UNKNOWN、没有此字段的记录保留，避免误隐藏旧审批申请。
 - transactions/count 及后端列表数量、排序、分页均未改。
   前端过滤后的展示数量、分页需由前端一起处理；不能直接当作后端已过滤。
-- 同一 view=approval 或 view=approved 接口的其他调用方也会得到该字段。
-  view=created / history 等其他视图未接入本次补充。
+- 同一 view=approval / approved / created / all 接口的其他调用方也会得到该字段。
+  其他 view 未接入本次补充；原有接口查询权限、角色与日期筛选保持原样。
 
 定位日志
 只有快照读取失败时增加一条统一 BeaSystemOut 日志：

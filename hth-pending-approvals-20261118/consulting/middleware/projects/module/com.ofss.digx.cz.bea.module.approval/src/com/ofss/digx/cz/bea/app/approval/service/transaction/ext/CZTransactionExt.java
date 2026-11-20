@@ -4076,7 +4076,8 @@ public class CZTransactionExt extends VoidTransactionExt {
 		}
 		//BCOCDC-5595 Jason end
 		new CZTransactionExtFunc().postListTransactions(sessionContext, transactionRequestDTO, viewType, approvalStatus, transactionListResponse);
-		if (ViewType.APPROVAL.equals(viewType) || ViewType.APPROVED.equals(viewType)) {
+		if (ViewType.APPROVAL.equals(viewType) || ViewType.APPROVED.equals(viewType)
+				|| ViewType.CREATED.equals(viewType) || ViewType.ALL.equals(viewType)) {
 			new HthApprovalUserChannel().enrich(transactionListResponse.getTransactionDTOs());
 		}
 	}

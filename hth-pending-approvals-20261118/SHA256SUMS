@@ -1,4 +1,7 @@
-74fca24287d78d677302ac02b71cd41637a43ee157cf09c5ebd4ceaf0142c9da  DELIVERY.txt
+256644dc2238143079b821210a0a2404d5ce814fbebb2ab501f71f16275e340b  DELIVERY.txt
+fac8dd8a039da6f6d19da4e823915410f4fb8404f10feefdb2bd539da7bbb7a7  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java
+72998d002d30a255ddfd94fd7ef419daf220d69b8ff85696e06db003c597767b  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/HthAuditUserChannel.java
 e95c37e43068f7035cf02ec3af1623fbbbe8b5c069951f7de232155a571a2f64  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
 4f668cb9a5e73196b605f16837f26b93106732d3e45a7c7d87dbc9fb524d5332  consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
+00c7f330aef3b85b2d543f0a5ded6f1f877cb921020feb36d510553a57be862f  consulting/tests/hth_onboarding/verify_audit_user_channel.py
 9ffcaff691435e7a7eafb72911a0864ff9d0371f5234996e5808db4c630fd5a3  consulting/tests/hth_onboarding/verify_pending_approval_channel.py

@@ -1,26 +1,24 @@
-Pending Approvals / My Approval List / Activity Log - userChannelType 字段交付
+Pending Approvals / My Approval List / Activity Log / Audit Log - userChannelType 字段交付
 日期：2026-11-20
 源仓库：/Users/devs/CProj/bco-applicaion-main
 源分支：hth-integration-20261110
 原版本：b9dd071e69d1e50fd89b23ecdca54b9fede1aa0f
-上一版提交：80f5a01dec5501273fdf4a8bb08323e8c2d45b3a
-本次提交：9eb908be3addb2e0eefd1b5febf56e141f693819
+上一版提交：9eb908be3addb2e0eefd1b5febf56e141f693819
+本次提交：521b76082802d799b41d345c44aa8390f8260c8e
 
 范围与部署
 - 本目录 consulting/ 下的文件按原相对路径覆盖目标代码。
-- 生产改动只有两个 Java 文件，均在 com.ofss.digx.cz.bea.module.approval。
-  CZTransactionExt.java：postListTransactions 末尾补字段，覆盖 view=approval / approved / created / all。
-  HthApprovalUserChannel.java：新增内部辅助类，补充响应字典中的用户渠道。
-- 重新编译并部署 com.ofss.digx.cz.bea.module.approval.jar（须包含新增类）。
-- 无 SQL、前端、配置或公共 DTO 修改。审批规则、审批状态和持久化数据不变。
+- 累计生产文件 4 个：approval 模块 2 个，access 模块 2 个。
+- 原有 transactions 接口的 4 个视图继续使用上一版实现，无新增改动。
+- 本次 Audit Log 仅改 2 个生产文件，均在 com.ofss.digx.cz.bea.module.access：
+  CZVoidAuditExt.java：postSearch 末尾增加 1 行调用，原过滤、翻译及 FMO 调用先照常完成。
+  HthAuditUserChannel.java：新增内部辅助类，仅补查询响应字典。
+- 本次增量需重新编译并部署 com.ofss.digx.cz.bea.module.access.jar（包含新增类）。
+  若尚未部署之前的列表改动，还需 com.ofss.digx.cz.bea.module.approval.jar。
+- 无 SQL、前端、配置或公共 DTO 修改；不修改审计落库、审批规则或业务数据。
 - consulting/tests/ 下是回归脚本，不属于服务器部署文件。
 
-本次最小增量
-- 相对上一版只扩展 CZTransactionExt.java 的一处条件，增加 ViewType.CREATED / ALL。
-- Pending Approvals、My Approval List 保持原逻辑；Activity Log 复用同一渠道识别与字典写入。
-- HthApprovalUserChannel.java 和回归脚本沿用上一版，不需另加实现。
-
-接口与字段
+transactions 接口（此前已交付，本次保持原样）
 Pending Approvals:
 GET /digx/v1/transactions?view=approval&discriminator=ADMIN_MAINTENANCE
 My Approval List:
@@ -28,54 +26,62 @@ GET /digx/v1/transactions?view=approved&discriminator=ADMIN_MAINTENANCE
 Activity Log（本人发起记录 / Viewer 查看记录）:
 GET /digx/v1/transactions?view=created&discriminator=ADMIN_MAINTENANCE
 GET /digx/v1/transactions?view=all&discriminator=ADMIN_MAINTENANCE
-在每条相关 transactionDTOs 记录的
-  dictionaryArray[0].nameValuePairDTOArray
-中追加或替换一项：
+字段位置：transactionDTOs[i].dictionaryArray[0].nameValuePairDTOArray
+- MT_N_CUS / MT_N_UUS：从已有或只读获取的提交快照中读取 userChannelType，
+  明确的 HTH / BCO 分别返回 HTH / BCO，缺少可靠依据返回 UNKNOWN。
+- UAT_N_HUA_NEW / EDT / DEL、PP_N_HTH_CERT_UPL、PP_N_HTH_ENB / EDT / DIS 返回 HTH。
+- 其他交易任务保持原响应，不新增字段。不改变列表数量、排序及计数接口。
+
+Audit Log 查询结果（本次新增）
+GET /digx/v1/audit?userID=...&startTime=...&endTime=...&activity=...&partyId=...
+字段位置：auditList[i].dictionaryArray[0].nameValuePairDTOArray
+每条非空审计记录追加或替换一项：
 {
   "name": "userChannelType",
   "genericName": "userChannelType",
   "value": "HTH",
   "datatype": "java.lang.String"
 }
-现有字典内容保留；重复补充不会在第一项字典内生成重复字段。
-
-渠道来源
-1. MT_N_CUS / MT_N_UUS（User Management 创建/编辑）：
-   优先读取交易响应已有的 UserExtensionDataDTO 快照；响应未附快照时，
-   按交易编号只读已保存的提交快照，取其中 userChannelType。
-   不查询实时用户表，也不会把完整提交快照补回列表响应。
-   明确的 HTH / BCO 分别返回 HTH / BCO；空值、未知值、缺少快照或读取失败
-   返回 UNKNOWN。该值只是渠道识别结果，与 API Password 状态无关。
-2. HTH 专用任务直接返回 HTH：
-   UAT_N_HUA_NEW / UAT_N_HUA_EDT / UAT_N_HUA_DEL
-   PP_N_HTH_CERT_UPL
-   PP_N_HTH_ENB / PP_N_HTH_EDT / PP_N_HTH_DIS
-3. 其他任务保持原响应，不新增字段。不根据名称或 HTH 前缀猜测渠道。
+- 以下 15 个明确 HTH onboarding taskCode 返回 HTH，范围与现有审计下拉一致：
+  MT_N_CUS_HTH / MT_N_UUS_HTH / MT_N_RUS_HTH
+  UAT_N_HUA_NEW / UAT_N_HUA_EDT / UAT_N_HUA_DEL
+  UAT_N_HAP_GEN / UAT_N_HAP_REGEN / UAT_N_HAP_RVL
+  CM_N_HAP_SETUP / CM_N_HAP_RESET / PP_N_HTH_CERT_UPL
+  PP_N_HTH_ENB / PP_N_HTH_EDT / PP_N_HTH_DIS
+- 其他 taskCode（含空值）返回 UNKNOWN。这不是 API Password 状态。
+  审计查询列表不带目标用户快照；不能把操作人渠道当作目标用户渠道，
+  也不能仅凭旧共享 MT_N_CUS / MT_N_UUS / MT_N_RUS 判断 BCO 或 HTH。
+  本次不额外查用户表或审计详情，不反推 BCO；旧记录不会被误隐藏。
+- 已上线 Inquiry 不属于此次 HTH onboarding 标记范围，返回 UNKNOWN 并保留显示。
+- 不按活动名称、通用 HTH 前缀或请求 URL 参数猜测渠道。
+- 保留其他字典字段；重复调用不重复增加该字段；不改原列表行数、顺序、
+  taskCode、Activity 文案、操作人、状态、引用编号或审计详情。
+- 本次仅接入 postSearch 查询结果，未修改单条 audit read 或审计写入流程。
 
 前端对接
-- 本次后端不读取 HTH 开关、不过滤记录。
-- 前端沿用所在 CM/BM 的 HTH 开关；关闭时只过滤 value === 'HTH' 的记录。
-- BCO、UNKNOWN、没有此字段的记录保留，避免误隐藏旧审批申请。
-- transactions/count 及后端列表数量、排序、分页均未改。
-  前端过滤后的展示数量、分页需由前端一起处理；不能直接当作后端已过滤。
-- 同一 view=approval / approved / created / all 接口的其他调用方也会得到该字段。
-  其他 view 未接入本次补充；原有接口查询权限、角色与日期筛选保持原样。
-
-定位日志
-只有快照读取失败时增加一条统一 BeaSystemOut 日志：
-  HTH_PENDING_APPROVAL stage=CHANNEL_UNAVAILABLE exceptionType=...
-不打印快照、Code、密码或用户联系方式；读取失败不阻断审批列表。
+- 查询结果补字段不依赖开关值，后端不新增 HTH 记录过滤。
+- 前端沿用当前门户的 CM/BM HTH 开关；关闭时只隐藏 value === 'HTH' 的记录。
+- UNKNOWN、BCO、缺少字段的旧版本响应均保留。
+- 字段必须在 nameValuePairDTOArray 中按 genericName/name 找到后取 value，
+  不假定它在数组中的固定下标。
+- 原有两个 Audit Log 下拉的 HTH toggle 过滤逻辑维持原样。
+- 前端过滤后的条数、分页由前端处理；原有后端计数/查询范围未改。
 
 验证
-python3 consulting/tests/hth_onboarding/verify_pending_approval_channel.py
-使用现有 SDK / 编译依赖及 JAVA_HOME，按 Ant 的 cp1252 编码、Java 8 目标编译。
-本次已重新编译生产扩展类并运行现有回归；157 项定向断言通过，覆盖 HTH/BCO/UNKNOWN、创建/编辑、
-缺失快照、读取失败、HTH 专用任务、无关任务、空字典、重复调用、原字典不变、
-列表顺序和审批元数据保留，以及实际 SDK 字典 JSON 序列化。
-日志容器与数据库读取边界使用替身；未连接 UAT 数据库或执行服务器联调，
-未运行全项目 Ant 构建。
+本次运行：python3 consulting/tests/hth_onboarding/verify_audit_user_channel.py
+- 按 Ant 的 cp1252 编码、Java 8 目标编译 CZVoidAuditExt 和新辅助类通过。
+- 141 项断言通过，使用实际 SDK AuditDTO、AuditListResponseDTO、Dictionary。
+- 覆盖 15 个 HTH 任务、历史共享任务、Inquiry、空/未知任务、失败审计记录、
+  防止用操作人/标签/请求参数猜测、原字段不变、列表顺序、空字典、重复补字段、
+  共享原字典不被改写，以及完整 AuditListResponseDTO 的 JSON 字段路径和值。
+- 已核对任务名单与现有 HthAuditTaskVisibility 的 15 个任务完全一致。
+此前 transactions 实现的 157 项断言已在上一版通过，本次代码未改动该实现。
+本次未连接银行数据库/API，未进行 UAT 联调，未运行全项目 Ant 构建。
 
 同步文件
+- consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/CZVoidAuditExt.java
+- consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.access/src/com/ofss/digx/cz/bea/app/audit/service/ext/HthAuditUserChannel.java
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/CZTransactionExt.java
 - consulting/middleware/projects/module/com.ofss.digx.cz.bea.module.approval/src/com/ofss/digx/cz/bea/app/approval/service/transaction/ext/HthApprovalUserChannel.java
+- consulting/tests/hth_onboarding/verify_audit_user_channel.py
 - consulting/tests/hth_onboarding/verify_pending_approval_channel.py

@@ -42,6 +42,7 @@ import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.TxnAmount;
 import com.hkbea.hth.service.payment.ChatsPaymentService;
+import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
 import com.hkbea.hth.service.payment.PaymentModelConvert;
 import com.hkbea.hth.utils.CacheHelperUtils;
@@ -62,6 +63,7 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -131,6 +133,8 @@ class ChatsPaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(chatsPaymentService, "debtorAddressService",
+                new DebtorAddressService(pe3Api, headers));
         // Mock LocalDateTime.now() to return a time within CHATS service window (Mon-Fri 9:00-17:00)
         localDateTimeMock = Mockito.mockStatic(LocalDateTime.class, Mockito.CALLS_REAL_METHODS);
         LocalDateTime fixedDateTime = LocalDateTime.of(2024, 1, 15, 10, 30); // Monday 10:30

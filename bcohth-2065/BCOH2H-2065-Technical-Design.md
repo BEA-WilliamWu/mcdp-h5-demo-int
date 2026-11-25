@@ -81,7 +81,9 @@ More than 140 characters is rejected with existing `500115` (`BENEFICIARY_ACCOUN
 
 Contract input: `contracts/SC-PE3_PEECHJ7A_Customer_Contact_Information_Retrieval_for_CHATS_TT_FPS_Sorted_by_Address-1.0.0.yaml` and the matching JSON. The integration copy is `src/main/resources/api/pe3/peechj7a.openapi.yaml`. It preserves the source wire fields, scalar types and lengths, and names/reuses the identical nested request/response schemas. Eighteen Java models were generated with OpenAPI Generator 7.17.0 using the existing PE3 JAX-RS/Jackson conventions.
 
-The On-us customer enquiry (PEECHI11) and the CHATS address enquiry (PEECHJ7A) share the same `Pe3Client`, environment-specific `pe3.base-url`, APIC credentials and z/OS timeout and error handling. Both use HTTP POST. In SIT, HTH calls the existing `/hkbea/sit-sf/hth/v1z/peechi11.v1` endpoint for On-us and `/hkbea/sit-sf/hth/v1z/peechj7a.v1` for CHATS.
+The On-us customer enquiry (PEECHI11) and the shared debtor address enquiry (PEECHJ7A) share the same `Pe3Client`, environment-specific `pe3.base-url`, APIC credentials and z/OS timeout and error handling. Both use HTTP POST. In SIT, HTH calls the existing `/hkbea/sit-sf/hth/v1z/peechi11.v1` endpoint for the On-us customer check and `/hkbea/sit-sf/hth/v1z/peechj7a.v1` for the address enquiry.
+
+CHATS, TT, DR, FPS and On-us each call `DebtorAddressService.lookup` once with the internal debit account during preparation of the selected payment for IPE submission. TT and DR share the overseas payment implementation. FPS and On-us retrieve the address before reserving the transfer limit. Each flow writes the result to `transactions[0].debtor.postalAddress`.
 
 Request mapping follows the existing PE3 account-key convention. The validated 18-digit internal debit account is split into entity (4), branch (4) and account (10), supplied under `ehj7aInput.ehj7aContractI.ehj7aKeyAccI`. `ehj7aCodEntityI` matches the entity. The common header uses channel `IN`, application `PE`, collection `PE9CHJ7A` (following the existing `PE9CHI11` convention), current operation date and blank optional common-header fields. The subsequently supplied PE9CHJ7A request form confirms collection `PE9CHJ7A` and supports the Alnova account-key query.
 
@@ -99,7 +101,7 @@ Response and IPE mapping:
 
 The BCO `selectDebtorPostalAddress` query and its unused `PartyPostalAddress` DTO are removed. Customer-name and other existing party-preference queries remain in use.
 
-Diagnostics use `messageId` for correlation. INFO records the host return code and contact count; WARN identifies missing response/output/answer and header errors. DEBUG for `com.hkbea.hth.service.payment.ChatsPaymentService` records the PE3 field names used to populate country and townName. An omitted field is logged as `none`.
+Diagnostics use `messageId` for correlation. INFO records the host return code and contact count; WARN identifies missing response/output/answer and header errors. DEBUG for `com.hkbea.hth.service.payment.DebtorAddressService` records the PE3 field names used to populate country and townName. An omitted field is logged as `none`.
 
 The CHATS creditor address remains optional. Apply the API's bounds as well as IPE's limits, rather than widening API fields to IPE's maximum:
 
@@ -118,10 +120,11 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | File | Change |
 | --- | --- |
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
-| `ChatsPaymentService.java` | Use the shared deposit-name builder; retain its CHATS remittance flags and obtain the debtor address through PEECHJ7A. |
+| `DebtorAddressService.java` | Query PEECHJ7A and map the first contact to an IPE debtor postal address for all five payment types. |
+| `ChatsPaymentService.java` | Use the shared debtor address lookup and deposit-name builder with the CHATS remittance flags. |
 | `PaymentRoutingPayload.java` | Build Name1..4 using the existing CHATS segmentation and short-name duplication rule. |
-| `OverseasPaymentService.java` | Apply the shared name builder to both TT and DR. |
-| `FpsPaymentService.java`, `OnUsPaymentService.java` | Add the same name fields to the existing supplementary data. |
+| `OverseasPaymentService.java` | Apply the shared name builder and debtor address lookup to TT and DR. |
+| `FpsPaymentService.java`, `OnUsPaymentService.java` | Populate the deposit-name fields and retrieve the debtor address before the limit update. |
 | `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
 | `PaymentServiceImpl.java` | Retain CHATS validation, routing identifiers and batch enquiry; share the confirmed five-type requested-execution-date mapping with 2126. |
 | `Pe3Api.java`, `Peechj7a*.java`, `api/pe3/peechj7a.openapi.yaml` | Add the PE3 contact enquiry and generated wire models using the existing PE3 client. |
@@ -148,6 +151,8 @@ SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 14
 Real IPE acceptance, database integration, pacs.008 generation and transmission are not established by mocked unit tests.
 
 ## 6. Verification and delivery
+
+The five-type address change passed 351 payment and PE3 tests with zero failures, errors or skips. Twelve new cases exercise TT, DR, FPS and On-us with an address, an empty result and a lookup failure. The tests verify the debit-account lookup and IPE payload, and verify that lookup failures occur before payment persistence, IPE submission and the FPS or On-us limit update. External services were mocked.
 
 The 25 November PE3 replacement first passed 45 targeted tests (44 CHATS service cases and one Feign wire-contract test). Coverage includes account-key request/header mapping, exact endpoint and JSON property names, response decoding, first-contact selection, empty addresses and failures before IPE submission. The subsequent direct-line correction tests one-to-one mapping, preserved empty-line positions, fifth-line-only input and per-line bounds. It passed 46 targeted executions (45 CHATS service cases plus one wire-contract case), with 0 failures, errors or skipped tests. Log: `/tmp/hth-pe3-address-20261125/direct-lines-test.log`. The verification reactor and generator run from `/tmp/hth-pe3-address-20261125/`; project POMs and dependencies are unchanged. Before the direct-line correction, the full clean payment regression passed 276 tests with 0 failures, 0 errors and 0 skipped. Log: `/tmp/hth-pe3-address-20261125/regression.log`. Request/response schemas were expanded and compared with the supplied contract, including every field and bound.
 

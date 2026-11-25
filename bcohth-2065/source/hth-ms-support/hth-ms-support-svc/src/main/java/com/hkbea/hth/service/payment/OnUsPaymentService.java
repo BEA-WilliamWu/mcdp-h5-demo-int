@@ -97,6 +97,8 @@ public class OnUsPaymentService {
     @Resource
     private com.hkbea.hth.bg3.api.AccountApi bgAccountApi;
     @Autowired
+    private DebtorAddressService debtorAddressService;
+    @Autowired
     private Pe3Api pe3Api;
     @Autowired
     private ScameterValidatorUtil scameterValidatorUtil;
@@ -179,6 +181,7 @@ public class OnUsPaymentService {
 
         // Remitter name is intentionally blank for BG3 internal transfers.
         txn.setDebtor(PaymentRoutingPayload.corporateDebtor(localPayment.getFromAccount().getName()));
+        txn.getDebtor().setPostalAddress(debtorAddressService.lookup(detail.debitInternal));
 
         String productCode = partyAccountMapper.selectProductCode(detail.debitInternal, localPayment.getPartyId());
         PartyAccount partyAccount = com.baomidou.mybatisplus.core.toolkit.StringUtils.isBlank(productCode) ? null

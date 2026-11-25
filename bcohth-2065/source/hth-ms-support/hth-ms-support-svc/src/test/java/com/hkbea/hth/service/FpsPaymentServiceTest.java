@@ -34,15 +34,19 @@ import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.TxnAmount;
+import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.FpsPaymentService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
 import com.hkbea.hth.service.payment.TransferLimitService;
+import com.hkbea.hth.utils.AccountUtils;
 import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.ScameterValidatorUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -103,6 +107,8 @@ class FpsPaymentServiceTest {
     private CommonHeader headers;
     @Mock
     private TransferLimitService transferLimitService;
+    @Mock
+    private DebtorAddressService debtorAddressService;
     @Mock
     private PaymentCommonService paymentCommonService;
     // savePaymentFee dereferences the cache manager when caching IPE fee data.
@@ -317,6 +323,36 @@ class FpsPaymentServiceTest {
         ParameterException exception = assertThrows(ParameterException.class,
                 () -> fpsPaymentService.processPayment(request, buildRoutingRequest()));
         assertEquals(HTHSupportErrorMapping.PAYMENT_BENEFICIARY_CURRENCY_NO_MATCHES, exception.getErrCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress(boolean hasAddress) {
+        when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
+        String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
+        var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
+                .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
+        when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        fpsPaymentService.processPayment(buildFpsPayment(), request);
+
+        verify(debtorAddressService).lookup(debitAccount);
+        verify(payemtRoutApi).submit(request);
+        assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+    }
+
+    @Test
+    void debtorAddressFailureStopsPaymentBeforeSubmission() {
+        when(debtorAddressService.lookup(anyString()))
+                .thenThrow(new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION));
+
+        ServiceException exception = assertThrows(ServiceException.class,
+                () -> fpsPaymentService.processPayment(buildFpsPayment(), buildRoutingRequest()));
+
+        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, exception.getErrCode());
+        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper, transferLimitService);
     }
 
     @Test

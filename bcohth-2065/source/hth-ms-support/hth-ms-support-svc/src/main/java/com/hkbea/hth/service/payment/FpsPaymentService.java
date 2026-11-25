@@ -90,6 +90,8 @@ public class FpsPaymentService {
 
 
     @Autowired
+    private DebtorAddressService debtorAddressService;
+    @Autowired
     private PayemtRoutApi payemtRoutApi;
     @Autowired
     private ScameterValidatorUtil scameterValidatorUtil;
@@ -164,6 +166,7 @@ public class FpsPaymentService {
         txn.setCharges(PaymentRoutingPayload.charges(null, debitCurrency, null, feeCode));
 
         txn.setDebtor(PaymentRoutingPayload.corporateDebtor(payerName));
+        txn.getDebtor().setPostalAddress(debtorAddressService.lookup(debitInternalAccNo));
         txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(
                 localPayment.getFromAccount().getAccountNumber(), debitInternalAccNo, null,
                 PaymentConstants.PAYER_ACCOUNT_TYPE_CSA,

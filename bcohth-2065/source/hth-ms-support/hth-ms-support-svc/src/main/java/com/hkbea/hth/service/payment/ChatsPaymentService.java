@@ -5,17 +5,6 @@ import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.constants.PaymentConstants;
-import com.hkbea.hth.pe3.api.Pe3Api;
-import com.hkbea.hth.pe3.model.Peechj7aRequest;
-import com.hkbea.hth.pe3.model.Peechj7aResponse;
-import com.hkbea.hth.pe3.model.Peechj7aDfhcommarea;
-import com.hkbea.hth.pe3.model.Peechj7aQaechcc;
-import com.hkbea.hth.pe3.model.Peechj7aRecord;
-import com.hkbea.hth.pe3.model.Peechj7aInput;
-import com.hkbea.hth.pe3.model.Peechj7aContractI;
-import com.hkbea.hth.pe3.model.Peechj7aKeyAccI;
-import com.hkbea.hth.pe3.model.Peechj7aAddressO;
-import com.hkbea.hth.pe3.model.Peechj7aContact;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentPayoutRecord;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -51,12 +40,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -75,9 +62,6 @@ public class ChatsPaymentService {
     // CHATS supported currencies：HKD, USD, CNY, EUR
     private static final Set<Currency> CHATS_SUPPORTED_CURRENCIES =
             EnumSet.of(Currency.HKD, Currency.CNY, Currency.USD, Currency.EUR);
-    private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
-    private static final Set<String> NON_STRUCTURED_ADDRESS_TYPES =
-            Set.of("40", "50", "60", "70", "80", "90", "00", "ZZ", "Z0", "Z1");
     private static final String CHATS_NETWORK = "CHATS";
 
     private static final String CHATS_PRINT_ADVICE_INDICATOR = "Y";
@@ -100,7 +84,7 @@ public class ChatsPaymentService {
     @Autowired
     private PartyPreferenceMapper partyPreferenceMapper;
     @Autowired
-    private Pe3Api pe3Api;
+    private DebtorAddressService debtorAddressService;
     @Autowired
     private CommonHeader headers;
     @Autowired
@@ -178,7 +162,7 @@ public class ChatsPaymentService {
         }
         txn.getDebtor().setType(Debtor.TypeEnum.CORPORATE);
         txn.getDebtor().setName(payerName);
-        txn.getDebtor().setPostalAddress(buildDebtorPostalAddress(debitInternalAccountNo));
+        txn.getDebtor().setPostalAddress(debtorAddressService.lookup(debitInternalAccountNo));
         txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(debitInternalAccountNo,
                 debitInternalAccountNo, null, PaymentConstants.PAYER_ACCOUNT_TYPE_CSA, debitCurrency,
                 PaymentRoutingPayload.parseCompanyCode(partyAccount == null ? null : partyAccount.getCompanyCode()),
@@ -227,145 +211,6 @@ public class ChatsPaymentService {
         CustomerNotificationInformRequest notification = paymentCommonService.buildCustomerNotificationInfo(
                 localPayment, PaymentConstants.NOTIFICATION_TYPE_EMAIL_SMS, localPayment.getPayeeId());
         txn.setNotification(PaymentRoutingPayload.notification(notification));
-    }
-
-    private com.hkbea.hth.ipe.model.PostalAddress buildDebtorPostalAddress(
-            String internalAccountNumber) {
-        Peechj7aContact contact = queryDebtorContact(internalAccountNumber);
-        if (contact == null || contact.getEhj7aAddressO() == null) {
-            log.debug("PEECHJ7A debtor address, messageId={}, countrySource=none, townNameSource=none",
-                    headers.getMessageId());
-            return null;
-        }
-        Peechj7aAddressO source = contact.getEhj7aAddressO();
-        String contactType = contact.getEhj7aTypCntaadrO() == null ? ""
-                : contact.getEhj7aTypCntaadrO().strip().toUpperCase(Locale.ROOT);
-        char addressType = contactType.length() == 2 ? contactType.charAt(1) : '\0';
-        String country = debtorCountry(contactType, addressType, source);
-        String preferredTown = switch (addressType) {
-            case 'H' -> source.getEhj7aDesDistrictO();
-            case 'C', 'I' -> source.getEhj7aOvrCtyDesO();
-            default -> null;
-        };
-        String town = PaymentRoutingPayload.firstNonBlank(preferredTown, source.getEhj7aDesCityO());
-        if (town != null) {
-            town = town.strip();
-        }
-        if (log.isDebugEnabled()) {
-            String countrySource = "none";
-            if (country != null) {
-                countrySource = NON_STRUCTURED_ADDRESS_TYPES.contains(contactType)
-                        ? "ehj7aCodCtryValO" : "ehj7aCodCountryAdrO";
-            }
-            String townSource = "none";
-            if (StringUtils.isNotBlank(preferredTown)) {
-                townSource = addressType == 'H' ? "ehj7aDesDistrictO" : "ehj7aOvrCtyDesO";
-            } else if (town != null) {
-                townSource = "ehj7aDesCityO";
-            }
-            log.debug("PEECHJ7A debtor address, messageId={}, countrySource={}, townNameSource={}",
-                    headers.getMessageId(), countrySource, townSource);
-        }
-        String[] lines = {source.getEhj7aExtAdrLin1O(), source.getEhj7aExtAdrLin2O(),
-                source.getEhj7aExtAdrLin3O(), source.getEhj7aExtAdrLin4O()};
-        boolean hasAddress = false;
-        for (int i = 0; i < lines.length; i++) {
-            if (StringUtils.isBlank(lines[i])) {
-                lines[i] = null;
-                continue;
-            }
-            lines[i] = lines[i].strip();
-            if (lines[i].codePointCount(0, lines[i].length()) > 70) {
-                throw new ParameterException("debtor.postalAddress", HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION);
-            }
-            hasAddress = true;
-        }
-        if (!hasAddress && country == null && town == null) {
-            return null;
-        }
-        return new com.hkbea.hth.ipe.model.PostalAddress()
-                .addressLine1(lines[0]).addressLine2(lines[1])
-                .addressLine3(lines[2]).addressLine4(lines[3])
-                .country(country).townName(town);
-    }
-
-    private String debtorCountry(String contactType, char addressType, Peechj7aAddressO source) {
-        String code = null;
-        if (NON_STRUCTURED_ADDRESS_TYPES.contains(contactType)) {
-            code = source.getEhj7aCodCtryValO();
-        } else if (addressType == 'H' || addressType == 'C' || addressType == 'I') {
-            code = source.getEhj7aCodCountryAdrO();
-        }
-        if (StringUtils.isBlank(code)) {
-            return null;
-        }
-        String country = code.strip().toUpperCase(Locale.ROOT);
-        if (!ISO_COUNTRIES.contains(country)) {
-            log.warn("PEECHJ7A country code omitted, messageId={}, contactType={}, countryCode={}",
-                    headers.getMessageId(), contactType, country);
-            return null;
-        }
-        return country;
-    }
-
-    private Peechj7aContact queryDebtorContact(String internalAccountNumber) {
-        Peechj7aResponse response;
-        try {
-            response = pe3Api.getCustomerContactInfo(buildContactInfoRequest(internalAccountNumber));
-        } catch (Exception e) {
-            log.error("PEECHJ7A debtor-address enquiry failed", e);
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
-        if (response == null || response.getDfhcommarea() == null
-                || response.getDfhcommarea().getQaechcc() == null) {
-            log.warn("PEECHJ7A response envelope is missing, messageId={}", headers.getMessageId());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
-        var header = response.getDfhcommarea().getQaechcc();
-        if (StringUtils.isNotBlank(header.getQaechccErrData())
-                && !"0000".equals(header.getQaechccErrData().strip())) {
-            log.warn("PEECHJ7A header error, messageId={}, error={}",
-                    headers.getMessageId(), header.getQaechccErrData());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
-        var record = header.getPeechj7a();
-        if (record == null || record.getEhj7aOutput() == null
-                || record.getEhj7aOutput().getEhj7aAnswer() == null) {
-            log.warn("PEECHJ7A output or answer is missing, messageId={}", headers.getMessageId());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
-        var output = record.getEhj7aOutput();
-        var contacts = output.getEhj7aContactO();
-        String returnCode = output.getEhj7aAnswer().getEhj7aCodReturn();
-        log.info("PEECHJ7A enquiry completed, messageId={}, returnCode={}, contactCount={}",
-                headers.getMessageId(), returnCode, contacts == null ? 0 : contacts.size());
-        if (!PaymentConstants.SUCC_CODE_00.equals(returnCode)) {
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
-        if (contacts == null || contacts.isEmpty()) {
-            return null;
-        }
-        // PEECHJ7A returns contacts sorted by address; preserve the returned order.
-        return contacts.getFirst();
-    }
-
-    private Peechj7aRequest buildContactInfoRequest(String internalAccountNumber) {
-        String entity = internalAccountNumber.substring(0, 4);
-        String branch = internalAccountNumber.substring(4, 8);
-        String account = internalAccountNumber.substring(8);
-        Peechj7aInput input = new Peechj7aInput()
-                .ehj7aCodEntityI(entity)
-                .ehj7aContractI(new Peechj7aContractI()
-                        .ehj7aKeyAccI(new Peechj7aKeyAccI()
-                                .ehj7aKeyEntityI(entity).ehj7aBrnOpenI(branch).ehj7aNumAccountI(account)));
-        return new Peechj7aRequest().dfhcommarea(new Peechj7aDfhcommarea()
-                .qaechcc(new Peechj7aQaechcc()
-                        .qaechccTypChannel(PaymentConstants.CHANNEL_TYPE_IN)
-                        .qaechccApplId("PE").qaechccCollecName("PE9CHJ7A")
-                        .qaechccCollecFunc("").qaechccDateOp(LocalDate.now().toString())
-                        .qaechccCodEntity(entity).qaechccCodBrn("").qaechccCodTerm("")
-                        .qaechccCodUser("").qaechccErrData("").qaechccFrArea("")
-                        .peechj7a(new Peechj7aRecord().ehj7aInput(input))));
     }
 
     private String findPreDesignatedAccounts(String partyId, String toAccountId) {

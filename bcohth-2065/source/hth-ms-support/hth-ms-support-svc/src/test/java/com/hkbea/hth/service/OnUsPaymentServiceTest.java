@@ -1,6 +1,7 @@
 package com.hkbea.hth.service;
 
 import com.hkbea.common.exception.ParameterException;
+import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
 import com.hkbea.hth.bg3.model.Bgec0760QaechccRequest;
@@ -49,15 +50,19 @@ import com.hkbea.hth.pe3.model.Peechi11RequestDfhcommareaQaechccPeechi11Ehi11Out
 import com.hkbea.hth.pe3.model.Peechi11RequestDfhcommareaQaechccPeechi11Ehi11OutputEhi11Data;
 import com.hkbea.hth.pe3.model.Peechi11RequestDfhcommareaQaechccPeechi11Ehi11OutputEhi11DataEhi11DtaBasicOInner;
 import com.hkbea.hth.pe3.model.Peechi11Response;
+import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.OnUsPaymentService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
 import com.hkbea.hth.service.payment.TransferLimitService;
+import com.hkbea.hth.utils.AccountUtils;
 import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.ScameterValidatorUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -122,6 +127,8 @@ class OnUsPaymentServiceTest {
     private PartyAccountMapper partyAccountMapper;
     @Mock
     private TransferLimitService transferLimitService;
+    @Mock
+    private DebtorAddressService debtorAddressService;
     @Mock
     private PaymentCommonService paymentCommonService;
     @Mock
@@ -419,6 +426,37 @@ class OnUsPaymentServiceTest {
         ParameterException exception = assertThrows(ParameterException.class,
                 () -> onUsPaymentService.processPayment(request, buildRoutingRequest()));
         assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NOT_FOUND, exception.getErrCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress(boolean hasAddress) {
+        stubSuccessFlow();
+        String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
+        var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
+                .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
+        when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        onUsPaymentService.processPayment(buildOnUsPayment(), request);
+
+        verify(debtorAddressService).lookup(debitAccount);
+        verify(payemtRoutApi).submit(request);
+        assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+    }
+
+    @Test
+    void debtorAddressFailureStopsPaymentBeforeSubmission() {
+        stubSuccessFlow();
+        when(debtorAddressService.lookup(anyString()))
+                .thenThrow(new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION));
+
+        ServiceException exception = assertThrows(ServiceException.class,
+                () -> onUsPaymentService.processPayment(buildOnUsPayment(), buildRoutingRequest()));
+
+        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, exception.getErrCode());
+        verifyNoInteractions(payemtRoutApi, paymentInternalMapper, transferLimitService);
     }
 
     @Test

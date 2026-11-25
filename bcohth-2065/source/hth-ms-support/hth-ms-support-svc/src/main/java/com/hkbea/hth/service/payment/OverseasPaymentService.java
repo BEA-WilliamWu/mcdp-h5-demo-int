@@ -69,6 +69,8 @@ public abstract class OverseasPaymentService {
     private static final String TT_PAYEE_BICCODE_REGEX = "[A-Z0-9]{4,4}[A-Z]{2,2}[A-Z0-9]{2,2}([A-Z0-9]{3,3}){0,1}";
 
     @Autowired
+    private DebtorAddressService debtorAddressService;
+    @Autowired
     protected PayemtRoutApi payemtRoutApi;
     @Autowired
     protected HthPaymentPayoutMapper paymentPayoutRecordMapper;
@@ -203,6 +205,7 @@ public abstract class OverseasPaymentService {
         }
 
         txn.setDebtor(PaymentRoutingPayload.corporateDebtor(payerName));
+        txn.getDebtor().setPostalAddress(debtorAddressService.lookup(debitInternalAccountNo));
         txn.setDebtorAccount(PaymentRoutingPayload.debtorAccount(
                 debitInternalAccountNo, debitInternalAccountNo,
                 formatPayerAccountNoFmt(localPayment.getFromAccount().getAccountNumber()),

@@ -3,7 +3,7 @@
     "_postman_id": "c9b7705d-77fd-5d18-9e13-11dd8a36effc",
     "name": "HTH APIs · Gateway and BFF",
     "description": "APIC product routes and direct HTH BFF routes. Use an HTH SIT/UAT environment and fill the test identities and credentials. The request examples use synthetic data or empty environment variables.",
-    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
     "type": "noauth"

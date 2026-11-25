@@ -3,7 +3,7 @@
     "_postman_id": "fb0bc0f7-9bb6-5695-bd6f-b44fda27138f",
     "name": "HTH Downstream APIs",
     "description": "HTTP requests built from the HTH/DSP runtime clients and repository contracts. Uses tenant-specific gateway base URLs and credentials. Direct microservice requests are grouped at the end.",
-    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
     "type": "noauth"

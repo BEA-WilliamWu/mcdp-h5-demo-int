@@ -1,5 +1,6 @@
 package com.hkbea.hth.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hkbea.common.exception.ParameterException;
 import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
@@ -73,6 +74,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -81,6 +83,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.reset;
@@ -848,7 +851,7 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void unsuccessfulOrMalformedPe3ResponseStopsSubmission() {
+    void unsuccessfulOrMalformedPe3ResponseOmitsAddressAndSubmits() {
         var hostError = contactResponse(null);
         hostError.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
                 .getEhj7aAnswer().setEhj7aCodReturn("99");
@@ -856,16 +859,16 @@ class ChatsPaymentServiceTest {
         headerError.getDfhcommarea().getQaechcc().setQaechccErrData("1234");
         var noRecord = new Peechj7aResponse().dfhcommarea(new Peechj7aDfhcommarea()
                 .qaechcc(new Peechj7aQaechcc()));
+        var missingReturnCode = contactResponse(null);
+        missingReturnCode.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aAnswer().setEhj7aCodReturn(null);
         var noAnswer = contactResponse(null);
         noAnswer.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput().setEhj7aAnswer(null);
         for (var response : Arrays.asList(null, new Peechj7aResponse(),
-                hostError, headerError, noRecord, noAnswer)) {
+                hostError, headerError, noRecord, noAnswer, missingReturnCode)) {
             when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-            var error = assertThrows(ServiceException.class,
-                    () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
-            assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, error.getErrCode());
+            assertChatsSubmitsWithoutDebtorAddress();
         }
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
     }
 
     @Test
@@ -971,9 +974,9 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void oversizedPe3AddressLineIsRejectedWithoutTruncation() {
+    void oversizedPe3AddressLineOmitsEntireAddressAndSubmits() {
         for (int i = 0; i < 4; i++) {
-            var source = new Peechj7aAddressO();
+            var source = new Peechj7aAddressO().ehj7aDesCityO("CITY");
             String value = "A".repeat(71);
             switch (i) {
                 case 0 -> source.setEhj7aExtAdrLin1O(value);
@@ -983,23 +986,44 @@ class ChatsPaymentServiceTest {
             }
             when(pe3Api.getCustomerContactInfo(any())).thenReturn(contactResponse(source));
 
-            var error = assertThrows(ParameterException.class,
-                    () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
-
-            assertEquals(HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION, error.getErrCode());
+            assertChatsSubmitsWithoutDebtorAddress();
         }
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
     }
 
     @Test
-    void debtorAddressPe3FailureStopsSubmission() {
-        when(pe3Api.getCustomerContactInfo(any(Peechj7aRequest.class)))
+    void pe3TransportFailureOmitsAddressAndSubmits() {
+        when(pe3Api.getCustomerContactInfo(any()))
                 .thenThrow(new IllegalStateException("PE3 address query failed"));
 
-        assertThrows(ServiceException.class,
-                () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
+        assertChatsSubmitsWithoutDebtorAddress();
+    }
 
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+    @Test
+    void ipeRejectionIsReturnedAfterPe3AddressFailure() {
+        when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
+        var request = buildRoutingRequest();
+        var rejected = buildSubmitResponse(StatusEnum.FAILED);
+        rejected.getData().setErrorCode("TEST-IPE-REJECTION");
+        when(payemtRoutApi.submit(request)).thenReturn(rejected);
+
+        Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        verify(payemtRoutApi).submit(request);
+        assertEquals(Payment.StatusEnum.REJECTED, result.getStatus());
+        assertEquals("TEST-IPE-REJECTION", result.getRejectCode());
+    }
+
+    private void assertChatsSubmitsWithoutDebtorAddress() {
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        Payment result = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        var debtor = request.getTransactions().getFirst().getDebtor();
+        assertEquals("PAYER NAME", debtor.getName());
+        assertFalse(new ObjectMapper().valueToTree(debtor).has("postalAddress"));
+        verify(payemtRoutApi).submit(same(request));
     }
 
     @Test

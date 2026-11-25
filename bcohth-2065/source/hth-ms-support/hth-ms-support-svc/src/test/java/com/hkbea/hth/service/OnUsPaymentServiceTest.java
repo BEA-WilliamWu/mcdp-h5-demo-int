@@ -1,7 +1,6 @@
 package com.hkbea.hth.service;
 
 import com.hkbea.common.exception.ParameterException;
-import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
 import com.hkbea.hth.bg3.model.Bgec0760QaechccRequest;
@@ -66,6 +65,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -447,16 +447,19 @@ class OnUsPaymentServiceTest {
     }
 
     @Test
-    void debtorAddressFailureStopsPaymentBeforeSubmission() {
+    void pe3TransportFailureOmitsAddressAndSubmits() {
         stubSuccessFlow();
-        when(debtorAddressService.lookup(anyString()))
-                .thenThrow(new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION));
+        when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
+        ReflectionTestUtils.setField(onUsPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        ServiceException exception = assertThrows(ServiceException.class,
-                () -> onUsPaymentService.processPayment(buildOnUsPayment(), buildRoutingRequest()));
+        Payment result = onUsPaymentService.processPayment(buildOnUsPayment(), request);
 
-        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, exception.getErrCode());
-        verifyNoInteractions(payemtRoutApi, paymentInternalMapper, transferLimitService);
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        verify(pe3Api).getCustomerContactInfo(any());
+        verify(payemtRoutApi).submit(request);
     }
 
     @Test

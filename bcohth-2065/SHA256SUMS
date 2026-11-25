@@ -1,6 +1,6 @@
-ef4cf9c9aed0efb9cd6c775607296274dff41fe1727278103f0c9c2074358c1d  BCOH2H-2065-Technical-Design.md
+31253aa1903fa122c3eba3e39f849ef979e1b15a27c7272579cbc932c893f79f  BCOH2H-2065-Technical-Design.md
 56472581fbd2048737e35b5d235224fa97073b3ed9e63314c6255eb1ea8b7439  DELETED_FILES.txt
-45b4f2fe4ab0b3081010b5416a84028ba9fb62fa31d305f551bfda1bb05bc4e0  DELIVERY.txt
+a42641e6af11b5eafb7c75346986d5d6a669e55bde539bed12579fb8e3dfeb0c  DELIVERY.txt
 c6d197b19cbedcebc457d2825f8ee0705d53cae5c98574d24993743e2bc25f60  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/mapper/PartyPreferenceMapper.java
 eebfdf6a4ee2522cad9826c28564402f8d186c801d2c41476147d41c2ede3017  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/api/Pe3Api.java
 bfc1a3f51ae20cfbe71b47a4d3aa8918fb151b7ccf911814cecfbd725fb8fb5d  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aAddressO.java
@@ -23,7 +23,7 @@ a4b9a96c91f382252a5c88bd7a94924d36a11432efe9079565810bef5003a5ce  source/hth-ms-
 d3876c2aaf2c201f0c4c0efaefa344b7902bb1897547ff6312ad572dbdc434d1  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aTeleFaxO.java
 1bbe49ab2d0fcd172f885859aa06b713ca6973bb8d082387c6ce3e4113de9143  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
 f8f5efa686e6875fe8520181373a930f5cf9c816df898606c0e0283668f8307c  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
-cd6e73d3a33b453299bc2f2dcd146f19277ca0a90fcbd82d46234c4b1bf5a975  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/DebtorAddressService.java
+a243b4a358cc75e2a581d7b0300547a186e19f338353c608a892dff6fc5193f5  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/DebtorAddressService.java
 4cb70d8ebff9c644d52c7e2018785d14bbc734257847165795ff28a7f7724008  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/FpsPaymentService.java
 ed010a8d62da63105565f7be375429a9ee850cc44ba9f2af16bf58dbaf2d32e2  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OnUsPaymentService.java
 ed43a67325580e46ffefcd7bbe0bccdb25bebe9fcde9d655f44a3db640b3afcc  source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OverseasPaymentService.java
@@ -33,10 +33,10 @@ af850497ef3562e234caf35496891a6527efd7ee025df6461efae3f980a09681  source/hth-ms-
 1b4ab08204e78ac0910ab1b0baf7b2625ec8dec331584ff35dd1b8c963c5f1c2  source/hth-ms-support/hth-ms-support-svc/src/main/resources/api/pe3/peechj7a.openapi.yaml
 ae63951bca1d6a12b47d7cd7b040d4787ac9987f0a47a3ceac3c2270d583fc79  source/hth-ms-support/hth-ms-support-svc/src/main/resources/mapper/PartyPreferenceMapper.xml
 6f918198bc47dfa22ad3745e4b08cd7fb36aed23407110206cfc13945d1e7090  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/pe3/Peechj7aContractTest.java
-0206bf6c540d0de92015b6bf54e0ce9788f86ca85dee5ccf6d03fe3daf44a01a  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
-4bd7281f896cf51163bbef05318a9c2efc265e9f3f6a8947f42029be0fb3632c  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/DrPaymentServiceTest.java
-e110630b3e9404e8610494e7e4bf10770a784fe1493adf78635933c0b395b3be  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/FpsPaymentServiceTest.java
-2efa2b25dcf703cd25ded8c70b83a8afe972930c01d3b915e2264b52ece994fd  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/OnUsPaymentServiceTest.java
+569318277cfc25c577423cc4fafc990fd916771780b518c47bb10afff287af92  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
+4035373731ff416880bf5861f2ebec2a183a0e3192bb4c4ff523d4dae88af80c  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/DrPaymentServiceTest.java
+c04ad2b28679c93d811b423414f15d6fba160c8fcbb07d87578a39f9e15daa58  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/FpsPaymentServiceTest.java
+17eaa98d7a5ed4acc247a2cf9c82ca224810a996e9dcf5e438b65660b04c2374  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/OnUsPaymentServiceTest.java
 4562b549f505f5417a0471c38661ba1c60d3d8f5f9c022cffdbc2ac4e63d00f1  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentEnquiryServiceTest.java
 6ff57ab5ccb3e75fc9f4a5598396fcc1d0621d4604d72f57c3851da5956ebc93  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/PaymentServiceImplTest.java
-19d6f94be13860ce834563d6dbb32d7ffc95c1bee8c235c955b75530f005f20d  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/TtPaymentServiceTest.java
+edaa5959658fbe6b2bb693c58df6231f9dd2384c774b7670b438ad2aade0a343  source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/TtPaymentServiceTest.java

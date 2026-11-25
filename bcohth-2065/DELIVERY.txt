@@ -1,7 +1,7 @@
 BCOH2H-2065 - PE3 debtor country/town and direct address-line mapping
 Date: 2026-11-25
 Source repository: /Users/devs/CProj/hth-dsp
-Local DSP commit / cumulative delivery source snapshot: b42acfaa85d7b472383a7a12276a48b944e5b38b
+Local DSP commit / cumulative delivery source snapshot: 21590bb0081ffd09e50bfbf638f68b0525e2befe
 
 The delivery includes PEECHJ7A in the existing Pe3Api/Pe3Client integration,
 including the integration OpenAPI and 18 generated wire models.
@@ -10,8 +10,10 @@ and On-us, and maps the first returned contact to the IPE debtor postal address.
 FPS and On-us run this enquiry before applying the transfer limit.
 ehj7aExtAdrLin1O..4O map directly to IPE debtor.postalAddress.addressLine1..4.
 Outer padding is stripped and blank line positions are preserved.
-Successful empty address results omit the address. Failed or malformed host
-responses stop payment submission with the existing service error 600000.
+For all five payment types, PEECHJ7A errors, malformed replies and oversized
+address lines generate a WARN and omit the debtor postal address. Payment
+continues through the normal limit and IPE submission flow. A successful
+empty result also omits the address.
 Country/town mapping now follows the approved contact-type rules:
 - H/C/I structured addresses use ehj7aCodCountryAdrO.
 - Non-structured types 40/50/60/70/80/90/00/ZZ/Z0/Z1 use ehj7aCodCtryValO.
@@ -38,10 +40,11 @@ PEECHJ7A enquiry completed with returnCode=00.
 
 Delivery baseline: apply to DSP sync 9c25499. Shared source files include the synced payment validation changes.
 Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
-All-payment debtor address revision: 351 tests passed, 0 failures/errors/skipped.
-The 12 new cases cover mapped and omitted addresses and lookup failure for TT, DR,
-FPS and On-us. Failures stop IPE submission and, for FPS and On-us, limit updates.
-Log: /tmp/hth-2065-reapply.KOrUPs/test.log
+All-payment debtor address revision: 352 tests passed, 0 failures/errors/skipped.
+All five payment flows submit to IPE after an address enquiry failure. Tests
+cover successful and rejected IPE responses, malformed PE3 replies, oversized
+lines and absence of the postalAddress property in debtor JSON.
+Log: /tmp/hth-2065-optional.SXYaH7/verified.log
 Earlier DEBUG logging revision: 80 tests passed, 0 failures/errors/skipped
 (79 CHATS cases and one PE3 wire-contract case).
 Tests cover structured/non-structured types, preferred city/district and generic

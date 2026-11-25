@@ -34,6 +34,7 @@ import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.TxnAmount;
+import com.hkbea.hth.pe3.api.Pe3Api;
 import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.FpsPaymentService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
@@ -50,6 +51,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -67,6 +69,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -344,15 +347,20 @@ class FpsPaymentServiceTest {
     }
 
     @Test
-    void debtorAddressFailureStopsPaymentBeforeSubmission() {
-        when(debtorAddressService.lookup(anyString()))
-                .thenThrow(new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION));
+    void pe3TransportFailureOmitsAddressAndSubmits() {
+        when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
+        Pe3Api pe3Api = mock(Pe3Api.class);
+        when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
+        ReflectionTestUtils.setField(fpsPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        ServiceException exception = assertThrows(ServiceException.class,
-                () -> fpsPaymentService.processPayment(buildFpsPayment(), buildRoutingRequest()));
+        Payment result = fpsPaymentService.processPayment(buildFpsPayment(), request);
 
-        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, exception.getErrCode());
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper, transferLimitService);
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        verify(pe3Api).getCustomerContactInfo(any());
+        verify(payemtRoutApi).submit(request);
     }
 
     @Test

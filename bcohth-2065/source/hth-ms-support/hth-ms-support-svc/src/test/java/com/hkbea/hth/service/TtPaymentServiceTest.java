@@ -1,7 +1,6 @@
 package com.hkbea.hth.service;
 
 import com.hkbea.common.exception.ParameterException;
-import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
 import com.hkbea.hth.constants.PaymentConstants;
@@ -38,6 +37,7 @@ import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.TxnAmount;
+import com.hkbea.hth.pe3.api.Pe3Api;
 import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
 import com.hkbea.hth.service.payment.TtPaymentService;
@@ -53,6 +53,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -74,6 +75,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -317,15 +319,19 @@ class TtPaymentServiceTest {
     }
 
     @Test
-    void debtorAddressFailureStopsPaymentBeforeSubmission() {
-        when(debtorAddressService.lookup(anyString()))
-                .thenThrow(new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION));
+    void pe3TransportFailureOmitsAddressAndSubmits() {
+        Pe3Api pe3Api = mock(Pe3Api.class);
+        when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
+        ReflectionTestUtils.setField(ttPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        ServiceException exception = assertThrows(ServiceException.class,
-                () -> ttPaymentService.processPayment(buildTtPayment(Currency.HKD), buildRoutingRequest()));
+        Payment result = ttPaymentService.processPayment(buildTtPayment(Currency.HKD), request);
 
-        assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, exception.getErrCode());
-        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        verify(pe3Api).getCustomerContactInfo(any());
+        verify(payemtRoutApi).submit(request);
     }
 
     @Test

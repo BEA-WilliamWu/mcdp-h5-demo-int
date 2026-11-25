@@ -1,11 +1,8 @@
 package com.hkbea.hth.service.payment;
 
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
-import com.hkbea.common.exception.ParameterException;
-import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.constants.PaymentConstants;
-import com.hkbea.hth.exception.HTHSupportErrorMapping;
 import com.hkbea.hth.ipe.model.PostalAddress;
 import com.hkbea.hth.pe3.api.Pe3Api;
 import com.hkbea.hth.pe3.model.Peechj7aAddressO;
@@ -42,7 +39,18 @@ public class DebtorAddressService {
     }
 
     public PostalAddress lookup(String internalAccountNumber) {
-        Peechj7aContact contact = queryDebtorContact(internalAccountNumber);
+        try {
+            var response = pe3Api.getCustomerContactInfo(buildContactInfoRequest(internalAccountNumber));
+            return mapAddress(firstContact(response));
+        } catch (Exception e) {
+            // Client exceptions can contain the raw response. Log only the exception type.
+            log.warn("PEECHJ7A debtor address omitted, messageId={}, exception={}",
+                    headers.getMessageId(), e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private PostalAddress mapAddress(Peechj7aContact contact) {
         if (contact == null || contact.getEhj7aAddressO() == null) {
             log.debug("PEECHJ7A debtor address, messageId={}, countrySource=none, townNameSource=none",
                     headers.getMessageId());
@@ -62,6 +70,22 @@ public class DebtorAddressService {
         if (town != null) {
             town = town.strip();
         }
+        String[] lines = {source.getEhj7aExtAdrLin1O(), source.getEhj7aExtAdrLin2O(),
+                source.getEhj7aExtAdrLin3O(), source.getEhj7aExtAdrLin4O()};
+        boolean hasAddress = false;
+        for (int i = 0; i < lines.length; i++) {
+            if (StringUtils.isBlank(lines[i])) {
+                lines[i] = null;
+                continue;
+            }
+            lines[i] = lines[i].strip();
+            if (lines[i].codePointCount(0, lines[i].length()) > 70) {
+                log.warn("PEECHJ7A debtor address omitted, messageId={}, addressLine{} exceeds 70 characters",
+                        headers.getMessageId(), i + 1);
+                return null;
+            }
+            hasAddress = true;
+        }
         if (log.isDebugEnabled()) {
             String countrySource = "none";
             if (country != null) {
@@ -76,20 +100,6 @@ public class DebtorAddressService {
             }
             log.debug("PEECHJ7A debtor address, messageId={}, countrySource={}, townNameSource={}",
                     headers.getMessageId(), countrySource, townSource);
-        }
-        String[] lines = {source.getEhj7aExtAdrLin1O(), source.getEhj7aExtAdrLin2O(),
-                source.getEhj7aExtAdrLin3O(), source.getEhj7aExtAdrLin4O()};
-        boolean hasAddress = false;
-        for (int i = 0; i < lines.length; i++) {
-            if (StringUtils.isBlank(lines[i])) {
-                lines[i] = null;
-                continue;
-            }
-            lines[i] = lines[i].strip();
-            if (lines[i].codePointCount(0, lines[i].length()) > 70) {
-                throw new ParameterException("debtor.postalAddress", HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION);
-            }
-            hasAddress = true;
         }
         if (!hasAddress && country == null && town == null) {
             return null;
@@ -119,40 +129,33 @@ public class DebtorAddressService {
         return country;
     }
 
-    private Peechj7aContact queryDebtorContact(String internalAccountNumber) {
-        Peechj7aResponse response;
-        try {
-            response = pe3Api.getCustomerContactInfo(buildContactInfoRequest(internalAccountNumber));
-        } catch (Exception e) {
-            log.error("PEECHJ7A debtor-address enquiry failed", e);
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
+    private Peechj7aContact firstContact(Peechj7aResponse response) {
         if (response == null || response.getDfhcommarea() == null
                 || response.getDfhcommarea().getQaechcc() == null) {
-            log.warn("PEECHJ7A response envelope is missing, messageId={}", headers.getMessageId());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
+            log.warn("PEECHJ7A debtor address omitted, missing response envelope, messageId={}", headers.getMessageId());
+            return null;
         }
         var header = response.getDfhcommarea().getQaechcc();
         if (StringUtils.isNotBlank(header.getQaechccErrData())
                 && !"0000".equals(header.getQaechccErrData().strip())) {
-            log.warn("PEECHJ7A header error, messageId={}, error={}",
-                    headers.getMessageId(), header.getQaechccErrData());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
+            log.warn("PEECHJ7A debtor address omitted, host header error, messageId={}", headers.getMessageId());
+            return null;
         }
         var record = header.getPeechj7a();
         if (record == null || record.getEhj7aOutput() == null
                 || record.getEhj7aOutput().getEhj7aAnswer() == null) {
-            log.warn("PEECHJ7A output or answer is missing, messageId={}", headers.getMessageId());
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
+            log.warn("PEECHJ7A debtor address omitted, missing host output or answer, messageId={}", headers.getMessageId());
+            return null;
         }
         var output = record.getEhj7aOutput();
         var contacts = output.getEhj7aContactO();
         String returnCode = output.getEhj7aAnswer().getEhj7aCodReturn();
+        if (!PaymentConstants.SUCC_CODE_00.equals(returnCode)) {
+            log.warn("PEECHJ7A debtor address omitted, messageId={}, returnCode={}", headers.getMessageId(), returnCode);
+            return null;
+        }
         log.info("PEECHJ7A enquiry completed, messageId={}, returnCode={}, contactCount={}",
                 headers.getMessageId(), returnCode, contacts == null ? 0 : contacts.size());
-        if (!PaymentConstants.SUCC_CODE_00.equals(returnCode)) {
-            throw new ServiceException(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION);
-        }
         if (contacts == null || contacts.isEmpty()) {
             return null;
         }

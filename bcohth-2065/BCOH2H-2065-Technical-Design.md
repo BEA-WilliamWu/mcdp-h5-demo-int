@@ -89,19 +89,19 @@ Request mapping follows the existing PE3 account-key convention. The validated 1
 
 Response and IPE mapping:
 
-- Require a well-formed response and `ehj7aAnswer.ehj7aCodReturn = 00`. Reject a nonblank common-header error other than `0000`.
+- Use the PE3 address only when the response is well formed, `ehj7aAnswer.ehj7aCodReturn = 00` and the common-header error field is blank or `0000`.
 - Select the first `ehj7aContactO` item in returned order, as confirmed by the user. Read its `ehj7aAddressO.ehj7aExtAdrLin1O..4O`. No primary-address or language filtering is applied.
-- Map `ehj7aExtAdrLin1O..4O` directly to IPE `debtor.postalAddress.addressLine1..4`, as requested on 25 November. Strip outer padding and omit blank fields while preserving each line position. Reject an individual line exceeding the IPE maximum of 70 Unicode characters.
+- Map `ehj7aExtAdrLin1O..4O` directly to IPE `debtor.postalAddress.addressLine1..4`, as requested on 25 November. Strip outer padding and omit blank fields while preserving each line position. If any mapped line exceeds the IPE limit of 70 Unicode characters, log a warning and omit the entire debtor postal address.
 - The fifth line `ehj7aExtAdrLin5O` is currently unmapped, pending the user's log review and mapping confirmation.
 - Populate `country` according to the trimmed, uppercased `ehj7aTypCntaadrO`. For a two-character contact type ending in `H`, `C` or `I`, read `ehj7aCodCountryAdrO`. For non-structured types `40`, `50`, `60`, `70`, `80`, `90`, `00`, `ZZ`, `Z0`, `Z1`, read `ehj7aCodCtryValO` instead. Trim and uppercase the selected code, require membership in the existing Java ISO alpha-2 country list, and omit/log unrecognized nonblank codes. Do not convert three-letter codes or fall back to the other country field. Unrecognized/missing contact types leave country absent.
 - Populate `townName` from `ehj7aDesDistrictO` for contact types ending in `H`; use `ehj7aOvrCtyDesO` for those ending in `C` or `I`. If that value is blank, or the type has no designated town field, use `ehj7aDesCityO`. Strip outer padding; all-blank candidates leave town absent. The user accepted this generic-city fallback as an implementation decision on 25 November.
 - Province, area and other district descriptions are not appended to the address lines. All mapped values come from the selected first contact.
 - A successful response with no contact/address omits the postal-address object and allows payment to continue. If the first four lines, mapped country and mapped town are all empty, omit the object. Country-only or town-only results retain an address object.
-- A timeout, transport exception, malformed response or unsuccessful host answer stops submission with the existing general service error `600000`. Preserve the distinction between a successful empty result and a failed enquiry.
+- For all five payment types, a timeout, client exception, malformed reply, host error or address mapping failure logs a WARN with the message ID. HTH omits `debtor.postalAddress` and continues normal payment processing, including limit checks and IPE submission. The IPE response determines the submission outcome.
 
 The BCO `selectDebtorPostalAddress` query and its unused `PartyPostalAddress` DTO are removed. Customer-name and other existing party-preference queries remain in use.
 
-Diagnostics use `messageId` for correlation. INFO records the host return code and contact count; WARN identifies missing response/output/answer and header errors. DEBUG for `com.hkbea.hth.service.payment.DebtorAddressService` records the PE3 field names used to populate country and townName. An omitted field is logged as `none`.
+Diagnostics use `messageId` for correlation. INFO records the successful enquiry return code and contact count. WARN identifies the reason for omitting an address after a failed enquiry. DEBUG for `com.hkbea.hth.service.payment.DebtorAddressService` records the PE3 field names used to populate country and townName. An omitted field is logged as `none`.
 
 The CHATS creditor address remains optional. Apply the API's bounds as well as IPE's limits, rather than widening API fields to IPE's maximum:
 
@@ -152,7 +152,7 @@ Real IPE acceptance, database integration, pacs.008 generation and transmission 
 
 ## 6. Verification and delivery
 
-The five-type address change passed a clean build on sync baseline `9c25499` with 351 payment and PE3 tests and zero failures, errors or skips. Twelve new cases exercise TT, DR, FPS and On-us with an address, an empty result and a lookup failure. The tests verify the debit-account lookup and IPE payload, and verify that lookup failures occur before payment persistence, IPE submission and the FPS or On-us limit update. External services were mocked.
+Payment service tests simulate a PE3 client failure for each of the five types and verify submission to IPE with the debtor address omitted. CHATS tests also cover malformed replies, header and return-code errors, oversized address lines, omission from serialized JSON and an IPE rejection after a PE3 failure. PE3 and IPE are mocked.
 
 The 25 November PE3 replacement first passed 45 targeted tests (44 CHATS service cases and one Feign wire-contract test). Coverage includes account-key request/header mapping, exact endpoint and JSON property names, response decoding, first-contact selection, empty addresses and failures before IPE submission. The subsequent direct-line correction tests one-to-one mapping, preserved empty-line positions, fifth-line-only input and per-line bounds. It passed 46 targeted executions (45 CHATS service cases plus one wire-contract case), with 0 failures, errors or skipped tests. Log: `/tmp/hth-pe3-address-20261125/direct-lines-test.log`. The verification reactor and generator run from `/tmp/hth-pe3-address-20261125/`; project POMs and dependencies are unchanged. Before the direct-line correction, the full clean payment regression passed 276 tests with 0 failures, 0 errors and 0 skipped. Log: `/tmp/hth-pe3-address-20261125/regression.log`. Request/response schemas were expanded and compared with the supplied contract, including every field and bound.
 

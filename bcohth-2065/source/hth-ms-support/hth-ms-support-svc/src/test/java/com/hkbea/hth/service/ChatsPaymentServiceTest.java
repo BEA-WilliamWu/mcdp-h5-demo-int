@@ -565,7 +565,7 @@ class ChatsPaymentServiceTest {
 
     @Test
     void customerEndToEndIdIsSubmittedWithoutReplacingTheHthReference() {
-        for (String customerId : Arrays.asList(null, "", "test123456end", " ", "  payer reference  ", "12345678901234567890123456789012345")) {
+        for (String customerId : Arrays.asList(null, "", "test123456end", " ", "payer-reference", "12345678901234567890123456789012345")) {
             reset(payemtRoutApi, paymentPayoutRecordMapper, accountApi);
             LocalPayment input = buildChatsPayment(Currency.HKD);
             input.getPaymentIdentification().setEndToEndId(customerId);
@@ -681,7 +681,7 @@ class ChatsPaymentServiceTest {
         ParameterException error = assertThrows(ParameterException.class,
                 () -> chatsPaymentService.processPayment(input, buildRoutingRequest()));
 
-        assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID, error.getErrCode());
+        assertEquals(HTHSupportErrorMapping.CREDITORNAME_LENGTH_EXCEPTION, error.getErrCode());
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper, scameterValidatorUtil);
     }
 

@@ -16,6 +16,8 @@ import com.hkbea.hth.model.Purpose;
 import com.hkbea.hth.service.PaymentServiceImpl;
 import com.hkbea.hth.utils.CurrencyUtils;
 
+import java.util.EnumSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -33,7 +35,7 @@ public final class PaymentValidationSupport {
     private static final int MAX_SEGMENTS = 4;
     private static final int MAX_LENGTH = SEGMENT_LENGTH * MAX_SEGMENTS;
 
-    private static final String CUSTOMER_TRANSACTION_ID_REGEX = "^.{1,35}$";
+    private static final String CUSTOMER_TRANSACTION_ID_REGEX = "^[A-Za-z0-9-]{1,35}$";
     private static final String BIC_REGEX = "[A-Z0-9]{4,4}[A-Z]{2,2}[A-Z0-9]{2,2}([A-Z0-9]{3,3}){0,1}";
     private static final String CHATS_ADDRESS_REGEX =
             "^[0-9a-zA-Z/?:().,'+ !#$%&*=^_`{|}~\";<>@\\[\\]\\\\-]{1,70}$";
@@ -50,7 +52,24 @@ public final class PaymentValidationSupport {
     private static final String CLEARING_SYSTEM_MEMBER_ID_REGEX = "^[A-Za-z0-9]{1,5}$";
     private static final Set<String> TT_CATEGORYPURPOSE_CODE = Set.of("CGODDR", "CSTRDR", "CCTFDR", "CCDNDR", "COCADR");
 
+    private static final Map<LocalPayment.PaymentTypeEnum, Set<Currency>> TYPE_SUPPORTED_CURRENCIES = Map.of(
+            LocalPayment.PaymentTypeEnum.ONUS, EnumSet.of(Currency.HKD, Currency.USD, Currency.EUR,
+                    Currency.AUD, Currency.CAD, Currency.CHF, Currency.CNY, Currency.GBP,
+                    Currency.JPY, Currency.NZD, Currency.SGD),
+            LocalPayment.PaymentTypeEnum.TT, EnumSet.of(Currency.HKD, Currency.USD, Currency.EUR,
+                    Currency.AUD, Currency.CAD, Currency.CHF, Currency.CNY, Currency.GBP,
+                    Currency.JPY, Currency.NZD, Currency.SGD),
+            LocalPayment.PaymentTypeEnum.FPS, EnumSet.of(Currency.HKD, Currency.CNY),
+            LocalPayment.PaymentTypeEnum.CHATS, EnumSet.of(Currency.HKD, Currency.USD, Currency.CNY, Currency.EUR),
+            LocalPayment.PaymentTypeEnum.DR, EnumSet.of(Currency.HKD, Currency.USD, Currency.CNY));
     private PaymentValidationSupport() {
+    }
+    public static void validateProvidedTypeCurrencyCompatibility(
+            LocalPayment.PaymentTypeEnum provided, Currency instructedCurrency) {
+        Set<Currency> supported = provided == null ? null : TYPE_SUPPORTED_CURRENCIES.get(provided);
+        if (supported != null && instructedCurrency != null && !supported.contains(instructedCurrency)) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYMENT_TYPE_CURRENCY_INCOMPATIBLE);
+        }
     }
 
     /**
@@ -198,7 +217,7 @@ public final class PaymentValidationSupport {
     /** CHATS creditor names fit the canonical IPE fields and four 35-character deposit-name fields. */
     public static void validateChatsCreditorName(LocalPayment payment) {
         String name = payment.getCreditor() == null ? null : payment.getCreditor().getCreditorName();
-        validateMaxLength(name, 140, HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID);
+        validateMaxLength(name, 140, HTHSupportErrorMapping.CREDITORNAME_LENGTH_EXCEPTION);
     }
 
     /** The trusted payer name is required by IPE Debtor and must fit its limit. */

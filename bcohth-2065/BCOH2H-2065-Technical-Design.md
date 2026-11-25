@@ -42,7 +42,7 @@ The corrected mapping separates the identifiers:
 | `HTH_PAYMENT_PAYOUT.END_TO_END_ID` | Generated HTH batch ID, preserving the existing column meaning |
 | `HTH_PAYMENT_PAYOUT.CUSTOMER_TRANSACTION_ID` | Existing API `transactionID`, unchanged |
 
-The customer ID is optional and limited to 35 characters. Supplied nonblank values are neither trimmed nor reformatted. This change does not introduce a customer End-to-End ID uniqueness check or a new persistence column. The existing `transactionID` duplicate check remains separate.
+The customer End-to-End ID is optional. On the 25 November sync baseline (`9c25499`), a nonblank CHATS value must contain 1 to 35 ASCII letters, digits or hyphens. HTH passes an accepted value through unchanged. This change does not introduce a customer End-to-End ID uniqueness check or a new persistence column. The existing `transactionID` duplicate check remains separate.
 
 For explicit CHATS requests, the caller ID is present in the initial IPE routing request. After route selection, the mapping is reapplied using the selected type:
 
@@ -75,7 +75,7 @@ For each payment type, the existing canonical name fields retain the full API na
 | 71–105 | Characters 1–35 | Characters 36–70 | Characters 71–105, as present | Unset |
 | 106–140 | Characters 1–35 | Characters 36–70 | Characters 71–105 | Characters 106–140, as present |
 
-More than 140 characters is rejected with existing `500115` (`BENEFICIARY_ACCOUNT_NAME_INVALID`). The explicit-CHATS entry check and selected-CHATS service check both use 140. Existing mandatory-name and character-set validation remains in place. Other payment types retain their existing rules.
+On baseline `9c25499`, a CHATS creditor name longer than 140 characters returns `500164` (`CREDITORNAME_LENGTH_EXCEPTION`). The explicit-CHATS entry check and selected-CHATS service check both use 140. Existing mandatory-name and character-set validation remains in place. Other payment types retain their existing rules.
 
 ### Debtor postal address from PE3 PEECHJ7A
 
@@ -152,7 +152,7 @@ Real IPE acceptance, database integration, pacs.008 generation and transmission 
 
 ## 6. Verification and delivery
 
-The five-type address change passed 351 payment and PE3 tests with zero failures, errors or skips. Twelve new cases exercise TT, DR, FPS and On-us with an address, an empty result and a lookup failure. The tests verify the debit-account lookup and IPE payload, and verify that lookup failures occur before payment persistence, IPE submission and the FPS or On-us limit update. External services were mocked.
+The five-type address change passed a clean build on sync baseline `9c25499` with 351 payment and PE3 tests and zero failures, errors or skips. Twelve new cases exercise TT, DR, FPS and On-us with an address, an empty result and a lookup failure. The tests verify the debit-account lookup and IPE payload, and verify that lookup failures occur before payment persistence, IPE submission and the FPS or On-us limit update. External services were mocked.
 
 The 25 November PE3 replacement first passed 45 targeted tests (44 CHATS service cases and one Feign wire-contract test). Coverage includes account-key request/header mapping, exact endpoint and JSON property names, response decoding, first-contact selection, empty addresses and failures before IPE submission. The subsequent direct-line correction tests one-to-one mapping, preserved empty-line positions, fifth-line-only input and per-line bounds. It passed 46 targeted executions (45 CHATS service cases plus one wire-contract case), with 0 failures, errors or skipped tests. Log: `/tmp/hth-pe3-address-20261125/direct-lines-test.log`. The verification reactor and generator run from `/tmp/hth-pe3-address-20261125/`; project POMs and dependencies are unchanged. Before the direct-line correction, the full clean payment regression passed 276 tests with 0 failures, 0 errors and 0 skipped. Log: `/tmp/hth-pe3-address-20261125/regression.log`. Request/response schemas were expanded and compared with the supplied contract, including every field and bound.
 

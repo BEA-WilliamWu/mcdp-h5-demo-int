@@ -23,6 +23,7 @@ import com.hkbea.hth.ipe.model.*;
 import com.hkbea.hth.mapper.*;
 import com.hkbea.hth.model.*;
 import com.hkbea.hth.model.CreditorAccount;
+import com.hkbea.hth.model.CreditorAgent;
 import com.hkbea.hth.model.InstructedAmount;
 import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.service.payment.*;
@@ -328,7 +329,7 @@ class PaymentServiceImplTest {
 
         ParameterException exception = assertThrows(ParameterException.class,
                 () -> paymentService.validateCommon(payment));
-        assertEquals(HTHSupportErrorMapping.CREDITORACCOUNT_ID_MISSING_OR_INVALID, exception.getErrCode());
+        assertEquals(HTHSupportErrorMapping.CREDITORACCOUNT_ID_LENGTH_EXCEPTION, exception.getErrCode());
     }
 
     @Test
@@ -792,7 +793,7 @@ class PaymentServiceImplTest {
             ParameterException exception = assertThrows(ParameterException.class,
                     () -> paymentService.processLocalPayment(request));
 
-            assertEquals(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NAME_INVALID, exception.getErrCode());
+            assertEquals(HTHSupportErrorMapping.CREDITORNAME_LENGTH_EXCEPTION, exception.getErrCode());
             verifyNoInteractions(payemtRoutApi, chatsPaymentService);
         }
     }
@@ -824,6 +825,9 @@ class PaymentServiceImplTest {
             reset(onUsPaymentService, fpsPaymentService, ttPaymentService, drPaymentService, chatsPaymentService, payemtRoutApi);
             PaymentInstructionRequest request = buildInstructionRequest();
             request.setPaymentType(LocalPayment.PaymentTypeEnum.valueOf(requestedType).value());
+            if (!"TT".equals(requestedType) && !"CHATS".equals(requestedType) && !"OTHERS".equals(requestedType)) {
+                request.setChargeBearer(null);
+            }
             request.getCreditor().setCreditorName("N".repeat(140));
             Payment expected = new Payment().status(Payment.StatusEnum.PROCESSING);
             when(onUsPaymentService.processPayment(any(), any())).thenReturn(expected);
@@ -1176,8 +1180,18 @@ class PaymentServiceImplTest {
         creditor.setCreditorName("BENEFICIARY");
         com.hkbea.hth.model.PostalAddress address = new com.hkbea.hth.model.PostalAddress();
         address.setCountry("HK");
+        address.setAddressLine1("Address Line 1");
+        address.setTownName("HONG KONG");
         creditor.setPostalAddress(address);
         request.setCreditor(creditor);
+
+        CreditorAgent creditorAgent = new CreditorAgent();
+        FinancialInstitutionId financialInstitutionId = new FinancialInstitutionId();
+        financialInstitutionId.setBicfi("BEASCHKHHXX");
+        creditorAgent.setFinancialInstitutionId(financialInstitutionId);
+        request.setCreditorAgent(creditorAgent);
+
+        request.setChargeBearer("SHA");
         request.setSettlementDate(LocalDate.now());
         return request;
     }

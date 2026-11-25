@@ -64,7 +64,7 @@ import java.util.regex.Pattern;
 public class PaymentServiceImpl implements PaymentApi {
     private static final Pattern EXECUTION_DATE_PATTERN = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
 
-    private static final String CUSTOMER_TRANSACTION_ID_REGEX = "^.{1,35}$";
+    private static final String CUSTOMER_TRANSACTION_ID_REGEX = "^[A-Za-z0-9-]{1,35}$";
 
     private static final int SEGMENT_LENGTH = 35;
     private static final int ENQUIRY_TXN_REF_MAX_LENGTH = 50;
@@ -194,8 +194,6 @@ public class PaymentServiceImpl implements PaymentApi {
 
         String customerName = partyPreferenceMapper.selectCustomerNameByPartyId(localPayment.getPartyId(),localPayment.getFromAccount().getId());
         if (LocalPayment.PaymentTypeEnum.CHATS == localPayment.getPaymentType()) {
-            PaymentValidationSupport.validateChatsIpeAddress(localPayment);
-            PaymentValidationSupport.validateChatsCreditorName(localPayment);
             PaymentValidationSupport.validateChatsDebtorName(customerName);
         }
         localPayment.getFromAccount().setName(customerName);
@@ -647,11 +645,25 @@ public class PaymentServiceImpl implements PaymentApi {
         validateAccountId(payment);
         validateExecutionDate(payment.getSettlementDate());
         PaymentValidationSupport.validateAddressLine2(payment);
-        PaymentValidationSupport.validateIntermediaryAgentRequired(payment);
-        PaymentValidationSupport.validateChatsCountryCode(payment);
-        PaymentValidationSupport.validateCategoryPurpose(payment,true);
+        validateProvidedPaymentTypeRules(payment);
         validatePaymentDetails(payment);
+    }
 
+    private void validateProvidedPaymentTypeRules(LocalPayment payment) {
+        LocalPayment.PaymentTypeEnum provided = payment.getPaymentType();
+        if (provided == null || provided == LocalPayment.PaymentTypeEnum.OTHERS) {
+            return;
+        }
+        PaymentValidationSupport.validateProvidedTypeCurrencyCompatibility(
+                provided, payment.getTxnAmount().getCurrency());
+        switch (provided) {
+            case TT -> PaymentValidationSupport.validateTtRules(payment);
+            case CHATS -> PaymentValidationSupport.validateChatsRules(payment);
+            case FPS -> PaymentValidationSupport.validateFpsRules(payment);
+            case ONUS -> PaymentValidationSupport.validateOnUsRules(payment);
+            case DR -> PaymentValidationSupport.validateDrRules(payment);
+            default -> throw new ParameterException(HTHSupportErrorMapping.PAYMENT_TYPE_INVALID);
+        }
     }
 
     private void validateLimit(LocalPayment payment) {
@@ -753,9 +765,11 @@ public class PaymentServiceImpl implements PaymentApi {
 
         PaymentToAccount toAccount = payment.getToAccount();
         // null-guard added: matcher(null) previously threw NPE and surfaced as 900000 General exception
-        if (toAccount == null || StringUtils.isBlank(toAccount.getId())
-                || !TO_ACCOUNT_ALNUM_PATTERN.matcher(toAccount.getId()).matches()) {
+        if (toAccount == null || StringUtils.isBlank(toAccount.getId())) {
             throw new ParameterException(HTHSupportErrorMapping.CREDITORACCOUNT_ID_MISSING_OR_INVALID);
+        }
+        if (!TO_ACCOUNT_ALNUM_PATTERN.matcher(toAccount.getId()).matches()) {
+            throw new ParameterException(HTHSupportErrorMapping.CREDITORACCOUNT_ID_LENGTH_EXCEPTION);
         }
     }
 

@@ -1,7 +1,7 @@
 BCOH2H-2065 - PE3 debtor country/town and direct address-line mapping
 Date: 2026-11-25
 Source repository: /Users/devs/CProj/hth-dsp
-Local DSP commit / cumulative delivery source snapshot: f6df3985610a354f257213554a38bfa1a4c71581
+Local DSP commit / cumulative delivery source snapshot: b42acfaa85d7b472383a7a12276a48b944e5b38b
 
 The delivery includes PEECHJ7A in the existing Pe3Api/Pe3Client integration,
 including the integration OpenAPI and 18 generated wire models.
@@ -36,11 +36,12 @@ lookup. PEECHJ7A shares the existing PEECHI11 client and HTH gateway.
 In SIT, submit one CHATS payment and match its messageId to the INFO entry
 PEECHJ7A enquiry completed with returnCode=00.
 
-Verification: Java 21 / offline Maven BUILD SUCCESS.
+Delivery baseline: apply to DSP sync 9c25499. Shared source files include the synced payment validation changes.
+Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
 All-payment debtor address revision: 351 tests passed, 0 failures/errors/skipped.
 The 12 new cases cover mapped and omitted addresses and lookup failure for TT, DR,
 FPS and On-us. Failures stop IPE submission and, for FPS and On-us, limit updates.
-Log: /tmp/hth-2065-all-address.akahjy/final.log
+Log: /tmp/hth-2065-reapply.KOrUPs/test.log
 Earlier DEBUG logging revision: 80 tests passed, 0 failures/errors/skipped
 (79 CHATS cases and one PE3 wire-contract case).
 Tests cover structured/non-structured types, preferred city/district and generic

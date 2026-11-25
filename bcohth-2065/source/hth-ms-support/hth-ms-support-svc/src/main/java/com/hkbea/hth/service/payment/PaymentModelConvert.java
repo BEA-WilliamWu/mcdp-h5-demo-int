@@ -182,9 +182,6 @@ public final class PaymentModelConvert {
     }
 
     private static String routingEndToEndId(LocalPayment payment, String batchId) {
-        if (payment.getPaymentType() != LocalPayment.PaymentTypeEnum.CHATS) {
-            return batchId;
-        }
         String customerId = payment.getPaymentIdentification() == null
                 ? null : payment.getPaymentIdentification().getEndToEndId();
         return StringUtils.hasText(customerId) ? customerId : batchId;
@@ -302,7 +299,7 @@ public final class PaymentModelConvert {
         String accountType = fromAccount.getAccountType() != null
                 ? fromAccount.getAccountType().value() : fromAccount.getType();
         String internalAccountNo = toInternalAccountNo(accountNumber, fromAccount.getAccountType() == null
-                ? null : fromAccount.getAccountType().value());
+                ? null : fromAccount.getAccountType().value(), fromAccount.getCurrency() == null ? null : fromAccount.getCurrency());
         String currency = fromAccount.getCurrency();
         if (accountNumber == null && internalAccountNo == null && accountType == null && currency == null) {
             return null;
@@ -480,11 +477,11 @@ public final class PaymentModelConvert {
         };
     }
 
-    private static String toInternalAccountNo(String accountNumber, String accountType) {
+    private static String toInternalAccountNo(String accountNumber, String accountType, String currency) {
         if (accountNumber == null || accountNumber.isBlank() || accountType == null || accountType.isBlank()) {
             return null;
         }
-        return AccountUtils.ext2intAccNo(accountNumber, accountType.substring(0, 1));
+        return AccountUtils.ext2intAccNo(accountNumber, accountType.substring(0, 1), currency);
     }
 
     private static LocalDate parseDate(String value) {

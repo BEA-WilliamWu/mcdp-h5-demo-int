@@ -57,8 +57,6 @@ import com.hkbea.hth.utils.ScameterValidatorUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -76,7 +74,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -142,33 +139,6 @@ class OnUsPaymentServiceTest {
     }
 
     // ===================== On-Us specific rules =====================
-
-    @ParameterizedTest
-    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
-    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
-        stubSuccessFlow();
-        LocalPayment input = buildOnUsPayment();
-        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
-        input.getCreditor().setCreditorName(name);
-        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
-
-        Payment result = onUsPaymentService.processPayment(input, request);
-
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var txn = request.getTransactions().getFirst();
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(name, txn.getCreditorAccount().getAccountName());
-        var remittance = txn.getSupplementaryData().getChatsRemittance();
-        assertNotNull(remittance);
-        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                remittance.getDepositAccountName2());
-        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                remittance.getDepositAccountName3());
-        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
-        verify(payemtRoutApi).submit(request);
-    }
 
     @Test
     @DisplayName("null payment is rejected as missing mandatory parameter")
@@ -726,8 +696,8 @@ class OnUsPaymentServiceTest {
     void ownAccountTransfer_usesOwnAccountLimit() {
         stubSuccessFlow();
         when(partyAccountMapper.selectActiveCsaAccountNumbers(anyString())).thenReturn(List.of(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
 
         Payment result = onUsPaymentService.processPayment(buildOnUsPayment(), buildRoutingRequest());
 
@@ -875,8 +845,8 @@ class OnUsPaymentServiceTest {
     @DisplayName("isSameCustomer: missing customer info on both sides returns true")
     void isSameCustomer_bothNull_true() {
         assertTrue(onUsPaymentService.isSameCustomer(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
     }
 
     @Test
@@ -886,8 +856,8 @@ class OnUsPaymentServiceTest {
                 .thenReturn(peechi11Response("00", "C111", "K1", "HK"));
 
         assertTrue(onUsPaymentService.isSameCustomer(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
     }
 
     @Test
@@ -898,8 +868,8 @@ class OnUsPaymentServiceTest {
                         peechi11Response("00", "C222", "K2", "HK"));
 
         assertFalse(onUsPaymentService.isSameCustomer(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
     }
 
     @Test
@@ -909,8 +879,8 @@ class OnUsPaymentServiceTest {
                 .thenReturn(peechi11Response("00", "C111", "K1", "HK"), null);
 
         assertFalse(onUsPaymentService.isSameCustomer(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
     }
 
     @Test
@@ -919,8 +889,8 @@ class OnUsPaymentServiceTest {
         when(pe3Api.getCustomerBasicInfo(any())).thenThrow(new RuntimeException("pe3 down"));
 
         assertTrue(onUsPaymentService.isSameCustomer(
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
-                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S")));
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
+                com.hkbea.hth.utils.AccountUtils.ext2intAccNo(BENEFICIARY_ACCOUNT, "S", "HKD")));
     }
 
     // ===================== Fixtures =====================

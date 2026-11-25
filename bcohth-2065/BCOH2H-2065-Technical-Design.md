@@ -1,6 +1,6 @@
 # BCOH2H-2065 — HTH CHATS Payment Beneficiary Bank Verification
 
-Revision: 20 November 2026. Name-segmentation extension baseline: `be7c0a0`. Includes the earlier CHATS corrections and shared enquiry alignment.
+Revision: 25 November 2026. PE3 debtor-address replacement baseline: `aa75dd7`. Includes the shared name segmentation and earlier enquiry alignment.
 
 ## Shared enquiry alignment with BCOH2H-2126
 
@@ -22,7 +22,7 @@ Confirmed decisions, updated on 18 November:
 
 1. CHATS `paymentIdentification.endToEndId` carries the API caller's value instead of HTH's generated internal number; the earlier reference separation remains in place.
 2. Restore the 140-character CHATS creditor-name limit. Split the name sequentially into `depositAccountName1..4`, at most 35 characters per field. For a name of 35 characters or fewer, populate both Name1 and Name2 with the full name. This replaces the earlier temporary 35-character restriction and fixed Name2 value.
-3. Retrieve the debtor address from BCO `DIGX_PI_PARTY_PREFERENCES.ADDRESS1..5` using the payment account owner. Preserve its text in up to four IPE address lines of 70 characters each; leave town/country unset and permit missing addresses.
+3. Retrieve the CHATS debtor address from PE3 PEECHJ7A using the debit account key. The user confirmed taking the first returned contact and omitting the address when a successful response contains no address. This supersedes the BCO party-preferences address lookup.
 
 On 20 November, the user additionally requested the same deposit-name segmentation for TT, DR, FPS and On-Us. These four types now populate `supplementaryData.chatsRemittance.depositAccountName1..4` using the existing CHATS rules. `PaymentRoutingPayload.chatsRemittance` builds the shared name fields. CHATS and the TT/DR base flow retain their other remittance fields; FPS and On-Us add a name-only `chatsRemittance` block. Existing validation applies to each payment type. IPE acceptance and use of these fields for FPS and On-Us require SIT verification.
 
@@ -77,21 +77,29 @@ For each payment type, the existing canonical name fields retain the full API na
 
 More than 140 characters is rejected with existing `500115` (`BENEFICIARY_ACCOUNT_NAME_INVALID`). The explicit-CHATS entry check and selected-CHATS service check both use 140. Existing mandatory-name and character-set validation remains in place. Other payment types retain their existing rules.
 
-### Debtor postal address from BCO
+### Debtor postal address from PE3 PEECHJ7A
 
-`PartyPreferenceMapper.selectDebtorPostalAddress` joins `DIGX_PI_PARTY_ACCOUNTS a` to `DIGX_PI_PARTY_PREFERENCES p` on `a.PARTYID = p.PARTYID` and matching `DETERMINANT_VALUE`. The account rows are scoped by the current HTH `PARENT_PARTY_ID`, normalized external debit account number, CSA account type and resolved product code. This retrieves the account owner's preferences rather than substituting a parent company's address. Identical results from repeated account/currency rows are deduplicated; conflicting results fail instead of choosing an arbitrary address.
+Contract input: `contracts/SC-PE3_PEECHJ7A_Customer_Contact_Information_Retrieval_for_CHATS_TT_FPS_Sorted_by_Address-1.0.0.yaml` and the matching JSON. The integration copy is `src/main/resources/api/pe3/peechj7a.openapi.yaml`. It preserves the source wire fields, scalar types and lengths, and names/reuses the identical nested request/response schemas. Eighteen Java models were generated with OpenAPI Generator 7.17.0 using the existing PE3 JAX-RS/Jackson conventions.
 
-The BCO ORM maps `ADDRESS1..5` to the party preferences address lines. Their creation/update provenance was reviewed separately; this implementation reads the stored values and does not refresh them from the host or introduce an EBK call.
+The On-us customer enquiry (PEECHI11) and the CHATS address enquiry (PEECHJ7A) share the same `Pe3Client`, environment-specific `pe3.base-url`, APIC credentials and z/OS timeout and error handling. Both use HTTP POST. In SIT, HTH calls the existing `/hkbea/sit-sf/hth/v1z/peechi11.v1` endpoint for On-us and `/hkbea/sit-sf/hth/v1z/peechj7a.v1` for CHATS.
 
-Mapping to `transactions[0].debtor.postalAddress`:
+Request mapping follows the existing PE3 account-key convention. The validated 18-digit internal debit account is split into entity (4), branch (4) and account (10), supplied under `ehj7aInput.ehj7aContractI.ehj7aKeyAccI`. `ehj7aCodEntityI` matches the entity. The common header uses channel `IN`, application `PE`, collection `PE9CHJ7A` (following the existing `PE9CHI11` convention), current operation date and blank optional common-header fields. The subsequently supplied PE9CHJ7A request form confirms collection `PE9CHJ7A` and supports the Alnova account-key query.
 
-- Ignore blank source lines, strip outer padding and join the remaining lines in source order with one space.
-- Split the combined text into `addressLine1..4`, each no longer than 70 Unicode characters, preserving the fifth source line's text.
-- Leave `townName` and `country` unset because these are not independent fields in this table. Do not infer them from address text or reuse creditor values.
-- If no preferences/address is found, omit the postal-address object and continue. Do not fall back to another company's preferences.
-- If the combined address exceeds 280 characters, reject with existing `500000` (`PARAMETER_INVALID_EXCEPTION`) prefixed by `debtor.postalAddress`, rather than truncate it. Database/query errors stop submission.
+Response and IPE mapping:
 
-No client-supplied debtor-address fields, schema migration or generated IPE model changes are needed.
+- Require a well-formed response and `ehj7aAnswer.ehj7aCodReturn = 00`. Reject a nonblank common-header error other than `0000`.
+- Select the first `ehj7aContactO` item in returned order, as confirmed by the user. Read its `ehj7aAddressO.ehj7aExtAdrLin1O..4O`. No primary-address or language filtering is applied.
+- Map `ehj7aExtAdrLin1O..4O` directly to IPE `debtor.postalAddress.addressLine1..4`, as requested on 25 November. Strip outer padding and omit blank fields while preserving each line position. Reject an individual line exceeding the IPE maximum of 70 Unicode characters.
+- The fifth line `ehj7aExtAdrLin5O` is currently unmapped, pending the user's log review and mapping confirmation.
+- Populate `country` according to the trimmed, uppercased `ehj7aTypCntaadrO`. For a two-character contact type ending in `H`, `C` or `I`, read `ehj7aCodCountryAdrO`. For non-structured types `40`, `50`, `60`, `70`, `80`, `90`, `00`, `ZZ`, `Z0`, `Z1`, read `ehj7aCodCtryValO` instead. Trim and uppercase the selected code, require membership in the existing Java ISO alpha-2 country list, and omit/log unrecognized nonblank codes. Do not convert three-letter codes or fall back to the other country field. Unrecognized/missing contact types leave country absent.
+- Populate `townName` from `ehj7aDesDistrictO` for contact types ending in `H`; use `ehj7aOvrCtyDesO` for those ending in `C` or `I`. If that value is blank, or the type has no designated town field, use `ehj7aDesCityO`. Strip outer padding; all-blank candidates leave town absent. The user accepted this generic-city fallback as an implementation decision on 25 November.
+- Province, area and other district descriptions are not appended to the address lines. All mapped values come from the selected first contact.
+- A successful response with no contact/address omits the postal-address object and allows payment to continue. If the first four lines, mapped country and mapped town are all empty, omit the object. Country-only or town-only results retain an address object.
+- A timeout, transport exception, malformed response or unsuccessful host answer stops submission with the existing general service error `600000`. Preserve the distinction between a successful empty result and a failed enquiry.
+
+The BCO `selectDebtorPostalAddress` query and its unused `PartyPostalAddress` DTO are removed. Customer-name and other existing party-preference queries remain in use.
+
+Diagnostics use `messageId` for correlation. INFO records the host return code and contact count; WARN identifies missing response/output/answer and header errors. DEBUG for `com.hkbea.hth.service.payment.ChatsPaymentService` records the PE3 field names used to populate country and townName. An omitted field is logged as `none`.
 
 The CHATS creditor address remains optional. Apply the API's bounds as well as IPE's limits, rather than widening API fields to IPE's maximum:
 
@@ -110,14 +118,14 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | File | Change |
 | --- | --- |
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
-| `ChatsPaymentService.java` | Use the shared deposit-name builder; retain its CHATS remittance flags and BCO debtor-address mapping. |
+| `ChatsPaymentService.java` | Use the shared deposit-name builder; retain its CHATS remittance flags and obtain the debtor address through PEECHJ7A. |
 | `PaymentRoutingPayload.java` | Build Name1..4 using the existing CHATS segmentation and short-name duplication rule. |
 | `OverseasPaymentService.java` | Apply the shared name builder to both TT and DR. |
 | `FpsPaymentService.java`, `OnUsPaymentService.java` | Add the same name fields to the existing supplementary data. |
 | `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
 | `PaymentServiceImpl.java` | Retain CHATS validation, routing identifiers and batch enquiry; share the confirmed five-type requested-execution-date mapping with 2126. |
-| `PartyPreferenceMapper.java` / `.xml` | Query all five account-owner address lines using the account/parent/product/determinant relationship. |
-| `PartyPostalAddress.java` | Internal five-line query-result DTO; no API contract change. |
+| `Pe3Api.java`, `Peechj7a*.java`, `api/pe3/peechj7a.openapi.yaml` | Add the PE3 contact enquiry and generated wire models using the existing PE3 client. |
+| `PartyPreferenceMapper.java` / `.xml`, `PartyPostalAddress.java` | Remove the obsolete BCO address query and DTO. |
 | Payment unit tests | Verify name segmentation/duplication and boundaries, debtor-address packing/missing/error cases, as well as existing reference, routing, enquiry and payment validation behavior. |
 
 No database migration, public JSON field addition/renaming or generated-model change is required. Conditional behavior is implemented in service code; shared API types and the supplied external IPE contract are not regenerated or modified in this correction. The earlier temporary 35-character API-name restriction is removed by this revision.
@@ -128,18 +136,24 @@ The new source documents also differ from current code in BIC applicability/expa
 
 Other 2065 integration dependencies remain:
 
-- Validate real BCO account-owner/preference data and address freshness in SIT, including linked companies with no preferences row; the implementation now reads the stored BCO address.
+- To confirm the new PE3 endpoint in SIT, submit one CHATS payment. Find the INFO entry `PEECHJ7A enquiry completed` with the same `messageId` and verify `returnCode=00`. A successful enquiry with `contactCount=0` also passes this endpoint check.
 - Confirm outbound debtor-account formatting, agent mapping, member-ID resolution and charge-bearer conversion.
 - Confirm deployed IPE accepts the agreed four-part legacy-name mapping, including duplicated Name1/Name2 for short names, and propagates debtor address into pacs.008.
 - Confirm the remittance array/element length definition and downstream message verification/failure reporting.
 
 SIT should capture the original API request, HTH-to-IPE routing/submission payloads and actual pacs.008 XML. Verify a short customer ID, 35-character ID, omitted ID (`NOTPROVIDED`), repeated customer IDs with distinct HTH `txnRef` values, explicit/automatic CHATS routing, 35/36-character names and 35/36-character towns. Verify enquiry after submission uses the generated reference and obtains the correct single-payment batch result. Include an older CHATS record as a compatibility case.
 
-SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 140 characters and inspect all four outbound fields. Compare debtor address with the payment account owner's BCO preferences and inspect the raw pacs.008 `Dbtr/PstlAdr`. Cover missing preferences and all-blank addresses.
+SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 140 characters and inspect all four outbound fields. For the existing pacs.008 address check, use the same CHATS payment with a debtor account known to have an address. Compare the address submitted to IPE with `Dbtr/PstlAdr` in the raw XML. The service tests cover empty addresses and host errors.
 
 Real IPE acceptance, database integration, pacs.008 generation and transmission are not established by mocked unit tests.
 
 ## 6. Verification and delivery
+
+The 25 November PE3 replacement first passed 45 targeted tests (44 CHATS service cases and one Feign wire-contract test). Coverage includes account-key request/header mapping, exact endpoint and JSON property names, response decoding, first-contact selection, empty addresses and failures before IPE submission. The subsequent direct-line correction tests one-to-one mapping, preserved empty-line positions, fifth-line-only input and per-line bounds. It passed 46 targeted executions (45 CHATS service cases plus one wire-contract case), with 0 failures, errors or skipped tests. Log: `/tmp/hth-pe3-address-20261125/direct-lines-test.log`. The verification reactor and generator run from `/tmp/hth-pe3-address-20261125/`; project POMs and dependencies are unchanged. Before the direct-line correction, the full clean payment regression passed 276 tests with 0 failures, 0 errors and 0 skipped. Log: `/tmp/hth-pe3-address-20261125/regression.log`. Request/response schemas were expanded and compared with the supplied contract, including every field and bound.
+
+The country/town follow-up uses the supplied PE9CHJ7A request form (provider sheet rows 73, 97-111) for contact-type applicability and country-code examples. Targeted tests cover structured HK/China/Macau/international addresses, every listed non-structured type, generic-city fallback, ISO code normalization/omission, metadata-only addresses, unknown contact types and first-contact isolation. Final verification passed 80 targeted tests (79 CHATS cases plus one PE3 wire-contract case), with 0 failures, errors or skipped tests. Log: `/tmp/hth-pe3-address-20261125/country-town-final.log`. PE3 and IPE calls are mocked.
+
+### Previous verification on 20 November
 
 The 20 November extension passed a Java 21 offline Maven **clean test** run: **305 tests, 0 failures, 0 errors, 0 skipped**. Four parameterized tests add 48 executions through the TT, DR, FPS and On-Us service entry points, covering name lengths 1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139 and 140. All 48 failed against the prior production mapping and pass after this extension. Assertions check the outbound IPE request, full canonical names and short-name duplication. Existing CHATS tests pass through the shared builder.
 
@@ -166,7 +180,7 @@ Verified on 18 November 2026 with Java 21 and Maven using the local dependency c
 
 The new tests cover creditor-name segment boundaries and short-name duplication, full canonical names, all five BCO address lines, packing at 70/71/280 characters, missing/blank lines, overflow and query failure. Existing balance-delegation and other payment tests still pass. MyBatis XML parsing and its DTO/parameter bindings were checked; the actual query was also exercised against in-memory SQLite fixtures for account-owner, parent, determinant, product and account-type isolation and duplicate rows. These fixture checks do not replace Oracle/SIT integration. External calls and persistence are mocked; no live SIT/UAT was performed.
 
-Current clean-build test log: `/tmp/hth-2126-all-execution-dates-clean.log`. The earlier BCO mapper parsing/SQL fixture checks remain applicable to the unchanged mapper. The current run also covers all five requested-date mappings and initiatedDate/asOf preservation.
+Current clean-build test log: `/tmp/hth-2126-all-execution-dates-clean.log`. The earlier BCO address-query fixtures describe the superseded implementation; the 25 November PE3 replacement removes that query. The current run also covers all five requested-date mappings and initiatedDate/asOf preservation.
 
 Reproduction with a temporary reactor containing the parent/common/DSP/support dependencies:
 

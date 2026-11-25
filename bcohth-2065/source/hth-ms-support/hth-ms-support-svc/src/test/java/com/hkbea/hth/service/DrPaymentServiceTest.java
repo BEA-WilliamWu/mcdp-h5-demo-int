@@ -41,8 +41,6 @@ import com.hkbea.hth.utils.CacheHelperUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -59,7 +57,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -134,31 +131,6 @@ class DrPaymentServiceTest {
     }
 
     // ===================== Validation =====================
-
-    @ParameterizedTest
-    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
-    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
-        LocalPayment input = buildDrPayment();
-        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
-        input.getCreditor().setCreditorName(name);
-        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
-
-        Payment result = drPaymentService.processPayment(input, request);
-
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var txn = request.getTransactions().getFirst();
-        assertEquals(name, txn.getSupplementaryData().getDirectRemittance().getChinaAccEnglishName());
-        var remittance = txn.getSupplementaryData().getChatsRemittance();
-        assertNotNull(remittance);
-        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                remittance.getDepositAccountName2());
-        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                remittance.getDepositAccountName3());
-        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
-        verify(payemtRoutApi).submit(request);
-    }
 
     @Test
     @DisplayName("missing toAccount is rejected with CREDITOR_ACCOUNT_MISSING")

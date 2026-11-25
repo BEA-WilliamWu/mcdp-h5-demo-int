@@ -1,0 +1,627 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "Customer Contact Information Retrieval for CHATS TT FPS Sorted by Address",
+    "version": "1.0.0",
+    "title": "SC-PE3 PEECHJ7A Customer Contact Information Retrieval for CHATS TT FPS Sorted by Address",
+    "x-ibm-name": "sc-pe3-peechj7a-customer-contact-information-retrieval-for-chats-tt-fps-sorted-by-address-api-opy",
+    "x-pathalias": "CustomerContactInformationRetrievalforCHATSTTFPSSortedbyAddress-OPY"
+  },
+  "host": "eam-sfgw-test.intranet.hkbea.com:443",
+  "basePath": "/v1z",
+  "schemes": [
+    "https"
+  ],
+  "tags": [
+    {
+      "name": "zcee-api",
+      "description": "z/OS Connect API"
+    },
+    {
+      "name": "PE3",
+      "description": "PE3 Alnova"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "security": [
+    {
+      "clientIdHeader": [],
+      "clientSecretHeader": []
+    }
+  ],
+  "securityDefinitions": {
+    "clientSecretHeader": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-IBM-Client-Secret"
+    },
+    "clientIdHeader": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-IBM-Client-Id"
+    }
+  },
+  "x-ibm-configuration": {
+    "phase": "realized",
+    "testable": true,
+    "enforced": true,
+    "cors": {
+      "enabled": true
+    },
+    "application-authentication": {
+      "certificate": false
+    },
+    "type": "rest",
+    "servers": [
+      {
+        "url": "https://eam-sfgw-test.intranet.hkbea.com:443/hkbea/sit-sf/opy/v1z",
+        "description": "",
+        "type": [
+          "production",
+          "development"
+        ]
+      }
+    ]
+  },
+  "paths": {
+    "/peechj7a.v1": {
+      "post": {
+        "tags": [
+          "ia-pe3-peechj7a"
+        ],
+        "operationId": "getCustomerContactInfo",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "in": "body",
+            "name": "peechj7aRequest",
+            "description": "request body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Peechj7aRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Peechj7aResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Peechj7aCiIdI": {
+      "type": "object",
+      "properties": {
+        "ehj7aNumCusI": {
+          "type": "string",
+          "maxLength": 8
+        }
+      }
+    },
+    "Peechj7aDocumentI": {
+      "type": "object",
+      "properties": {
+        "ehj7aCodIdI": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aKeyIdI": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "ehj7aCodIssCtryI": {
+          "type": "string",
+          "maxLength": 3
+        }
+      }
+    },
+    "Peechj7aKeyAccI": {
+      "type": "object",
+      "properties": {
+        "ehj7aKeyEntityI": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "ehj7aBrnOpenI": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "ehj7aNumAccountI": {
+          "type": "string",
+          "maxLength": 10
+        }
+      }
+    },
+    "Peechj7aPartI": {
+      "type": "object",
+      "properties": {
+        "ehj7aKeyParticI": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "ehj7aPartseqI": {
+          "type": "string",
+          "maxLength": 2
+        }
+      }
+    },
+    "Peechj7aContractI": {
+      "type": "object",
+      "properties": {
+        "ehj7aTypAppI": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aNumAccExtI": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aKeyAccI": {
+          "$ref": "#/definitions/Peechj7aKeyAccI"
+        },
+        "ehj7aCodOperI": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aPartI": {
+          "$ref": "#/definitions/Peechj7aPartI"
+        }
+      }
+    },
+    "Peechj7aInput": {
+      "type": "object",
+      "properties": {
+        "ehj7aCodEntityI": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "ehj7aCiIdI": {
+          "$ref": "#/definitions/Peechj7aCiIdI"
+        },
+        "ehj7aDocumentI": {
+          "$ref": "#/definitions/Peechj7aDocumentI"
+        },
+        "ehj7aContractI": {
+          "$ref": "#/definitions/Peechj7aContractI"
+        }
+      }
+    },
+    "Peechj7aSqlerrm": {
+      "type": "object",
+      "properties": {
+        "ehj7aSqlerrmlth": {
+          "type": "integer",
+          "minimum": -9999,
+          "maximum": 9999
+        },
+        "ehj7aDatSqlerrm": {
+          "type": "string",
+          "maxLength": 70
+        }
+      }
+    },
+    "Peechj7aAnswer": {
+      "type": "object",
+      "properties": {
+        "ehj7aCodReturn": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "ehj7aSqlcode": {
+          "type": "integer",
+          "minimum": -999999999,
+          "maximum": 999999999
+        },
+        "ehj7aSqlerrm": {
+          "$ref": "#/definitions/Peechj7aSqlerrm"
+        },
+        "ehj7aDesTable": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "ehj7aReference": {
+          "type": "string",
+          "maxLength": 20
+        }
+      }
+    },
+    "Peechj7aAddressO": {
+      "type": "object",
+      "properties": {
+        "ehj7aPrimAddFlagO": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aFlgLinkO": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aLangCodO": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aCodLocaAdrO": {
+          "type": "string",
+          "maxLength": 7
+        },
+        "ehj7aTxtLocaAdrO": {
+          "type": "string",
+          "maxLength": 7
+        },
+        "ehj7aTxtFloorO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aTxtBlockO": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "ehj7aTxtBuildingO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aCodStreetFromO": {
+          "type": "string",
+          "maxLength": 6
+        },
+        "ehj7aTxtStreetFromO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aTxtStreetToO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aTxtStreetO": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "ehj7aTxtPhaseAdrO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aTypLotO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aNumLotO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aTxtLotSectionO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aTxtLotSubsectionO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aNumDdO": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "ehj7aTxtRemarkO": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aCodDistrictO": {
+          "type": "string",
+          "maxLength": 7
+        },
+        "ehj7aDesDistrictO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aCodAreaAdrO": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "ehj7aDesAreaO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aCodProvinceO": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "ehj7aDesProvinceO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aDesCityO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aNumCodpostO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aCodCountryAdrO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aDesCountryAdrO": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aOvrCtyDesO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aOvrPrvDesO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aOvrDistDesO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aCodMailO": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99
+        },
+        "ehj7aCodCtryValO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aExtAdrLin1O": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aExtAdrLin2O": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aExtAdrLin3O": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aExtAdrLin4O": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "ehj7aExtAdrLin5O": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
+    },
+    "Peechj7aTeleFaxO": {
+      "type": "object",
+      "properties": {
+        "ehj7aCodCountryPhoneO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aCodAreaPhoneO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aNumTphO": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ehj7aContRmkO": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
+    },
+    "Peechj7aEmailO": {
+      "type": "object",
+      "properties": {
+        "ehj7aAdrEmailO": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "ehj7aFlgAccnumO": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "ehj7aDatModPriAdrO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aDatCreationO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aUsrCreationO": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "ehj7aDatLastmodO": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "ehj7aUsrLastmodO": {
+          "type": "string",
+          "maxLength": 8
+        }
+      }
+    },
+    "Peechj7aContact": {
+      "type": "object",
+      "properties": {
+        "ehj7aNumCusO": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "ehj7aNumLadr1O": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "ehj7aCodIdO": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aKeyIdO": {
+          "type": "string",
+          "maxLength": 25
+        },
+        "ehj7aCodIssCtryO": {
+          "type": "string",
+          "maxLength": 3
+        },
+        "ehj7aTypCntaadrO": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "ehj7aCodAttnO": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "ehj7aDesPersonO": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "ehj7aLngSpokenO": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "ehj7aAddressO": {
+          "$ref": "#/definitions/Peechj7aAddressO"
+        },
+        "ehj7aTeleFaxO": {
+          "$ref": "#/definitions/Peechj7aTeleFaxO"
+        },
+        "ehj7aEmailO": {
+          "$ref": "#/definitions/Peechj7aEmailO"
+        },
+        "ehj7aTimeLinkO": {
+          "type": "string",
+          "maxLength": 26
+        },
+        "ehj7aTimeLastmodO": {
+          "type": "string",
+          "maxLength": 26
+        }
+      }
+    },
+    "Peechj7aOutput": {
+      "type": "object",
+      "properties": {
+        "ehj7aAnswer": {
+          "$ref": "#/definitions/Peechj7aAnswer"
+        },
+        "ehj7aContactO": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Peechj7aContact"
+          },
+          "maxItems": 10,
+          "minItems": 10
+        }
+      }
+    },
+    "Peechj7aRecord": {
+      "type": "object",
+      "properties": {
+        "ehj7aInput": {
+          "$ref": "#/definitions/Peechj7aInput"
+        },
+        "ehj7aOutput": {
+          "$ref": "#/definitions/Peechj7aOutput"
+        }
+      }
+    },
+    "Peechj7aQaechcc": {
+      "type": "object",
+      "properties": {
+        "qaechccTypChannel": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "qaechccApplId": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "qaechccCollecName": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "qaechccCollecFunc": {
+          "type": "string",
+          "maxLength": 1
+        },
+        "qaechccDateOp": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "qaechccCodEntity": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "qaechccCodBrn": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "qaechccCodTerm": {
+          "type": "string",
+          "maxLength": 4
+        },
+        "qaechccCodUser": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "qaechccErrData": {
+          "type": "string",
+          "maxLength": 387
+        },
+        "qaechccInOutData": {
+          "type": "string",
+          "maxLength": 15000
+        },
+        "peechj7a": {
+          "$ref": "#/definitions/Peechj7aRecord"
+        },
+        "qaechccFrArea": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "Peechj7aDfhcommarea": {
+      "type": "object",
+      "properties": {
+        "qaechcc": {
+          "$ref": "#/definitions/Peechj7aQaechcc"
+        }
+      }
+    },
+    "Peechj7aRequest": {
+      "type": "object",
+      "properties": {
+        "dfhcommarea": {
+          "$ref": "#/definitions/Peechj7aDfhcommarea"
+        }
+      }
+    },
+    "Peechj7aResponse": {
+      "type": "object",
+      "properties": {
+        "dfhcommarea": {
+          "$ref": "#/definitions/Peechj7aDfhcommarea"
+        }
+      }
+    }
+  }
+}

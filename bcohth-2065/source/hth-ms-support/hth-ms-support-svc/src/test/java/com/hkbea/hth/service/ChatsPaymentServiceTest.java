@@ -5,7 +5,16 @@ import com.hkbea.common.exception.ServiceException;
 import com.hkbea.common.header.CommonHeader;
 import com.hkbea.hth.api.AccountApi;
 import com.hkbea.hth.constants.PaymentConstants;
-import com.hkbea.hth.dto.PartyPostalAddress;
+import com.hkbea.hth.pe3.api.Pe3Api;
+import com.hkbea.hth.pe3.model.Peechj7aRequest;
+import com.hkbea.hth.pe3.model.Peechj7aResponse;
+import com.hkbea.hth.pe3.model.Peechj7aDfhcommarea;
+import com.hkbea.hth.pe3.model.Peechj7aQaechcc;
+import com.hkbea.hth.pe3.model.Peechj7aRecord;
+import com.hkbea.hth.pe3.model.Peechj7aOutput;
+import com.hkbea.hth.pe3.model.Peechj7aAnswer;
+import com.hkbea.hth.pe3.model.Peechj7aContact;
+import com.hkbea.hth.pe3.model.Peechj7aAddressO;
 import com.hkbea.hth.entity.PartyAccount;
 import com.hkbea.hth.entity.PaymentPayoutRecord;
 import com.hkbea.hth.exception.HTHSupportErrorMapping;
@@ -41,6 +50,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -56,9 +68,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -110,6 +119,8 @@ class ChatsPaymentServiceTest {
     @Mock
     private PartyPreferenceMapper partyPreferenceMapper;
     @Mock
+    private Pe3Api pe3Api;
+    @Mock
     private CommonHeader headers;
     @Mock
     private PaymentCommonService paymentCommonService;
@@ -126,6 +137,7 @@ class ChatsPaymentServiceTest {
         localDateTimeMock.when(LocalDateTime::now).thenReturn(fixedDateTime);
 
         new HTHSupportErrorMapping();
+        lenient().when(pe3Api.getCustomerContactInfo(any())).thenReturn(contactResponse(null));
         lenient().when(headers.getMessageId()).thenReturn(MESSAGE_ID);
         lenient().when(partyAccountMapper.selectProductCode(anyString(), anyString())).thenReturn("6802");
         lenient().when(partyAccountMapper.selectAccountStatus(anyString(), anyString(), anyString()))
@@ -597,12 +609,15 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void automaticChatsReplacesRoutingIdButRetainsGeneratedPaymentId() {
+    void automaticChatsKeepsCustomerRoutingIdAndGeneratedPaymentId() {
         LocalPayment input = buildChatsPayment(Currency.HKD);
         input.setPaymentType(LocalPayment.PaymentTypeEnum.OTHERS);
         BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
         String batchId = request.getGroupHeader().getMessageId();
-        assertEquals(batchId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+        // Automatic (OTHERS) mapping now carries the payer's reference from the start:
+        // the generated batch id stays separate as the enquiry/payment reference.
+        assertEquals("E2E-CHATS", request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+        assertNotEquals(batchId, request.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
         input.setPaymentType(LocalPayment.PaymentTypeEnum.CHATS);
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -666,16 +681,199 @@ class ChatsPaymentServiceTest {
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper, scameterValidatorUtil);
     }
 
+    private Peechj7aResponse contactResponse(Peechj7aAddressO address) {
+        var output = new Peechj7aOutput().ehj7aAnswer(new Peechj7aAnswer().ehj7aCodReturn("00"));
+        output.setEhj7aContactO(address == null ? List.of()
+                : List.of(new Peechj7aContact().ehj7aAddressO(address)));
+        return new Peechj7aResponse().dfhcommarea(new Peechj7aDfhcommarea()
+                .qaechcc(new Peechj7aQaechcc().qaechccErrData("0000")
+                        .peechj7a(new Peechj7aRecord().ehj7aOutput(output))));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1H,HK,CENTRAL", "2H,HK,CENTRAL", "1C,CN,SHENZHEN",
+            "2C,MO,SHENZHEN", "1I,US,SHENZHEN", "2I,GB,SHENZHEN"})
+    void structuredCountryAndTownFollowContactType(String type, String country, String expectedTown) {
+        var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("FIRST LINE")
+                .ehj7aCodCountryAdrO(" " + country.toLowerCase(java.util.Locale.ROOT) + " ")
+                .ehj7aCodCtryValO("CA").ehj7aDesDistrictO(" CENTRAL ")
+                .ehj7aOvrCtyDesO(" SHENZHEN ").ehj7aDesCityO("FALLBACK CITY");
+        var response = contactResponse(source);
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(" " + type + " ");
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertEquals(country, address.getCountry());
+        assertEquals(expectedTown, address.getTownName());
+        assertEquals("FIRST LINE", address.getAddressLine1());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"40", "50", "60", "70", "80", "90", "00", "ZZ", "Z0", "Z1"})
+    void unstructuredCountryUsesCountryValueField(String type) {
+        var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("CN")
+                .ehj7aCodCtryValO(" us ").ehj7aDesCityO(" NEW YORK ")
+                .ehj7aOvrCtyDesO("UNUSED CITY").ehj7aDesDistrictO("UNUSED DISTRICT");
+        var response = contactResponse(source);
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type.toLowerCase(java.util.Locale.ROOT));
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertNotNull(address);
+        assertEquals("US", address.getCountry());
+        assertEquals("NEW YORK", address.getTownName());
+        assertNull(address.getAddressLine1());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1H", "2H", "1C", "2C", "1I", "2I", "ZZ"})
+    void missingPreferredTownFallsBackToGenericCity(String type) {
+        var source = new Peechj7aAddressO().ehj7aDesDistrictO(" ")
+                .ehj7aOvrCtyDesO("").ehj7aDesCityO(" FALLBACK CITY ");
+        var response = contactResponse(source);
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertEquals("FALLBACK CITY", address.getTownName());
+        assertNull(address.getCountry());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"HKG", "ZZ", "1", "123", "", "   "})
+    void unrecognizedCountryIsOmittedAndPaymentContinues(String code) {
+        var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("ADDRESS")
+                .ehj7aCodCountryAdrO(code).ehj7aCodCtryValO("US");
+        var response = contactResponse(source);
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO("1H");
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        var payment = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, payment.getStatus());
+        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress().getCountry());
+        verify(payemtRoutApi).submit(request);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "X", "99"})
+    void unknownContactTypeUsesGenericCityAndOmitsCountry(String type) {
+        var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("HK").ehj7aCodCtryValO("US")
+                .ehj7aDesCityO("GENERIC CITY").ehj7aDesDistrictO("UNUSED DISTRICT").ehj7aOvrCtyDesO("UNUSED CITY");
+        var response = contactResponse(source);
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertEquals("GENERIC CITY", address.getTownName());
+        assertNull(address.getCountry());
+    }
+
     @Test
-    void debtorAddressFromBcoPreservesAllFiveLinesInIpeRequest() {
-        PartyPostalAddress source = new PartyPostalAddress();
-        source.setAddress1("  " + "A".repeat(40) + "  ");
-        source.setAddress2("B".repeat(40));
-        source.setAddress3("C".repeat(40));
-        source.setAddress4("D".repeat(40));
-        source.setAddress5("E".repeat(40));
-        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                .thenReturn(source);
+    void countryAlonePopulatesAddressWithoutAddressLines() {
+        var response = contactResponse(new Peechj7aAddressO().ehj7aCodCountryAdrO("HK"));
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO("1H");
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertNotNull(address);
+        assertEquals("HK", address.getCountry());
+        assertNull(address.getTownName());
+        assertNull(address.getAddressLine1());
+    }
+
+    @Test
+    void debtorAddressUsesDebitAccountKeyAndFirstReturnedContact() {
+        var response = contactResponse(new Peechj7aAddressO().ehj7aExtAdrLin1O("FIRST ADDRESS"));
+        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .setEhj7aContactO(List.of(
+                        new Peechj7aContact().ehj7aTypCntaadrO("1H").ehj7aAddressO(new Peechj7aAddressO()
+                                .ehj7aExtAdrLin1O("FIRST ADDRESS").ehj7aCodCountryAdrO("HK").ehj7aDesDistrictO("CENTRAL")),
+                        new Peechj7aContact().ehj7aTypCntaadrO("1I").ehj7aAddressO(new Peechj7aAddressO()
+                                .ehj7aExtAdrLin1O("SECOND ADDRESS").ehj7aCodCountryAdrO("US").ehj7aOvrCtyDesO("NEW YORK"))));
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        ArgumentCaptor<Peechj7aRequest> captor = ArgumentCaptor.forClass(Peechj7aRequest.class);
+        verify(pe3Api).getCustomerContactInfo(captor.capture());
+        var header = captor.getValue().getDfhcommarea().getQaechcc();
+        assertEquals("IN", header.getQaechccTypChannel());
+        assertEquals("PE", header.getQaechccApplId());
+        assertEquals("PE9CHJ7A", header.getQaechccCollecName());
+        String account = request.getTransactions().getFirst().getDebtorAccount().getInternalAccountNo();
+        var input = header.getPeechj7a().getEhj7aInput();
+        assertEquals(account.substring(0, 4), input.getEhj7aCodEntityI());
+        var key = input.getEhj7aContractI().getEhj7aKeyAccI();
+        assertEquals(account.substring(0, 4), key.getEhj7aKeyEntityI());
+        assertEquals(account.substring(4, 8), key.getEhj7aBrnOpenI());
+        assertEquals(account.substring(8), key.getEhj7aNumAccountI());
+        assertEquals("FIRST ADDRESS", request.getTransactions().getFirst().getDebtor().getPostalAddress().getAddressLine1());
+        assertEquals("HK", request.getTransactions().getFirst().getDebtor().getPostalAddress().getCountry());
+        assertEquals("CENTRAL", request.getTransactions().getFirst().getDebtor().getPostalAddress().getTownName());
+    }
+
+    @Test
+    void unsuccessfulOrMalformedPe3ResponseStopsSubmission() {
+        var hostError = contactResponse(null);
+        hostError.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                .getEhj7aAnswer().setEhj7aCodReturn("99");
+        var headerError = contactResponse(null);
+        headerError.getDfhcommarea().getQaechcc().setQaechccErrData("1234");
+        var noRecord = new Peechj7aResponse().dfhcommarea(new Peechj7aDfhcommarea()
+                .qaechcc(new Peechj7aQaechcc()));
+        var noAnswer = contactResponse(null);
+        noAnswer.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput().setEhj7aAnswer(null);
+        for (var response : Arrays.asList(null, new Peechj7aResponse(),
+                hostError, headerError, noRecord, noAnswer)) {
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var error = assertThrows(ServiceException.class,
+                    () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
+            assertEquals(HTHSupportErrorMapping.GENERAL_SERVICE_EXCEPTION, error.getErrCode());
+        }
+        verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
+    }
+
+    @Test
+    void debtorAddressFromPe3MapsFirstFourLinesDirectlyToIpe() {
+        Peechj7aAddressO source = new Peechj7aAddressO();
+        source.setEhj7aExtAdrLin1O("  " + "A".repeat(40) + "  ");
+        source.setEhj7aExtAdrLin2O("B".repeat(40));
+        source.setEhj7aExtAdrLin3O("C".repeat(40));
+        source.setEhj7aExtAdrLin4O("D".repeat(40));
+        source.setEhj7aExtAdrLin5O("E".repeat(40));
+        when(pe3Api.getCustomerContactInfo(any(Peechj7aRequest.class)))
+                .thenReturn(contactResponse(source));
         BatchRoutingCreditTransferRequest request = buildRoutingRequest();
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -683,31 +881,29 @@ class ChatsPaymentServiceTest {
 
         assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
         var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        String expected = String.join(" ", "A".repeat(40), "B".repeat(40), "C".repeat(40),
-                "D".repeat(40), "E".repeat(40));
-        assertEquals(expected.substring(0, 70), address.getAddressLine1());
-        assertEquals(expected.substring(70, 140), address.getAddressLine2());
-        assertEquals(expected.substring(140), address.getAddressLine3());
-        assertNull(address.getAddressLine4());
+        assertEquals("A".repeat(40), address.getAddressLine1());
+        assertEquals("B".repeat(40), address.getAddressLine2());
+        assertEquals("C".repeat(40), address.getAddressLine3());
+        assertEquals("D".repeat(40), address.getAddressLine4());
         assertNull(address.getTownName());
         assertNull(address.getCountry());
         assertEquals("Flat 12A 88 Queens Road", request.getTransactions().getFirst()
                 .getCreditor().getPostalAddress().getAddressLine1());
-        verify(partyPreferenceMapper).selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802");
+        verify(pe3Api).getCustomerContactInfo(any(Peechj7aRequest.class));
         verify(payemtRoutApi).submit(request);
     }
 
     @Test
     void debtorAddressCanBeMissingOrAllBlank() {
-        for (PartyPostalAddress source : Arrays.asList(null, new PartyPostalAddress())) {
+        for (Peechj7aAddressO source : Arrays.asList(null, new Peechj7aAddressO())) {
             reset(payemtRoutApi, partyPreferenceMapper);
             when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString(), anyString())).thenReturn("PAYER NAME");
             if (source != null) {
-                source.setAddress1("   ");
-                source.setAddress5("");
+                source.setEhj7aExtAdrLin1O("   ");
+                source.setEhj7aExtAdrLin5O("");
             }
-            when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                    .thenReturn(source);
+            when(pe3Api.getCustomerContactInfo(any(Peechj7aRequest.class)))
+                    .thenReturn(contactResponse(source));
             BatchRoutingCreditTransferRequest request = buildRoutingRequest();
             when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -720,69 +916,83 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void debtorAddressSkipsEmptyLinesWithoutDroppingTheFifthLine() {
-        PartyPostalAddress source = new PartyPostalAddress();
-        source.setAddress2("  SECOND LINE  ");
-        source.setAddress4(" ");
-        source.setAddress5("LAST LINE");
-        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                .thenReturn(source);
+    void debtorAddressPreservesEmptyLinePositions() {
+        Peechj7aAddressO source = new Peechj7aAddressO();
+        source.setEhj7aExtAdrLin2O("  SECOND LINE  ");
+        source.setEhj7aExtAdrLin4O(" ");
+        source.setEhj7aExtAdrLin5O("LAST LINE");
+        when(pe3Api.getCustomerContactInfo(any(Peechj7aRequest.class)))
+                .thenReturn(contactResponse(source));
         BatchRoutingCreditTransferRequest request = buildRoutingRequest();
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
         chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
         var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        assertEquals("SECOND LINE LAST LINE", address.getAddressLine1());
-        assertNull(address.getAddressLine2());
+        assertNull(address.getAddressLine1());
+        assertEquals("SECOND LINE", address.getAddressLine2());
+        assertNull(address.getAddressLine3());
+        assertNull(address.getAddressLine4());
     }
 
     @Test
-    void debtorAddressRespectsIpeLineBoundaries() {
-        for (int length : new int[]{70, 71, 280}) {
-            reset(payemtRoutApi, partyPreferenceMapper);
-            when(partyPreferenceMapper.selectCustomerNameByPartyId(anyString(), anyString())).thenReturn("PAYER NAME");
-            PartyPostalAddress source = new PartyPostalAddress();
-            source.setAddress1("A".repeat(length));
-            when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                    .thenReturn(source);
-            BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    void debtorAddressDoesNotPopulateIpeFromTheUnmappedFifthLine() {
+        var source = new Peechj7aAddressO().ehj7aExtAdrLin5O("FIFTH LINE ONLY");
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(contactResponse(source));
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-            String joined = Stream.of(address.getAddressLine1(), address.getAddressLine2(),
-                            address.getAddressLine3(), address.getAddressLine4())
-                    .filter(Objects::nonNull).collect(Collectors.joining());
-            assertEquals("A".repeat(length), joined);
-            Stream.of(address.getAddressLine1(), address.getAddressLine2(),
-                            address.getAddressLine3(), address.getAddressLine4())
-                    .filter(Objects::nonNull).forEach(line -> assertTrue(line.length() <= 70));
+        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        verify(payemtRoutApi).submit(request);
+    }
+
+    @Test
+    void debtorAddressPreservesEachIpeLineAtItsLengthLimit() {
+        var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("A".repeat(70))
+                .ehj7aExtAdrLin2O("B".repeat(70)).ehj7aExtAdrLin3O("C".repeat(70))
+                .ehj7aExtAdrLin4O("D".repeat(70));
+        when(pe3Api.getCustomerContactInfo(any())).thenReturn(contactResponse(source));
+        var request = buildRoutingRequest();
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+        assertEquals(source.getEhj7aExtAdrLin1O(), address.getAddressLine1());
+        assertEquals(source.getEhj7aExtAdrLin2O(), address.getAddressLine2());
+        assertEquals(source.getEhj7aExtAdrLin3O(), address.getAddressLine3());
+        assertEquals(source.getEhj7aExtAdrLin4O(), address.getAddressLine4());
+    }
+
+    @Test
+    void oversizedPe3AddressLineIsRejectedWithoutTruncation() {
+        for (int i = 0; i < 4; i++) {
+            var source = new Peechj7aAddressO();
+            String value = "A".repeat(71);
+            switch (i) {
+                case 0 -> source.setEhj7aExtAdrLin1O(value);
+                case 1 -> source.setEhj7aExtAdrLin2O(value);
+                case 2 -> source.setEhj7aExtAdrLin3O(value);
+                case 3 -> source.setEhj7aExtAdrLin4O(value);
+            }
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(contactResponse(source));
+
+            var error = assertThrows(ParameterException.class,
+                    () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
+
+            assertEquals(HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION, error.getErrCode());
         }
-    }
-
-    @Test
-    void debtorAddressBeyondFourLinesIsRejectedWithoutTruncation() {
-        PartyPostalAddress source = new PartyPostalAddress();
-        source.setAddress1("A".repeat(281));
-        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                .thenReturn(source);
-
-        ParameterException error = assertThrows(ParameterException.class,
-                () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
-
-        assertEquals(HTHSupportErrorMapping.PARAMETER_INVALID_EXCEPTION, error.getErrCode());
-        assertEquals("A".repeat(281), source.getAddress1());
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);
     }
 
     @Test
-    void debtorAddressDatabaseFailureStopsSubmission() {
-        when(partyPreferenceMapper.selectDebtorPostalAddress(PARTY_ID, DEBIT_ACCOUNT, "6802"))
-                .thenThrow(new IllegalStateException("BCO address query failed"));
+    void debtorAddressPe3FailureStopsSubmission() {
+        when(pe3Api.getCustomerContactInfo(any(Peechj7aRequest.class)))
+                .thenThrow(new IllegalStateException("PE3 address query failed"));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(ServiceException.class,
                 () -> chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), buildRoutingRequest()));
 
         verifyNoInteractions(payemtRoutApi, paymentPayoutRecordMapper);

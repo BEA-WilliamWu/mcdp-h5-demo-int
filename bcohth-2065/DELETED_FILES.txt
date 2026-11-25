@@ -1,0 +1,2 @@
+Delete these obsolete files from the target source tree when applying this delivery:
+hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/dto/PartyPostalAddress.java

@@ -130,7 +130,7 @@ public abstract class OverseasPaymentService {
      * Optional hook invoked before submission with the accepted batch id; TT uses
      * it to kick off the WMG process instance. No-op by default.
      */
-    protected void createProcessInstanceExecute(LocalPayment localPayment, String batchId) {
+    protected void createProcessInstanceExecute(LocalPayment localPayment, String batchId, String ttRefNo) {
         // TT-specific
     }
 
@@ -177,7 +177,10 @@ public abstract class OverseasPaymentService {
 
         String debitInternalAccountNo = AccountUtils.ext2intAccNo(
                 localPayment.getFromAccount().getAccountNumber(),
-                localPayment.getFromAccount().getAccountType().value().substring(0, 1));
+                localPayment.getFromAccount().getAccountType().value().substring(0, 1),
+                localPayment.getFromAccount().getCurrency());
+        localPayment.getFromAccount().setInternalAccountNumber(debitInternalAccountNo);
+        localPayment.getToAccount().setInternalAccountNumber(localPayment.getToAccount().getAccountNumber());
         String productCode = partyAccountMapper.selectProductCode(
                 debitInternalAccountNo, localPayment.getPartyId());
         PartyAccount partyAccount = StringUtils.isBlank(productCode) ? null
@@ -241,9 +244,6 @@ public abstract class OverseasPaymentService {
                                   BatchRoutingCreditTransferRequest routingRequest) {
         Payment payment = new Payment();
         String batchId = PaymentRoutingPayload.batchId(routingRequest);
-        // TT creates the WMG process after validation, using the same batch id
-        // that was accepted by smart-routing and is subsequently submitted to IPE.
-        createProcessInstanceExecute(localPayment, batchId);
         payment.setTxnRef(PaymentRoutingPayload.endToEndId(routingRequest));
         // Phase 1: basic payment info is on record before the IPE submission.
         String recordId = insertPendingRecord(localPayment, routingRequest, payment);
@@ -253,8 +253,13 @@ public abstract class OverseasPaymentService {
         payment.setTxnTime(OffsetDateTime.now().withNano(0));
         payment.setOriginalEndtoendID(PaymentModelConvert.EndToEndId(localPayment));
         payment.setOriginalTransactionID(localPayment.getTransactionID());
+        payment.setDebitAccountNumber(localPayment.getFromAccount().getInternalAccountNumber());
+        payment.setCreditAccountNumber(localPayment.getToAccount().getInternalAccountNumber());
         // Phase 2: the pending record is updated with the IPE outcome.
         PaymentServiceSupport.validatePaymentResult(localPayment, result);
+        // TT creates the WMG process after validation, using the same batch id
+        // that was accepted by smart-routing and is subsequently submitted to IPE.
+        createProcessInstanceExecute(localPayment, batchId, result == null ? null : result.getTtRefNum());
         persistPaymentRecord(recordId, localPayment, routingRequest, payment, result);
         cacheHelperUtils.validatePaymentResult(result);
         return payment;
@@ -321,7 +326,9 @@ public abstract class OverseasPaymentService {
             throw logAndCreateException(HTHSupportErrorMapping.DEBIT_ACCOUNT_TYPE_MISSING);
         }
         String debitInternalAccountNo = AccountUtils.ext2intAccNo(
-                fromAccount.getAccountNumber(), fromAccount.getAccountType().value().substring(0, 1));
+                fromAccount.getAccountNumber(),
+                fromAccount.getAccountType().value().substring(0, 1),
+                fromAccount.getCurrency());
         String productCode = partyAccountMapper.selectProductCode(debitInternalAccountNo, partyId);
         List<HthUserAccessAccount> accessAccounts =
                 hthUserAccessAccountMapper.selectFromAccountInfo(partyId, closeId, fromAccount.getAccountNumber());

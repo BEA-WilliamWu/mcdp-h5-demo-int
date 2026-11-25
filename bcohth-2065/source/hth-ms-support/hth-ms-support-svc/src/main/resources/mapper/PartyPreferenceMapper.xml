@@ -8,19 +8,6 @@
         AND ACCOUNT_TYPE ='CSA' AND PRODUCT_CODE  &lt;&gt;'6800'  AND ROWNUM = 1
     </select>
 
-    <select id="selectDebtorPostalAddress" resultType="com.hkbea.hth.dto.PartyPostalAddress">
-        SELECT DISTINCT p.ADDRESS1 AS address1, p.ADDRESS2 AS address2,
-                        p.ADDRESS3 AS address3, p.ADDRESS4 AS address4, p.ADDRESS5 AS address5
-        FROM DIGX_PI_PARTY_ACCOUNTS a
-        JOIN DIGX_PI_PARTY_PREFERENCES p
-          ON p.PARTYID = a.PARTYID
-         AND p.DETERMINANT_VALUE = a.DETERMINANT_VALUE
-        WHERE a.PARENT_PARTY_ID = #{parentPartyId}
-          AND REPLACE(a.ACCOUNT_NUMBER_FORMATTED, '-', '') = #{accountNumber}
-          AND a.ACCOUNT_TYPE = 'CSA'
-          AND a.PRODUCT_CODE = #{productCode}
-    </select>
-
     <!-- Office Email -->
     <select id="getOfficeEmail" parameterType="java.lang.String" resultType="java.lang.String">
         SELECT OFFICE_EMAIL

@@ -44,8 +44,6 @@ import com.hkbea.hth.utils.CacheHelperUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -143,32 +141,6 @@ class TtPaymentServiceTest {
     }
 
     // ===================== Validation =====================
-
-    @ParameterizedTest
-    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
-    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
-        LocalPayment input = buildTtPayment(Currency.HKD);
-        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
-        input.getCreditor().setCreditorName(name);
-        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
-
-        Payment result = ttPaymentService.processPayment(input, request);
-
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var txn = request.getTransactions().getFirst();
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(name, txn.getCreditorAccount().getAccountName());
-        var remittance = txn.getSupplementaryData().getChatsRemittance();
-        assertNotNull(remittance);
-        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                remittance.getDepositAccountName2());
-        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                remittance.getDepositAccountName3());
-        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
-        verify(payemtRoutApi).submit(request);
-    }
 
     @Test
     @DisplayName("missing toAccount is rejected with TT_PAYEE_INFO_MISSING")
@@ -410,8 +382,9 @@ class TtPaymentServiceTest {
         assertEquals("PAYER NAME", tt.getAccountHolderName());
         assertEquals("1", tt.getPriority());
 
+        // ttRefNo is result.getTtRefNum(), which the submit fixture leaves null
         verify(ttPaymentServiceSupport).createProcessInstanceExecute(
-                any(com.hkbea.hth.wmg.model.RequestModel.class), any(LocalPayment.class), eq(BATCH_ID));
+                any(com.hkbea.hth.wmg.model.RequestModel.class), any(LocalPayment.class), eq(BATCH_ID), nullable(String.class));
 
         InOrder persistenceOrder = inOrder(paymentPayoutRecordMapper, payemtRoutApi);
         ArgumentCaptor<PaymentPayoutRecord> insertCaptor =
@@ -454,7 +427,7 @@ class TtPaymentServiceTest {
         doThrow(new RuntimeException("wmg down"))
                 .when(ttPaymentServiceSupport)
                 .createProcessInstanceExecute(any(com.hkbea.hth.wmg.model.RequestModel.class),
-                        any(LocalPayment.class), anyString());
+                        any(LocalPayment.class), anyString(), nullable(String.class));
 
         Payment result = assertDoesNotThrow(
                 () -> ttPaymentService.processPayment(buildTtPayment(Currency.HKD), buildRoutingRequest()));

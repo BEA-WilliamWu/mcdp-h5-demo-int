@@ -1,41 +1,78 @@
-BCOH2H-2065 - Deposit-name segmentation extended to all five payment types
-Date: 2026-11-20
+BCOH2H-2065 - PE3 debtor country/town and direct address-line mapping
+Date: 2026-11-25
 Source repository: /Users/devs/CProj/hth-dsp
-Implementation baseline: be7c0a0
-Local DSP commit / cumulative delivery source snapshot: b9f065b7866301b7de4b8f2a725cbeacbad62164
+Local DSP commit / cumulative delivery source snapshot: 84efc750ebce3e3f2b0b0763d2ef03dc0c205b85
 
-Current extension: five production Java files, four test files and Technical Design.
-TT/DR use the overseas base flow. FPS and On-Us add name-only ChatsRemittance.
-All five types share PaymentRoutingPayload.chatsRemittance(name).
-Name1 = characters 1-35; Name2 = 36-70; Name3 = 71-105; Name4 = 106-140.
-As in the existing CHATS mapping, names <=35 populate both Name1 and Name2.
-Existing full creditor/account names and DR chinaAccEnglishName are preserved.
-The existing per-type field validation applies. No schema, dependency or API-model change.
+This revision adds PEECHJ7A to the existing Pe3Api/Pe3Client integration,
+including the integration OpenAPI and 18 generated wire models.
+The first returned contact is selected, as confirmed by the user.
+ehj7aExtAdrLin1O..4O map directly to IPE debtor.postalAddress.addressLine1..4.
+Outer padding is stripped and blank line positions are preserved.
+Successful empty address results omit the address. Failed or malformed host
+responses stop payment submission with the existing service error 600000.
+Country/town mapping now follows the approved contact-type rules:
+- H/C/I structured addresses use ehj7aCodCountryAdrO.
+- Non-structured types 40/50/60/70/80/90/00/ZZ/Z0/Z1 use ehj7aCodCtryValO.
+- Country codes are trimmed, uppercased and validated against Java ISO alpha-2
+  countries. Invalid nonblank codes are logged/omitted; no alpha-3 conversion.
+- H uses ehj7aDesDistrictO for townName; C/I use ehj7aOvrCtyDesO.
+- Blank preferred town falls back to ehj7aDesCityO; outer padding is stripped.
+- Unknown contact types omit country and may use generic city for townName.
+- Country-only or town-only results retain an address object; all-empty mapped
+  fields omit the object.
+The fifth formatted line remains unmapped. Province/area fields are not appended.
+The BCO address query and PartyPostalAddress DTO are removed. Apply the deletion
+listed in DELETED_FILES.txt to the actual target codebase as well.
 
-Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
-305 tests passed, 0 failures, 0 errors, 0 skipped.
-48 new parameterized executions cover TT/DR/FPS/On-Us name lengths
-1,34,35,36,69,70,71,104,105,106,139,140 through the service entry points.
-These 48 cases failed against the prior production mapping and now pass.
-Existing CHATS and routing/payment regression suites also pass.
-Log: /tmp/hth-all-payment-names-20261120/test.log
-IPE and database calls are mocked. FPS/On-Us acceptance and use of the added
-ChatsRemittance fields require SIT verification with the deployed IPE.
+PEECHJ7A DEBUG entries identify the fields used for country and townName,
+correlated by messageId. An omitted field is reported as none. In SIT, enable
+logging.level.com.hkbea.hth.service.payment.ChatsPaymentService=DEBUG
+to inspect the selected field names.
 
-Cumulative delivery: 18 complete source/test/mapper files, refreshed from
-this single DSP commit to avoid mixing earlier story snapshots. Original
-repository-relative paths are retained under source/. The previous CHATS
-customer reference, BCO debtor address and payment enquiry changes are included
-as current source files. This delivery does not establish compatibility with
-older separate 2055/2126 source packages; use the latest DSP baseline when merging.
+The supplied request form confirms collection PE9CHJ7A and Alnova account-key
+lookup. PEECHJ7A shares the existing PEECHI11 client and HTH gateway.
+In SIT, submit one CHATS payment and match its messageId to the INFO entry
+PEECHJ7A enquiry completed with returnCode=00.
 
-Only local DSP Git committed. mcdp Git submission remains manual.
-SHA256SUMS covers the source files, Technical Design and this delivery note.
-Unrelated working-tree source documents and sample files are excluded.
+Verification: Java 21 / offline Maven BUILD SUCCESS.
+Latest DEBUG logging revision: 80 tests passed, 0 failures/errors/skipped
+(79 CHATS cases and one PE3 wire-contract case).
+Tests cover structured/non-structured types, preferred city/district and generic
+city fallback, country validation/normalization, metadata-only addresses,
+unknown types, first-contact isolation and the earlier address-line behavior.
+The test run produced 75 PEECHJ7A DEBUG entries. All matched the expected field-source format.
+Log: /tmp/hth-2065-debug.w4u6ZB/tests.log
+Earlier full payment regression before these address follow-ups passed 276 tests.
+The request/response schemas match every supplied source wire field and bound.
+No live host or IPE integration was performed.
+
+Cumulative delivery: 38 complete source/test/mapper/contract files from
+this single current DSP commit under source/, with repository-relative paths.
+Older separate 2055/2126 packages may contain stale shared files; merge against
+the current DSP baseline. Tech Design is at this directory root.
+Local DSP Git is committed. mcdp Git submission remains manual.
 
 Synchronized source files:
-- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/dto/PartyPostalAddress.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/mapper/PartyPreferenceMapper.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/api/Pe3Api.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aAddressO.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aAnswer.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aCiIdI.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aContact.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aContractI.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aDfhcommarea.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aDocumentI.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aEmailO.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aInput.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aKeyAccI.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aOutput.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aPartI.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aQaechcc.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aRecord.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aRequest.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aResponse.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aSqlerrm.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/pe3/model/Peechj7aTeleFaxO.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/FpsPaymentService.java
@@ -44,7 +81,9 @@ Synchronized source files:
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentModelConvert.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentRoutingPayload.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/PaymentValidationSupport.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/resources/api/pe3/peechj7a.openapi.yaml
 - source/hth-ms-support/hth-ms-support-svc/src/main/resources/mapper/PartyPreferenceMapper.xml
+- source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/pe3/Peechj7aContractTest.java
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/ChatsPaymentServiceTest.java
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/DrPaymentServiceTest.java
 - source/hth-ms-support/hth-ms-support-svc/src/test/java/com/hkbea/hth/service/FpsPaymentServiceTest.java

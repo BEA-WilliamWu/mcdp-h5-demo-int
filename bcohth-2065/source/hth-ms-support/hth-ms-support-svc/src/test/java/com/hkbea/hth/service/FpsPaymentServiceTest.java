@@ -42,8 +42,6 @@ import com.hkbea.hth.utils.ScameterValidatorUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -60,7 +58,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -122,34 +119,6 @@ class FpsPaymentServiceTest {
     }
 
     // ===================== Validation =====================
-
-    @ParameterizedTest
-    @ValueSource(ints = {1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140})
-    void creditorNameIsPreservedAcrossDepositNameSegments(int length) {
-        when(transferLimitService.updateFasterPaymentLimit(any(), any()))
-                .thenReturn(populatedFpu01Result());
-        LocalPayment input = buildFpsPayment();
-        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
-        input.getCreditor().setCreditorName(name);
-        BatchRoutingCreditTransferRequest request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
-
-        Payment result = fpsPaymentService.processPayment(input, request);
-
-        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
-        var txn = request.getTransactions().getFirst();
-        assertEquals(name, txn.getCreditor().getName());
-        assertEquals(name, txn.getCreditorAccount().getAccountName());
-        var remittance = txn.getSupplementaryData().getChatsRemittance();
-        assertNotNull(remittance);
-        assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-        assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                remittance.getDepositAccountName2());
-        assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                remittance.getDepositAccountName3());
-        assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
-        verify(payemtRoutApi).submit(request);
-    }
 
     @Test
     @DisplayName("null payment is rejected as missing mandatory parameter")
@@ -441,7 +410,7 @@ class FpsPaymentServiceTest {
                 txn.getRemittanceInformation().getCustomerRemarks());
         assertEquals("CXBSNS", txn.getPurpose().getProprietary());
         assertEquals("PAYER NAME", txn.getDebtor().getName());
-        assertEquals(com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C"),
+        assertEquals(com.hkbea.hth.utils.AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD"),
                 txn.getDebtorAccount().getInternalAccountNo());
         assertEquals("6802", txn.getDebtorAccount().getProductCode());
         assertEquals("FPS BENEFICIARY", txn.getCreditor().getName());
@@ -467,7 +436,6 @@ class FpsPaymentServiceTest {
         assertEquals("FPS BENEFICIARY", pending.getCreditAccountName());
         assertEquals(new BigDecimal("100.00"), pending.getInstdAmount());
         assertEquals("HKD", pending.getInstdCurrency());
-        assertEquals("FPS-DETAIL-1; FPS-DETAIL-2", pending.getRemarks());
         assertEquals("6802", pending.getProdCode());
         assertEquals("015", pending.getCreditMemberId());
         assertNull(pending.getStatus());

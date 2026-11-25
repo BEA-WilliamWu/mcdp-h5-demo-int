@@ -189,9 +189,9 @@ public final class PaymentValidationSupport {
                 && !address.getTownName().matches(CHATS_TOWN_NAME_REGEX)) {
             throw new ParameterException(HTHSupportErrorMapping.PAYEE_TOWN_NAME_MISSING_OR_INVALID);
         }
-        if (address.getCountry() != null && !address.getCountry().matches(CHATS_COUNTRY_CODE_REGEX)) {
-            throw new ParameterException(HTHSupportErrorMapping.PAYEE_COUNTRY_MISSING_OR_INVALID);
-        }
+//        if (address.getCountry() != null && !address.getCountry().matches(CHATS_COUNTRY_CODE_REGEX)) {
+//            throw new ParameterException(HTHSupportErrorMapping.PAYEE_COUNTRY_MISSING_OR_INVALID);
+//        }
         validateAddressLine2(payment);
     }
 
@@ -235,10 +235,12 @@ public final class PaymentValidationSupport {
      * CHATS payee country must be a 2-letter uppercase ISO code.
      */
     public static void validateChatsCountryCode(LocalPayment payment) {
-        String country = payment.getCreditor() == null || payment.getCreditor().getPostalAddress() == null
-                ? null : payment.getCreditor().getPostalAddress().getCountry();
-        if (StringUtils.isBlank(country) || !country.matches(CHATS_COUNTRY_CODE_REGEX)) {
-            throw new ParameterException(HTHSupportErrorMapping.PAYEE_COUNTRY_MISSING_OR_INVALID);
+        if (LocalPayment.PaymentTypeEnum.TT.equals(payment.getPaymentType())) {
+            String country = payment.getCreditor() == null || payment.getCreditor().getPostalAddress() == null
+                    ? null : payment.getCreditor().getPostalAddress().getCountry();
+            if (StringUtils.isBlank(country) || !country.matches(CHATS_COUNTRY_CODE_REGEX)) {
+                throw new ParameterException(HTHSupportErrorMapping.PAYEE_COUNTRY_MISSING_OR_INVALID);
+            }
         }
     }
 
@@ -375,54 +377,56 @@ public final class PaymentValidationSupport {
      * TT: intermediaryAgent.bicfi is mandatory and must be a valid BIC.
      */
     public static void validateIntermediaryAgentRequired(LocalPayment payment) {
-        IntermediaryAgent agent = payment.getIntermediaryAgent();
-        FinancialInstitutionId fid = agent == null ? null : agent.getFinancialInstitutionId();
-        String intermediaryBicfi = fid == null ? null : fid.getBicfi();
+        if (LocalPayment.PaymentTypeEnum.TT.equals(payment.getPaymentType())) {
+            IntermediaryAgent agent = payment.getIntermediaryAgent();
+            FinancialInstitutionId fid = agent == null ? null : agent.getFinancialInstitutionId();
+            String intermediaryBicfi = fid == null ? null : fid.getBicfi();
 
-        String instructedCurrency = payment.getTxnAmount() == null ? null : payment.getTxnAmount().getCurrency().name();
-        boolean isTtCny = LocalPayment.PaymentTypeEnum.TT.value().equalsIgnoreCase(payment.getPaymentType().value()) && Currency.CNY.name().equalsIgnoreCase(instructedCurrency);
+            String instructedCurrency = payment.getTxnAmount() == null ? null : payment.getTxnAmount().getCurrency().name();
+            boolean isTtCny = LocalPayment.PaymentTypeEnum.TT.value().equalsIgnoreCase(payment.getPaymentType().value()) && Currency.CNY.name().equalsIgnoreCase(instructedCurrency);
 
-        /*
-         * For payments other than TT CNY,
-         * intermediaryAgent.financialInstitutionId.bicfi must be blank.
-         */
-        if (!isTtCny) {
-            if (StringUtils.isNotBlank(intermediaryBicfi)) {
-                throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MUST_BE_BLANK);
+            /*
+             * For payments other than TT CNY,
+             * intermediaryAgent.financialInstitutionId.bicfi must be blank.
+             */
+            if (!isTtCny) {
+                if (StringUtils.isNotBlank(intermediaryBicfi)) {
+                    throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MUST_BE_BLANK);
+                }
             }
-        }
 
-        // Get Creditor Agent BICFI
-        CreditorAgent creditorAgent = payment.getCreditorAgent();
-        FinancialInstitutionId creditorFid = creditorAgent == null ? null : creditorAgent.getFinancialInstitutionId();
-        String creditorBicfi = creditorFid == null ? null : creditorFid.getBicfi();
+            // Get Creditor Agent BICFI
+            CreditorAgent creditorAgent = payment.getCreditorAgent();
+            FinancialInstitutionId creditorFid = creditorAgent == null ? null : creditorAgent.getFinancialInstitutionId();
+            String creditorBicfi = creditorFid == null ? null : creditorFid.getBicfi();
 
-        /*
-         * The 5th and 6th characters of the Creditor Agent BICFI
-         * represent the country code.
-         *
-         * Creditor Agent BICFI should already have been validated
-         * before this method is called.
-         */
-        boolean creditorAgentOutsideChina = StringUtils.isNotBlank(creditorBicfi) && creditorBicfi.length() >= 6
-                && !"CN".equalsIgnoreCase(creditorBicfi.substring(4, 6));
+            /*
+             * The 5th and 6th characters of the Creditor Agent BICFI
+             * represent the country code.
+             *
+             * Creditor Agent BICFI should already have been validated
+             * before this method is called.
+             */
+            boolean creditorAgentOutsideChina = StringUtils.isNotBlank(creditorBicfi) && creditorBicfi.length() >= 6
+                    && !"CN".equalsIgnoreCase(creditorBicfi.substring(4, 6));
 
-        /*
-         * For TT CNY payments, Intermediary Agent BICFI is mandatory
-         * when the Creditor Agent BIC country code is not CN.
-         */
-        if (isTtCny && creditorAgentOutsideChina && StringUtils.isBlank(intermediaryBicfi)) {
-            throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MANDATORY_FOR_TT_CNY);
-        }
+            /*
+             * For TT CNY payments, Intermediary Agent BICFI is mandatory
+             * when the Creditor Agent BIC country code is not CN.
+             */
+            if (isTtCny && creditorAgentOutsideChina && StringUtils.isBlank(intermediaryBicfi)) {
+                throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MANDATORY_FOR_TT_CNY);
+            }
 
-        /*
-         * If Intermediary Agent BICFI is provided,
-         * it must not contain leading or trailing spaces
-         * and must match the BIC format.
-         */
-        if (StringUtils.isNotBlank(intermediaryBicfi) && (!intermediaryBicfi.equals(intermediaryBicfi.trim())
-                || !intermediaryBicfi.matches(BIC_REGEX))) {
-            throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MISSING_OR_INVALID);
+            /*
+             * If Intermediary Agent BICFI is provided,
+             * it must not contain leading or trailing spaces
+             * and must match the BIC format.
+             */
+            if (StringUtils.isNotBlank(intermediaryBicfi) && (!intermediaryBicfi.equals(intermediaryBicfi.trim())
+                    || !intermediaryBicfi.matches(BIC_REGEX))) {
+                throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MISSING_OR_INVALID);
+            }
         }
     }
 

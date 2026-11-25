@@ -33,6 +33,7 @@ import com.hkbea.hth.mapper.*;
 import com.hkbea.hth.model.*;
 import com.hkbea.hth.model.Currency;
 import com.hkbea.hth.service.payment.*;
+import com.hkbea.hth.utils.AccountUtils;
 import com.hkbea.hth.utils.CacheHelperUtils;
 import com.hkbea.hth.utils.CurrencyUtils;
 import com.hkbea.hth.utils.FineGrainedEntitlementUtil;
@@ -639,13 +640,16 @@ public class PaymentServiceImpl implements PaymentApi {
      * its own fields after dispatch.
      */
     public void validateCommon(LocalPayment payment) {
-        validateAccountId(payment);
         validateAmount(payment);
         validateTransactionId(payment);
         PaymentValidationSupport.validateEndToEndIdFormat(payment);
         validateAccountTypeAndCurrency(payment);
+        validateAccountId(payment);
         validateExecutionDate(payment.getSettlementDate());
         PaymentValidationSupport.validateAddressLine2(payment);
+        PaymentValidationSupport.validateIntermediaryAgentRequired(payment);
+        PaymentValidationSupport.validateChatsCountryCode(payment);
+        PaymentValidationSupport.validateCategoryPurpose(payment,true);
         validatePaymentDetails(payment);
 
     }
@@ -735,15 +739,15 @@ public class PaymentServiceImpl implements PaymentApi {
             throw new ParameterException(HTHSupportErrorMapping.DEBIT_ACCOUNT_NUMBER_FORMAT_INVALID);
         }
 
-        List<HthUserAccessAccount> hthUserAccessAccounts = hthUserAccessAccountMapper.selectFromAccountInfo(payment.getPartyId(), payment.getCloseId(), fromAccountId);
-        if (hthUserAccessAccounts.isEmpty()) {
-            throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
-        }
-        Eh7e0Output acctInfo = queryAccountInfo(hthUserAccessAccounts.getFirst().getAccountNumber());
+        Eh7e0Output acctInfo = queryAccountInfo(AccountUtils.ext2intAccNo(payment.getFromAccount().getId(),
+                payment.getFromAccount().getAccountType().value().substring(0, 1),
+                payment.getFromAccount().getCurrency()));
         if (acctInfo == null) {
             throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
         }
-        if (!"N".equalsIgnoreCase(acctInfo.getEh7e0FlgAccHoldO().trim())) {
+        if ("C".equalsIgnoreCase(acctInfo.getEh7e0FlgStatusO().trim())
+                || isNotN(acctInfo.getEh7e0FlgDormantO())
+                || isNotN(acctInfo.getEh7e0FlgAccHoldO())) {
             throw new ParameterException(HTHSupportErrorMapping.FPS_DEBIT_ACCOUNT_STATUS_INVALID);
         }
 
@@ -753,6 +757,10 @@ public class PaymentServiceImpl implements PaymentApi {
                 || !TO_ACCOUNT_ALNUM_PATTERN.matcher(toAccount.getId()).matches()) {
             throw new ParameterException(HTHSupportErrorMapping.CREDITORACCOUNT_ID_MISSING_OR_INVALID);
         }
+    }
+
+    private boolean isNotN(String value) {
+        return value != null && !value.trim().isEmpty() && !"N".equalsIgnoreCase(value.trim());
     }
 
     /**

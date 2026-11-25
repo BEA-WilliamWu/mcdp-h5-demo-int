@@ -137,9 +137,11 @@ public class OnUsPaymentService {
         validateBankTransfer(localPayment);
 
         String toAccount = AccountUtils.ext2intAccNo(localPayment.getToAccount().getAccountNumber(),
-                localPayment.getToAccount().getAccountType().value().substring(0, 1));
+                localPayment.getToAccount().getAccountType().value().substring(0, 1), localPayment.getToAccount().getCurrency().toString());
+        localPayment.getToAccount().setInternalAccountNumber(toAccount);
         String fromAccount = AccountUtils.ext2intAccNo(localPayment.getFromAccount().getAccountNumber(),
-                localPayment.getFromAccount().getAccountType().value().substring(0, 1));
+                localPayment.getFromAccount().getAccountType().value().substring(0, 1), localPayment.getFromAccount().getCurrency());
+        localPayment.getFromAccount().setInternalAccountNumber(fromAccount);
         validateFromAndToAccount(fromAccount, toAccount);
         validateBeneficiaryAccount(toAccount, localPayment.getTxnAmount().getCurrency().toString());
         validatePaymentTransfer(toAccount, localPayment.getTxnAmount().getCurrency().toString(),
@@ -226,10 +228,10 @@ public class OnUsPaymentService {
 
         private RoutingDetail(LocalPayment localPayment) {
             this.debitInternal =  AccountUtils.ext2intAccNo(localPayment.getFromAccount().getAccountNumber(),
-                    localPayment.getFromAccount().getAccountType().value().substring(0, 1));
+                    localPayment.getFromAccount().getAccountType().value().substring(0, 1), localPayment.getFromAccount().getCurrency());
             this.creditInternal = AccountUtils.ext2intAccNo(
                     localPayment.getToAccount().getAccountNumber(),
-                    localPayment.getToAccount().getAccountType().value().substring(0, 1));
+                    localPayment.getToAccount().getAccountType().value().substring(0, 1), localPayment.getToAccount().getCurrency().toString());
             this.fromCurrency = localPayment.getFromAccount().getCurrency();
             this.toCurrency = localPayment.getToAccount().getCurrency().toString();
             this.creditorName = localPayment.getCreditor().getCreditorName();
@@ -281,6 +283,8 @@ public class OnUsPaymentService {
         payment.setTxnTime(OffsetDateTime.now().withNano(0));
         payment.setOriginalEndtoendID(PaymentModelConvert.EndToEndId(localPayment));
         payment.setOriginalTransactionID(localPayment.getTransactionID());
+        payment.setDebitAccountNumber(localPayment.getFromAccount().getInternalAccountNumber());
+        payment.setCreditAccountNumber(localPayment.getToAccount().getInternalAccountNumber());
         // Phase 2: the pending record is updated with the IPE outcome.
         PaymentServiceSupport.validatePaymentResult(localPayment, paymentResult);
         PaymentServiceSupport.updateInternalRecord(paymentInternalMapper, log, INTERNAL, recordId, payment, paymentResult, localPayment);
@@ -324,6 +328,7 @@ public class OnUsPaymentService {
             entity.setMessageId(headers.getMessageId());
             entity.setAdcSuspiciousInd(localPayment.getSuspiciousInd());
             entity.setEndToEndId(PaymentModelConvert.EndToEndId(localPayment));
+            entity.setDebitInternalAccount(localPayment.getFromAccount().getInternalAccountNumber());
             paymentInternalMapper.insert(entity);
             log.info("On-Us pending payment internal record inserted, customerTransactionId={}",
                     localPayment.getTransactionID());
@@ -345,6 +350,7 @@ public class OnUsPaymentService {
             throw new ParameterException(HTHSupportErrorMapping.CREDITOR_ACCOUNT_MISSING);
         }
         String toAccountType = toAccount.getAccountType() == null ? "" : toAccount.getAccountType().value();
+        String toAccountCurrency = toAccount.getCurrency() == null ? "" : toAccount.getCurrency().toString();
         String accountNumber = PaymentValidationSupport.creditorAccountNumber(toAccount);
         if (!StringUtils.hasText(accountNumber)) {
             throw new ParameterException(HTHSupportErrorMapping.BENEFICIARY_ACCOUNT_NUMBER_MISSING);
@@ -352,7 +358,7 @@ public class OnUsPaymentService {
         if (toAccount.getAccountType() != null && toAccount.getCurrency() != null) {
             return;
         }
-        String accountId18 = AccountUtils.ext2intAccNo(accountNumber, toAccountType);
+        String accountId18 = AccountUtils.ext2intAccNo(accountNumber, toAccountType, toAccountCurrency);
         Eh7e0Output accountInfo = queryOnUsAccountInfo(accountId18);
         if (accountInfo == null) {
             throw new ParameterException(HTHSupportErrorMapping.ACCOUNT_NOT_FOUND_EXCEPTION);
@@ -493,8 +499,10 @@ public class OnUsPaymentService {
         if (CollectionUtils.isEmpty(strings)) {
             return false;
         }
-        String toAccount = AccountUtils.ext2intAccNo(localPayment.getToAccount().getAccountNumber(), localPayment.getToAccount().getAccountType().value().substring(0, 1));
-        String fromAccount = AccountUtils.ext2intAccNo(localPayment.getFromAccount().getAccountNumber(), localPayment.getFromAccount().getAccountType().value().substring(0, 1));
+        String toAccount = AccountUtils.ext2intAccNo(localPayment.getToAccount().getAccountNumber(),
+                localPayment.getToAccount().getAccountType().value().substring(0, 1), localPayment.getToAccount().getCurrency().toString());
+        String fromAccount = AccountUtils.ext2intAccNo(localPayment.getFromAccount().getAccountNumber(),
+                localPayment.getFromAccount().getAccountType().value().substring(0, 1), localPayment.getFromAccount().getCurrency());
         return strings.contains(toAccount) && strings.contains(fromAccount);
     }
 

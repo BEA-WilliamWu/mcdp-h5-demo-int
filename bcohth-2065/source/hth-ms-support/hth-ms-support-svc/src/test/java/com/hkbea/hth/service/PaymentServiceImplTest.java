@@ -335,7 +335,10 @@ class PaymentServiceImplTest {
     @DisplayName("a missing creditor account is rejected by the common account check")
     void missingCreditorAccountInCommonCheck_throws() {
         LocalPayment payment = buildValidPayment();
-        payment.setToAccount(null);
+        // A null toAccount NPEs earlier, in validateAccountTypeAndCurrency, which
+        // runs before validateAccountId; the creditor id being absent is what the
+        // common check rejects with CREDITORACCOUNT_ID_MISSING_OR_INVALID.
+        payment.setToAccount(new PaymentToAccount());
 
         ParameterException exception = assertThrows(ParameterException.class,
                 () -> paymentService.validateCommon(payment));
@@ -459,7 +462,7 @@ class PaymentServiceImplTest {
 
         ParameterException exception = assertThrows(ParameterException.class,
                 () -> paymentService.validateCommon(payment));
-        assertEquals(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID, exception.getErrCode());
+        assertEquals(HTHSupportErrorMapping.ACCOUNT_NOT_FOUND_EXCEPTION, exception.getErrCode());
     }
 
     @Test
@@ -723,7 +726,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    void automaticRoutingToChatsReplacesInternalIdentifierWithCustomerValue() {
+    void automaticRoutingToChatsPassesCustomerIdentifierToRouteAndSelectedService() {
         PaymentInstructionRequest request = buildInstructionRequest();
         request.setPaymentType(LocalPayment.PaymentTypeEnum.OTHERS.value());
         request.setPaymentIdentification(new PaymentIdentification().endToEndId("CUSTOMER-ID"));
@@ -731,8 +734,11 @@ class PaymentServiceImplTest {
         when(chatsPaymentService.processPayment(any(), any())).thenReturn(expected);
         when(payemtRoutApi.route(any())).thenAnswer(invocation -> {
             BatchRoutingCreditTransferRequest routing = invocation.getArgument(0);
-            assertEquals(routing.getGroupHeader().getMessageId(),
+            // Automatic routing keeps the payer's reference at validation time; the
+            // internal HTH batch id stays in the group header only.
+            assertEquals("CUSTOMER-ID",
                     routing.getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            assertTrue(routing.getGroupHeader().getMessageId().startsWith("HTH"));
             return PaymentRoutingTestSupport.routeResponseForType("CHATS");
         });
 
@@ -745,7 +751,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    void chatsReroutedToAnotherRailRestoresThatRailsInternalIdentifier() {
+    void chatsReroutedToAnotherRailKeepsCustomerIdentifier() {
         for (String selectedType : Arrays.asList("FPS", "ONUS")) {
             reset(fpsPaymentService, onUsPaymentService, payemtRoutApi, chatsPaymentService);
             PaymentInstructionRequest request = buildInstructionRequest();
@@ -768,9 +774,9 @@ class PaymentServiceImplTest {
             } else {
                 verify(onUsPaymentService).processPayment(any(), routed.capture());
             }
-            assertEquals(routed.getValue().getGroupHeader().getMessageId(),
+            assertEquals("CUSTOMER-ID", routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
+            assertNotEquals(routed.getValue().getGroupHeader().getMessageId(),
                     routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
-            assertNotEquals("CUSTOMER-ID", routed.getValue().getTransactions().getFirst().getPaymentIdentification().getEndToEndId());
             verify(chatsPaymentService, never()).processPayment(any(), any());
         }
     }
@@ -1064,6 +1070,7 @@ class PaymentServiceImplTest {
     private Bgech7e0Response accountInfoResponse() {
         Eh7e0Output output = new Eh7e0Output();
         output.setEh7e0CodReturnO(PaymentConstants.SUCC_CODE_00);
+        output.setEh7e0FlgStatusO("A");
         output.setEh7e0FlgAccHoldO("N");
         Bgech7e0Res bgech7e0Res = new Bgech7e0Res();
         bgech7e0Res.setEh7e0Output(output);
@@ -1167,6 +1174,9 @@ class PaymentServiceImplTest {
 
         com.hkbea.hth.model.Creditor creditor = new com.hkbea.hth.model.Creditor();
         creditor.setCreditorName("BENEFICIARY");
+        com.hkbea.hth.model.PostalAddress address = new com.hkbea.hth.model.PostalAddress();
+        address.setCountry("HK");
+        creditor.setPostalAddress(address);
         request.setCreditor(creditor);
         request.setSettlementDate(LocalDate.now());
         return request;

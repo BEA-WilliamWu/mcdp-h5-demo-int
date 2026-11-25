@@ -145,7 +145,9 @@ public class FpsPaymentService {
         String debitCurrency = localPayment.getTxnAmount().getCurrency().toString();
         String debitInternalAccNo = AccountUtils.ext2intAccNo(
                 localPayment.getFromAccount().getAccountNumber(),
-                localPayment.getFromAccount().getAccountType().value().substring(0, 1));
+                localPayment.getFromAccount().getAccountType().value().substring(0, 1), localPayment.getFromAccount().getCurrency());
+        localPayment.getFromAccount().setInternalAccountNumber(debitInternalAccNo);
+        localPayment.getToAccount().setInternalAccountNumber(localPayment.getToAccount().getAccountNumber());
         String productCode = partyAccountMapper.selectProductCode(
                 debitInternalAccNo, localPayment.getPartyId());
         String payerName = partyPreferenceMapper.selectCustomerNameByPartyId(localPayment.getPartyId(),localPayment.getFromAccount().getAccountNumber());
@@ -436,7 +438,7 @@ public class FpsPaymentService {
             throw logAndCreateException(HTHSupportErrorMapping.DEBIT_ACCOUNT_TYPE_MISSING);
         }
         String debitInternalAccountNo = AccountUtils.ext2intAccNo(
-                fromAccount.getAccountNumber(), fromAccount.getAccountType().value().substring(0, 1));
+                fromAccount.getAccountNumber(), fromAccount.getAccountType().value().substring(0, 1), fromAccount.getCurrency());
         String productCode = partyAccountMapper.selectProductCode(debitInternalAccountNo, partyId);
         PartyAccount partyAccount = StringUtils.isBlank(productCode) ? null
                 : partyAccountMapper.selectAccountStatus(
@@ -569,6 +571,8 @@ public class FpsPaymentService {
         payment.setTxnTime(OffsetDateTime.now().withNano(0));
         payment.setOriginalEndtoendID(PaymentModelConvert.EndToEndId(localPayment));
         payment.setOriginalTransactionID(localPayment.getTransactionID());
+        payment.setDebitAccountNumber(localPayment.getFromAccount().getInternalAccountNumber());
+        payment.setCreditAccountNumber(localPayment.getToAccount().getInternalAccountNumber());
         PaymentServiceSupport.validatePaymentResult(localPayment, result);
         PaymentServiceSupport.updatePayoutRecord(
                 paymentPayoutRecordMapper, log, FPS_NETWORK, payoutId, payment, result, localPayment);
@@ -642,6 +646,7 @@ public class FpsPaymentService {
             entity.setIpeStatusReason(null);
             entity.setStatusFlag(PaymentConstants.MOCK_OBJECT_STATUS);
             entity.setAdcSuspiciousInd(req.getSuspiciousInd());
+            entity.setDebitInternalAccount(req.getFromAccount().getInternalAccountNumber());
             paymentPayoutRecordMapper.insert(entity);
             log.info("{} pending payout record inserted, paymentId={}, status={}",
                     FPS_NETWORK, batchId, entity.getStatus());

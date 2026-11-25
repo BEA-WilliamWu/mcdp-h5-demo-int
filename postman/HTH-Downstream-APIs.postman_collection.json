@@ -1,0 +1,3959 @@
+{
+  "info": {
+    "_postman_id": "fb0bc0f7-9bb6-5695-bd6f-b44fda27138f",
+    "name": "HTH Downstream APIs",
+    "description": "HTTP requests built from the HTH/DSP runtime clients and repository contracts. Uses tenant-specific gateway base URLs and credentials. Direct microservice requests are grouped at the end.",
+    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "BG3",
+      "item": [
+        {
+          "name": "callBgec021",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccApplId\": \"BG\",\n      \"qaechccCollecName\": \"BG7C0210\",\n      \"qaechccCodEntity\": \"{{pe_account_entity}}\",\n      \"bgec021\": {\n        \"e021InputData\": {\n          \"e021AccountIn\": {\n            \"e021EntIn\": \"{{pe_account_entity}}\",\n            \"e021CenRegIn\": \"{{pe_account_branch}}\",\n            \"e021AccIn\": \"{{pe_account_number}}\"\n          },\n          \"e021FccIn\": \"\"\n        },\n        \"e021InputOutputData\": {\n          \"e021AggregBalR\": 0,\n          \"e021OvdlHkdR\": 0,\n          \"e021OvdlUsdR\": 0\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/bgec021.v1",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "bgec021.v1"
+              ]
+            },
+            "description": "Query Account Balance\n\nJava client route /v1z/bgec021.v1. The source Swagger has /hkbea/sit-sf/cdc/v1z/bgec021.v1.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/bg3/bgec021.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "postSC-BG3-BGEC0760",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"BG\",\n      \"qaechccCollecName\": \"BG9C0760\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"\",\n      \"qaechccCodEntity\": \"0015\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"bgec076\": {\n        \"e076Input\": {\n          \"e076Ent\": \"0015\",\n          \"e076CenRegistration\": \"{{pe_account_branch}}\",\n          \"e076Acc\": \"{{pe_account_number}}\",\n          \"e076Fcc\": \"HKD\",\n          \"e076FlgNames\": \"\",\n          \"e076Option\": \"3\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/bgec0760.v1",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "bgec0760.v1"
+              ]
+            },
+            "description": "Java client route /v1z/bgec0760.v1. The source Swagger has /bgec0760.v1.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/bg3/bgec0760.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "postSC-BG3-BGNC520I",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qxec5002\": {\n      \"e5002Input\": {\n        \"e5002OriSysCod\": \"BGDP12-010HTH001\",\n        \"e5002SeqNumInp\": \"\",\n        \"e5002FlgCmmt\": \"N\",\n        \"e5002CodEntity\": \"0015\",\n        \"e5002User\": \"CBSHTH1\",\n        \"e5002CenterCode\": \"0101471\",\n        \"e5002CodTrns\": \"B520\",\n        \"e5002Pf\": \"05\",\n        \"e5002Channel\": \"40\",\n        \"e5002EventValue\": [\n          {\n            \"e5002EventId\": \"TC0005\",\n            \"e5002SwCmp\": \"0\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          },\n          {\n            \"e5002EventId\": \"\",\n            \"e5002SwCmp\": \"\",\n            \"e5002IvClassValue\": null\n          }\n        ],\n        \"bgnc520i\": {\n          \"n520iFlgCnh\": \"\",\n          \"n520iFlgResidentDeb\": \"C\",\n          \"n520iFlgResidentCre\": \"C\",\n          \"n520iDebitAccount\": {\n            \"n520iCacDeb\": \"{{internal_account_number}}\",\n            \"n520iFccDeb\": \"USD\",\n            \"n520iFccAmtdeb\": \"USD\",\n            \"n520iNumCheckR\": \"000000\",\n            \"n520iAmtDebR\": \"000000000010000\"\n          },\n          \"n520iCreditAccount\": {\n            \"n520iCacCre\": \"{{creditor_internal_account}}\",\n            \"n520iFccCre\": \"HKD\",\n            \"n520iFccAmtcre\": \"HKD\",\n            \"n520iAmtCreR\": \"000000000078000\"\n          },\n          \"n520iExchangeRate\": {\n            \"n520iRtCtrR\": \"00000000000\",\n            \"n520iRtSpecialR\": \"00078000000\",\n            \"n520iFlgSpRate\": \"\"\n          },\n          \"n520iOtherFields\": {\n            \"n520iCodOperDeb\": \"121\",\n            \"n520iCodOperCre\": \"021\",\n            \"n520iFlgTrans\": \"04\",\n            \"n520iTransRef1\": \"{{ipe_message_id}}\"\n          },\n          \"n520iFlgTradeInfo\": {\n            \"n520iFlgTrade\": \"N\"\n          }\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/bgnc520i.v1",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "bgnc520i.v1"
+              ]
+            },
+            "description": "Transactional request from FxServiceImpl. Replace accounts, amounts and rates with UAT values.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/bg3/bgnc520.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "BGEC H7E0 · account information",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"BG\",\n      \"qaechccCollecName\": \"BG9CH7E0\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"\",\n      \"qaechccCodEntity\": \"0015\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"bgech7e0\": {\n        \"eh7e0Record\": {\n          \"eh7e0Input\": {\n            \"eh7e0CacI\": {\n              \"eh7e0EntI\": 15,\n              \"eh7e0CenRegI\": 0,\n              \"eh7e0AccI\": 0\n            },\n            \"eh7e0FccI\": \"HKD\"\n          }\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v3z/bgech7e0.v3",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v3z",
+                "bgech7e0.v3"
+              ]
+            },
+            "description": "Request body follows the Java request builder. Replace test account details. For H7E0, set the numerical entity, branch, and account segments.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/bg3/api/AccountApi.java\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "BGNC401 · transaction history",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qxec5002\": {\n      \"e5002Input\": {\n        \"e5002OriSysCod\": \"BGDP13-050HTH001\",\n        \"e5002SeqNumInp\": \"\",\n        \"e5002FlgCmmt\": \"N\",\n        \"e5002CodEntity\": \"0015\",\n        \"e5002User\": \"CBSHTH2\",\n        \"e5002CenterCode\": \"0101471\",\n        \"e5002CodTrns\": \"B401\",\n        \"e5002Pf\": \"\",\n        \"e5002Channel\": \"40\",\n        \"bgnc401\": {\n          \"n401Cac\": \"{{internal_account_number}}\",\n          \"n401Fcc\": \"HKD\",\n          \"n401DatSince\": \"{{from_date}}\",\n          \"n401DatUntil\": \"{{to_date}}\",\n          \"n401NumOperation\": 0,\n          \"n401Continuation\": \"P\",\n          \"n401Finope\": 0,\n          \"n401Opcode\": \"\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/bgnc401.v1",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "bgnc401.v1"
+              ]
+            },
+            "description": "Request body follows the Java request builder. Replace test account details. For H7E0, set the numerical entity, branch, and account segments.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/bg3/api/AccountApi.java\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "BGNC400I · transaction detail",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qxec5002\": {\n      \"e5002Input\": {\n        \"e5002OriSysCod\": \"BGDP13-051HTH001\",\n        \"e5002SeqNumInp\": \"\",\n        \"e5002FlgCmmt\": \"N\",\n        \"e5002CodEntity\": \"0015\",\n        \"e5002User\": \"CBSHTH3\",\n        \"e5002CenterCode\": \"0101471\",\n        \"e5002CodTrns\": \"B400\",\n        \"e5002Pf\": \"\",\n        \"e5002Channel\": \"40\",\n        \"bgnc400i\": {\n          \"n400iFiller\": \"\",\n          \"n400iCacL\": 0,\n          \"n400iCacA\": \"\",\n          \"n400iCac\": \"{{internal_account_number}}\",\n          \"n400iFccL\": 0,\n          \"n400iFccA\": \"\",\n          \"n400iFcc\": \"HKD\",\n          \"n400iNumOperationL\": 0,\n          \"n400iNumOperationA\": \"\",\n          \"n400iNumOperation\": 1,\n          \"n400iPaperL\": 0,\n          \"n400iPaperA\": \"\",\n          \"n400iPaper\": \"N\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/bgnc400i.v1",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "bgnc400i.v1"
+              ]
+            },
+            "description": "Request body follows the Java request builder. Replace test account details. For H7E0, set the numerical entity, branch, and account segments.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/bg3/api/AccountApi.java\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "PE3",
+      "item": [
+        {
+          "name": "postSC-PE3-PEECHI11",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"PE\",\n      \"qaechccCollecName\": \"PE9CHI11\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"{{settlement_date}}\",\n      \"qaechccCodEntity\": \"{{pe_account_entity}}\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"peechi11\": {\n        \"ehi11Input\": {\n          \"ehi11CodEntityI\": \"{{pe_account_entity}}\",\n          \"ehi11CiIdI\": {\n            \"ehi11NumCusI\": \"\"\n          },\n          \"ehi11KeyAccI\": {\n            \"ehi11KeyEntityI\": \"{{pe_account_entity}}\",\n            \"ehi11BrnOpenI\": \"{{pe_account_branch}}\",\n            \"ehi11NumAccountI\": \"{{pe_account_number}}\"\n          }\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{pe3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{pe3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{pe3_base_url}}/v1z/peechi11.v1",
+              "host": [
+                "{{pe3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "peechi11.v1"
+              ]
+            },
+            "description": "Fill the entity, branch, and 10-digit account segment from the 18-character test account.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/pe3/peechi11.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "getCustomerContactInfo",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"PE\",\n      \"qaechccCollecName\": \"PE9CHJ7A\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"{{settlement_date}}\",\n      \"qaechccCodEntity\": \"{{pe_account_entity}}\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"peechj7a\": {\n        \"ehj7aInput\": {\n          \"ehj7aCodEntityI\": \"{{pe_account_entity}}\",\n          \"ehj7aContractI\": {\n            \"ehj7aKeyAccI\": {\n              \"ehj7aKeyEntityI\": \"{{pe_account_entity}}\",\n              \"ehj7aBrnOpenI\": \"{{pe_account_branch}}\",\n              \"ehj7aNumAccountI\": \"{{pe_account_number}}\"\n            }\n          }\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{pe3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{pe3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{pe3_base_url}}/v1z/peechj7a.v1",
+              "host": [
+                "{{pe3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "peechj7a.v1"
+              ]
+            },
+            "description": "Fill the entity, branch, and 10-digit account segment from the 18-character test account.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/pe3/peechj7a.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "IPE · Smart Routing",
+      "item": [
+        {
+          "name": "Routing to ON-US",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{ipe_message_id}}\"\n      },\n      \"debtor\": {\n        \"name\": \"DEBIT NAME\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\",\n          \"bankCode\": \"015\"\n        }\n      },\n      \"creditor\": {\n        \"name\": \"CREDITOR NAME\"\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/validation",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "validation"
+              ]
+            },
+            "description": "Query payment type\n\nRouting request from the IPE Swagger. Fill the test accounts, BIC and reference variables.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Routing to FPS",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{ipe_message_id}}\"\n      },\n      \"amount\": {\n        \"instructedAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        },\n        \"settlementAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        }\n      },\n      \"debtor\": {\n        \"type\": \"CORPORATE\",\n        \"name\": \"impainer\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\",\n        \"accountType\": \"6805\",\n        \"currency\": \"HKD\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\",\n          \"bankCode\": \"004\"\n        }\n      },\n      \"creditor\": {\n        \"type\": \"ACCOUNT\",\n        \"name\": \"CREDITOR NAME\"\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\",\n        \"currency\": \"HKD\"\n      },\n      \"supplementaryData\": {\n        \"debitInternalAccount\": \"{{internal_account_number}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/validation",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "validation"
+              ]
+            },
+            "description": "Query payment type\n\nRouting request from the IPE Swagger. Fill the test accounts, BIC and reference variables.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Routing to DR",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{ipe_message_id}}\"\n      },\n      \"amount\": {\n        \"instructedAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        },\n        \"settlementAmount\": {\n          \"currency\": \"HKD\"\n        }\n      },\n      \"debtor\": {\n        \"name\": \"DEBIT NAME\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\",\n        \"currency\": \"HKD\"\n      },\n      \"creditor\": {\n        \"type\": \"ACCOUNT\",\n        \"name\": \"CREDITOR NAME\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\",\n          \"bankCode\": \"016\"\n        }\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\",\n        \"currency\": \"HKD\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/validation",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "validation"
+              ]
+            },
+            "description": "Query payment type\n\nRouting request from the IPE Swagger. Fill the test accounts, BIC and reference variables.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Routing to CHATS",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{end_to_end_id}}\"\n      },\n      \"amount\": {\n        \"instructedAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        },\n        \"settlementAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        }\n      },\n      \"debtor\": {\n        \"type\": \"CORPORATE\",\n        \"name\": \"DEBIT NAME\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\",\n          \"bankCode\": \"016\"\n        }\n      },\n      \"creditor\": {\n        \"name\": \"98CHAN TAI MAN\"\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/validation",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "validation"
+              ]
+            },
+            "description": "Query payment type\n\nRouting request from the IPE Swagger. Fill the test accounts, BIC and reference variables.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Routing to TT",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{ipe_message_id}}\"\n      },\n      \"amount\": {\n        \"instructedAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        },\n        \"settlementAmount\": {\n          \"amount\": 1.0,\n          \"currency\": \"HKD\"\n        }\n      },\n      \"debtor\": {\n        \"type\": \"CORPORATE\",\n        \"name\": \"DEBIT NAME\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\",\n        \"financialInstitution\": {\n          \"bicfi\": \"{{debtor_bank_bic}}\"\n        }\n      },\n      \"creditor\": {\n        \"name\": \" A\",\n        \"type\": \"ACCOUNT\"\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\",\n          \"bankCode\": \"004\"\n        }\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/validation",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "validation"
+              ]
+            },
+            "description": "Query payment type\n\nRouting request from the IPE Swagger. Fill the test accounts, BIC and reference variables.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "submit",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentInformation\": {\n    \"channel\": \"HTH\",\n    \"paymentMethod\": \"CHATS\",\n    \"requestedExecutionDate\": \"{{settlement_date}}\"\n  },\n  \"groupHeader\": {\n    \"messageId\": \"{{ipe_message_id}}\",\n    \"creationDateTime\": \"NOW\",\n    \"numberOfTransactions\": 1,\n    \"controlSum\": 100\n  },\n  \"transactions\": [\n    {\n      \"paymentIdentification\": {\n        \"endToEndId\": \"{{end_to_end_id}}\"\n      },\n      \"amount\": {\n        \"instructedAmount\": {\n          \"currency\": \"HKD\",\n          \"amount\": 100\n        },\n        \"settlementAmount\": {\n          \"currency\": \"HKD\",\n          \"amount\": 100\n        },\n        \"equivalentAmount\": {\n          \"amount\": 100\n        }\n      },\n      \"charges\": {\n        \"chargeBearer\": \"S\",\n        \"feeCode\": \"EP5\"\n      },\n      \"remittanceInformation\": {\n        \"unstructured\": [\n          \"HTH UAT TEST\"\n        ]\n      },\n      \"purpose\": {\n        \"proprietary\": \"/IFT01/\"\n      },\n      \"debtor\": {\n        \"type\": \"CORPORATE\",\n        \"name\": \"UAT TEST PAYER\"\n      },\n      \"debtorAccount\": {\n        \"identification\": \"{{internal_account_number}}\",\n        \"internalAccountNo\": \"{{internal_account_number}}\",\n        \"companyCode\": 1,\n        \"productCode\": \"{{debtor_product_code}}\",\n        \"accountType\": \"CSA\",\n        \"currency\": \"HKD\"\n      },\n      \"debtorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{debtor_bank_bic}}\"\n        }\n      },\n      \"creditor\": {\n        \"type\": \"ACCOUNT\",\n        \"name\": \"{{creditor_name}}\",\n        \"postalAddress\": {\n          \"addressLine1\": \"1 TEST ROAD\",\n          \"townName\": \"HONG KONG\",\n          \"country\": \"HK\"\n        }\n      },\n      \"creditorAccount\": {\n        \"identification\": \"{{creditor_account}}\",\n        \"accountName\": \"{{creditor_name}}\",\n        \"currency\": \"HKD\",\n        \"country\": \"HK\"\n      },\n      \"creditorAgent\": {\n        \"financialInstitution\": {\n          \"bicfi\": \"{{creditor_bank_bic}}\"\n        }\n      },\n      \"supplementaryData\": {\n        \"debitInternalAccount\": \"{{internal_account_number}}\",\n        \"productType\": \"{{debtor_product_code}}\",\n        \"hdrCibExtAcNo\": \"{{party_id}}\",\n        \"hdrCibIntAcNo\": \"{{corporate_internal_account}}\",\n        \"chatsRemittance\": {\n          \"chatAcTpCode\": \"{{chats_account_type_code}}\",\n          \"prntAdvInd\": \"Y\",\n          \"lmInd\": \"y\",\n          \"depositAccountName1\": \"{{creditor_name}}\",\n          \"depositAccountName2\": \"{{creditor_name}}\",\n          \"pinCnt\": 0,\n          \"pinListArea\": []\n        }\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_routing_base_url}}/credit-transfer",
+              "host": [
+                "{{ipe_routing_base_url}}"
+              ],
+              "path": [
+                "credit-transfer"
+              ]
+            },
+            "description": "Submit batch credit transfer\n\nCHATS submit sample. Use the same batch message ID and payment method returned by validation. For different rails, use the matching payload produced by HTH, with route-specific supplementary fields.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/smartRouting.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "IPE · Payments",
+      "item": [
+        {
+          "name": "Query payment result · batch ID (CHATS)",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": \"{{txn_ref}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_payments_base_url}}/result/query",
+              "host": [
+                "{{ipe_payments_base_url}}"
+              ],
+              "path": [
+                "result",
+                "query"
+              ]
+            },
+            "description": "Query payment result\n\nSet txn_ref to the IPE identifier. HTH queries CHATS by batch ID; TT and other payouts use transaction ID.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/ipeLocalPayment.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Query payment result · transaction ID",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"{{txn_ref}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_payments_base_url}}/result/query",
+              "host": [
+                "{{ipe_payments_base_url}}"
+              ],
+              "path": [
+                "result",
+                "query"
+              ]
+            },
+            "description": "Query payment result\n\nSet txn_ref to the IPE identifier. HTH queries CHATS by batch ID; TT and other payouts use transaction ID.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/ipeLocalPayment.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "submitOutwardCreditTransfer",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"HTH\",\n  \"batchId\": \"{{ipe_message_id}}\",\n  \"channelReference\": \"PAYROLL-20260527\",\n  \"transactionType\": \"FPS\",\n  \"timeOfTransfer\": \"NOW\",\n  \"executionDate\": \"{{settlement_date}}\",\n  \"totalCount\": 2,\n  \"totalAmount\": 30000.0,\n  \"serviceChargeAmount\": 20.0,\n  \"customerRemarks\": \"Monthly payroll\",\n  \"transactions\": [\n    {\n      \"transactionId\": \"{{transaction_id}}\",\n      \"debitAmount\": 10000.0,\n      \"debitAmountCcy\": \"HKD\",\n      \"settlementCurrency\": \"HKD\",\n      \"hkdEquivalentAmount\": 10000.0,\n      \"serviceChargeAmount\": 10.0,\n      \"chargeCurrency\": \"HKD\",\n      \"paymentDetails\": [\n        \"\"\n      ],\n      \"exchangeCurrencyPair\": \"HKDUSD\",\n      \"exchangeContractRate\": \"{{account_number}}\",\n      \"exchangeSpecialRate\": \"{{account_number}}\",\n      \"exchangeSpecialRateFlag\": \"Y\",\n      \"treasuryReference\": \"TRS0001\",\n      \"paymentSource\": \"CCB\",\n      \"enquiryType\": \"ALL\",\n      \"costCenterCode\": \"CYB\",\n      \"feeCode\": \"SHA\",\n      \"payeeIdentificationType\": \"BBAN, SVID\",\n      \"alnovaLimitCheckInd\": \"Y\",\n      \"instructionId\": \"INS20260519143025000001\",\n      \"clearingSystem\": \"FPS\",\n      \"purposeCode\": \"CXBSNS\",\n      \"purposeProprietary\": \"PAYROLL\",\n      \"officeId\": \"001\",\n      \"invoiceNumber\": \"INV202605190001\",\n      \"vipIndicator\": \"Y\",\n      \"creditInternalAccount\": 987654321098765,\n      \"debitInternalAccount\": 123456789012345,\n      \"productType\": 8805,\n      \"bg3\": {\n        \"eventValues\": [\n          {\n            \"e5002EventId\": \"CHKBOOK\",\n            \"e5002SwCmp\": \"Y\"\n          }\n        ]\n      },\n      \"payerType\": \"INDIVIDUAL\",\n      \"payerAccountNo\": 1234567890,\n      \"payerInternalAccountNo\": \"\",\n      \"payerBicCode\": \"BEAHHKHXXX\",\n      \"payerAccountType\": 6805,\n      \"payerAccountCurrency\": \"HKD\",\n      \"payerName\": \"ABC COMPANY LIMITED\",\n      \"payerAddressLine1\": \"\",\n      \"payerAddressLine2\": \"\",\n      \"payerAddressLine3\": \"\",\n      \"payerAddressLine4\": \"\",\n      \"payerTownName\": \"HONG KONG\",\n      \"payerCountryCode\": \"HK\",\n      \"payeeType\": \"ACCOUNT\",\n      \"payeeName\": \"EMPLOYEE ONE\",\n      \"payeeAccountName\": \"\",\n      \"payeeAccountNo\": 1000000001,\n      \"payeeAccountCurrency\": \"HKD\",\n      \"payeeProxyId\": \"+85291234567\",\n      \"payeeMobileNo\": \"\",\n      \"payeeEmailAddress\": \"\",\n      \"payeeBankCode\": \"015\",\n      \"memberId\": \"004\",\n      \"payeeBankName\": \"\",\n      \"payeeBicCode\": \"HSBCHKHH\",\n      \"senderCorrBankBicCode\": \"\",\n      \"receiverCorrBankBicCode\": \"\",\n      \"payeeAddressLine1\": \"\",\n      \"payeeAddressLine2\": \"\",\n      \"payeeAddressLine3\": \"\",\n      \"payeeAddressLine4\": \"\",\n      \"payeeTownName\": \"\",\n      \"payeeCountryCode\": \"HK\",\n      \"requestRemittanceCreditTransferRequest\": {\n        \"hdrMessageId\": \"\",\n        \"hdrOpt\": \"\",\n        \"hdrCibCustId\": \"\",\n        \"hdrCibIntAcNo\": \"\",\n        \"hdrSubOpt\": \"\",\n        \"relCompCode\": 0,\n        \"relAcProdCode\": 0,\n        \"relAcCcy\": \"\",\n        \"relAcNoFmt\": \"\",\n        \"chatAcNo\": \"\",\n        \"chatAcTpCode\": \"\",\n        \"prntAdvInd\": \"‘Y’ – print advise (default) , ‘N’ – not print\",\n        \"srvcExchRate\": 0,\n        \"chrgDiscRate\": 0,\n        \"lmInd\": \"\",\n        \"depositAccountName1\": \"\",\n        \"depositAccountName2\": \"\",\n        \"depositAccountName3\": \"\",\n        \"depositAccountName4\": \"\",\n        \"ourChargeBearerInd\": \"S - ‘SHA’ , O - ‘OUR’(pending EBK checking)\",\n        \"ourChargeBearerCcy\": \"SHA\",\n        \"ourChargeBearerAmt\": \"\",\n        \"pinCnt\": 0,\n        \"pinListArea\": [\n          {\n            \"agentId\": \"\"\n          }\n        ],\n        \"macArea\": {\n          \"macCode\": \"\",\n          \"agentId\": \"\",\n          \"desKey\": \"\",\n          \"pinBlock\": \"\"\n        }\n      },\n      \"customerNotificationInformRequest\": {\n        \"riskLevel\": \"H/M/L\",\n        \"preDesignated\": false,\n        \"notificationType\": \"Push/Email/SMS/Email-SMS\",\n        \"payerEmailBox\": \"123456@hkbea.com\",\n        \"payerPhoneNo\": \"\",\n        \"officeEmail\": \"test@example.invalid\",\n        \"subAccount\": \"\",\n        \"accountType\": \"\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_payments_base_url}}/outward/credit-transfer",
+              "host": [
+                "{{ipe_payments_base_url}}"
+              ],
+              "path": [
+                "outward",
+                "credit-transfer"
+              ]
+            },
+            "description": "Submit outward credit transfer\n\nLegacy operation declared in LocalPaymentApi. Current HTH payment submission uses Smart Routing credit-transfer.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/ipeLocalPayment.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "nameMatch",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alnovaAccountName\": \"UAT TEST BENEFICIARY\",\n  \"swiftBeneficialName\": \"UAT TEST BENEFICIARY\",\n  \"alnovaAccountNum\": \"{{internal_account_number}}\",\n  \"currencyCode\": \"HKD\",\n  \"accountType\": \"\",\n  \"isJointAccount\": \"N\",\n  \"senderRefNum\": \"\",\n  \"osnUrNum\": \"\",\n  \"channel\": \"HTH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ipe_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ipe_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ipe_payments_base_url}}/nameMatch/query",
+              "host": [
+                "{{ipe_payments_base_url}}"
+              ],
+              "path": [
+                "nameMatch",
+                "query"
+              ]
+            },
+            "description": "the name match API\n\nJava client route /nameMatch/query. The source Swagger has /nameMatch/.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ipe/nameMatch.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "TC3",
+      "item": [
+        {
+          "name": "queryExchangeRates",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"TC\",\n      \"qaechccCollecName\": \"TC9C681S\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"\",\n      \"qaechccCodEntity\": \"0015\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"tcec6810\": {\n        \"e6810Entity\": \"0015\",\n        \"e6810Date\": \"{{host_date_yyyymmdd}}\",\n        \"e6810TbCodFccIn\": {\n          \"e6810TbCodFccRe\": [\n            {\n              \"e6810TbCodFcc\": \"USD\"\n            }\n          ]\n        },\n        \"e6810TbCodTypIn\": {\n          \"e6810TbCodTypRe\": [\n            {\n              \"e6810TbCodTyp\": \"X\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            },\n            {\n              \"e6810TbCodTyp\": \"\"\n            }\n          ]\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{tc3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{tc3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{tc3_base_url}}/v1z/tcec6810.v1",
+              "host": [
+                "{{tc3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "tcec6810.v1"
+              ]
+            },
+            "description": "Query Exchange Rates\n\nJava client route /v1z/tcec6810.v1. The source Swagger has /hkbea/sit-sf/ich/v1z/tcec6810.v1.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/tc3/tcec6810.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "postSC-TC3-TCEC3813",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"qaechcc\": {\n      \"qaechccTypChannel\": \"IN\",\n      \"qaechccApplId\": \"TC\",\n      \"qaechccCollecName\": \"TC8C481S\",\n      \"qaechccCollecFunc\": \"\",\n      \"qaechccDateOp\": \"{{host_date_yyyymmdd}}\",\n      \"qaechccCodEntity\": \"0015\",\n      \"qaechccCodBrn\": \"\",\n      \"qaechccCodTerm\": \"\",\n      \"qaechccCodUser\": \"\",\n      \"qaechccErrData\": \"\",\n      \"qaechccFrArea\": \"\",\n      \"tcec3813\": {\n        \"e3813Entity\": \"0015\",\n        \"e3813NumAcc\": \"{{internal_account_number}}\",\n        \"e3813FlgFcc1Buysell\": \"1\",\n        \"e3813LoginNumAcc\": \"{{corporate_internal_account}}\",\n        \"e3813Fcc1Amt\": 100.0,\n        \"e3813Fcc2Amt\": 0,\n        \"e3813Fcc1\": \"USD\",\n        \"e3813Fcc2\": \"HKD\",\n        \"e3813Fcc1BalTyp\": \"X\",\n        \"e3813Fcc2BalTyp\": \"X\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{tc3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{tc3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{tc3_base_url}}/v1z/tcec3813.v1",
+              "host": [
+                "{{tc3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "tcec3813.v1"
+              ]
+            },
+            "description": "Java client route /v1z/tcec3813.v1. The source Swagger has /tcec3813.v1.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/tc3/tcec3813.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "EBK",
+      "item": [
+        {
+          "name": "updateTransferLimit",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"ebzwk00wArea\": {\n      \"ebzwk00iArea\": {\n        \"ebzwk00iHeader\": {\n          \"ebzwk00iHdrHostTermNo\": \"\",\n          \"ebzwk00iHdrHostStrArea\": {\n            \"ebzwk00iHdrHostSessId\": \"\",\n            \"ebzwk00iHdrChSrcInd\": \"\",\n            \"ebzwk00iHdr01\": \"\"\n          },\n          \"ebzwk00iHdrMessageId\": \"\",\n          \"ebzwk00iHdrOpt\": \"\",\n          \"ebzwk00iHdrBankCode\": \"\",\n          \"ebzwk00iHdrIntBankCode\": \"\",\n          \"ebzwk00iHdrMediaCode\": \"\",\n          \"ebzwk00iHdrCibCustId\": {\n            \"ebzwk00iHdrCibExtAcno\": \"\"\n          },\n          \"ebzwk00iHdrCibIntAcNo\": \"\",\n          \"ebzwk00iHdrRtTimeoutFlg\": \"\",\n          \"ebzwk00iHdrTxPostDate\": \"\",\n          \"ebzwk00iHdrTxMatchKey\": \"\",\n          \"ebzwk00iHdrSubOpt\": \"\",\n          \"ebzwk00iHdrCompCode\": 0,\n          \"ebzwk00iHdrCibAccessLvl\": \"\",\n          \"ebzwk00iHdrPublicKeyInd\": \"\",\n          \"ebzwk00iHdrInputUserId\": \"\",\n          \"ebzwk00iHdrInputDate\": \"\",\n          \"ebzwk00iHdrInputTime\": \"\",\n          \"ebzwk00iHdrAprvlUserId\": \"\",\n          \"ebzwk00iHdrAprvlDate\": \"\",\n          \"ebzwk00iHdrAprvlTime\": \"\",\n          \"ebzwk00iHdrIntCcbbbdd\": \"\",\n          \"ebzwk00iHdrTxnNumber\": \"\",\n          \"ebzwk00iHdrDialupBkupInd\": \"\",\n          \"ebzwk00iHdrSusIpFlg\": \"\",\n          \"ebzwk00iHdrCibAcProdCode\": \"\",\n          \"ebzwk00iHdrRiskInd\": \"\",\n          \"ebzwk00iHdrSpecRateFlg\": \"\",\n          \"ebzwk00iHdrTxnType\": \"\",\n          \"ebzwk00iHdrOmbFlag\": \"\",\n          \"fillerHdr02\": \"\"\n        },\n        \"ebzwk00iBpuc1\": {\n          \"ebzwk00iBpuc1RelTfrLim\": 0,\n          \"ebzwk00iBpuc1DesLim\": 0,\n          \"ebzwk00iBpuc1DesTfrLim\": 0,\n          \"ebzwk00iBpuc1DesCrossLim\": 0,\n          \"ebzwk00iBpuc1NdesLim\": 0,\n          \"ebzwk00iBpuc1NdesTfrLim\": 0,\n          \"ebzwk00iBpuc1NdesCrossLim\": 0,\n          \"ebzwk00iBpuc1Filler\": \"\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ebk_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ebk_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ebk_base_url}}/ebzbpuc1.v1",
+              "host": [
+                "{{ebk_base_url}}"
+              ],
+              "path": [
+                "ebzbpuc1.v1"
+              ]
+            },
+            "description": "Update transfer limits (deduct / pre-authorize before an On-Us payment)\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ebk/sc-ebk-payment-limit-openapi-3.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "reverseTransferLimit",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"ebzwk00wArea\": {\n      \"ebzwk00iArea\": {\n        \"ebzwk00iHeader\": {\n          \"ebzwk00iHdrHostTermNo\": \"\",\n          \"ebzwk00iHdrHostStrArea\": {\n            \"ebzwk00iHdrHostSessId\": \"\",\n            \"ebzwk00iHdrChSrcInd\": \"\",\n            \"ebzwk00iHdr01\": \"\"\n          },\n          \"ebzwk00iHdrMessageId\": \"\",\n          \"ebzwk00iHdrOpt\": \"\",\n          \"ebzwk00iHdrBankCode\": \"\",\n          \"ebzwk00iHdrIntBankCode\": \"\",\n          \"ebzwk00iHdrMediaCode\": \"\",\n          \"ebzwk00iHdrCibCustId\": {\n            \"ebzwk00iHdrCibExtAcno\": \"\"\n          },\n          \"ebzwk00iHdrCibIntAcNo\": \"\",\n          \"ebzwk00iHdrRtTimeoutFlg\": \"\",\n          \"ebzwk00iHdrTxPostDate\": \"\",\n          \"ebzwk00iHdrTxMatchKey\": \"\",\n          \"ebzwk00iHdrSubOpt\": \"\",\n          \"ebzwk00iHdrCompCode\": 0,\n          \"ebzwk00iHdrCibAccessLvl\": \"\",\n          \"ebzwk00iHdrPublicKeyInd\": \"\",\n          \"ebzwk00iHdrInputUserId\": \"\",\n          \"ebzwk00iHdrInputDate\": \"\",\n          \"ebzwk00iHdrInputTime\": \"\",\n          \"ebzwk00iHdrAprvlUserId\": \"\",\n          \"ebzwk00iHdrAprvlDate\": \"\",\n          \"ebzwk00iHdrAprvlTime\": \"\",\n          \"ebzwk00iHdrIntCcbbbdd\": \"\",\n          \"ebzwk00iHdrTxnNumber\": \"\",\n          \"ebzwk00iHdrDialupBkupInd\": \"\",\n          \"ebzwk00iHdrSusIpFlg\": \"\",\n          \"ebzwk00iHdrCibAcProdCode\": \"\",\n          \"ebzwk00iHdrRiskInd\": \"\",\n          \"ebzwk00iHdrSpecRateFlg\": \"\",\n          \"ebzwk00iHdrTxnType\": \"\",\n          \"ebzwk00iHdrOmbFlag\": \"\",\n          \"fillerHdr02\": \"\"\n        },\n        \"ebzwk00iBprc1\": {\n          \"ebzwk00iBprc1RelTfrLim\": 0,\n          \"ebzwk00iBprc1DesLim\": 0,\n          \"ebzwk00iBprc1DesTfrLim\": 0,\n          \"ebzwk00iBprc1DesCrossLim\": 0,\n          \"ebzwk00iBprc1NdesLim\": 0,\n          \"ebzwk00iBprc1NdesTfrLim\": 0,\n          \"ebzwk00iBprc1NdesCrossLim\": 0,\n          \"ebzwk00iBprc1Filler\": \"\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ebk_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ebk_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ebk_base_url}}/ebzbprc1.v1",
+              "host": [
+                "{{ebk_base_url}}"
+              ],
+              "path": [
+                "ebzbprc1.v1"
+              ]
+            },
+            "description": "Reverse transfer limits (release after a rejected On-Us payment)\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ebk/sc-ebk-payment-limit-openapi-3.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "acceptOrReleaseFasterPayment",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"ebzwk00wArea\": {\n      \"ebzwk00iArea\": {\n        \"ebzwk00iHeader\": {\n          \"ebzwk00iHdrHostTermNo\": \"\",\n          \"ebzwk00iHdrHostStrArea\": {\n            \"ebzwk00iHdrHostSessId\": \"\",\n            \"ebzwk00iHdrChSrcInd\": \"\",\n            \"ebzwk00iHdr01\": \"\"\n          },\n          \"ebzwk00iHdrMessageId\": \"\",\n          \"ebzwk00iHdrOpt\": \"\",\n          \"ebzwk00iHdrBankCode\": \"\",\n          \"ebzwk00iHdrIntBankCode\": \"\",\n          \"ebzwk00iHdrMediaCode\": \"\",\n          \"ebzwk00iHdrCibCustId\": {\n            \"ebzwk00iHdrCibExtAcno\": \"\"\n          },\n          \"ebzwk00iHdrCibIntAcNo\": \"\",\n          \"ebzwk00iHdrRtTimeoutFlg\": \"\",\n          \"ebzwk00iHdrTxPostDate\": \"\",\n          \"ebzwk00iHdrTxMatchKey\": \"\",\n          \"ebzwk00iHdrSubOpt\": \"\",\n          \"ebzwk00iHdrCompCode\": 0,\n          \"ebzwk00iHdrCibAccessLvl\": \"\",\n          \"ebzwk00iHdrPublicKeyInd\": \"\",\n          \"ebzwk00iHdrInputUserId\": \"\",\n          \"ebzwk00iHdrInputDate\": \"\",\n          \"ebzwk00iHdrInputTime\": \"\",\n          \"ebzwk00iHdrAprvlUserId\": \"\",\n          \"ebzwk00iHdrAprvlDate\": \"\",\n          \"ebzwk00iHdrAprvlTime\": \"\",\n          \"ebzwk00iHdrIntCcbbbdd\": \"\",\n          \"ebzwk00iHdrTxnNumber\": \"\",\n          \"ebzwk00iHdrDialupBkupInd\": \"\",\n          \"ebzwk00iHdrSusIpFlg\": \"\",\n          \"ebzwk00iHdrCibAcProdCode\": \"\",\n          \"ebzwk00iHdrRiskInd\": \"\",\n          \"ebzwk00iHdrSpecRateFlg\": \"\",\n          \"ebzwk00iHdrTxnType\": \"\",\n          \"ebzwk00iHdrOmbFlag\": \"\",\n          \"fillerHdr02\": \"\"\n        },\n        \"ebzwk00iFpr01\": {\n          \"ebzwk00iFpr01ActCode\": \"\",\n          \"ebzwk00iFpr01RelCompCode\": 0,\n          \"ebzwk00iFpr01RelAcSeq\": 0,\n          \"ebzwk00iFpr01RelAcPrdCode\": \"\",\n          \"ebzwk00iFpr01RelAcCcy\": \"\",\n          \"ebzwk00iFpr01RelAcStatus\": 0,\n          \"ebzwk00iFpr01RelAcNo\": \"\",\n          \"ebzwk00iFpr01RelAcNoFmt\": \"\",\n          \"ebzwk00iFpr01DbAmtCcy\": \"\",\n          \"ebzwk00iFpr01DbAmt\": 0,\n          \"ebzwk00iFpr01CrAmtCcy\": \"\",\n          \"ebzwk00iFpr01CrAmt\": 0,\n          \"ebzwk00iFpr01TxnCrDrInd\": \"\",\n          \"ebzwk00iFpr01FpProxyIdTy\": \"\",\n          \"ebzwk00iFpr01FpProxyId\": \"\",\n          \"ebzwk00iFpr01TxnType\": \"\",\n          \"ebzwk00iFpr01TxnNature\": \"\",\n          \"ebzwk00iFpr01Bea2BeaInd\": \"\",\n          \"ebzwk00iFpr01FpTxRef\": \"\",\n          \"ebzwk00iFpr01TxReference\": \"\",\n          \"ebzwk00iFpr01AgentId1\": \"\",\n          \"ebzwk00iFpr01AgentId2\": \"\",\n          \"ebzwk00iFpr01AgentId3\": \"\",\n          \"ebzwk00iFpr01Filler01\": \"\",\n          \"ebzwk00iFpr01ReturnArea\": {\n            \"ebzwk00iFpr01AmtHkd\": 0,\n            \"ebzwk00iFpr01AltCode\": \"\",\n            \"ebzwk00iFpr01AltFlg\": \"\",\n            \"ebzwk00iFpr01LimUpdDate\": 0,\n            \"ebzwk00iFpr01LimUpdTime\": 0,\n            \"ebzwk00iFpr01TxValDate\": 0,\n            \"ebzwk00iFpr01DesAcFlg\": \"\",\n            \"ebzwk00iFpr01DesAcName\": \"\",\n            \"ebzwk00iFpr01ExRate\": 0\n          },\n          \"ebzwk00iFpr01Filler02\": \"\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ebk_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ebk_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ebk_base_url}}/ebzfpr01.v1",
+              "host": [
+                "{{ebk_base_url}}"
+              ],
+              "path": [
+                "ebzfpr01.v1"
+              ]
+            },
+            "description": "Faster payment accept or release (FPR01)\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ebk/sc-ebk-payment-limit-openapi-3.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "updateFasterPaymentLimit",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"ebzwk00wArea\": {\n      \"ebzwk00iArea\": {\n        \"ebzwk00iHeader\": {\n          \"ebzwk00iHdrHostTermNo\": \"\",\n          \"ebzwk00iHdrHostStrArea\": {\n            \"ebzwk00iHdrHostSessId\": \"\",\n            \"ebzwk00iHdrChSrcInd\": \"\",\n            \"ebzwk00iHdr01\": \"\"\n          },\n          \"ebzwk00iHdrMessageId\": \"\",\n          \"ebzwk00iHdrOpt\": \"\",\n          \"ebzwk00iHdrBankCode\": \"\",\n          \"ebzwk00iHdrIntBankCode\": \"\",\n          \"ebzwk00iHdrMediaCode\": \"\",\n          \"ebzwk00iHdrCibCustId\": {\n            \"ebzwk00iHdrCibExtAcno\": \"\"\n          },\n          \"ebzwk00iHdrCibIntAcNo\": \"\",\n          \"ebzwk00iHdrRtTimeoutFlg\": \"\",\n          \"ebzwk00iHdrTxPostDate\": \"\",\n          \"ebzwk00iHdrTxMatchKey\": \"\",\n          \"ebzwk00iHdrSubOpt\": \"\",\n          \"ebzwk00iHdrCompCode\": 0,\n          \"ebzwk00iHdrCibAccessLvl\": \"\",\n          \"ebzwk00iHdrPublicKeyInd\": \"\",\n          \"ebzwk00iHdrInputUserId\": \"\",\n          \"ebzwk00iHdrInputDate\": \"\",\n          \"ebzwk00iHdrInputTime\": \"\",\n          \"ebzwk00iHdrAprvlUserId\": \"\",\n          \"ebzwk00iHdrAprvlDate\": \"\",\n          \"ebzwk00iHdrAprvlTime\": \"\",\n          \"ebzwk00iHdrIntCcbbbdd\": \"\",\n          \"ebzwk00iHdrTxnNumber\": \"\",\n          \"ebzwk00iHdrDialupBkupInd\": \"\",\n          \"ebzwk00iHdrSusIpFlg\": \"\",\n          \"ebzwk00iHdrCibAcProdCode\": \"\",\n          \"ebzwk00iHdrRiskInd\": \"\",\n          \"ebzwk00iHdrSpecRateFlg\": \"\",\n          \"ebzwk00iHdrTxnType\": \"\",\n          \"ebzwk00iHdrOmbFlag\": \"\",\n          \"fillerHdr02\": \"\"\n        },\n        \"ebzwk00iFpu01\": {\n          \"ebzwk00iFpu01RelCompCode\": 0,\n          \"ebzwk00iFpu01RelAcSeq\": 0,\n          \"ebzwk00iFpu01RelAcPrdCode\": \"\",\n          \"ebzwk00iFpu01RelAcCcy\": \"\",\n          \"ebzwk00iFpu01RelAcStatus\": 0,\n          \"ebzwk00iFpu01RelAcNo\": \"\",\n          \"ebzwk00iFpu01RelAcNoFmt\": \"\",\n          \"ebzwk00iFpu01DbAmtCcy\": \"\",\n          \"ebzwk00iFpu01DbAmt\": 0,\n          \"ebzwk00iFpu01CrAmtCcy\": \"\",\n          \"ebzwk00iFpu01CrAmt\": 0,\n          \"ebzwk00iFpu01TxnCrDrInd\": \"\",\n          \"ebzwk00iFpu01FpProxyIdTy\": \"\",\n          \"ebzwk00iFpu01FpProxyId\": \"\",\n          \"ebzwk00iFpu01DesAcPrdCd\": \"\",\n          \"ebzwk00iFpu01TxnType\": \"\",\n          \"ebzwk00iFpu01TxnNature\": \"\",\n          \"ebzwk00iFpu01Bea2BeaInd\": \"\",\n          \"ebzwk00iFpu01Filler\": \"\"\n        }\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{ebk_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{ebk_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ebk_base_url}}/ebzfpu01.v1",
+              "host": [
+                "{{ebk_base_url}}"
+              ],
+              "path": [
+                "ebzfpu01.v1"
+              ]
+            },
+            "description": "Faster payment update limit (FPU01)\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/ebk/sc-ebk-payment-limit-openapi-3.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ADC",
+      "item": [
+        {
+          "name": "checkPayee",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"adccdii\": {\n      \"adccdiiInput\": {\n        \"adccdiiChlCode\": \"MBK\",\n        \"adccdiiPayerAc\": \"{{account_number}}\",\n        \"adccdiiPayeeAc\": \"{{account_number}}\",\n        \"adccdiiTxCcy\": \"HKD\",\n        \"adccdiiTxAmt\": \"0000000001000.00\",\n        \"adccdiiCnBcodeFlag\": \"Y\",\n        \"adccdiiCnBcode\": \"012         \"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{bg3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{bg3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bg3_base_url}}/v1z/adccdii.v3",
+              "host": [
+                "{{bg3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "adccdii.v3"
+              ]
+            },
+            "description": "Check Suspicious Payee\n\nJava client route /v1z/adccdii.v3. The source Swagger has /hkbea/sit-sf/hth/v1z/adccdii.v3.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/adc/adccdii.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "RBS",
+      "item": [
+        {
+          "name": "postSC-RBS-RBS90CFW",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dfhcommarea\": {\n    \"rbs90cfRec\": {\n      \"rbs90cfInArea\": {\n        \"rbs90cfFuncCode\": \"E\",\n        \"rbs90cfApplCode\": \"HTH\",\n        \"rbs90cfCcyCode\": \"USD\",\n        \"rbs90cfChnlCode\": \"02\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{tc3_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{tc3_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{tc3_base_url}}/v1z/rbs90cfw.v1",
+              "host": [
+                "{{tc3_base_url}}"
+              ],
+              "path": [
+                "v1z",
+                "rbs90cfw.v1"
+              ]
+            },
+            "description": "Java client route /v1z/rbs90cfw.v1. The source Swagger has /rbs90cfw.v1.\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/rbs/SC-RBS_RBS90CFW_Channel_Flag_Enquiry-1.0.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "FMO",
+      "item": [
+        {
+          "name": "postSC-fmo-api",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"TXN_SOURCE_SYSTEM\": \"\",\n  \"TRAN_ACTIVITY_TYPE\": \"\",\n  \"SOURCE_SYSTEM_TRAN_TYPE\": \"\",\n  \"APPLICATION_TYPE_CODE\": \"\",\n  \"EXT_ACCT_NUM\": \"\",\n  \"INT_ACCT_NUM\": \"\",\n  \"CARD_NUM\": \"\",\n  \"MERCHANT_ID\": \"\",\n  \"MERCHANT_COUNTRY\": \"\",\n  \"PREFERRED_LANGUAGE\": \"\",\n  \"IP_ADDRESS\": \"\",\n  \"IP_INTRENET_SERVICE_PROVIDER\": \"\",\n  \"OB_LOGIN_ID\": \"\",\n  \"OB_USER_ID\": \"\",\n  \"OB_SESSION_ID\": \"\",\n  \"OB_DATE\": \"\",\n  \"OB_TIME\": \"\",\n  \"OB_LOGON_STATUS\": \"\",\n  \"OB_LOGON_METHOD\": \"\",\n  \"DEVICE_TYPE\": \"\",\n  \"DEVICE_MODEL\": \"\",\n  \"DEVICE_ID\": \"\",\n  \"BROWSER_OPERATING_SYSTEM\": \"\",\n  \"MAC_ADDRESS\": \"\",\n  \"TERMINAL_ID\": \"\",\n  \"TRAN_REF_NUM\": \"\",\n  \"TRAN_STATUS\": \"\",\n  \"TRAN_DATE\": \"\",\n  \"TRAN_TIME\": \"\",\n  \"TRAN_CURR_CD\": \"\",\n  \"TRAN_EXCHANGE_RT\": \"\",\n  \"TRAN_AMT\": \"\",\n  \"TRAN_AMT_BASE\": \"\",\n  \"TRAN_DEBIT_CREDIT\": \"\",\n  \"PER_DAY_AVAIL_LIMIT\": \"\",\n  \"PAYEE_BANK_CODE\": \"\",\n  \"PAYEE_ACCT_NUM\": \"\",\n  \"PAYEE_ACCT_NAME\": \"\",\n  \"ACCT_REGISTERED_IND\": \"\",\n  \"SELF_ACCT_IND\": \"\",\n  \"HIGH_RISK_IND\": \"\",\n  \"EXT_PROXY_ID\": \"\",\n  \"INT_PAYEE_APP_TYPE_CODE\": \"\",\n  \"INT_PAYEE_ACCT_NUM\": \"\",\n  \"INT_PAYEE_ACCT_NAME\": \"\",\n  \"CREATE_DATE_INSTRUCTION\": \"\",\n  \"CREATE_TIME_INSTRUCTION\": \"\",\n  \"BANK_NOTES_SERIAL_NO\": \"\",\n  \"CHEQUE_SERIAL_NO\": \"\",\n  \"ACCT_TYPE\": \"\",\n  \"AUTH_TYPE\": \"\",\n  \"ACCT_CREDIT_LIMIT\": \"\",\n  \"ACCT_CASH_LIMIT\": \"\",\n  \"OPEN_TO_BUY\": \"\",\n  \"ACCT_BRANCH_ID\": \"\",\n  \"ACCT_ATM_LIMIT\": \"\",\n  \"ACCT_POS_LIMIT\": \"\",\n  \"ACCT_TFR_LIMIT\": \"\",\n  \"ACCT_LIMIT_CURR_CD\": \"\",\n  \"ACCT_EXCHANGE_RT\": \"\",\n  \"PAYEE_ENTITY_TYPE\": \"\",\n  \"PAYEE_REGISTRATION_DATE\": \"\",\n  \"PAYEE_REGISTRATION_TIME\": \"\",\n  \"PAYEE_REF_NUM\": \"\",\n  \"PAYEE_PHONE_NUM\": \"\",\n  \"PAYEE_EMAIL_ADDRESS\": \"\",\n  \"PAYEE_SOCICAL_NET\": \"\",\n  \"PAYEE_SOC_NET_ID\": \"\",\n  \"PAYEE_COUNTRY_CODE\": \"\",\n  \"PAYEE_CITY\": \"\",\n  \"PAYEE_STATE\": \"\",\n  \"PAYEE_POS_CODE\": \"\",\n  \"PAYEE_BANK_TYPE\": \"\",\n  \"PAYEE_ACC_TYPE\": \"\",\n  \"PAYEE_ACC_CTY\": \"\",\n  \"PAYEE_ACC_ID\": \"\",\n  \"PAYEE_CUR_CODE\": \"\",\n  \"USAGE_CARD\": \"\",\n  \"USAGE_OB\": \"\",\n  \"DEVICT_TYPE\": \"\",\n  \"CHANNEL_ATM_LIMIT\": \"\",\n  \"CHANNEL_POS_LIMIT\": \"\",\n  \"CHANNEL_TFR_LIMIT\": \"\",\n  \"CHANNEL_CURRENCY\": \"\",\n  \"CHANNEL_MSG_TYPE\": \"\",\n  \"IP_MATCH_IND\": \"\",\n  \"NAME_WEBSITE\": \"\",\n  \"WEB_CLASS\": \"\",\n  \"JAVA_DEVICE_IND\": \"\",\n  \"DEVICE_FINGERPRINT\": \"\",\n  \"DEVICE_COUNTRY_CODE\": \"\",\n  \"DEVICE_SYSTEM_DATE\": \"\",\n  \"DEVICE_SYSTEM_TIME\": \"\",\n  \"DEVICE_ZONE_OFFSET\": \"\",\n  \"DEVICE_DST_SUPPORTED\": \"\",\n  \"DEVICE_DST_ACTIVE\": \"\",\n  \"DEVICE_CPU_CLASS\": \"\",\n  \"DEVICE_SCREEN_WIDTH\": \"\",\n  \"DEVICE_SCREEN_HEIGHT\": \"\",\n  \"DEVICE_COLOR_DEPTH\": \"\",\n  \"TYPE_OF_BROWSER\": \"\",\n  \"HTTP_HEADER_ACCEPT\": \"\",\n  \"HTTP_ACCEPT_ENCODING\": \"\",\n  \"HTTP_ACCEPT_CHARSET\": \"\",\n  \"HTTP_LANGUAGE\": \"\",\n  \"HTTP_USER_AGENT\": \"\",\n  \"HTTP_REFERER\": \"\",\n  \"BROWSER_BWSR_COOKIE_ENABLED\": \"\",\n  \"SERVER_DATE\": \"\",\n  \"SERVER_TIME\": \"\",\n  \"CARD_RATING\": \"\",\n  \"FOREIGN_ISSUE_FLAG\": \"\",\n  \"DEBIT_CREDIT_FLAG\": \"\",\n  \"CARD_OPEN_DATE\": \"\",\n  \"CARD_OPEN_TIME\": \"\",\n  \"CARD_ACTIVE_DATE\": \"\",\n  \"CARD_ACTIVE_TIME\": \"\",\n  \"CARD_PURPOSE\": \"\",\n  \"CARDHOLDER_POSTAL_CODE\": \"\",\n  \"CARDHOLDER_COUNTRY_ISO\": \"\",\n  \"AUTH_CARD_MEDIA\": \"\",\n  \"CARD_USED_IND\": \"\",\n  \"ONUS_FLAG\": \"\",\n  \"TERMINAL_OWNER_ID\": \"\",\n  \"MERCH_MER_MCC\": \"\",\n  \"MERCH_TERMINAL_ID\": \"\",\n  \"CARD_TYPE_CATEGORY\": \"\",\n  \"TERMINAL_OWNER_NAME\": \"\",\n  \"TERMINAL_CITY\": \"\",\n  \"TERMINAL_STATE\": \"\",\n  \"TERMINAL_POSTAL_CODE\": \"\",\n  \"TERMINAL_COUNTRY_CODE\": \"\",\n  \"MERCH_LOCAL_LANGUAGE\": \"\",\n  \"ACQUIRER_COUNTRY_CODE\": \"\",\n  \"ACQUIRER_ID\": \"\",\n  \"UTC_TRAN_FLAG\": \"\",\n  \"ALT_TRAN_DATE\": \"\",\n  \"ALT_TRAN_TIME\": \"\",\n  \"AUTH_DECISION_CODE\": \"\",\n  \"AUTH_REASON_CODE\": \"\",\n  \"CARD_REVERSAL_IND\": \"\",\n  \"STAND_IN_IND\": \"\",\n  \"INST_CREDIT_IND\": \"\",\n  \"CASHBACK_AMT\": \"\",\n  \"CHIP_DATA_STATUS\": \"\",\n  \"CHIP_DATA_SCHEME\": \"\",\n  \"ARQC_VALID\": \"\",\n  \"CARD_TRAN_COUNTER\": \"\",\n  \"HOST_TRAN_COUNTER\": \"\",\n  \"LAST_TRANS_COUNTER\": \"\",\n  \"HOSTS_OFFLINE_TRANS\": \"\",\n  \"TERMINAL_TVR_TVR\": \"\",\n  \"CARD_RESULTS_CVR\": \"\",\n  \"APPLICATION_AIP_AIP\": \"\",\n  \"TERMINAL_TCP_TCP\": \"\",\n  \"CHIP_CONDITION_CODE\": \"\",\n  \"CARD_PRESENT_IND\": \"\",\n  \"CARDHOLDER_TERMINAL_TYPE\": \"\",\n  \"AUTH_TERM_PAN_ENTRY_CAP\": \"\",\n  \"AUTH_TERM_PIN_ENTRY_CAP\": \"\",\n  \"AUTH_POS_ENTRY_MODE\": \"\",\n  \"CUST_PRESENT\": \"\",\n  \"AUTH_CVV_CVC\": \"\",\n  \"AUTH_CVV2_PSNT\": \"\",\n  \"AUTH_AVS_RESPONSE_CODE\": \"\",\n  \"AUTH_AVS_POST_CODE\": \"\",\n  \"AUTH_PIN_VRFY\": \"\",\n  \"MSG_EXP_DATE\": \"\",\n  \"CARD_EXP_DATE\": \"\",\n  \"AUTH_SCHEME\": \"\",\n  \"TRACK1_PRESENT\": \"\",\n  \"TRACK2_PRESENT\": \"\",\n  \"CARDHOLDER_AUTH_IND\": \"\",\n  \"ACS_REFER_CODE\": \"\",\n  \"BIO_VERIFY\": \"\",\n  \"CUS_ID\": \"\",\n  \"TRACE_NUM\": \"\",\n  \"SERVICE_NM\": \"\",\n  \"COD_ENTITY\": \"\",\n  \"ACC_CURR_CD\": \"\",\n  \"DISPLAY_ACCT_NUM\": \"\",\n  \"TOTAL_BALANCE\": \"\",\n  \"ACC_OPEN_DATE\": \"\",\n  \"ALNOVA_USER\": \"\",\n  \"OPER_KEY\": \"\",\n  \"PRE_TRAN_IND\": \"\",\n  \"FIELD_FUTURE_USE\": \"\",\n  \"TRAN_AMT_ACC_BASE\": \"\",\n  \"COD_PRODSERV\": \"\",\n  \"COD_SPROD\": \"\",\n  \"PARTICIPATION_TYPE_CODE\": \"\",\n  \"PARTICIPATION_TYPE_SEQ\": \"\",\n  \"BRANCH_TRANS_IND\": \"\",\n  \"CHANGE_MOBILE_SMS_OTP_IND\": \"\",\n  \"CUS_TYPE\": \"\",\n  \"RULE_ACTION\": \"\",\n  \"BLOCK_CD\": \"\",\n  \"TRAN_SEQ_NUM\": \"\",\n  \"TRAN_TIME_STAMP\": \"\",\n  \"BLOCK_START_TIME_STAMP\": \"\",\n  \"BLOCK_END_TIME_STAMP\": \"\",\n  \"RETURN_CD\": \"\",\n  \"RETURN_INFO\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{fmo_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{fmo_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Client-Id",
+                "value": "{{fmo_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Client-Secret",
+                "value": "{{fmo_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{fmo_base_url}}/sendfmomsg",
+              "host": [
+                "{{fmo_base_url}}"
+              ],
+              "path": [
+                "sendfmomsg"
+              ]
+            },
+            "description": "Source: hth-ms-support/hth-ms-support-svc/src/main/resources/api/fmo/FMO_API-1.0.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "WMG",
+      "item": [
+        {
+          "name": "CreateProcessInstance_Execute",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Workflow\": \"Workflows\\\\OTT_Main\",\n  \"Datafield\": {\n    \"SystemCode\": \"HTH\",\n    \"TransType\": \"TT\",\n    \"TransNo\": \"{{transaction_id}}\",\n    \"HOSTRefNo\": \"{{$guid}}\",\n    \"RemitAccNo\": \"{{account_number}}\",\n    \"RemitAccCurr\": \"HKD\",\n    \"TransAmount\": \"100\",\n    \"TransCurrency\": \"HKD\",\n    \"TransExeDate\": \"{{wmg_date_ddmmyyyy}}\",\n    \"TransValueDate\": \"{{wmg_date_ddmmyyyy}}\",\n    \"BeneBankName\": \"{{creditor_name}}\",\n    \"BeneBankBIC\": \"{{creditor_bank_bic}}\",\n    \"BeneBankCity\": \"HONG KONG\",\n    \"BeneBankCty\": \"HK\",\n    \"BeneAccNo\": \"{{creditor_account}}\",\n    \"BeneNameAddress1\": \"1 TEST ROAD\",\n    \"BeneCty\": \"HK\",\n    \"TTRef\": \"{{txn_ref}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{wmg_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{wmg_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "AuthKey",
+                "value": "{{wmg_auth_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Message-Id",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Channel",
+                "value": "HTH",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Enable only if required by the downstream environment."
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{wmg_base_url}}/WorkflowService/CreateProcessInstance/v1",
+              "host": [
+                "{{wmg_base_url}}"
+              ],
+              "path": [
+                "WorkflowService",
+                "CreateProcessInstance",
+                "v1"
+              ]
+            },
+            "description": "CreateProcessInstance API\n\nSource: hth-ms-support/hth-ms-support-svc/src/main/resources/api/wmg/wmg.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "UAM (DSP client)",
+      "item": [
+        {
+          "name": "UAM access token",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_assertion_type",
+                  "value": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "client_assertion",
+                  "value": "{{client_assertion}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/amg/token",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "amg",
+                "token"
+              ]
+            },
+            "description": "Get Access Token\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/dsp-uam-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify access token",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dynamicAgentSession\": \"\",\n  \"accessToken\": \"{{access_token}}\",\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/am5/rest/authz/oauth/accessToken/verify",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "am5",
+                "rest",
+                "authz",
+                "oauth",
+                "accessToken",
+                "verify"
+              ]
+            },
+            "description": "Verify Access Token\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/dsp-uam-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "UAM authn login",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionToken\": \"{{uam_session_token}}\",\n  \"userId\": \"{{test_user_id}}\",\n  \"realmId\": \"40151\",\n  \"segmentId\": \"\",\n  \"password\": \"{{test_password}}\",\n  \"challengeToken\": \"{{uam_challenge_token}}\",\n  \"device\": {\n    \"type\": \"iOS\",\n    \"id\": \"\",\n    \"tag\": \"\",\n    \"agent\": \"\",\n    \"desc\": \"\"\n  },\n  \"params\": {\n    \"realmId\": \"\",\n    \"segmentId\": \"\",\n    \"remoteAddr\": \"\",\n    \"audit.attr.runtime.<audit_attribute_name>\": \"\",\n    \"authMode\": \"\",\n    \"appId\": \"\",\n    \"useVirtualToken\": \"\",\n    \"DPModuleId\": \"\",\n    \"Pki\": \"\",\n    \"Ra\": \"\",\n    \"SMSOneOTPPerUser\": false,\n    \"inputSeeds\": \"\",\n    \"eventNotificationPolicyId\": \"\",\n    \"tokenPolicyId\": \"\",\n    \"CallingStationId\": \"\",\n    \"contextualToken\": \"\",\n    \"context.latitude\": \"\",\n    \"context.longitude\": \"\",\n    \"context.isRooted\": \"\",\n    \"context.malwareDetected\": \"\",\n    \"context.botOrAutoTrxDetected\": \"\",\n    \"jwtClientId\": \"\",\n    \"state\": \"\",\n    \"expectedNonce\": \"\",\n    \"redirect_uri\": \"\",\n    \"autoProv.userId\": \"\",\n    \"autoProv.segmentId\": \"\",\n    \"linkToDevice\": {\n      \"id\": \"\"\n    },\n    \"reauthnReqId\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/am5/rest/authn/login",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "am5",
+                "rest",
+                "authn",
+                "login"
+              ]
+            },
+            "description": "authn/login\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/authentication-service.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "List OAuth clients",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionToken\": \"{{uam_session_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/am5/rest/authz/oauth/client/list",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "am5",
+                "rest",
+                "authz",
+                "oauth",
+                "client",
+                "list"
+              ]
+            },
+            "description": "authz/oauth/client/list\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/authorization-service.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Read OAuth authorization request",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dynamicAgentSession\": true,\n  \"sessionToken\": \"{{uam_session_token}}\",\n  \"clientId\": \"{{corporate_client_id}}\",\n  \"responseType\": \"\",\n  \"redirectUri\": \"\",\n  \"scope\": \"\",\n  \"request\": \"\",\n  \"contextualInfo\": {\n    \"context.latitude\": \"\",\n    \"context.longitude\": \"\",\n    \"context.timeZone\": \"\",\n    \"context.deviceId\": \"\",\n    \"context.deviceTag\": \"\",\n    \"context.deviceType\": \"\",\n    \"context.deviceAgent\": \"\",\n    \"context.deviceDesc\": \"\",\n    \"context.botOrAutoTrxDetected\": \"\"\n  },\n  \"params\": {\n    \"nonce\": \"\",\n    \"code_challenge\": \"\",\n    \"code_challenge_method\": \"S256\",\n    \"prompt\": \"none\",\n    \"max_age\": \"\",\n    \"login_hint\": \"\",\n    \"display\": \"\",\n    \"state\": \"\",\n    \"acr_values\": \"\",\n    \"id_token_hint\": \"\",\n    \"obi_id\": \"\",\n    \"evalUserSession\": false,\n    \"userSessionToken\": \"\",\n    \"mask-parameters\": [\n      \"\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/am5/rest/authz/oauth/authzReq/read",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "am5",
+                "rest",
+                "authz",
+                "oauth",
+                "authzReq",
+                "read"
+              ]
+            },
+            "description": "authz/oauth/authzReq/read\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/authorization-service.yaml\n\nUse test data and the matching SIT/UAT environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Get JWKS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/amg/jwks.json",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "amg",
+                "jwks.json"
+              ]
+            },
+            "description": "Runtime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java"
+          },
+          "response": []
+        },
+        {
+          "name": "Get client registration",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-IBM-Client-Id",
+                "value": "{{uam_client_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-IBM-Client-Secret",
+                "value": "{{uam_client_secret}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{uam_registration_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{uam_base_url}}/amg/register/{{corporate_client_id}}",
+              "host": [
+                "{{uam_base_url}}"
+              ],
+              "path": [
+                "amg",
+                "register",
+                "{{corporate_client_id}}"
+              ]
+            },
+            "description": "Get Client Registration\n\nRuntime route: dsp-ms-support/dsp-ms-support-svc/src/main/java/com/hkbea/dsp/uam/api/UamService.java. The APIC contract includes the clp aliases in the gateway collection.\n\nSource: dsp-ms-support/dsp-ms-support-svc/src/main/resources/api/uam/dsp-uam-1.0.0.openapi.yaml"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "HTH Support direct",
+      "item": [
+        {
+          "name": "account",
+          "item": [
+            {
+              "name": "enquireAccountSummary",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"accountType\": \"4040\",\n  \"currency\": \"HKD\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/account/v1/account-summary/enquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "account",
+                    "v1",
+                    "account-summary",
+                    "enquiry"
+                  ]
+                },
+                "description": "Account Summary\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AccountApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-account-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "enquireBalance",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"accountType\": \"TD\",\n  \"accountCurrency\": \"{{currency}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/account/v1/balance-inquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "account",
+                    "v1",
+                    "balance-inquiry"
+                  ]
+                },
+                "description": "Account Balance Enquiry\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AccountApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-account-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "enquireGenericBalance",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "[\n  {\n    \"accountNumber\": \"{{account_number}}\",\n    \"currencies\": [\n      \"HKD\"\n    ]\n  }\n]",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/account/v1/balances/generic-enquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "account",
+                    "v1",
+                    "balances",
+                    "generic-enquiry"
+                  ]
+                },
+                "description": "Generic Balance Enquiry\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AccountApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-account-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "enquireTransactions",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"accountType\": \"6805\",\n  \"currency\": \"HKD\",\n  \"transactionPeriod\": \"TODAY\",\n  \"pageSize\": 50\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/account/v1/transactions/enquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "account",
+                    "v1",
+                    "transactions",
+                    "enquiry"
+                  ]
+                },
+                "description": "Transaction History Enquiry\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AccountApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-account-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "inquireTransactions",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accountNumber\": \"{{account_number}}\",\n  \"accountType\": \"CUR\",\n  \"currency\": \"HKD\",\n  \"fromDate\": \"{{from_date}}\",\n  \"toDate\": \"{{to_date}}\",\n  \"pageSize\": 50\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/account/v1/transaction-inquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "account",
+                    "v1",
+                    "transaction-inquiry"
+                  ]
+                },
+                "description": "Transaction History Inquiry\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AccountApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-account-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "audit-log",
+          "item": [
+            {
+              "name": "queryAuditLogs",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"lastNDays\": 7,\n  \"pageNumber\": 1,\n  \"pageSize\": 20\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/audit-log/v1/inquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "audit-log",
+                    "v1",
+                    "inquiry"
+                  ]
+                },
+                "description": "Query audit logs\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AuditLogApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-auditLog-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "operations",
+          "item": [
+            {
+              "name": "queryAuditLogsByPartyId",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"lastNDays\": 7,\n  \"pageNumber\": 1,\n  \"pageSize\": 20\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/operations/audit-log/v1/{{party_id}}",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "operations",
+                    "audit-log",
+                    "v1",
+                    "{{party_id}}"
+                  ]
+                },
+                "description": "Query audit logs by party ID\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/AuditLogApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-auditLog-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "auth",
+          "item": [
+            {
+              "name": "getCorporateToken",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"client_assertion\": \"{{client_assertion}}\",\n  \"password_signature\": \"{{password_signature}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/auth/v1/token",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "auth",
+                    "v1",
+                    "token"
+                  ]
+                },
+                "description": "Get AccessToken\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/CorporateTokenApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-bff-local-logon-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "document",
+          "item": [
+            {
+              "name": "getDocumentList",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentType\": \"ADV\",\n  \"lastNDays\": 30,\n  \"account\": {\n    \"id\": \"{{account_number}}\"\n  },\n  \"pageNumber\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/document/v1/inquiry",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "document",
+                    "v1",
+                    "inquiry"
+                  ]
+                },
+                "description": "Inquiry eStatement / eAdvice Document List\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/DocumentApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-document-list-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "downloadDocument",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentEntry\": {\n    \"type\": \"STM\",\n    \"accountNumber\": \"{{account_number}}\",\n    \"documentId\": \"{{document_id}}\",\n    \"blockNumber\": 1\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/document/v1/download",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "document",
+                    "v1",
+                    "download"
+                  ]
+                },
+                "description": "Download eStatement / eAdvice Report\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/DocumentApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-eStatement-1.0.0.apenapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "fx",
+          "item": [
+            {
+              "name": "getFXRate",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/fx/v1/rate-inquiry?enqType=I&fromCurrency=USD&toCurrency=HKD",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "fx",
+                    "v1",
+                    "rate-inquiry"
+                  ],
+                  "query": [
+                    {
+                      "key": "enqType",
+                      "value": "I",
+                      "disabled": false,
+                      "description": "Enquiry Type. I – Indicative: Returns the general bank exchange rate list (Buy/Sell rates). Q – Quote: Check the exchange rate for a pair."
+                    },
+                    {
+                      "key": "fromCurrency",
+                      "value": "USD",
+                      "disabled": false,
+                      "description": "From currency code"
+                    },
+                    {
+                      "key": "toCurrency",
+                      "value": "HKD",
+                      "disabled": false,
+                      "description": "To currency code"
+                    }
+                  ]
+                },
+                "description": "Fetches the latest exchange rate for given currency\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-fx-1.0.0.openapi.yaml"
+              },
+              "response": []
+            },
+            {
+              "name": "fxSpot",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fromAccount\": {\n    \"accountNumber\": \"{{account_number}}\",\n    \"currency\": \"HKD\",\n    \"AccountType\": \"SSA\"\n  },\n  \"txnAmount\": {\n    \"currency\": \"HKD\",\n    \"amount\": 100.0\n  },\n  \"toAccount\": {\n    \"accountNumber\": \"{{creditor_account}}\",\n    \"currency\": \"HKD\",\n    \"AccountType\": \"SSA\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/fx/v1/spot",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "fx",
+                    "v1",
+                    "spot"
+                  ]
+                },
+                "description": "Perform FX spot transaction\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java\n\nSource: pd-hth-internal/sc-hth-fx-openapi_1.0.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "GET /fx/v1/calculateHkdAmount",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/fx/v1/calculateHkdAmount?fromCurrency=USD&amount=100",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "fx",
+                    "v1",
+                    "calculateHkdAmount"
+                  ],
+                  "query": [
+                    {
+                      "key": "fromCurrency",
+                      "value": "USD"
+                    },
+                    {
+                      "key": "amount",
+                      "value": "100"
+                    }
+                  ]
+                },
+                "description": "Runtime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java"
+              },
+              "response": []
+            },
+            {
+              "name": "fxDeal",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fromAccount\": {\n    \"accountNumber\": \"{{account_number}}\",\n    \"accountType\": \"SSA\",\n    \"currency\": \"USD\"\n  },\n  \"fromAmount\": 100.0,\n  \"toAccount\": {\n    \"accountNumber\": \"{{creditor_account}}\",\n    \"accountType\": \"SSA\",\n    \"currency\": \"HKD\"\n  },\n  \"rateId\": \"{{fx_rate_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/fx/v1/deal",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "fx",
+                    "v1",
+                    "deal"
+                  ]
+                },
+                "description": "Confirm FX spot transaction\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-fx-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "fxEnquiry",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fromAccount\": {\n    \"accountNumber\": \"{{account_number}}\",\n    \"accountType\": \"SSA\",\n    \"currency\": \"USD\"\n  },\n  \"fromAmount\": 100.0,\n  \"toAccount\": {\n    \"accountNumber\": \"{{creditor_account}}\",\n    \"accountType\": \"SSA\",\n    \"currency\": \"HKD\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/fx/v1/get-quote",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "fx",
+                    "v1",
+                    "get-quote"
+                  ]
+                },
+                "description": "Perform FX spot transaction\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/FxApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-fx-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "payment",
+          "item": [
+            {
+              "name": "enquireTransactionRecord",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/payment/v1/transaction-inquiry?txnRef={{txn_ref}}",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "payment",
+                    "v1",
+                    "transaction-inquiry"
+                  ],
+                  "query": [
+                    {
+                      "key": "txnRef",
+                      "value": "{{txn_ref}}",
+                      "disabled": false,
+                      "description": "Payment transaction reference number (PAYMENT_ID) returned by the payment initiation API."
+                    }
+                  ]
+                },
+                "description": "Payment Transaction Record Enquiry\n\nRuntime route: hth-ms-support/hth-ms-support-api/src/main/java/com/hkbea/hth/api/PaymentApi.java\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-local-payment.0.0.openapi.yaml"
+              },
+              "response": []
+            },
+            {
+              "name": "Initiate payment · CHATS",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"paymentIdentification\": {\n    \"endToEndId\": \"{{end_to_end_id}}\"\n  },\n  \"debtorAccount\": {\n    \"id\": \"{{account_number}}\",\n    \"currency\": \"HKD\"\n  },\n  \"instructedAmount\": {\n    \"amount\": 100.0,\n    \"currency\": \"HKD\"\n  },\n  \"creditor\": {\n    \"creditorName\": \"{{creditor_name}}\",\n    \"postalAddress\": {\n      \"addressLine1\": \"1 TEST ROAD\",\n      \"townName\": \"HONG KONG\",\n      \"country\": \"HK\"\n    }\n  },\n  \"creditorAccount\": {\n    \"id\": \"{{creditor_account}}\"\n  },\n  \"paymentType\": \"CHATS\",\n  \"transactionID\": \"{{transaction_id}}\",\n  \"settlementDate\": \"{{settlement_date}}\",\n  \"creditorAgent\": {\n    \"financialInstitutionId\": {\n      \"bicfi\": \"{{creditor_bank_bic}}\"\n    }\n  },\n  \"remittanceInformationUnstructured\": \"HTH UAT TEST\",\n  \"chargeBearer\": \"SHA\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{hth_support_base_url}}/hth/api/payment/v1/initiate",
+                  "host": [
+                    "{{hth_support_base_url}}"
+                  ],
+                  "path": [
+                    "hth",
+                    "api",
+                    "payment",
+                    "v1",
+                    "initiate"
+                  ]
+                },
+                "description": "Local Payment Initiation\n\nUse a routed CHATS test beneficiary and bank. Adjust charge bearer and address data as needed.\n\nSource: hth-ms-support/hth-ms-support-api/src/main/resources/api/hth-support-local-payment.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DSP Support direct",
+      "item": [
+        {
+          "name": "client",
+          "item": [
+            {
+              "name": "validateClientId",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/client/v1/validate",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "client",
+                    "v1",
+                    "validate"
+                  ]
+                },
+                "description": "Validate client ID through UAM\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/ClientApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-client-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "checkClientIdExists",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/client/v1/exists",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "client",
+                    "v1",
+                    "exists"
+                  ]
+                },
+                "description": "Check whether a client ID exists in UAM\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/ClientApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-client-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "tokenWithClientId",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{access_token}}\",\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Client-Id",
+                    "value": "{{corporate_client_id}}",
+                    "type": "text",
+                    "description": "DSP client ID for audit log purpose."
+                  },
+                  {
+                    "key": "Request-Time",
+                    "value": "{{request_time_ms}}",
+                    "type": "text",
+                    "description": "Timestamp of the request."
+                  },
+                  {
+                    "key": "Request-Sign",
+                    "value": "{{request_sign}}",
+                    "type": "text",
+                    "description": "Signature of the request."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/client/v1/tokenWithClientId",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "client",
+                    "v1",
+                    "tokenWithClientId"
+                  ]
+                },
+                "description": "Validate Token with ClientId\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CorporateTokenApi.java\n\nSource: pd-hth-internal/sc-hth-logon-openapi_1.0.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "auth",
+          "item": [
+            {
+              "name": "getCorporateToken",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"client_assertion\": \"{{client_assertion}}\",\n  \"password_signature\": \"{{password_signature}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/auth/v1/token",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "auth",
+                    "v1",
+                    "token"
+                  ]
+                },
+                "description": "Get AccessToken\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CorporateTokenApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-local-logon-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "persistCloseIdCredential",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{corporate_client_id}}\",\n  \"closeId\": \"{{close_id}}\",\n  \"passwordHash\": \"{{password_hash}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Client-Id",
+                    "value": "{{corporate_client_id}}",
+                    "type": "text",
+                    "description": "DSP client ID for audit log purpose."
+                  },
+                  {
+                    "key": "Request-Time",
+                    "value": "{{request_time_ms}}",
+                    "type": "text",
+                    "description": "Timestamp of the request."
+                  },
+                  {
+                    "key": "Request-Sign",
+                    "value": "{{request_sign}}",
+                    "type": "text",
+                    "description": "Signature of the request."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/auth/credentials/v1/persist",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "auth",
+                    "credentials",
+                    "v1",
+                    "persist"
+                  ]
+                },
+                "description": "Persist CloseId Credential\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CorporateTokenApi.java\n\nSource: pd-hth-internal/sc-hth-logon-openapi_1.0.0.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "validator",
+          "item": [
+            {
+              "name": "validateToken",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{access_token}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/validator/v1/token",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "validator",
+                    "v1",
+                    "token"
+                  ]
+                },
+                "description": "Validate Token\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CorporateTokenApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-tokenValidator-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "validateSignature",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"signature\": \"{{request_sign}}\",\n  \"content\": \"{\\\"amount\\\": 100}\",\n  \"keySubject\": \"client-id-12345\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/validator/v1/signature",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "validator",
+                    "v1",
+                    "signature"
+                  ]
+                },
+                "description": "Validate Signature\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CypherApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-tokenValidator-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "getPublicKey",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/validator/v1/publicKey",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "validator",
+                    "v1",
+                    "publicKey"
+                  ]
+                },
+                "description": "Retrieve Public Key\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/CypherApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-tokenValidator-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "password",
+          "item": [
+            {
+              "name": "modifyPassword",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"function\": \"A\",\n  \"oldEncryptedPassword\": \"{{encrypted_old_password}}\",\n  \"newEncryptedPassword\": \"{{encrypted_new_password}}\",\n  \"randomNumber\": \"123456\",\n  \"closeId\": \"{{close_id}}\",\n  \"clientId\": \"{{corporate_client_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/password/v1/modification",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "password",
+                    "v1",
+                    "modification"
+                  ]
+                },
+                "description": "Add or modify password\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            },
+            {
+              "name": "queryPublicKey",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"hashValue\": \"{{password_hash}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_support_base_url}}/dsp/api/password/v1/public-key",
+                  "host": [
+                    "{{dsp_support_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "password",
+                    "v1",
+                    "public-key"
+                  ]
+                },
+                "description": "Query RSA public key\n\nRuntime route: dsp-ms-support/dsp-ms-support-api/src/main/java/com/hkbea/dsp/api/PasswordApi.java\n\nSource: dsp-ms-support/dsp-ms-support-api/src/main/resources/api/dsp-support-password-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DSP BFF direct",
+      "item": [
+        {
+          "name": "auth",
+          "item": [
+            {
+              "name": "getCorporateToken",
+              "request": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"client_assertion\": \"{{client_assertion}}\",\n  \"password_signature\": \"{{password_signature}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Message-Id",
+                    "value": "{{$guid}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Channel",
+                    "value": "HTH",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Client-Id",
+                    "value": "{{corporate_client_id}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Request-Time",
+                    "value": "{{request_time_ms}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Request-Sign",
+                    "value": "{{request_sign}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dsp_bff_base_url}}/dsp/api/bff/auth/v1/token",
+                  "host": [
+                    "{{dsp_bff_base_url}}"
+                  ],
+                  "path": [
+                    "dsp",
+                    "api",
+                    "bff",
+                    "auth",
+                    "v1",
+                    "token"
+                  ]
+                },
+                "description": "Get AccessToken\n\nRuntime route: dsp-ms-bff/dsp-ms-bff-api/src/main/java/com/hkbea/dsp/bff/api/CorporateTokenApi.java\n\nSource: dsp-ms-bff/dsp-ms-bff-api/src/main/resources/api/dsp-bff-local-logon-1.0.0.openapi.yaml\n\nUse test data and the matching SIT/UAT environment."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const hkt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);",
+          "const defaults = {settlement_date: hkt, from_date: hkt, to_date: hkt, host_date_yyyymmdd: hkt.replace(/-/g, \"\"), wmg_date_ddmmyyyy: hkt.split(\"-\").reverse().join(\"-\")};",
+          "for (const [key, value] of Object.entries(defaults)) {",
+          "    if (!pm.variables.get(key)) pm.variables.set(key, value);",
+          "}",
+          "if (!pm.variables.get(\"transaction_id\")) {",
+          "    pm.variables.set(\"transaction_id\", \"HTH\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\"));",
+          "}"
+        ]
+      }
+    }
+  ]
+}

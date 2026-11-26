@@ -1,0 +1,44 @@
+<job>
+<script language="VBScript.Encode" src="K:\PCONTROL\batch\zFuncWSH.vbe"/>
+<script language="VBScript">
+
+'*************************************************************************
+'* FTEBKUA1 : e-advice -   1 file from CDC to Host EBK
+'*
+'*************************************************************************
+
+	zJOB_START
+
+    	strCDCServer   = "CDCP"
+    	strMainFrame   = "TSOB"
+			strMode        = "A"
+	    CDCInwardFolder = "/project/CDC/ftp/snd/advice"
+
+'****** For production migration, to change 1st qualifier below to EBKP
+		  strHostFile    = "EBKQ"
+			strCdate = "%RDATE%"
+
+
+'******* No need to change CDC file prefix
+			strCDCFile = "EBKP"
+
+'******* To upload HOSTPC.HTHTOEBK.EBFPADV.B.D.date from CDC to Host
+
+			filePrefix = strCDCFile & "." & "HOSTPC.HTHTOEBK.EBFPADV.B.D20"
+
+
+			getFile1 = filePrefix & strCdate & ".TXT"
+			filePrefix = strHostFile & "." & "HOSTPC.HTHTOEBK.EBFPADV.B.D"
+			putFile1 = filePrefix & strCdate
+
+
+
+			zWSCPGet strCDCServer, CDCInwardFolder & "/" & getFile1, getFile1, strMode
+		    zCFTPut	 strMainFrame, getFile1, putFile1, strMode
+
+	zJOB_END
+
+
+
+</script>
+</job>

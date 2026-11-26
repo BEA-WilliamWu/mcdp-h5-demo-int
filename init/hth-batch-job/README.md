@@ -29,6 +29,8 @@
 
 ## 构建及部署
 
+04u AIX 的 MTB 和 eAdvice 部署包、数据库配置和验证命令见 [04u 部署说明](deploy/04u/README.md)。
+
 ```sh
 cd hth-batch-job
 mvn clean verify

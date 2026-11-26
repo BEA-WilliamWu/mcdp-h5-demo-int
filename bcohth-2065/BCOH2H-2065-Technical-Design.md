@@ -1,6 +1,6 @@
 # BCOH2H-2065 — HTH CHATS Payment Beneficiary Bank Verification
 
-Revision: 25 November 2026. PE3 debtor-address replacement baseline: `aa75dd7`. Includes the shared name segmentation and earlier enquiry alignment.
+Revised 26 November 2026 on DSP sync `8cf58a0`. Section 3 covers the beneficiary mapping for CHATS, TT, DR, FPS and On-us, including the outstanding IPE decisions.
 
 ## Shared enquiry alignment with BCOH2H-2126
 
@@ -15,16 +15,16 @@ Correct the confirmed CHATS instruction mapping and validation defects on the la
 Sources in `jira/BCOHTH-2065/`:
 
 - `10 - HTH Local & Overseas Payment Specification for HTH API (v0.8)-v42-20261117_060515.docx`: API field definitions, especially Table 5 rows 5, 22 and 24–27.
-- `hth-ipe 参数长度映射_API_RZ.xlsx`: IPE field limits, especially Sheet1 rows 4–5, 37, 40–47 and 91–94.
+- `hth-ipe 参数长度映射_API_RZ.xlsx`: IPE field limits, especially Sheet1 rows 4–5, 37, 40–47 and 91–101.
 - `[#BCOH2H-2065] HTH CHATS payment beneficiary bank verification.pdf`: story acceptance criteria.
 
-Confirmed decisions, updated on 18 November:
+Confirmed decisions through 26 November
 
 1. CHATS `paymentIdentification.endToEndId` carries the API caller's value instead of HTH's generated internal number; the earlier reference separation remains in place.
-2. Restore the 140-character CHATS creditor-name limit. Split the name sequentially into `depositAccountName1..4`, at most 35 characters per field. For a name of 35 characters or fewer, populate both Name1 and Name2 with the full name. This replaces the earlier temporary 35-character restriction and fixed Name2 value.
+2. Accept the full CHATS creditor name up to 140 characters. For the four EBK deposit fields sent through IPE, use one beneficiary name followed by three address slots, as specified in section 3.
 3. Retrieve the CHATS debtor address from PE3 PEECHJ7A using the debit account key. The user confirmed taking the first returned contact and omitting the address when a successful response contains no address. This supersedes the BCO party-preferences address lookup.
 
-On 20 November, the user additionally requested the same deposit-name segmentation for TT, DR, FPS and On-Us. These four types now populate `supplementaryData.chatsRemittance.depositAccountName1..4` using the existing CHATS rules. `PaymentRoutingPayload.chatsRemittance` builds the shared name fields. CHATS and the TT/DR base flow retain their other remittance fields; FPS and On-Us add a name-only `chatsRemittance` block. Existing validation applies to each payment type. IPE acceptance and use of these fields for FPS and On-Us require SIT verification.
+The 26 November revision supersedes the 20 November cross-channel name segmentation. Only CHATS supplies the four deposit name/address fields.
 
 ## 2. End-to-End ID and transaction reference
 
@@ -62,18 +62,41 @@ The supplied workbook still defines IPE `endToEndId` as 23–26 characters and a
 
 IPE must accept the agreed customer ID range and `NOTPROVIDED`, and confirm propagation to pacs.008 `PmtId/EndToEndId`. Changing HTH cannot remove IPE's deployed validation. The external IPE Swagger is retained as supplied rather than silently rewritten. `instructionId`, which maps to `PmtId/InstrId`, is not repurposed.
 
-## 3. Creditor-name segmentation and debtor address
+## 3. Creditor details and debtor address
 
 ### Creditor name
 
-For each payment type, the existing canonical name fields retain the full API name, up to the current 140-character validation limit. DR also retains its complete `directRemittance.chinaAccEnglishName`. All five payment types populate the legacy deposit-name fields with the following mapping:
+CHATS preserves the full API name in `creditor.name` and `creditorAccount.accountName`, and the supplied address in `creditor.postalAddress`. The BCO CHATS assembler (`CZChatsTfrInitAssembler`) maps the EBK deposit fields to a beneficiary name followed by up to three address lines. HTH sends the following fields under `supplementaryData.chatsRemittance` to IPE.
 
-| Name length | Name1 | Name2 | Name3 | Name4 |
-| --- | --- | --- | --- | --- |
-| 1–35 | Full name | Full name | Unset | Unset |
-| 36–70 | Characters 1–35 | Characters 36–70, as present | Unset | Unset |
-| 71–105 | Characters 1–35 | Characters 36–70 | Characters 71–105, as present | Unset |
-| 106–140 | Characters 1–35 | Characters 36–70 | Characters 71–105 | Characters 106–140, as present |
+| IPE field | CHATS source |
+| --- | --- |
+| `depositAccountName1` | API `creditor.creditorName` |
+| `depositAccountName2` | API `creditor.postalAddress.addressLine1` |
+| `depositAccountName3` | API `creditor.postalAddress.addressLine2` |
+| `depositAccountName4` | Blank. The HTH API accepts two address lines. |
+
+Each deposit field follows the BCO fixed-width rule. Trim leading and trailing whitespace, collapse internal whitespace to one space, take the first 35 characters and right-pad with spaces to 35. A missing line occupies its original slot as 35 spaces. Length limits on the full name and structured address lines remain 140 and 70 respectively.
+
+### Other payment types
+
+| Payment | BCO outbound rule | HTH submission to IPE |
+| --- | --- | --- |
+| TT | `CZTelegraphicTfrInitAssembler` writes the name and address lines 1–3 to `BenefNameAddr1–4`, each 35 characters. Slot 2 takes the raw first address line. With a blank second line, the remainder after character 35 of line 1 goes into slot 3 after whitespace normalization. An explicit second line takes precedence. Country travels separately. | Send the caller's full name, address lines and country in the existing structured fields. Keep the complete first line available to IPE. The Smart Routing TT block exposes no four beneficiary slots. |
+| DR | `CZChinaTfrInitAssembler` reads the English China account name from `ACCT_NAME_ENG`, fits it to 34 characters and sends 62 spaces for the Chinese name. | Keep the existing HTH English-name source, `creditor.creditorName`. In `supplementaryData.directRemittance`, truncate or right-pad `chinaAccEnglishName` to 34 and send 62 spaces in `chinaAccChineseName`. The full name remains available in the canonical payment fields. |
+| FPS | `CZI006Assembler` prefers the I005 customer name and falls back to the beneficiary name. For an account-number payee it combines that name with up to three address lines into I006 `Cdtr/Nm`, using up to 35 characters per component. For proxy payees it sends the name alone. | The current HTH flow accepts account-number payees. Pass the caller's name and available postal address separately as defined by the IPE input contract. A missing address omits the structured address from the submission. HTH does not receive an identified I005 customer-name result in this flow. |
+| On-us | `CZFundsTfrInitAssembler` identifies the credit account in TFR01. `CZTFR02Assembler` forwards the account holder name from the TFR01 reply when confirming the transfer. | Send the credit account and existing caller-supplied name. The BG3 long English account name is used for name matching. Its equivalence to the TFR01 confirmation name has not been established. |
+
+TT and DR retain the pre-existing `chatsRemittance.pinCnt = 0` control value. Their four deposit fields are absent. FPS and On-us omit the legacy block entirely.
+
+### Questions for IPE and SIT
+
+| Payment | Evidence needed |
+| --- | --- |
+| CHATS | Trace one submitted name and two distinct address lines through IPE and EBK into the raw pacs.008. Confirm the first two `Cdtr/PstlAdr/AdrLine` values and handling of a blank fourth slot. |
+| TT | Which IPE inputs feed EBK `BenefNameAddr1–4`, and which system implements the 35-character continuation? Compare a long first address line with line 2 absent, then present. The separate WMG workflow does not establish the IPE mapping. |
+| DR | Confirm in an EBK trace that IPE passes the 34/62-character fields to the designated China account fields, including a blank Chinese name. Confirm whether designated payees require a host-sourced English name. |
+| FPS | Does IPE obtain I005 `CUST_FULLNM` and construct I006 `Cdtr/Nm` from the structured payee fields? If HTH must supply the composite, identify the IPE target and the source of the resolved name. |
+| On-us | Does IPE use the TFR01 response directly in TFR02? If HTH must supply the confirmed holder name, identify both the authoritative host response field and the IPE input. |
 
 On baseline `9c25499`, a CHATS creditor name longer than 140 characters returns `500164` (`CREDITORNAME_LENGTH_EXCEPTION`). The explicit-CHATS entry check and selected-CHATS service check both use 140. Existing mandatory-name and character-set validation remains in place. Other payment types retain their existing rules.
 
@@ -121,15 +144,16 @@ Optional empty address lines/town remain accepted. An absent address object rema
 | --- | --- |
 | `PaymentModelConvert.java` | Separate CHATS customer End-to-End ID from the batch ID; apply the confirmed default; reapply identifiers after routing while retaining other channels' behavior. |
 | `DebtorAddressService.java` | Query PEECHJ7A and map the first contact to an IPE debtor postal address for all five payment types. |
-| `ChatsPaymentService.java` | Use the shared debtor address lookup and deposit-name builder with the CHATS remittance flags. |
-| `PaymentRoutingPayload.java` | Build Name1..4 using the existing CHATS segmentation and short-name duplication rule. |
-| `OverseasPaymentService.java` | Apply the shared name builder and debtor address lookup to TT and DR. |
-| `FpsPaymentService.java`, `OnUsPaymentService.java` | Populate the deposit-name fields and retrieve the debtor address before the limit update. |
+| `ChatsPaymentService.java` | Map the CHATS beneficiary name and address into the four EBK deposit fields. Apply the shared debtor address lookup and CHATS remittance flags. |
+| `PaymentRoutingPayload.java` | Build the four CHATS deposit fields and format fixed-width EBK names. |
+| `OverseasPaymentService.java` | Keep the TT/DR PIN control and shared debtor-address enquiry. Omit CHATS beneficiary slots. |
+| `FpsPaymentService.java`, `OnUsPaymentService.java` | Remove the name-only CHATS block. FPS accepts an absent creditor postal address. |
+| `DrPaymentService.java` | Format the China account names in the dedicated IPE direct-remittance block. |
 | `PaymentValidationSupport.java` | Restore the CHATS name maximum to 140; retain v0.8 town, address-character and customer-ID checks. |
 | `PaymentServiceImpl.java` | Retain CHATS validation, routing identifiers and batch enquiry; share the confirmed five-type requested-execution-date mapping with 2126. |
 | `Pe3Api.java`, `Peechj7a*.java`, `api/pe3/peechj7a.openapi.yaml` | Add the PE3 contact enquiry and generated wire models using the existing PE3 client. |
 | `PartyPreferenceMapper.java` / `.xml`, `PartyPostalAddress.java` | Remove the obsolete BCO address query and DTO. |
-| Payment unit tests | Verify name segmentation/duplication and boundaries, debtor-address packing/missing/error cases, as well as existing reference, routing, enquiry and payment validation behavior. |
+| Payment unit tests | Verify the distinct submission fields for all five channels, name and address boundaries, debtor-address packing/missing/error cases, as well as existing reference, routing, enquiry and payment validation behavior. |
 
 No database migration, public JSON field addition/renaming or generated-model change is required. Conditional behavior is implemented in service code; shared API types and the supplied external IPE contract are not regenerated or modified in this correction. The earlier temporary 35-character API-name restriction is removed by this revision.
 
@@ -141,16 +165,18 @@ Other 2065 integration dependencies remain:
 
 - To confirm the new PE3 endpoint in SIT, submit one CHATS payment. Find the INFO entry `PEECHJ7A enquiry completed` with the same `messageId` and verify `returnCode=00`. A successful enquiry with `contactCount=0` also passes this endpoint check.
 - Confirm outbound debtor-account formatting, agent mapping, member-ID resolution and charge-bearer conversion.
-- Confirm deployed IPE accepts the agreed four-part legacy-name mapping, including duplicated Name1/Name2 for short names, and propagates debtor address into pacs.008.
+- Confirm IPE forwards the four CHATS deposit fields to EBK in order. Verify the resulting creditor address in the raw pacs.008 and the PE3 debtor address separately.
 - Confirm the remittance array/element length definition and downstream message verification/failure reporting.
 
 SIT should capture the original API request, HTH-to-IPE routing/submission payloads and actual pacs.008 XML. Verify a short customer ID, 35-character ID, omitted ID (`NOTPROVIDED`), repeated customer IDs with distinct HTH `txnRef` values, explicit/automatic CHATS routing, 35/36-character names and 35/36-character towns. Verify enquiry after submission uses the generated reference and obtains the correct single-payment batch result. Include an older CHATS record as a compatibility case.
 
-SIT should additionally submit creditor names of 35, 36, 70, 71, 105, 106 and 140 characters and inspect all four outbound fields. For the existing pacs.008 address check, use the same CHATS payment with a debtor account known to have an address. Compare the address submitted to IPE with `Dbtr/PstlAdr` in the raw XML. The service tests cover empty addresses and host errors.
+For CHATS SIT, use a distinct beneficiary name and two recognisable address lines. Check the four IPE/EBK fields, then compare the first two `Cdtr/PstlAdr/AdrLine` values in the raw pacs.008 with the corresponding address lines. Include a name or address longer than 35 characters and an omitted address case. For an account with a PE3 address, verify `Dbtr/PstlAdr` separately.
 
 Real IPE acceptance, database integration, pacs.008 generation and transmission are not established by mocked unit tests.
 
 ## 6. Verification and delivery
+
+The 26 November Java 21 offline Maven clean payment regression passed 288 tests with zero failures, errors or skips, including the five payment submission suites and the PE3 contract test. Coverage includes CHATS slot order and whitespace, TT preservation of a long first line, DR short/34/35/140-character English names and the blank Chinese field, FPS submissions with and without an address, and On-us submission with the caller name. The tests inspect the HTH submission to a mocked IPE. Live IPE, EBK and payment-network output require the SIT checks in section 3.
 
 Payment service tests simulate a PE3 client failure for each of the five types and verify submission to IPE with the debtor address omitted. CHATS tests also cover malformed replies, header and return-code errors, oversized address lines, omission from serialized JSON and an IPE rejection after a PE3 failure. PE3 and IPE are mocked.
 

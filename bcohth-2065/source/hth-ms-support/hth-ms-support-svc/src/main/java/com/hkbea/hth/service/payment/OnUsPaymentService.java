@@ -203,7 +203,6 @@ public class OnUsPaymentService {
                 null, detail.memberId, null, null, null, null, null));
 
         SupplementaryData supplementaryData = new SupplementaryData();
-        supplementaryData.setChatsRemittance(PaymentRoutingPayload.chatsRemittance(detail.creditorName));
         supplementaryData.setDebitInternalAccount(detail.debitInternal);
         supplementaryData.setCreditInternalAccount(detail.creditInternal);
         supplementaryData.setProductType(detail.productCode);

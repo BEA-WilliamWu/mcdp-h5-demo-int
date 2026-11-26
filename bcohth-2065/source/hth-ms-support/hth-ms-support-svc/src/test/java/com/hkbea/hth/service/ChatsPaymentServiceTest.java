@@ -52,9 +52,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -64,7 +61,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -134,9 +130,28 @@ class ChatsPaymentServiceTest {
 
     private MockedStatic<LocalDateTime> localDateTimeMock;
 
+    private static void setField(Object target, String name, Object value) {
+        try {
+            Class<?> clazz = target.getClass();
+            while (clazz != null) {
+                try {
+                    var field = clazz.getDeclaredField(name);
+                    field.setAccessible(true);
+                    field.set(target, value);
+                    return;
+                } catch (NoSuchFieldException e) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException(name);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(chatsPaymentService, "debtorAddressService",
+        setField(chatsPaymentService, "debtorAddressService",
                 new DebtorAddressService(pe3Api, headers));
         // Mock LocalDateTime.now() to return a time within CHATS service window (Mon-Fri 9:00-17:00)
         localDateTimeMock = Mockito.mockStatic(LocalDateTime.class, Mockito.CALLS_REAL_METHODS);
@@ -442,8 +457,10 @@ class ChatsPaymentServiceTest {
         assertEquals("", chatsRemittance.getChatAcTpCode());
         assertEquals("Y", chatsRemittance.getPrntAdvInd());
         assertEquals("y", chatsRemittance.getLmInd());
-        assertEquals("CHATS BENEFICIARY", chatsRemittance.getDepositAccountName1());
-        assertEquals("CHATS BENEFICIARY", chatsRemittance.getDepositAccountName2());
+        assertEquals("CHATS BENEFICIARY" + " ".repeat(18), chatsRemittance.getDepositAccountName1());
+        assertEquals("Flat 12A 88 Queens Road" + " ".repeat(12), chatsRemittance.getDepositAccountName2());
+        assertEquals(" ".repeat(35), chatsRemittance.getDepositAccountName3());
+        assertEquals(" ".repeat(35), chatsRemittance.getDepositAccountName4());
 
         ArgumentCaptor<PaymentPayoutRecord> insertCaptor =
                 ArgumentCaptor.forClass(PaymentPayoutRecord.class);
@@ -650,12 +667,14 @@ class ChatsPaymentServiceTest {
     }
 
     @Test
-    void creditorNameIsPreservedAcrossDepositNameSegments() {
+    void ebkDepositFieldsUseNameAndAddressIndependently() {
         for (int length : new int[]{1, 34, 35, 36, 69, 70, 71, 104, 105, 106, 139, 140}) {
             reset(payemtRoutApi);
             LocalPayment input = buildChatsPayment(Currency.HKD);
             String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
             input.getCreditor().setCreditorName(name);
+            input.getCreditor().getPostalAddress().setAddressLine1(null);
+            input.getCreditor().getPostalAddress().setAddressLine2("  FLOOR   TWO  ");
             BatchRoutingCreditTransferRequest request = PaymentModelConvert.toRoutingRequest(input);
             when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -666,12 +685,10 @@ class ChatsPaymentServiceTest {
             assertEquals(name, txn.getCreditor().getName());
             assertEquals(name, txn.getCreditorAccount().getAccountName());
             var remittance = txn.getSupplementaryData().getChatsRemittance();
-            assertEquals(name.substring(0, Math.min(35, length)), remittance.getDepositAccountName1());
-            assertEquals(length <= 35 ? name : name.substring(35, Math.min(70, length)),
-                    remittance.getDepositAccountName2());
-            assertEquals(length <= 70 ? null : name.substring(70, Math.min(105, length)),
-                    remittance.getDepositAccountName3());
-            assertEquals(length <= 105 ? null : name.substring(105), remittance.getDepositAccountName4());
+            assertEquals(String.format("%-35.35s", name), remittance.getDepositAccountName1());
+            assertEquals(" ".repeat(35), remittance.getDepositAccountName2());
+            assertEquals("FLOOR TWO" + " ".repeat(26), remittance.getDepositAccountName3());
+            assertEquals(" ".repeat(35), remittance.getDepositAccountName4());
             verify(payemtRoutApi).submit(request);
         }
     }
@@ -697,106 +714,127 @@ class ChatsPaymentServiceTest {
                         .peechj7a(new Peechj7aRecord().ehj7aOutput(output))));
     }
 
-    @ParameterizedTest
-    @CsvSource({"1H,HK,CENTRAL", "2H,HK,CENTRAL", "1C,CN,SHENZHEN",
-            "2C,MO,SHENZHEN", "1I,US,SHENZHEN", "2I,GB,SHENZHEN"})
-    void structuredCountryAndTownFollowContactType(String type, String country, String expectedTown) {
-        var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("FIRST LINE")
-                .ehj7aCodCountryAdrO(" " + country.toLowerCase(java.util.Locale.ROOT) + " ")
-                .ehj7aCodCtryValO("CA").ehj7aDesDistrictO(" CENTRAL ")
-                .ehj7aOvrCtyDesO(" SHENZHEN ").ehj7aDesCityO("FALLBACK CITY");
-        var response = contactResponse(source);
-        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
-                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(" " + type + " ");
-        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void structuredCountryAndTownFollowContactType() {
+        String[][] cases = {
+                {"1H", "HK", "CENTRAL"},
+                {"2H", "HK", "CENTRAL"},
+                {"1C", "CN", "SHENZHEN"},
+                {"2C", "MO", "SHENZHEN"},
+                {"1I", "US", "SHENZHEN"},
+                {"2I", "GB", "SHENZHEN"}
+        };
+        for (String[] tc : cases) {
+            String type = tc[0];
+            String country = tc[1];
+            String expectedTown = tc[2];
 
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("FIRST LINE")
+                    .ehj7aCodCountryAdrO(" " + country.toLowerCase(java.util.Locale.ROOT) + " ")
+                    .ehj7aCodCtryValO("CA").ehj7aDesDistrictO(" CENTRAL ")
+                    .ehj7aOvrCtyDesO(" SHENZHEN ").ehj7aDesCityO("FALLBACK CITY");
+            var response = contactResponse(source);
+            response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                    .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(" " + type + " ");
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        assertEquals(country, address.getCountry());
-        assertEquals(expectedTown, address.getTownName());
-        assertEquals("FIRST LINE", address.getAddressLine1());
+            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+
+            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+            assertEquals(country, address.getCountry());
+            assertEquals(expectedTown, address.getTownName());
+            assertEquals("FIRST LINE", address.getAddressLine1());
+        }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"40", "50", "60", "70", "80", "90", "00", "ZZ", "Z0", "Z1"})
-    void unstructuredCountryUsesCountryValueField(String type) {
-        var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("CN")
-                .ehj7aCodCtryValO(" us ").ehj7aDesCityO(" NEW YORK ")
-                .ehj7aOvrCtyDesO("UNUSED CITY").ehj7aDesDistrictO("UNUSED DISTRICT");
-        var response = contactResponse(source);
-        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
-                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type.toLowerCase(java.util.Locale.ROOT));
-        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void unstructuredCountryUsesCountryValueField() {
+        String[] types = {"40", "50", "60", "70", "80", "90", "00", "ZZ", "Z0", "Z1"};
+        for (String type : types) {
+            var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("CN")
+                    .ehj7aCodCtryValO(" us ").ehj7aDesCityO(" NEW YORK ")
+                    .ehj7aOvrCtyDesO("UNUSED CITY").ehj7aDesDistrictO("UNUSED DISTRICT");
+            var response = contactResponse(source);
+            response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                    .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type.toLowerCase(java.util.Locale.ROOT));
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        assertNotNull(address);
-        assertEquals("US", address.getCountry());
-        assertEquals("NEW YORK", address.getTownName());
-        assertNull(address.getAddressLine1());
+            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+            assertNotNull(address);
+            assertEquals("US", address.getCountry());
+            assertEquals("NEW YORK", address.getTownName());
+            assertNull(address.getAddressLine1());
+        }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"1H", "2H", "1C", "2C", "1I", "2I", "ZZ"})
-    void missingPreferredTownFallsBackToGenericCity(String type) {
-        var source = new Peechj7aAddressO().ehj7aDesDistrictO(" ")
-                .ehj7aOvrCtyDesO("").ehj7aDesCityO(" FALLBACK CITY ");
-        var response = contactResponse(source);
-        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
-                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
-        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void missingPreferredTownFallsBackToGenericCity() {
+        String[] types = {"1H", "2H", "1C", "2C", "1I", "2I", "ZZ"};
+        for (String type : types) {
+            var source = new Peechj7aAddressO().ehj7aDesDistrictO(" ")
+                    .ehj7aOvrCtyDesO("").ehj7aDesCityO(" FALLBACK CITY ");
+            var response = contactResponse(source);
+            response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                    .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        assertEquals("FALLBACK CITY", address.getTownName());
-        assertNull(address.getCountry());
+            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+            assertEquals("FALLBACK CITY", address.getTownName());
+            assertNull(address.getCountry());
+        }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"HKG", "ZZ", "1", "123", "", "   "})
-    void unrecognizedCountryIsOmittedAndPaymentContinues(String code) {
-        var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("ADDRESS")
-                .ehj7aCodCountryAdrO(code).ehj7aCodCtryValO("US");
-        var response = contactResponse(source);
-        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
-                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO("1H");
-        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void unrecognizedCountryIsOmittedAndPaymentContinues() {
+        String[] codes = {"HKG", "ZZ", "1", "123", "", "   "};
+        for (String code : codes) {
+            reset(payemtRoutApi);
+            var source = new Peechj7aAddressO().ehj7aExtAdrLin1O("ADDRESS")
+                    .ehj7aCodCountryAdrO(code).ehj7aCodCtryValO("US");
+            var response = contactResponse(source);
+            response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                    .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO("1H");
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        var payment = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            var payment = chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-        assertEquals(Payment.StatusEnum.SUCCESS, payment.getStatus());
-        assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress().getCountry());
-        verify(payemtRoutApi).submit(request);
+            assertEquals(Payment.StatusEnum.SUCCESS, payment.getStatus());
+            assertNull(request.getTransactions().getFirst().getDebtor().getPostalAddress().getCountry());
+            verify(payemtRoutApi).submit(request);
+        }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"", " ", "X", "99"})
-    void unknownContactTypeUsesGenericCityAndOmitsCountry(String type) {
-        var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("HK").ehj7aCodCtryValO("US")
-                .ehj7aDesCityO("GENERIC CITY").ehj7aDesDistrictO("UNUSED DISTRICT").ehj7aOvrCtyDesO("UNUSED CITY");
-        var response = contactResponse(source);
-        response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
-                .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
-        when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void unknownContactTypeUsesGenericCityAndOmitsCountry() {
+        String[] types = {"", " ", "X", "99"};
+        for (String type : types) {
+            var source = new Peechj7aAddressO().ehj7aCodCountryAdrO("HK").ehj7aCodCtryValO("US")
+                    .ehj7aDesCityO("GENERIC CITY").ehj7aDesDistrictO("UNUSED DISTRICT").ehj7aOvrCtyDesO("UNUSED CITY");
+            var response = contactResponse(source);
+            response.getDfhcommarea().getQaechcc().getPeechj7a().getEhj7aOutput()
+                    .getEhj7aContactO().getFirst().setEhj7aTypCntaadrO(type);
+            when(pe3Api.getCustomerContactInfo(any())).thenReturn(response);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
+            chatsPaymentService.processPayment(buildChatsPayment(Currency.HKD), request);
 
-        var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
-        assertEquals("GENERIC CITY", address.getTownName());
-        assertNull(address.getCountry());
+            var address = request.getTransactions().getFirst().getDebtor().getPostalAddress();
+            assertEquals("GENERIC CITY", address.getTownName());
+            assertNull(address.getCountry());
+        }
     }
 
     @Test
@@ -1043,7 +1081,9 @@ class ChatsPaymentServiceTest {
         assertEquals(name, txn.getCreditor().getName());
         assertEquals(name, txn.getCreditorAccount().getAccountName());
         assertEquals(name, txn.getSupplementaryData().getChatsRemittance().getDepositAccountName1());
-        assertEquals(name, txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
+        assertEquals("A".repeat(35), txn.getSupplementaryData().getChatsRemittance().getDepositAccountName2());
+        assertEquals("B".repeat(35), txn.getSupplementaryData().getChatsRemittance().getDepositAccountName3());
+        assertEquals(" ".repeat(35), txn.getSupplementaryData().getChatsRemittance().getDepositAccountName4());
         assertEquals("A".repeat(70), txn.getCreditor().getPostalAddress().getAddressLine1());
         assertEquals("B".repeat(70), txn.getCreditor().getPostalAddress().getAddressLine2());
         assertEquals("T".repeat(35), txn.getCreditor().getPostalAddress().getTownName());
@@ -1093,6 +1133,10 @@ class ChatsPaymentServiceTest {
         assertEquals(Payment.StatusEnum.SUCCESS, chatsPaymentService.processPayment(input, request).getStatus());
 
         assertNull(request.getTransactions().getFirst().getCreditor().getPostalAddress());
+        var remittance = request.getTransactions().getFirst().getSupplementaryData().getChatsRemittance();
+        assertEquals(" ".repeat(35), remittance.getDepositAccountName2());
+        assertEquals(" ".repeat(35), remittance.getDepositAccountName3());
+        assertEquals(" ".repeat(35), remittance.getDepositAccountName4());
         var captured = ArgumentCaptor.forClass(PaymentPayoutRecord.class);
         verify(paymentPayoutRecordMapper).insert(captured.capture());
         assertNull(captured.getValue().getCreditAddressLine1());

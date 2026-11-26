@@ -214,8 +214,7 @@ public abstract class OverseasPaymentService {
                 PaymentRoutingPayload.parseCompanyCode(partyAccount == null ? null : partyAccount.getCompanyCode()),
                 productCode));
 
-        ChatsRemittance chatsRemittance =
-                PaymentRoutingPayload.chatsRemittance(localPayment.getCreditor().getCreditorName());
+        ChatsRemittance chatsRemittance = new ChatsRemittance();
         chatsRemittance.setPinCnt(0);
 
         SupplementaryData supplementaryData = new SupplementaryData();

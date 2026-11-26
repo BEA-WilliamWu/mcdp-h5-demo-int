@@ -112,20 +112,25 @@ final class PaymentRoutingPayload {
         return target;
     }
 
-    /** Builds legacy name fields with the existing CHATS short-name duplication rule. */
-    static ChatsRemittance chatsRemittance(String creditorName) {
-        ChatsRemittance chatsRemittance =
-                new ChatsRemittance();
-        chatsRemittance.setDepositAccountName1(creditorName.substring(0, Math.min(35, creditorName.length())));
-        chatsRemittance.setDepositAccountName2(creditorName.length() <= 35
-                ? creditorName : creditorName.substring(35, Math.min(70, creditorName.length())));
-        if (creditorName.length() > 70) {
-            chatsRemittance.setDepositAccountName3(creditorName.substring(70, Math.min(105, creditorName.length())));
-        }
-        if (creditorName.length() > 105) {
-            chatsRemittance.setDepositAccountName4(creditorName.substring(105));
-        }
-        return chatsRemittance;
+    /** The CHATS EBK request represents a beneficiary as one name followed by three fixed-width address lines. */
+    static ChatsRemittance chatsRemittance(String name, com.hkbea.hth.model.PostalAddress address) {
+        ChatsRemittance remittance = new ChatsRemittance();
+        remittance.setDepositAccountName1(ebkDepositField(name));
+        remittance.setDepositAccountName2(ebkDepositField(address == null ? null : address.getAddressLine1()));
+        remittance.setDepositAccountName3(ebkDepositField(address == null ? null : address.getAddressLine2()));
+        remittance.setDepositAccountName4(ebkDepositField(null)); // The HTH API accepts two address lines.
+        return remittance;
+    }
+
+    private static String ebkDepositField(String value) {
+        String normalized = value == null ? "" : value.trim().replaceAll("\\s+", " ");
+        return ebkFixedWidth(normalized, 35);
+    }
+
+    static String ebkFixedWidth(String value, int width) {
+        return value.length() >= width
+                ? value.substring(0, width)
+                : value + " ".repeat(width - value.length());
     }
 
     /** Corporate debtor block. */

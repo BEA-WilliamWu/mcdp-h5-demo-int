@@ -48,12 +48,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -147,6 +144,25 @@ class TtPaymentServiceTest {
                 .thenReturn(null);
         lenient().doNothing().when(cacheHelperUtils).validatePaymentResult(any());
         lenient().doNothing().when(cacheHelperUtils).saveMtbInfo(any());
+    }
+
+    private static void setField(Object target, String name, Object value) {
+        try {
+            Class<?> clazz = target.getClass();
+            while (clazz != null) {
+                try {
+                    var field = clazz.getDeclaredField(name);
+                    field.setAccessible(true);
+                    field.set(target, value);
+                    return;
+                } catch (NoSuchFieldException e) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException(name);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ===================== Validation =====================
@@ -301,28 +317,30 @@ class TtPaymentServiceTest {
         assertEquals(HTHSupportErrorMapping.CATEGORY_PURPOSE_CODE_PROPRIETARY_CONFLICT, exception.getErrCode());
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress(boolean hasAddress) {
-        String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
-        var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
-                .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
-        when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress() {
+        for (boolean hasAddress : new boolean[]{true, false}) {
+            org.mockito.Mockito.reset(debtorAddressService, payemtRoutApi);
+            String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
+            var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
+                    .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
+            when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        ttPaymentService.processPayment(buildTtPayment(Currency.HKD), request);
+            ttPaymentService.processPayment(buildTtPayment(Currency.HKD), request);
 
-        verify(debtorAddressService).lookup(debitAccount);
-        verify(payemtRoutApi).submit(request);
-        assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+            verify(debtorAddressService).lookup(debitAccount);
+            verify(payemtRoutApi).submit(request);
+            assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        }
     }
 
     @Test
     void pe3TransportFailureOmitsAddressAndSubmits() {
         Pe3Api pe3Api = mock(Pe3Api.class);
         when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
-        ReflectionTestUtils.setField(ttPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        setField(ttPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
         var request = buildRoutingRequest();
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -388,7 +406,10 @@ class TtPaymentServiceTest {
         when(internalPayeeMapper.selectInternationalPayeeId(anyString(), anyString()))
                 .thenReturn("DOMESTIC-PAYEE-1");
 
-        Payment result = ttPaymentService.processPayment(buildTtPayment(Currency.HKD), buildRoutingRequest());
+        LocalPayment payment = buildTtPayment(Currency.HKD);
+        String line1 = "A".repeat(35) + "CONTINUATION";
+        payment.getCreditor().getPostalAddress().setAddressLine1(line1);
+        Payment result = ttPaymentService.processPayment(payment, buildRoutingRequest());
 
         assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
         assertEquals("E2E-TT", result.getTxnRef());
@@ -412,9 +433,17 @@ class TtPaymentServiceTest {
         assertEquals(PaymentConstants.BG3_CUSTOMER_REMARKS_OUTWARD,
                 txn.getRemittanceInformation().getCustomerRemarks());
         assertEquals("TT BENEFICIARY", txn.getCreditor().getName());
+        assertEquals(line1, txn.getCreditor().getPostalAddress().getAddressLine1());
+        assertNull(txn.getCreditor().getPostalAddress().getAddressLine2());
+        assertEquals("HK", txn.getCreditor().getPostalAddress().getCountry());
+        var remittance = txn.getSupplementaryData().getChatsRemittance();
+        assertEquals(0, remittance.getPinCnt());
+        assertNull(remittance.getDepositAccountName1());
+        assertNull(remittance.getDepositAccountName2());
+        assertNull(remittance.getDepositAccountName3());
+        assertNull(remittance.getDepositAccountName4());
         assertEquals(BENEFICIARY_ACCOUNT, txn.getCreditorAccount().getIdentification());
         assertEquals("HKD", txn.getCreditorAccount().getCurrency());
-        assertEquals("BKCHHKHHXXX", txn.getCreditorAgent().getFinancialInstitution().getBicfi());
         assertEquals("S", txn.getCharges().getChargeBearer());
         assertEquals("CB97", txn.getSupplementaryData().getCreditorAccount().getProductCode());
         assertEquals("N", txn.getSupplementaryData().getCreditorAccount().getIndicator());

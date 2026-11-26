@@ -172,27 +172,31 @@ public class FpsPaymentService {
                 PaymentConstants.PAYER_ACCOUNT_TYPE_CSA,
                 localPayment.getFromAccount().getCurrency(), null, productCode));
 
+        var postal = localPayment.getCreditor().getPostalAddress();
+        String addressLine1 = postal == null ? null : postal.getAddressLine1();
+        String addressLine2 = postal == null ? null : postal.getAddressLine2();
+        String townName = postal == null ? null : postal.getTownName();
+        String country = postal == null ? null : postal.getCountry();
         String creditorName = localPayment.getCreditor().getCreditorName();
         txn.setCreditor(PaymentRoutingPayload.creditor(
                 com.hkbea.hth.ipe.model.Creditor.TypeEnum.ACCOUNT, creditorName,
                 localPayment.getToAccount().getMobileNumber(),
                 localPayment.getToAccount().getEmailAddress(),
-                localPayment.getCreditor().getPostalAddress().getAddressLine1(),
-                localPayment.getCreditor().getPostalAddress().getAddressLine2(),
-                localPayment.getCreditor().getPostalAddress().getTownName(),
-                localPayment.getCreditor().getPostalAddress().getCountry()));
+                addressLine1,
+                addressLine2,
+                townName,
+                country));
         txn.setCreditorAccount(PaymentRoutingPayload.creditorAccount(
                 creditorName, localPayment.getToAccount().getAccountNumber(),
                 localPayment.getTxnAmount().getCurrency().toString(), null, FPS_PAYEE_ID_TYPE_ACCOUNT,
-                localPayment.getCreditor().getPostalAddress().getCountry(), null));
+                country, null));
 
         String memberId = localPayment.getCreditorAgent().getFinancialInstitutionId().getClearingSystemMemberId();
         txn.setCreditorAgent(PaymentRoutingPayload.creditorAgent(null, memberId, null,
-                localPayment.getCreditor().getPostalAddress().getAddressLine1(),
-                localPayment.getCreditor().getPostalAddress().getAddressLine2(), null, null));
+                addressLine1,
+                addressLine2, null, null));
 
         SupplementaryData supplementaryData = new SupplementaryData();
-        supplementaryData.setChatsRemittance(PaymentRoutingPayload.chatsRemittance(creditorName));
         //BCO hardcode CCB
         supplementaryData.setPaymentSource(FPS_PAYMENT_SOURCE);
         //ACCTNO-->FEE , EMAIL-->TGT, FPSID-->ALL, MOBILE-->TGT

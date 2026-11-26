@@ -13,6 +13,7 @@ import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.PostalAddress;
 import com.hkbea.hth.model.Purpose;
+import com.hkbea.hth.model.SchmeName;
 import com.hkbea.hth.service.PaymentServiceImpl;
 import com.hkbea.hth.utils.CurrencyUtils;
 
@@ -105,7 +106,7 @@ public final class PaymentValidationSupport {
      */
     public static void validateOnUsRules(LocalPayment payment) {
         validateOnUsCreditorAccount(payment);
-        validateCategoryPurpose(payment, false);
+        validateCategoryPurpose(payment, true);
         validatePurpose(payment, false);
         validateOnusBicfiAndMemberId(payment);
         validateIntermediaryAgentMustBeBlank(payment);
@@ -120,7 +121,7 @@ public final class PaymentValidationSupport {
      * identifier, no intermediary agent and mandatory chargeBearer.
      */
     public static void validateChatsRules(LocalPayment payment) {
-        validateCategoryPurpose(payment, false);
+        validateCategoryPurpose(payment, true);
         validatePurpose(payment, false);
         validateChatsIpeAddress(payment);
         validateChatsCreditorName(payment);
@@ -138,7 +139,7 @@ public final class PaymentValidationSupport {
      * proprietary format.
      */
     public static void validateFpsRules(LocalPayment payment) {
-        validateCategoryPurpose(payment, false);
+        validateCategoryPurpose(payment, true);
         validatePurpose(payment, false);
         validateFpsBicfiAndMemberId(payment);
 //        validateEndToEndId(payment, true);
@@ -155,8 +156,8 @@ public final class PaymentValidationSupport {
     public static void validateTtRules(LocalPayment payment) {
         validateCategoryPurpose(payment, true);
         validatePurpose(payment, true);
-        validateChatsAddress(payment);
-        validateChatsCountryCode(payment);
+        validateTtAddress(payment);
+        validateTtCountryCode(payment);
         validateTtBicfiAndMemberId(payment);
         validateTtCreditorName(payment.getCreditor() == null
                 ? null : payment.getCreditor().getCreditorName());
@@ -172,7 +173,7 @@ public final class PaymentValidationSupport {
      * and proprietary format.
      */
     public static void validateDrRules(LocalPayment payment) {
-        validateCategoryPurpose(payment, false);
+        validateCategoryPurpose(payment, true);
         validatePurpose(payment, false);
         validateDrBicfiAndMemberId(payment);
         validateDrCreditorName(payment.getCreditor() == null
@@ -237,7 +238,7 @@ public final class PaymentValidationSupport {
      * Legacy address rule used by TT: addressLine1 (<=70) and townName (<=35) are both
      * mandatory and limited to the SWIFT-style character set.
      */
-    public static void validateChatsAddress(LocalPayment payment) {
+    public static void validateTtAddress(LocalPayment payment) {
         String addressLine1 = payment.getCreditor() == null || payment.getCreditor().getPostalAddress() == null
                 ? null : payment.getCreditor().getPostalAddress().getAddressLine1();
         String townName = payment.getCreditor() == null || payment.getCreditor().getPostalAddress() == null
@@ -253,7 +254,7 @@ public final class PaymentValidationSupport {
     /**
      * CHATS payee country must be a 2-letter uppercase ISO code.
      */
-    public static void validateChatsCountryCode(LocalPayment payment) {
+    public static void validateTtCountryCode(LocalPayment payment) {
         if (LocalPayment.PaymentTypeEnum.TT.equals(payment.getPaymentType())) {
             String country = payment.getCreditor() == null || payment.getCreditor().getPostalAddress() == null
                     ? null : payment.getCreditor().getPostalAddress().getCountry();
@@ -326,6 +327,7 @@ public final class PaymentValidationSupport {
         }
         if (StringUtils.isBlank(memberId)) {
             payment.getCreditorAgent().getFinancialInstitutionId().setClearingSystemMemberId(bankCode);
+            payment.getCreditorAgent().getFinancialInstitutionId().setBicfi(null);
         }
     }
 
@@ -497,6 +499,96 @@ public final class PaymentValidationSupport {
         }
     }
 
+    public static void validateOptionalFieldsPreRoute(LocalPayment payment) {
+        validateAddressLine1AndTownNameIfProvided(payment);
+        validateCountryFormatIfProvided(payment);
+        validateIntermediaryBicfiFormatIfProvided(payment);
+        validateCreditorAgentIdentifiersPreRoute(payment);
+        validateDebtorAccountCurrencyFormat(payment);
+        validateCreditorAccountSchmeNameIfProvided(payment);
+        validateCategoryPurposeFormatIfProvided(payment);
+        validatePurposeFormatIfProvided(payment);
+    }
+    public static void validateCreditorAccountSchmeNameIfProvided(LocalPayment payment) {
+        SchmeName schmeName = payment.getToAccount() == null
+                ? null : payment.getToAccount().getSchmeName();
+        String proprietary = schmeName == null ? null : schmeName.getProprietary();
+        if (StringUtils.isNotBlank(proprietary) && proprietary.length() != 4) {
+            throw new ParameterException(HTHSupportErrorMapping.CREDITOR_ACCOUNT_SCHEME_PROPRIETARY_INVALID);
+        }
+    }
+    public static void validateAddressLine1AndTownNameIfProvided(LocalPayment payment) {
+        PostalAddress address = payment.getCreditor() == null
+                ? null : payment.getCreditor().getPostalAddress();
+        if (address == null) {
+            return;
+        }
+        if (StringUtils.isNotBlank(address.getAddressLine1())
+                && !address.getAddressLine1().matches(CHATS_ADDRESS_REGEX)) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYEE_ADDRESS_LINE1_MISSING_OR_INVALID);
+        }
+        if (StringUtils.isNotBlank(address.getTownName())
+                && !address.getTownName().matches(CHATS_TOWN_NAME_REGEX)) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYEE_TOWN_NAME_MISSING_OR_INVALID);
+        }
+    }
+    public static void validateCountryFormatIfProvided(LocalPayment payment) {
+        PostalAddress address = payment.getCreditor() == null
+                ? null : payment.getCreditor().getPostalAddress();
+        String country = address == null ? null : address.getCountry();
+        if (StringUtils.isNotBlank(country) && !country.matches(CHATS_COUNTRY_CODE_REGEX)) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYEE_COUNTRY_MISSING_OR_INVALID);
+        }
+    }
+    public static void validateIntermediaryBicfiFormatIfProvided(LocalPayment payment) {
+        String bicfi = intermediaryBicfi(payment);
+        if (StringUtils.isNotBlank(bicfi)
+                && (!bicfi.equals(bicfi.trim()) || !bicfi.matches(BIC_REGEX))) {
+            throw new ParameterException(HTHSupportErrorMapping.INTERMEDIARY_BICFI_MISSING_OR_INVALID);
+        }
+    }
+    public static void validateCreditorAgentIdentifiersPreRoute(LocalPayment payment) {
+        validateClearingSystemMemberIdFormat(payment);
+        String bicfi = bicfi(payment);
+        String memberId = memberId(payment);
+//        if (StringUtils.isBlank(bicfi) && StringUtils.isBlank(memberId)) {
+//            throw new ParameterException(HTHSupportErrorMapping.CREDITOR_AGENT_IDENTIFIER_REQUIRED);
+//        }
+        if (StringUtils.isNotBlank(bicfi) && StringUtils.isNotBlank(memberId)) {
+            throw new ParameterException(HTHSupportErrorMapping.CREDITOR_AGENT_BIC_MEMBER_ID_CONFLICT);
+        }
+        if (StringUtils.isNotBlank(bicfi) && !bicfi.matches(BIC_REGEX)) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYEE_BIC_CODE_INVALID);
+        }
+    }
+    public static void validateDebtorAccountCurrencyFormat(LocalPayment payment) {
+        String currency = payment.getFromAccount() == null
+                ? null : payment.getFromAccount().getCurrency();
+        if (StringUtils.isNotBlank(currency) && !currency.matches("^[A-Z]{3,3}$")) {
+            throw new ParameterException(HTHSupportErrorMapping.PAYER_ACCOUNT_CURRENCY_INVALID);
+        }
+    }
+    public static void validateCategoryPurposeFormatIfProvided(LocalPayment payment) {
+        CategoryPurpose categoryPurpose = payment.getCategoryPurpose();
+        String code = categoryPurpose == null ? null : categoryPurpose.getCode();
+        String proprietary = categoryPurpose == null ? null : categoryPurpose.getProprietary();
+        if (StringUtils.isNotBlank(code) && !code.matches("^[0-9A-Za-z]{1,4}$")) {
+            throw new ParameterException(HTHSupportErrorMapping.CATEGORY_PURPOSE_CODE_INVALID);
+        }
+        if (StringUtils.isNotBlank(proprietary) && !proprietary.matches(PROPRIETARY_REGEX)) {
+            throw new ParameterException(HTHSupportErrorMapping.POURPOSE_PROPRIETARY_INVALID);
+        }
+    }
+    public static void validatePurposeFormatIfProvided(LocalPayment payment) {
+        Purpose purpose = payment.getPurpose();
+        String code = purpose == null ? null : purpose.getCode();
+        String proprietary = purpose == null ? null : purpose.getProprietary();
+        if ((StringUtils.isNotBlank(code) && code.length() > 35)
+                || (StringUtils.isNotBlank(proprietary) && proprietary.length() > 35)) {
+            throw new ParameterException(HTHSupportErrorMapping.PURPOSE_INVALID);
+        }
+    }
+
     /**
      * TT creditor name: mandatory, <=140 chars (code points), English charset
      * only.
@@ -614,7 +706,8 @@ public final class PaymentValidationSupport {
             throw new ParameterException(HTHSupportErrorMapping.CATEGORY_PURPOSE_CODE_PROPRIETARY_CONFLICT);
         }
 
-        if (Currency.CNY == payment.getTxnAmount().getCurrency()) {
+        if (LocalPayment.PaymentTypeEnum.TT.equals(payment.getPaymentType()) &&
+                Currency.CNY == payment.getTxnAmount().getCurrency()) {
             if (!hasProprietary) {
                 throw new ParameterException(HTHSupportErrorMapping.POURPOSE_PROPRIETARY_INVALID);
             }

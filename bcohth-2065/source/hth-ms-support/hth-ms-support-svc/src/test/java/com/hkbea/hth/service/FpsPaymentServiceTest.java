@@ -46,12 +46,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -125,6 +122,25 @@ class FpsPaymentServiceTest {
         lenient().when(partyAccountMapper.selectProductCode(anyString(), anyString())).thenReturn("6802");
         lenient().when(partyAccountMapper.selectAccountStatus(anyString(), anyString(), anyString()))
                 .thenReturn(activePartyAccount());
+    }
+
+    private static void setField(Object target, String name, Object value) {
+        try {
+            Class<?> clazz = target.getClass();
+            while (clazz != null) {
+                try {
+                    var field = clazz.getDeclaredField(name);
+                    field.setAccessible(true);
+                    field.set(target, value);
+                    return;
+                } catch (NoSuchFieldException e) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException(name);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ===================== Validation =====================
@@ -328,22 +344,24 @@ class FpsPaymentServiceTest {
         assertEquals(HTHSupportErrorMapping.PAYMENT_BENEFICIARY_CURRENCY_NO_MATCHES, exception.getErrCode());
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress(boolean hasAddress) {
-        when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
-        String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
-        var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
-                .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
-        when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress() {
+        for (boolean hasAddress : new boolean[]{true, false}) {
+            org.mockito.Mockito.reset(transferLimitService, debtorAddressService, payemtRoutApi);
+            when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
+            String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "HKD");
+            var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
+                    .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
+            when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        fpsPaymentService.processPayment(buildFpsPayment(), request);
+            fpsPaymentService.processPayment(buildFpsPayment(), request);
 
-        verify(debtorAddressService).lookup(debitAccount);
-        verify(payemtRoutApi).submit(request);
-        assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+            verify(debtorAddressService).lookup(debitAccount);
+            verify(payemtRoutApi).submit(request);
+            assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        }
     }
 
     @Test
@@ -351,7 +369,7 @@ class FpsPaymentServiceTest {
         when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
         Pe3Api pe3Api = mock(Pe3Api.class);
         when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
-        ReflectionTestUtils.setField(fpsPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        setField(fpsPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
         var request = buildRoutingRequest();
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -458,6 +476,9 @@ class FpsPaymentServiceTest {
                 txn.getDebtorAccount().getInternalAccountNo());
         assertEquals("6802", txn.getDebtorAccount().getProductCode());
         assertEquals("FPS BENEFICIARY", txn.getCreditor().getName());
+        assertEquals("Flat 1A 88 Gloucester Road", txn.getCreditor().getPostalAddress().getAddressLine1());
+        assertEquals("Wanchai", txn.getCreditor().getPostalAddress().getAddressLine2());
+        assertNull(txn.getSupplementaryData().getChatsRemittance());
         assertEquals(BENEFICIARY_ACCOUNT, txn.getCreditorAccount().getIdentification());
         assertEquals("015", txn.getCreditorAgent().getFinancialInstitution().getMemberId());
         assertEquals("CCB", txn.getSupplementaryData().getPaymentSource());
@@ -499,6 +520,24 @@ class FpsPaymentServiceTest {
         assertEquals(PaymentLimitApiConstants.FPS_ACT_CODE_CONFIRM, release.getEbzwk00iFpr01ActCode());
         assertEquals("FPS-DETAIL-1FPS-DETAIL-2", release.getEbzwk00iFpr01FpTxRef());
         assertEquals(new BigDecimal("780.00"), release.getEbzwk00iFpr01ReturnArea().getEbzwk00iFpr01AmtHkd());
+    }
+
+    @Test
+    void accountNumberPaymentWithoutPostalAddressSubmitsNameOnly() {
+        LocalPayment payment = buildFpsPayment();
+        payment.getCreditor().setPostalAddress(null);
+        var request = buildRoutingRequest();
+        when(transferLimitService.updateFasterPaymentLimit(any(), any())).thenReturn(populatedFpu01Result());
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        Payment result = fpsPaymentService.processPayment(payment, request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        verify(payemtRoutApi).submit(request);
+        var txn = request.getTransactions().getFirst();
+        assertEquals("FPS BENEFICIARY", txn.getCreditor().getName());
+        assertNull(txn.getCreditor().getPostalAddress());
+        assertNull(txn.getSupplementaryData().getChatsRemittance());
     }
 
     @Test

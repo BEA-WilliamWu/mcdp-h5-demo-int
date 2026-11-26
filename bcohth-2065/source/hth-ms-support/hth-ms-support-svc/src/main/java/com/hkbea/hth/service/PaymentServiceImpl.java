@@ -186,11 +186,11 @@ public class PaymentServiceImpl implements PaymentApi {
         // Only contract-wide checks and common field normalisation live here. Each
         // payment type remains responsible for its own rules and IPE mapping.
         validateMandatoryFields(localPayment);
+        validateCommon(localPayment);
 
         String path = uriInfo.getPath();
         fineGrainedEntitlementUtil.isAuthorizedAccount(path, localPayment.getFromAccount().getId());
 
-        validateCommon(localPayment);
 
         String customerName = partyPreferenceMapper.selectCustomerNameByPartyId(localPayment.getPartyId(),localPayment.getFromAccount().getId());
         if (LocalPayment.PaymentTypeEnum.CHATS == localPayment.getPaymentType()) {
@@ -612,6 +612,9 @@ public class PaymentServiceImpl implements PaymentApi {
         if (payment.getFromAccount() == null || StringUtils.isBlank(payment.getFromAccount().getId())) {
             throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
         }
+        if (!FROM_ACCOUNT_NUMERIC_PATTERN.matcher(payment.getFromAccount().getId()).matches()) {
+            throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
+        }
         if (payment.getTxnAmount() == null || payment.getTxnAmount().getAmount() == null) {
             throw new ParameterException(HTHSupportErrorMapping.AMOUNT_MISSING_OR_INVALID);
         }
@@ -645,8 +648,11 @@ public class PaymentServiceImpl implements PaymentApi {
         validateAccountId(payment);
         validateExecutionDate(payment.getSettlementDate());
         PaymentValidationSupport.validateAddressLine2(payment);
+        PaymentValidationSupport.validateTtCreditorName(payment.getCreditor().getCreditorName());
+        PaymentValidationSupport.validateOptionalFieldsPreRoute(payment);
         validateProvidedPaymentTypeRules(payment);
         validatePaymentDetails(payment);
+
     }
 
     private void validateProvidedPaymentTypeRules(LocalPayment payment) {
@@ -748,7 +754,7 @@ public class PaymentServiceImpl implements PaymentApi {
             throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
         }
         if (!FROM_ACCOUNT_NUMERIC_PATTERN.matcher(fromAccountId).matches()) {
-            throw new ParameterException(HTHSupportErrorMapping.DEBIT_ACCOUNT_NUMBER_FORMAT_INVALID);
+            throw new ParameterException(HTHSupportErrorMapping.DEBTORACCOUNT_ID_MISSING_OR_INVALID);
         }
 
         Eh7e0Output acctInfo = queryAccountInfo(AccountUtils.ext2intAccNo(payment.getFromAccount().getId(),

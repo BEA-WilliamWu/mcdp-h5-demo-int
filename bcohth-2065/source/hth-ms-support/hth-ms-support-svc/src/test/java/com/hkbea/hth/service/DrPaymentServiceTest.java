@@ -36,6 +36,7 @@ import com.hkbea.hth.model.PaymentIdentification;
 import com.hkbea.hth.model.PaymentToAccount;
 import com.hkbea.hth.model.TxnAmount;
 import com.hkbea.hth.service.payment.DrPaymentService;
+import com.hkbea.hth.service.payment.PaymentModelConvert;
 import com.hkbea.hth.pe3.api.Pe3Api;
 import com.hkbea.hth.service.payment.DebtorAddressService;
 import com.hkbea.hth.service.payment.PaymentCommonService;
@@ -50,7 +51,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -137,6 +137,25 @@ class DrPaymentServiceTest {
                         any(com.hkbea.hth.bg3.model.bg9ch7e0.request.Bgech7e0Request.class)))
                 .thenReturn(OverseasPaymentServiceTest.buildAccountInfoResponse());
         lenient().doNothing().when(cacheHelperUtils).validatePaymentResult(any());
+    }
+
+    private static void setField(Object target, String name, Object value) {
+        try {
+            Class<?> clazz = target.getClass();
+            while (clazz != null) {
+                try {
+                    var field = clazz.getDeclaredField(name);
+                    field.setAccessible(true);
+                    field.set(target, value);
+                    return;
+                } catch (NoSuchFieldException e) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException(name);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ===================== Validation =====================
@@ -265,28 +284,30 @@ class DrPaymentServiceTest {
         assertEquals(HTHSupportErrorMapping.PAYMENT_BENEFICIARY_CURRENCY_NO_MATCHES, exception.getErrCode());
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress(boolean hasAddress) {
-        String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "CNY");
-        var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
-                .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
-        when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
-        var request = buildRoutingRequest();
-        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+    @Test
+    void submitsWithAddressFromDebitAccountOrOmitsEmptyAddress() {
+        for (boolean hasAddress : new boolean[]{true, false}) {
+            org.mockito.Mockito.reset(debtorAddressService, payemtRoutApi);
+            String debitAccount = AccountUtils.ext2intAccNo(DEBIT_ACCOUNT, "C", "CNY");
+            var address = hasAddress ? new com.hkbea.hth.ipe.model.PostalAddress()
+                    .addressLine1("PE3 DEBTOR ADDRESS").townName("CENTRAL").country("HK") : null;
+            when(debtorAddressService.lookup(debitAccount)).thenReturn(address);
+            var request = buildRoutingRequest();
+            when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
-        drPaymentService.processPayment(buildDrPayment(), request);
+            drPaymentService.processPayment(buildDrPayment(), request);
 
-        verify(debtorAddressService).lookup(debitAccount);
-        verify(payemtRoutApi).submit(request);
-        assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+            verify(debtorAddressService).lookup(debitAccount);
+            verify(payemtRoutApi).submit(request);
+            assertEquals(address, request.getTransactions().getFirst().getDebtor().getPostalAddress());
+        }
     }
 
     @Test
     void pe3TransportFailureOmitsAddressAndSubmits() {
         Pe3Api pe3Api = mock(Pe3Api.class);
         when(pe3Api.getCustomerContactInfo(any())).thenThrow(new IllegalStateException("PE3 unavailable"));
-        ReflectionTestUtils.setField(drPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
+        setField(drPaymentService, "debtorAddressService", new DebtorAddressService(pe3Api, headers));
         var request = buildRoutingRequest();
         when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
 
@@ -372,7 +393,14 @@ class DrPaymentServiceTest {
         DirectRemittance directRemittance = txn.getSupplementaryData().getDirectRemittance();
         assertEquals("01", directRemittance.getChinaAcType());
         assertEquals(BENEFICIARY_ACCOUNT, directRemittance.getChinaAcno());
-        assertEquals("DR BENEFICIARY", directRemittance.getChinaAccEnglishName());
+        assertEquals("DR BENEFICIARY" + " ".repeat(20), directRemittance.getChinaAccEnglishName());
+        assertEquals(" ".repeat(62), directRemittance.getChinaAccChineseName());
+        var remittance = txn.getSupplementaryData().getChatsRemittance();
+        assertEquals(0, remittance.getPinCnt());
+        assertNull(remittance.getDepositAccountName1());
+        assertNull(remittance.getDepositAccountName2());
+        assertNull(remittance.getDepositAccountName3());
+        assertNull(remittance.getDepositAccountName4());
 
         InOrder inOrder = inOrder(paymentInternalMapper, payemtRoutApi);
         ArgumentCaptor<PaymentInternal> insertCaptor = ArgumentCaptor.forClass(PaymentInternal.class);
@@ -401,6 +429,25 @@ class DrPaymentServiceTest {
         assertEquals(Payment.StatusEnum.SUCCESS.value(), updated.getStatus());
         assertEquals(StatusEnum.SUCCESS.value(), updated.getIpeStatus());
         assertEquals("IPE-REF-DR-001", updated.getIpeRefNo());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {34, 35, 140})
+    void submitsFixedWidthEnglishNameToIpe(int length) {
+        LocalPayment payment = buildDrPayment();
+        String name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(6).substring(0, length);
+        payment.getCreditor().setCreditorName(name);
+        var request = PaymentModelConvert.toRoutingRequest(payment);
+        when(payemtRoutApi.submit(request)).thenReturn(buildSubmitResponse(StatusEnum.SUCCESS));
+
+        Payment result = drPaymentService.processPayment(payment, request);
+
+        assertEquals(Payment.StatusEnum.SUCCESS, result.getStatus());
+        verify(payemtRoutApi).submit(request);
+        var txn = request.getTransactions().getFirst();
+        assertEquals(name, txn.getCreditor().getName());
+        assertEquals(name, txn.getCreditorAccount().getAccountName());
+        assertEquals(name.substring(0, 34), txn.getSupplementaryData().getDirectRemittance().getChinaAccEnglishName());
     }
 
     @Test

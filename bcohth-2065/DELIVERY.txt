@@ -1,7 +1,17 @@
-BCOH2H-2065 - PE3 debtor country/town and direct address-line mapping
-Date: 2026-11-25
+BCOH2H-2065 - Beneficiary mapping by payment type and PE3 debtor address
+Date: 2026-11-26
 Source repository: /Users/devs/CProj/hth-dsp
-Local DSP commit / cumulative delivery source snapshot: 21590bb0081ffd09e50bfbf638f68b0525e2befe
+Local DSP commit / cumulative delivery source snapshot: 0035e9b964dec9c6e0aa6299d139add7dae75a95
+
+CHATS beneficiary mapping follows the BCO-to-EBK deposit fields. Name1 carries the
+name, Name2 and Name3 carry API address lines 1 and 2, and Name4 is blank.
+Each field is normalized and padded or truncated to 35 characters.
+DR uses the direct-remittance fields with a 34-character English account name and
+62 blanks for the Chinese name. TT, DR, FPS and On-us omit CHATS deposit fields.
+TT continuation, FPS I005/I006 name composition and On-us confirmation-name
+sourcing require IPE confirmation. See section 3 of the Technical Design.
+Payment regression at this snapshot passed 288 tests, with zero failures,
+errors or skips. The downstream messages require SIT verification.
 
 The delivery includes PEECHJ7A in the existing Pe3Api/Pe3Client integration,
 including the integration OpenAPI and 18 generated wire models.
@@ -38,7 +48,7 @@ lookup. PEECHJ7A shares the existing PEECHI11 client and HTH gateway.
 In SIT, submit one CHATS payment and match its messageId to the INFO entry
 PEECHJ7A enquiry completed with returnCode=00.
 
-Delivery baseline: apply to DSP sync 9c25499. Shared source files include the synced payment validation changes.
+Delivery baseline: apply to DSP sync 8cf58a0. Shared source files include the synced payment validation changes.
 Verification: Java 21 / offline Maven clean test BUILD SUCCESS.
 All-payment debtor address revision: 352 tests passed, 0 failures/errors/skipped.
 All five payment flows submit to IPE after an address enquiry failure. Tests
@@ -56,7 +66,7 @@ Earlier full payment regression before these address follow-ups passed 276 tests
 The request/response schemas match every supplied source wire field and bound.
 No live host or IPE integration was performed.
 
-Cumulative delivery: 39 complete source/test/mapper/contract files from
+Cumulative delivery: 40 complete source/test/mapper/contract files from
 this single current DSP commit under source/, with repository-relative paths.
 Older separate 2055/2126 packages may contain stale shared files; merge against
 the current DSP baseline. Tech Design is at this directory root.
@@ -86,6 +96,7 @@ Synchronized source files:
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/PaymentServiceImpl.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/ChatsPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/DebtorAddressService.java
+- source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/DrPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/FpsPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OnUsPaymentService.java
 - source/hth-ms-support/hth-ms-support-svc/src/main/java/com/hkbea/hth/service/payment/OverseasPaymentService.java

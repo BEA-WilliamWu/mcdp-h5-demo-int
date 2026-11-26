@@ -194,7 +194,7 @@ public class ChatsPaymentService {
                 : null;
         localPayment.setPayeeId(payeeId);
 
-        ChatsRemittance chatsRemittance = PaymentRoutingPayload.chatsRemittance(creditorName);
+        ChatsRemittance chatsRemittance = PaymentRoutingPayload.chatsRemittance(creditorName, creditorAddress);
         chatsRemittance.setChatAcTpCode(findPreDesignatedAccounts(localPayment.getPartyId(), localPayment.getToAccount().getId()));
         chatsRemittance.setPrntAdvInd(CHATS_PRINT_ADVICE_INDICATOR);
         chatsRemittance.setLmInd(CHATS_LM_INDICATOR);

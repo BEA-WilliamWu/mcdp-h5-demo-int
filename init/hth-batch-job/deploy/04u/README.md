@@ -29,6 +29,20 @@ sh deploy/04u/package.sh
 如果要在终端完成构建，也可先执行 `mvn -B -pl hth-mtb,hth-eAdvice clean verify`，再运行上面的打包命令。
 打包命令会打印产物目录 `target/04u-aix/<commit>/`。将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 04u。该目录还包含部署说明 `README-04u-AIX.md`。
 
+## 在 04u 安装 JRE 21
+
+04u 用 IBM Semeru Certified Edition JRE 21.0.13.0（AIX ppc64）运行两个作业。把 JRE 压缩包上传到 `/HTHBatch`，确认文件大小为 70,406,433 字节。 [JRE 安装包](https://github.com/ibmruntimes/semeru21-certified-binaries/releases/download/jdk-21.0.13.0/ibm-semeru-certified-jre_ppc64_aix_21.0.13.0.tar.gz) · [SHA-256 校验文件](https://github.com/ibmruntimes/semeru21-certified-binaries/releases/download/jdk-21.0.13.0/ibm-semeru-certified-jre_ppc64_aix_21.0.13.0.tar.gz.sha256.txt)
+
+```sh
+cd /HTHBatch
+JRE=ibm-semeru-certified-jre_ppc64_aix_21.0.13.0.tar.gz
+wc -c < "$JRE"
+gunzip -t "$JRE" && gunzip -c "$JRE" | /usr/bin/tar xf -
+/HTHBatch/jdk-21.0.13.0-jre/bin/java -version
+```
+
+解压目录为 `/HTHBatch/jdk-21.0.13.0-jre`。验证输出中的版本号应以 `21.0.13` 开头。 [IBM AIX 解包说明](https://www.ibm.com/support/pages/semeru-runtimes-installation)
+
 ## 上传和解包
 
 将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 `/HTHBatch`。以下命令由 batch 运行账号执行。
@@ -49,7 +63,20 @@ mkdir -p /HTHBatch/conf
 if [ ! -f /HTHBatch/conf/HTHBatchEnv.sh ]; then
     cp HTHBatchEnv.sh /HTHBatch/conf/HTHBatchEnv.sh
 fi
+```
+
+新模板的默认路径是 `/HTHBatch/jdk-21.0.13.0-jre`。如果 04u 已有 `/HTHBatch/conf/HTHBatchEnv.sh`，编辑该文件，把原有的 `HTH_JAVA_HOME` 设置改为：
+
+```sh
+HTH_JAVA_HOME=/HTHBatch/jdk-21.0.13.0-jre
+export HTH_JAVA_HOME
+```
+
+加载公共配置并确认两个作业使用的 Java 路径和版本。
+
+```sh
 . /HTHBatch/conf/HTHBatchEnv.sh
+printf '%s\n' "$HTH_JAVA_HOME"
 "$HTH_JAVA_HOME/bin/java" -version
 ```
 

@@ -16,7 +16,7 @@ if [ -n "${HTH_BATCH_COMMON_ENV:-}" ] || [ -f "$hth_common_env" ]; then
     . "$hth_common_env" || return 50
 fi
 
-JAVA_HOME=${HTH_JAVA_HOME:-${JAVA_HOME:-/HTHBatch/jdk-21.0.13.0}}
+JAVA_HOME=${HTH_JAVA_HOME:-${JAVA_HOME:-/HTHBatch/jdk-21.0.13.0-jre}}
 if [ ! -x "$JAVA_HOME/bin/java" ]; then
     printf '%s\n' "HTH_BATCH Java 21 is missing at $JAVA_HOME/bin/java; set HTH_JAVA_HOME" >&2
     return 50

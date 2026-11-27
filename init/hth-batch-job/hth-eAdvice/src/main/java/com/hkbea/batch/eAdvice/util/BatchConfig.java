@@ -1,9 +1,12 @@
 package com.hkbea.batch.eAdvice.util;
 
+import com.hkbea.batch.config.BcoJdbcConfig;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Properties;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -25,8 +28,12 @@ public final class BatchConfig {
     private static BatchConfig instance;
     private final Properties properties = new Properties();
 
-    private BatchConfig(Properties source, Function<String, String> environment) {
+    private BatchConfig(Properties source, Function<String, String> environment, Map<String, String> bcoJdbc) {
+        properties.putAll(bcoJdbc);
         source.forEach((key, raw) -> {
+            if (bcoJdbc.containsKey(key)) {
+                return;
+            }
             Matcher matcher = ENV.matcher((String) raw);
             StringBuilder value = new StringBuilder();
             while (matcher.find()) {
@@ -50,6 +57,10 @@ public final class BatchConfig {
     }
 
     public static BatchConfig load(Path directory) throws IOException {
+        return load(directory, System::getenv);
+    }
+
+    static BatchConfig load(Path directory, Function<String, String> environment) throws IOException {
         Properties source = new Properties();
         for (String name : new String[] {"db.ibank.batch.properties", "system_batch.properties"}) {
             try (InputStream input = directory == null
@@ -59,12 +70,21 @@ public final class BatchConfig {
                 source.load(input);
             }
         }
-        // encrypt.properties was an unused scaffold. No implicit BCO AES/decryption fallback.
-        return fromProperties(source, System::getenv);
+        if (directory == null) {
+            return fromProperties(source, environment);
+        }
+
+        Map<String, String> bcoJdbc;
+        try {
+            bcoJdbc = BcoJdbcConfig.resolve(source, environment);
+        } catch (IllegalArgumentException error) {
+            throw new ConfigurationException(error.getMessage());
+        }
+        return new BatchConfig(source, environment, bcoJdbc);
     }
 
     public static BatchConfig fromProperties(Properties source, Function<String, String> environment) {
-        return new BatchConfig(source, environment);
+        return new BatchConfig(source, environment, Map.of());
     }
 
     public String required(String key) {

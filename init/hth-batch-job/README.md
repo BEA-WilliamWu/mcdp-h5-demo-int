@@ -78,10 +78,9 @@ jdbc.conn.autocommit=false
 账号必须有 `HTH_BEA.HTH_CRM_EVENT` 的 SELECT 权限。也支持运维管理的受限配置文件直接提供
 `jdbc.*` 值，数据库参数不应放入命令行或仓库。`${...}` 变量不存在/为空会立即报错。
 
-**配置迁移差异：** 原 BCO 托管版本的 `hth_crm_batch_config.properties` 使用 BCO AES 密文；
-本工程使用已有 HTH 配置体系，不能把那些密文粘贴进 `jdbc.conn.*`。本工程原始
-`encrypt.properties` 只是未接线的模板，不代表已实现解密；本任务也不加载它。
-由部署方在新环境提供连接值，不需要导出 BCO 的数据库密码。
+也可把 BCO 的密文连接字段追加到两个模块现有的 `config/db.ibank.batch.properties`。
+应用识别这些字段后解密并提交给 JDBC。包装密钥由运行环境注入。
+配置方式见 [04u 部署说明](deploy/04u/README.md#配置-oracle)。
 
 `system_batch.properties`：
 

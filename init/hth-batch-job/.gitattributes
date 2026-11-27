@@ -1,5 +1,6 @@
 bin/*.sh text eol=lf
 deploy/04u/*.sh text eol=lf
+deploy/04u/upload-files.txt text eol=lf
 tools/*.awk text eol=lf
 bin/*.bat text eol=crlf
 hth-mtb/src/test/resources/golden/*.csv -text whitespace=-blank-at-eol

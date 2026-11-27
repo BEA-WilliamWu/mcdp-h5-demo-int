@@ -1,6 +1,6 @@
 # HTH Batch 04u AIX 手工部署
 
-## 构建部署包
+## 构建与准备上传
 
 ### 1. 在公司电脑准备源码
 
@@ -18,7 +18,17 @@
 
 Maven 会运行单元测试，然后生成 `hth-mtb/target/hth-batch-job-mtb-1.0.0.jar` 和 `hth-eAdvice/target/hth-eAdvice-1.0.0.jar`。两个 JAR 都包含运行所需的依赖。
 
-### 3. 生成 04u 的 tar 包
+### 3. 在 Windows 生成上传目录
+
+Maven 构建成功后，在 IDEA Terminal 的 PowerShell 中进入父 `pom.xml` 所在目录。首次部署执行下列命令。
+
+```powershell
+.\deploy\04u\prepare-upload.ps1
+```
+
+脚本把所有要上传的文件放到打印出来的 `target\04u-upload\full-<时间>\`。该目录的 `conf`、`hth-mtb`、`hth-eAdvice` 对应 04u 上 `/HTHBatch` 下的目录。通过 SFTP 从这个目录上传即可。脚本和配置模板的位置由 `deploy/04u/upload-files.txt` 统一维护。
+
+### 使用 tar 包
 
 在同一个 `hth-batch-job` 目录进入终端。Windows 用 Git Bash，可在 IDEA 的 Terminal 中打开 Git Bash。macOS 和 Linux 可用各自的终端。
 
@@ -28,6 +38,47 @@ sh deploy/04u/package.sh
 
 如果要在终端完成构建，也可先执行 `mvn -B -pl hth-mtb,hth-eAdvice clean verify`，再运行上面的打包命令。
 打包命令会打印产物目录 `target/04u-aix/<commit>/`。将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 04u。该目录还包含部署说明 `README-04u-AIX.md`。
+
+## 已部署环境升级外部 Oracle 密文读取
+
+升级 `hth-mtb` 和 `hth-eAdvice` 的两个 JAR。用 PowerShell 生成本次上传目录。
+
+```powershell
+.\deploy\04u\prepare-upload.ps1 -JarsOnly
+```
+
+在 04u 创建暂存目录。
+
+```sh
+mkdir -p /HTHBatch/jar-update
+```
+
+将脚本打印的 `target\04u-upload\jars-<时间>\` 中的两个模块目录和 `SHA256SUMS` 上传到该目录，再校验。
+
+```sh
+cd /HTHBatch/jar-update
+sha256sum -c SHA256SUMS
+```
+
+如果没有 `sha256sum`，可用 `openssl dgst -sha256` 计算两个 JAR 的值并对照 `SHA256SUMS`。校验通过且两个作业处于空闲状态后，使用具有安装目录写权限的 batch 部署账号执行。
+
+```sh
+STAGE=/HTHBatch/jar-update
+MTB=hth-mtb/lib/hth-batch-job-mtb-1.0.0.jar
+EA=hth-eAdvice/lib/hth-eAdvice-1.0.0.jar
+BACKUP=$(date +%Y%m%d%H%M%S)
+
+cd /HTHBatch &&
+cp -p "$MTB" "$MTB.bak.$BACKUP" &&
+cp -p "$EA" "$EA.bak.$BACKUP" &&
+cp "$STAGE/$MTB" "$MTB.new.$$" &&
+cp "$STAGE/$EA" "$EA.new.$$" &&
+chmod 644 "$MTB.new.$$" "$EA.new.$$" &&
+mv "$MTB.new.$$" "$MTB" &&
+mv "$EA.new.$$" "$EA"
+```
+
+在 04u 上按 [Oracle 配置](#配置-oracle) 把密文字段追加到各作业实际使用的外部 `db.ibank.batch.properties`，并向作业环境注入包装密钥。若 eAdvice 测试用 `CONFIG_DIR` 指向 `uat-config`，更新那个目录下的 JDBC 文件。配置完成后用下文的启动命令验证。
 
 ## 在 04u 安装 JRE 21
 
@@ -44,6 +95,10 @@ gunzip -t "$JRE" && gunzip -c "$JRE" | /usr/bin/tar xf -
 解压目录为 `/HTHBatch/jdk-21.0.13.0-jre`。验证输出中的版本号应以 `21.0.13` 开头。 [IBM AIX 解包说明](https://www.ibm.com/support/pages/semeru-runtimes-installation)
 
 ## 上传和解包
+
+直接上传方式将 `full-<时间>` 下的文件放入对应安装目录。在初装目录执行 `chmod 750 /HTHBatch/hth-mtb/bin/*.sh /HTHBatch/hth-eAdvice/bin/*.sh`，并按下面的公共 Java 配置步骤验证路径和版本。
+
+使用 tar 包时执行下面的解包步骤。
 
 将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 `/HTHBatch`。以下命令由 batch 运行账号执行。
 `RELEASE` 使用包文件名末尾的提交号。
@@ -83,6 +138,23 @@ printf '%s\n' "$HTH_JAVA_HOME"
 升级时先解到暂存目录，核对并保留各模块的 `config/`，再按调度窗口切换 `/HTHBatch/hth-mtb` 和 `/HTHBatch/hth-eAdvice`。公共配置留在 `/HTHBatch/conf`。
 
 ## 配置 Oracle
+
+### 在现有 HTH 配置中使用密文字段
+
+将原先 `hth_crm_batch_config.properties` 的内容追加到 04u 上两个模块的外部 JDBC 配置，保留原字段名。启动脚本通过 `CONFIG_DIR` 指定配置目录，默认使用各模块安装目录下的 `config/`。
+
+```sh
+vi /HTHBatch/hth-mtb/config/db.ibank.batch.properties
+vi /HTHBatch/hth-eAdvice/config/db.ibank.batch.properties
+chmod 600 /HTHBatch/hth-mtb/config/db.ibank.batch.properties \
+          /HTHBatch/hth-eAdvice/config/db.ibank.batch.properties
+```
+
+加密模式使用 `encr_passphrase`、`db.hostname`、`db.port`、`db.servicename`、`db.username` 和 `db.password`。原文件的 `db.ext.*` 字段也可随内容复制。保留 HTH 原有的 JDBC 驱动和 `jdbc.conn.autocommit=false` 设置。应用识别 BCO 字段后，解密得到的 URL、用户名和密码优先用于 JDBC。
+
+由调度的凭据功能或受限的作业环境注入 `HTH_BATCH_BCO_WRAPPING_KEY`。其值是原配置用于解开 `encr_passphrase` 的包装密钥。配置文件和包装密钥分别管理。两个脚本沿用各自的启动参数，下面示例的 `.env` 可用来提供包装密钥。
+
+### 使用 JDBC 环境变量
 
 通过调度系统注入以下三个环境变量，或在交互测试时创建两份仅运行账号可读的环境文件。
 

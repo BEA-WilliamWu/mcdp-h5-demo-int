@@ -41,27 +41,17 @@ python3 -m unittest discover -s tools -p 'test_*.py'
 H2 只用于测试，不进入生产 JAR。服务器必须有 **Java 21**；旧 BCO Java 8 不能运行此 JAR。
 构建在开发机 / pipeline 执行，运行服务器不需要 Maven。
 
-例如部署到 `/HTHBatch`（示例安装位置，可自行指定）：
+启动脚本和共用的 `Env.sh` 统一放在 `bin/`。直接从源码目录运行时，脚本读取模块的 `config/`，并启动模块 `target/` 下的 JAR。
+04u 的上传目录由部署清单生成，安装后各模块从自己的 `bin/` 启动，使用各自的 `config/` 和 `lib/`。
 
-```text
-/HTHBatch/
-  bin/Env.sh
-  bin/MTBBatch.sh
-  bin/GenHthCrmExtract.sh
-  bin/MTBBatch.bat                    # 只供 Windows 使用
-  hth-mtb/target/hth-batch-job-mtb-1.0.0.jar
-  hth-mtb/config/db.ibank.batch.properties
-  hth-mtb/config/system_batch.properties
-  tools/verify_hth_crm_csv.py
-```
-
-`BATCH_HOME` 默认从脚本位置计算；`JAVA_HOME`、`CONFIG_DIR`、`LOG_DIR`、`BATCH_JAR`、
+`BATCH_HOME` 默认从脚本位置计算。`HTH_JAVA_HOME`、`JAVA_HOME`、`CONFIG_DIR`、`LOG_DIR`、`BATCH_JAR`、
 `JVM_OPTS` 均允许部署环境覆盖。建议使用绝对路径。`.sh` 固定 LF，避免 Windows
 检出或上传后出现 `Env.sh^M: not found`；不再引用 BCO 的 Env.sh。
 
 ## 数据库和输出配置
 
-外部配置默认放在 `$BATCH_HOME/hth-mtb/config`。使用 `-Dconfig.path` 指向其他目录时，
+04u 上的 MTB 外部配置默认在 `/HTHBatch/hth-mtb/config`。从源码目录运行时则使用 `$BATCH_HOME/hth-mtb/config`。
+使用 `-Dconfig.path` 指向其他目录时，
 两个配置文件均必须存在；缺失时失败，不回退到 JAR 内配置或 BCO 数据库。
 
 `db.ibank.batch.properties`：
@@ -100,14 +90,14 @@ crm.file.pattern=hthtomtb_mvp1apis_D{date}.csv
 部署环境准备好 JDBC 配置并设定 Java 21 的 `JAVA_HOME` 后执行：
 
 ```sh
-sh /HTHBatch/bin/MTBBatch.sh CRM_EXTRACT 20261007
+sh /HTHBatch/hth-mtb/bin/MTBBatch.sh CRM_EXTRACT 20261007
 echo $?
 
 # 兼容原命令名，但执行的是新 HTH 独立程序：
-sh /HTHBatch/bin/GenHthCrmExtract.sh 20261007
+sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh 20261007
 
 # 不传日期：抽取香港时间的昨天。
-sh /HTHBatch/bin/GenHthCrmExtract.sh
+sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh
 ```
 
 Windows：`bin\MTBBatch.bat CRM_EXTRACT 20261007`。
@@ -120,7 +110,7 @@ Windows：`bin\MTBBatch.bat CRM_EXTRACT 20261007`。
 返回码：`0` 成功；`2` 参数/日期错误；`50` 配置、连接、抽取、锁或发布失败。
 脚本直接打印本次日志完整路径，并按 Java 退出码返回，不通过搜索日志中 Error 字样判断成败。
 
-默认示例输出：`/HTHBatch/output/hthtomtb_mvp1apis_D261007.csv`。
+默认示例输出：`/HTHBatch/hth-mtb/output/hthtomtb_mvp1apis_D261007.csv`。
 同日成功重跑原子替换同名文件；失败不替换已存在的正确文件。
 同日并发只允许一个任务执行；`.lock` 会保留，它不是交给 MTB 的文件。
 输出目录必须支持 Java 文件锁和同一文件系统内的原子重命名。
@@ -150,8 +140,7 @@ NULL 输出空字段，Event_Time 的 `HHmmss` 转为 `HH:mm:ss`。
 ## 检查与测试
 
 ```sh
-python3 /HTHBatch/tools/verify_hth_crm_csv.py \
-  /HTHBatch/output/hthtomtb_mvp1apis_D261007.csv 20261007
+python3 tools/verify_hth_crm_csv.py /path/to/hthtomtb_mvp1apis_D261007.csv 20261007
 ```
 
 检查日志 `HTH_CRM_1293 stage=END status=SUCCESS`，核对 `count`、`size`、`file`。

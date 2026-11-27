@@ -26,7 +26,7 @@ Maven 构建成功后，在 IDEA Terminal 的 PowerShell 中进入父 `pom.xml` 
 .\deploy\04u\prepare-upload.ps1
 ```
 
-脚本把所有要上传的文件放到打印出来的 `target\04u-upload\full-<时间>\`。该目录的 `conf`、`hth-mtb`、`hth-eAdvice` 对应 04u 上 `/HTHBatch` 下的目录。通过 SFTP 从这个目录上传即可。脚本和配置模板的位置由 `deploy/04u/upload-files.txt` 统一维护。
+脚本把所有要上传的文件放到打印出来的 `target\04u-upload\full-<时间>\`。该目录的 `conf`、`hth-mtb`、`hth-eAdvice` 对应 04u 上 `/HTHBatch` 下的目录。通过 SFTP 从这个目录上传即可。PowerShell 和 tar 打包共用 `deploy/04u/upload-files.txt`。两个模块的启动脚本从 `bin/` 取用，共用一份 `bin/Env.sh`。各模块的 Oracle 和输出配置模板来自自己的 `config/`。
 
 ### 使用 tar 包
 
@@ -78,7 +78,7 @@ mv "$MTB.new.$$" "$MTB" &&
 mv "$EA.new.$$" "$EA"
 ```
 
-在 04u 上按 [Oracle 配置](#配置-oracle) 把密文字段追加到各作业实际使用的外部 `db.ibank.batch.properties`，并向作业环境注入包装密钥。若 eAdvice 测试用 `CONFIG_DIR` 指向 `uat-config`，更新那个目录下的 JDBC 文件。配置完成后用下文的启动命令验证。
+按 [Oracle 配置](#配置-oracle) 更新外部 JDBC 文件并提供包装密钥。若 eAdvice 使用 `uat-config`，更新该目录下的 JDBC 文件。要启用密钥文件自动加载，按下文的 [公共环境](#公共环境) 更新两处 `bin/Env.sh`。
 
 ## 在 04u 安装 JRE 21
 
@@ -120,7 +120,11 @@ if [ ! -f /HTHBatch/conf/HTHBatchEnv.sh ]; then
 fi
 ```
 
-新模板的默认路径是 `/HTHBatch/jdk-21.0.13.0-jre`。如果 04u 已有 `/HTHBatch/conf/HTHBatchEnv.sh`，编辑该文件，把原有的 `HTH_JAVA_HOME` 设置改为：
+## 公共环境
+
+两个作业启动时都会读取 `/HTHBatch/conf/HTHBatchEnv.sh`。在这里维护共用的 `HTH_JAVA_HOME` 和需要共用的 `JVM_OPTS`。各作业自己的 `CONFIG_DIR`、日志路径和输出目录由各自的启动环境或 `config/` 管理。
+
+JRE 的默认路径是 `/HTHBatch/jdk-21.0.13.0-jre`。已部署环境可以在现有公共文件中更新 `HTH_JAVA_HOME`。
 
 ```sh
 HTH_JAVA_HOME=/HTHBatch/jdk-21.0.13.0-jre
@@ -135,7 +139,7 @@ printf '%s\n' "$HTH_JAVA_HOME"
 "$HTH_JAVA_HOME/bin/java" -version
 ```
 
-升级时先解到暂存目录，核对并保留各模块的 `config/`，再按调度窗口切换 `/HTHBatch/hth-mtb` 和 `/HTHBatch/hth-eAdvice`。公共配置留在 `/HTHBatch/conf`。
+已部署环境升级公共密钥加载时，把源码里的同一份 `bin/Env.sh` 上传到 `/HTHBatch/hth-mtb/bin/Env.sh` 和 `/HTHBatch/hth-eAdvice/bin/Env.sh`，保留执行权限。两个模块的 `config/`、`/HTHBatch/conf/HTHBatchEnv.sh` 和现有密钥文件继续沿用。如果以前在 `HTHBatchEnv.sh` 里手工加过读取密钥文件的命令，可以移除该行，由启动脚本统一加载。
 
 ## 配置 Oracle
 
@@ -152,7 +156,21 @@ chmod 600 /HTHBatch/hth-mtb/config/db.ibank.batch.properties \
 
 加密模式使用 `encr_passphrase`、`db.hostname`、`db.port`、`db.servicename`、`db.username` 和 `db.password`。原文件的 `db.ext.*` 字段也可随内容复制。保留 HTH 原有的 JDBC 驱动和 `jdbc.conn.autocommit=false` 设置。应用识别 BCO 字段后，解密得到的 URL、用户名和密码优先用于 JDBC。
 
-由调度的凭据功能或受限的作业环境注入 `HTH_BATCH_BCO_WRAPPING_KEY`。其值是原配置用于解开 `encr_passphrase` 的包装密钥。配置文件和包装密钥分别管理。两个脚本沿用各自的启动参数，下面示例的 `.env` 可用来提供包装密钥。
+两个作业优先使用调度环境已注入的 `HTH_BATCH_BCO_WRAPPING_KEY`。也可以由 batch 运行账号在 04u 上维护同一份 `/HTHBatch/conf/bco-db-key.env`。文件所有者为 batch 运行账号，权限为 `600`。
+
+```sh
+umask 077
+key_file=/HTHBatch/conf/bco-db-key.env
+touch "$key_file" && chmod 600 "$key_file" && vi "$key_file"
+```
+
+写入下面这行，将占位文字替换为解开 `encr_passphrase` 的原始包装密钥。
+
+```sh
+export HTH_BATCH_BCO_WRAPPING_KEY='实际包装密钥'
+```
+
+启动脚本会自动读取这个文件，重新登录后可以直接运行。若设置了 `HTH_BATCH_COMMON_ENV`，密钥文件放在该公共脚本同目录。密钥文件由 04u 或调度系统管理。
 
 ### 使用 JDBC 环境变量
 
@@ -173,7 +191,7 @@ export HTH_BATCH_JDBC_USER='实际账号'
 export HTH_BATCH_JDBC_PASSWORD='实际密码'
 ```
 
-各模块的 `config/db.ibank.batch.properties` 已引用这三个变量，保留其中的 `jdbc.conn.autocommit=false`。真实凭据只存放在 04u 的受限文件或调度配置中。
+各模块的 `config/db.ibank.batch.properties` 已引用这三个变量，保留其中的 `jdbc.conn.autocommit=false`。采用这个方式手工测试时，先在同一个终端用 `. /HTHBatch/conf/mtb-db.env` 或 `. /HTHBatch/conf/eadvice-db.env` 加载对应的配置，再执行下方的启动命令。
 
 | 作业 | JDBC 权限 |
 | --- | --- |
@@ -189,10 +207,7 @@ export HTH_BATCH_JDBC_PASSWORD='实际密码'
 
 ```sh
 run_date=20261126
-(
-    . /HTHBatch/conf/mtb-db.env &&
-    sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh "$run_date"
-)
+sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh "$run_date"
 printf 'MTB exit=%s\n' "$?"
 
 mtb_file="/HTHBatch/hth-mtb/output/hthtomtb_mvp1apis_D${run_date#??}.csv"
@@ -212,7 +227,18 @@ WHERE CREATION_DATE >= DATE '2026-11-26'
 
 ## 启动和验证 eAdvice
 
-首次用隔离目录和专用测试交易验证。作业会回写 `BATCH_STATUS_FLAG`。作业 `1`、`2`、`3`、`P` 分别生成 `A`、`B`、`C`、`P` 档。作业 1、2、3 共用成功 FPS 的取数范围，每次验证准备对应的未处理测试交易。
+四个调度入口安装在 `/HTHBatch/hth-eAdvice/bin/`。每个入口只接收可选的业务日 `yyyyMMdd`，沿用同一个 `EAdviceBatch.sh`、JAR 和配置。也可以继续使用原有的 `EAdviceBatch.sh <1|2|3|P> [yyyyMMdd]` 命令。
+
+| 启动脚本 | 作业 | 输出档 |
+| --- | --- | --- |
+| `genEAdvice2EBK1.sh` | `1` | `A` |
+| `genEAdvice2EBK2.sh` | `2` | `B` |
+| `genEAdvice2EBK3.sh` | `3` | `C` |
+| `genPaperAdvice2EBK.sh` | `P` | `P` |
+
+已有 eAdvice 安装可以把这四个文件加到现有 `bin/`，并设置权限为 `750`。
+
+首次用隔离目录和专用测试交易验证。作业会回写 `BATCH_STATUS_FLAG`。作业 1、2、3 共用成功 FPS 的取数范围，每次验证准备对应的未处理测试交易。
 
 ```sh
 mkdir -p /HTHBatch/hth-eAdvice/uat-output
@@ -223,10 +249,7 @@ vi /HTHBatch/hth-eAdvice/config/system_batch.properties
 
 ```sh
 run_date=20261126
-(
-    . /HTHBatch/conf/eadvice-db.env &&
-    sh /HTHBatch/hth-eAdvice/bin/EAdviceBatch.sh 3 "$run_date"
-)
+sh /HTHBatch/hth-eAdvice/bin/genEAdvice2EBK3.sh "$run_date"
 printf 'eAdvice exit=%s\n' "$?"
 
 advice_file="/HTHBatch/hth-eAdvice/uat-output/EBKP.HOSTPC.HTHTOEBK.EBFPADV.C.D${run_date}.TXT"

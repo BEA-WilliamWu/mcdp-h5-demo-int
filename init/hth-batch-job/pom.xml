@@ -58,18 +58,16 @@
         <pluginManagement>
             <plugins>
                 <plugin>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>build-helper-maven-plugin</artifactId>
-                    <version>3.6.2</version>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
                     <executions>
                         <execution>
-                            <id>shared-batch-source</id>
-                            <phase>generate-sources</phase>
-                            <goals><goal>add-source</goal></goals>
+                            <id>default-compile</id>
                             <configuration>
-                                <sources>
-                                    <source>${project.basedir}/../shared/src/main/java</source>
-                                </sources>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.sourceDirectory}</compileSourceRoot>
+                                    <compileSourceRoot>${project.basedir}/../shared/src/main/java</compileSourceRoot>
+                                </compileSourceRoots>
                             </configuration>
                         </execution>
                     </executions>

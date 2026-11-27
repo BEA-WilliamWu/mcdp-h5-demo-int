@@ -11,8 +11,13 @@ case "${1:-}" in
     LOAD_DATA|PROCESS_TXN|GENERATE_REPORT) ;; # Existing project scaffold tasks.
     *) echo "Usage: MTBBatch.sh CRM_EXTRACT [yyyyMMdd]" >&2; exit 2 ;;
 esac
-HTH_SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd) || exit 50
-. "$HTH_SCRIPT_DIR/Env.sh" || exit 50
+hth_module_home=$(CDPATH= cd "$(dirname "$0")/.." && pwd) || exit 50
+hth_env=$hth_module_home/../conf/Env.sh
+if [ ! -r "$hth_env" ]; then
+    printf '%s\n' "HTH_BATCH cannot read common launcher environment: $hth_env" >&2
+    exit 50
+fi
+. "$hth_env" || exit 50
 # Relative deployment paths resolve from the installation, including logs.
 cd "$BATCH_HOME" || exit 50
 if [ ! -f "$BATCH_JAR" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then

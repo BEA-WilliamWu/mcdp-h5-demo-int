@@ -1,50 +1,62 @@
 # HTH Batch 04u AIX 手工部署
 
-## 构建与准备上传
+## Git 与 04u 的目录
 
-### 1. 在公司电脑准备源码
+从 `hth-batch-job/` 选取下面的运行文件，按**相同相对路径**上传到 `/HTHBatch/`。
 
-同步 Git 中的整个 `hth-batch-job` 目录，或解压交付的 `hth-batch-job-source-<commit>.zip`。保留目录下的父 `pom.xml`、两个模块、`bin/`、`deploy/`、`sftp/` 和 `tools/`。源码 ZIP 自带 `SOURCE_REVISION`，打包时用它给产物命名。
+```text
+hth-batch-job/                    /HTHBatch/
+  conf/
+    Env.sh
+    HTHBatchEnv.sh
+  hth-mtb/
+    bin/
+    config/
+    tools/
+    lib/                          Maven 打包后准备
+  hth-eAdvice/
+    bin/
+    config/
+    tools/
+    lib/                          Maven 打包后准备
+    transfer/windows/             Windows 传输节点使用
+  README-04u-AIX.md
+```
 
-### 2. 在 IntelliJ IDEA 构建
+公共 Oracle 密钥文件 `conf/bco-db-key.env` 由 04u 的 batch 运行账号维护。根目录 `tools/` 存放公司电脑上的打包脚本和测试。
 
-1. 用 **File → Open** 打开 `hth-batch-job/pom.xml`，加载 Maven 项目。确认 Maven 窗口显示 `hth-mtb` 和 `hth-eAdvice`。
-2. 在 **File → Project Structure → Project SDK** 选择公司电脑上的 JDK 21。在 **Settings → Build, Execution, Deployment → Build Tools → Maven → Runner** 的 **JRE** 也选 JDK 21。若依赖走公司 Maven 镜像，在 Maven 设置的 **User settings file** 选择公司的 `settings.xml`。
-3. 在 **Run → Edit Configurations → + → Maven** 新建配置。项目路径选 `hth-batch-job`，**Run** 填下面的参数。执行后等到 `BUILD SUCCESS`。 [IntelliJ IDEA Maven 配置](https://www.jetbrains.com/help/idea/run-debug-configuration-maven.html)
+## 在 IntelliJ IDEA 构建
+
+1. 在公司电脑从 Git 拉取完整的 `hth-batch-job`，用 **File → Open** 打开它的父 `pom.xml`。
+2. 在 IDEA 的 **Project SDK** 和 **Maven Runner JRE** 都选 JDK 21。公司 Maven 镜像使用现有的 `settings.xml`。
+3. 在 Maven 运行配置里选择 `hth-batch-job` 作为项目目录，执行以下目标，等待 `BUILD SUCCESS`。 [IntelliJ IDEA Maven 配置](https://www.jetbrains.com/help/idea/run-debug-configuration-maven.html)
 
 ```text
 -pl hth-mtb,hth-eAdvice clean verify
 ```
 
-Maven 会运行单元测试，然后生成 `hth-mtb/target/hth-batch-job-mtb-1.0.0.jar` 和 `hth-eAdvice/target/hth-eAdvice-1.0.0.jar`。两个 JAR 都包含运行所需的依赖。
-
-### 3. 在 Windows 生成上传目录
-
-Maven 构建成功后，在 IDEA Terminal 的 PowerShell 中进入父 `pom.xml` 所在目录。首次部署执行下列命令。
+Maven 在两个模块的 `target/` 生成可执行 JAR。手工上传时，将 `hth-batch-job-mtb-1.0.0.jar` 和 `hth-eAdvice-1.0.0.jar` 分别放进各模块的 `lib/`。也可以使用 PowerShell 一次准备好完整的上传目录。
 
 ```powershell
-.\deploy\04u\prepare-upload.ps1
+.\tools\prepare-upload.ps1
 ```
 
-脚本把所有要上传的文件放到打印出来的 `target\04u-upload\full-<时间>\`。该目录的 `conf`、`hth-mtb`、`hth-eAdvice` 对应 04u 上 `/HTHBatch` 下的目录。通过 SFTP 从这个目录上传即可。PowerShell 和 tar 打包共用 `deploy/04u/upload-files.txt`。两个模块的启动脚本从 `bin/` 取用，共用一份 `bin/Env.sh`。各模块的 Oracle 和输出配置模板来自自己的 `config/`。
+PowerShell 输出 `target\04u-upload\full-<时间>\`。其中的文件可以按原路径上传到 `/HTHBatch/`，包括已放进 `lib/` 的两个 JAR。清单 `tools/upload-files.txt` 同时用于 PowerShell 和 tar 打包。
 
-### 使用 tar 包
+### 可选的 tar 包
 
-在同一个 `hth-batch-job` 目录进入终端。Windows 用 Git Bash，可在 IDEA 的 Terminal 中打开 Git Bash。macOS 和 Linux 可用各自的终端。
+从项目根目录执行以下命令。Windows 可在 Git Bash 里执行。输出目录为 `target/04u-aix/<commit>/`，内含公共 `conf/`、两个模块 tar 包、部署说明和 `SHA256SUMS`。
 
 ```sh
-sh deploy/04u/package.sh
+sh tools/package.sh
 ```
-
-如果要在终端完成构建，也可先执行 `mvn -B -pl hth-mtb,hth-eAdvice clean verify`，再运行上面的打包命令。
-打包命令会打印产物目录 `target/04u-aix/<commit>/`。将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 04u。该目录还包含部署说明 `README-04u-AIX.md`。
 
 ## 已部署环境升级外部 Oracle 密文读取
 
 升级 `hth-mtb` 和 `hth-eAdvice` 的两个 JAR。用 PowerShell 生成本次上传目录。
 
 ```powershell
-.\deploy\04u\prepare-upload.ps1 -JarsOnly
+.\tools\prepare-upload.ps1 -JarsOnly
 ```
 
 在 04u 创建暂存目录。
@@ -78,7 +90,7 @@ mv "$MTB.new.$$" "$MTB" &&
 mv "$EA.new.$$" "$EA"
 ```
 
-按 [Oracle 配置](#配置-oracle) 更新外部 JDBC 文件并提供包装密钥。若 eAdvice 使用 `uat-config`，更新该目录下的 JDBC 文件。要启用密钥文件自动加载，按下文的 [公共环境](#公共环境) 更新两处 `bin/Env.sh`。
+按 [Oracle 配置](#配置-oracle) 更新外部 JDBC 文件并提供包装密钥。若 eAdvice 使用 `uat-config`，更新该目录下的 JDBC 文件。使用新目录结构时，同时上传公共 `conf/Env.sh` 和两个模块的启动脚本。
 
 ## 在 04u 安装 JRE 21
 
@@ -94,31 +106,27 @@ gunzip -t "$JRE" && gunzip -c "$JRE" | /usr/bin/tar xf -
 
 解压目录为 `/HTHBatch/jdk-21.0.13.0-jre`。验证输出中的版本号应以 `21.0.13` 开头。 [IBM AIX 解包说明](https://www.ibm.com/support/pages/semeru-runtimes-installation)
 
-## 上传和解包
+## 上传和更新
 
-直接上传方式将 `full-<时间>` 下的文件放入对应安装目录。在初装目录执行 `chmod 750 /HTHBatch/hth-mtb/bin/*.sh /HTHBatch/hth-eAdvice/bin/*.sh`，并按下面的公共 Java 配置步骤验证路径和版本。
-
-使用 tar 包时执行下面的解包步骤。
-
-将两个 `.tar`、`HTHBatchEnv.sh` 和 `SHA256SUMS` 上传到 `/HTHBatch`。以下命令由 batch 运行账号执行。
-`RELEASE` 使用包文件名末尾的提交号。
+首次部署时，上传上述运行目录，并用有安装权限的 batch 账号设置脚本权限。
 
 ```sh
-cd /HTHBatch
+chmod 640 /HTHBatch/conf/Env.sh /HTHBatch/conf/HTHBatchEnv.sh
+chmod 750 /HTHBatch/hth-mtb/bin/*.sh /HTHBatch/hth-eAdvice/bin/*.sh
+```
+
+已安装的环境在两个作业空闲时先上传 `conf/Env.sh`，再按原路径更新两个模块的 `bin/` 和 `tools/`。沿用服务器已配置的 `conf/HTHBatchEnv.sh`、密钥文件和两个模块的 `config/`。验证两个作业后，可以归档各模块旧的 `bin/Env.sh`。如需更新 JAR，参照前面的独立 JAR 更新步骤。
+
+使用 tar 时，将两个包和公共 `conf/` 上传到一个暂存目录。将 `RELEASE` 替换成包文件名末尾的提交号，在暂存目录校验并解包。
+
+```sh
 RELEASE=替换成提交号
-sha256sum -c SHA256SUMS
+sha256sum -c SHA256SUMS &&
+    tar -xf "hth-mtb-04u-aix-${RELEASE}.tar" &&
+    tar -xf "hth-eAdvice-04u-aix-${RELEASE}.tar"
 ```
 
-没有 `sha256sum` 时，用 `openssl dgst -sha256 HTHBatchEnv.sh "hth-mtb-04u-aix-${RELEASE}.tar" "hth-eAdvice-04u-aix-${RELEASE}.tar"` 并逐项比对 `SHA256SUMS`。校验通过后执行首次解包。
-
-```sh
-tar -xf "hth-mtb-04u-aix-${RELEASE}.tar"
-tar -xf "hth-eAdvice-04u-aix-${RELEASE}.tar"
-mkdir -p /HTHBatch/conf
-if [ ! -f /HTHBatch/conf/HTHBatchEnv.sh ]; then
-    cp HTHBatchEnv.sh /HTHBatch/conf/HTHBatchEnv.sh
-fi
-```
+如果没有 `sha256sum`，可以用 `openssl dgst -sha256 conf/*.sh ./*.tar` 对照 `SHA256SUMS`。再把解包后的运行文件按原路径上传或复制到 `/HTHBatch/`。
 
 ## 公共环境
 
@@ -139,7 +147,7 @@ printf '%s\n' "$HTH_JAVA_HOME"
 "$HTH_JAVA_HOME/bin/java" -version
 ```
 
-已部署环境升级公共密钥加载时，把源码里的同一份 `bin/Env.sh` 上传到 `/HTHBatch/hth-mtb/bin/Env.sh` 和 `/HTHBatch/hth-eAdvice/bin/Env.sh`，保留执行权限。两个模块的 `config/`、`/HTHBatch/conf/HTHBatchEnv.sh` 和现有密钥文件继续沿用。如果以前在 `HTHBatchEnv.sh` 里手工加过读取密钥文件的命令，可以移除该行，由启动脚本统一加载。
+两个模块的启动脚本共用 `/HTHBatch/conf/Env.sh`。由它统一加载密钥。如果以前在 `HTHBatchEnv.sh` 里手工加过读取密钥文件的命令，可以移除该行。
 
 ## 配置 Oracle
 
@@ -216,7 +224,7 @@ LC_ALL=C awk -v day="$run_date" \
     -f /HTHBatch/hth-mtb/tools/verify_hth_crm_csv.awk "$mtb_file"
 ```
 
-脚本打印本次运行日志的完整路径。退出码应为 `0`，日志应有 `HTH_CRM_1293 stage=END status=SUCCESS`。AIX 上用 `awk` 核对首尾控制记录、业务笔数和尾行校验值。把输出的 `MTB data rows`、日志的 `count` 与同一业务日的数据库笔数对照。若要逐字段验证 CSV 格式，可将文件交给开发环境的 `tools/verify_hth_crm_csv.py` 检查。
+脚本打印本次运行日志的完整路径。退出码应为 `0`，日志应有 `HTH_CRM_1293 stage=END status=SUCCESS`。AIX 上用 `awk` 核对首尾控制记录、业务笔数和尾行校验值。把输出的 `MTB data rows`、日志的 `count` 与同一业务日的数据库笔数对照。若要逐字段验证 CSV 格式，可将文件交给开发环境的 `hth-mtb/tools/verify_hth_crm_csv.py` 检查。
 
 ```sql
 SELECT COUNT(*)
@@ -254,18 +262,8 @@ printf 'eAdvice exit=%s\n' "$?"
 
 advice_file="/HTHBatch/hth-eAdvice/uat-output/EBKP.HOSTPC.HTHTOEBK.EBFPADV.C.D${run_date}.TXT"
 ls -l "$advice_file"
-awk -v day="$run_date" '
-    NR == 1 { header_ok = (substr($0, 1, 10) == "01" day) }
-    substr($0, 1, 2) == "02" { rows++ }
-    END {
-        count = substr($0, 3, 8)
-        checksum = substr($0, 11, 10)
-        if (!header_ok || NR != rows + 2 || substr($0, 1, 2) != "99" ||
-            count !~ /^[0-9]+$/ || length(count) != 8 || count + 0 != rows ||
-            checksum !~ /^[0-9]+$/ || length(checksum) != 10 || checksum + 0 != day + rows) exit 1
-        printf "eAdvice data rows=%d\n", rows
-    }
-' "$advice_file"
+LC_ALL=C awk -v day="$run_date" \
+    -f /HTHBatch/hth-eAdvice/tools/verify_eadvice.awk "$advice_file"
 ```
 
 退出码应为 `0`，本次日志应有 `HTH_EADVICE stage=END status=SUCCESS`。核对文件控制行和业务笔数，再用实际测试交易的 `PAYMENT_ID` 查询。

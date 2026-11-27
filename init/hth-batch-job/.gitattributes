@@ -1,6 +1,7 @@
-bin/*.sh text eol=lf
-deploy/04u/*.sh text eol=lf
-deploy/04u/upload-files.txt text eol=lf
-tools/*.awk text eol=lf
-bin/*.bat text eol=crlf
+conf/*.sh text eol=lf
+hth-*/bin/*.sh text eol=lf
+hth-*/bin/*.bat text eol=crlf
+hth-*/tools/*.awk text eol=lf
+tools/*.sh text eol=lf
+tools/upload-files.txt text eol=lf
 hth-mtb/src/test/resources/golden/*.csv -text whitespace=-blank-at-eol

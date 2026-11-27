@@ -2,9 +2,11 @@
 import contextlib
 import io
 import pathlib
+import sys
 import tempfile
 import unittest
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "hth-mtb" / "tools"))
 from verify_hth_crm_csv import EXPECTED, verify
 
 

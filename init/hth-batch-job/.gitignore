@@ -3,6 +3,10 @@
 /output/
 /error/
 /temp/
+/hth-*/output/
+/hth-*/error/
+/hth-*/temp/
+/hth-*/lib/*.jar
 **/__pycache__/
 **/bco-db-key.env
 bea-coding-copilot-rule-guide.zh.md

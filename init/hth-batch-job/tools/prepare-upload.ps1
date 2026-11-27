@@ -1,7 +1,7 @@
 param([switch]$JarsOnly)
 
 $ErrorActionPreference = 'Stop'
-$batchRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+$batchRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $kind = if ($JarsOnly) { 'jars' } else { 'full' }
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
 $outputDir = Join-Path $batchRoot "target/04u-upload/$kind-$timestamp"
@@ -13,11 +13,12 @@ $checksums = foreach ($line in Get-Content -LiteralPath $manifest) {
         continue
     }
 
-    $source, $destination = ($line -split '\|', 3)[0, 1]
+    $destination = ($line -split '\|', 2)[0]
     if ($JarsOnly -and -not $destination.EndsWith('.jar')) {
         continue
     }
 
+    $source = $destination -replace '^([^/]+)/lib/([^/]+\.jar)$', '$1/target/$2'
     $inputFile = Join-Path $batchRoot $source
     $outputFile = Join-Path $outputDir $destination
     if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) {

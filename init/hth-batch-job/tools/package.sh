@@ -8,7 +8,7 @@ if [ "$#" -gt 1 ]; then
 fi
 
 scripts=$(CDPATH= cd "$(dirname "$0")" && pwd)
-batch_root=$(CDPATH= cd "$scripts/../.." && pwd)
+batch_root=$(CDPATH= cd "$scripts/.." && pwd)
 if [ -f "$batch_root/SOURCE_REVISION" ]; then
     revision=$(cat "$batch_root/SOURCE_REVISION")
 else
@@ -26,8 +26,12 @@ trap 'rm -rf "$staging"' 0
 trap 'exit 1' HUP INT TERM
 install -d -m 0755 "$staging/release"
 
-while IFS='|' read -r source destination mode; do
-    case "$source" in ''|\#*) continue ;; esac
+while IFS='|' read -r destination mode; do
+    case "$destination" in ''|\#*) continue ;; esac
+    source=$destination
+    case "$destination" in
+        */lib/*.jar) source=${destination%/lib/*}/target/${destination##*/} ;;
+    esac
     if [ ! -r "$batch_root/$source" ]; then
         printf '%s\n' "Missing $batch_root/$source. Run mvn verify from $batch_root first." >&2
         exit 1
@@ -36,21 +40,18 @@ while IFS='|' read -r source destination mode; do
     install -m "$mode" "$batch_root/$source" "$staging/$destination"
 done < "$scripts/upload-files.txt"
 
-cp -p "$staging/conf/HTHBatchEnv.sh" "$staging/release/"
-for folder in release hth-mtb hth-eAdvice; do
-    cp -p "$staging/README-04u-AIX.md" "$staging/$folder/"
-done
+mv "$staging/conf" "$staging/README-04u-AIX.md" "$staging/release/"
 COPYFILE_DISABLE=1 tar --format ustar -cf "$staging/release/hth-mtb-04u-aix-$revision.tar" -C "$staging" hth-mtb
 COPYFILE_DISABLE=1 tar --format ustar -cf "$staging/release/hth-eAdvice-04u-aix-$revision.tar" -C "$staging" hth-eAdvice
 (
     cd "$staging/release"
     if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum HTHBatchEnv.sh ./*.tar
+        sha256sum conf/*.sh ./*.tar
     else
-        shasum -a 256 HTHBatchEnv.sh ./*.tar
+        shasum -a 256 conf/*.sh ./*.tar
     fi
 ) > "$staging/release/SHA256SUMS"
 
 mkdir -p "$release_dir"
-cp -p "$staging"/release/* "$release_dir/"
+cp -pR "$staging"/release/* "$release_dir/"
 printf '04u packages: %s\n' "$release_dir"

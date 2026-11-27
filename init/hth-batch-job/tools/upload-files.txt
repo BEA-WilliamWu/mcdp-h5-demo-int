@@ -1,0 +1,25 @@
+# Relative path in the checkout and under /HTHBatch | AIX file mode
+conf/Env.sh|0640
+conf/HTHBatchEnv.sh|0640
+README-04u-AIX.md|0644
+hth-mtb/lib/hth-batch-job-mtb-1.0.0.jar|0644
+hth-mtb/bin/GenHthCrmExtract.sh|0750
+hth-mtb/bin/MTBBatch.sh|0750
+hth-mtb/bin/MTBBatch.bat|0644
+hth-mtb/config/db.ibank.batch.properties|0640
+hth-mtb/config/system_batch.properties|0640
+hth-mtb/tools/verify_hth_crm_csv.awk|0644
+hth-mtb/tools/verify_hth_crm_csv.py|0644
+hth-eAdvice/lib/hth-eAdvice-1.0.0.jar|0644
+hth-eAdvice/bin/EAdviceBatch.sh|0750
+hth-eAdvice/bin/genEAdvice2EBK1.sh|0750
+hth-eAdvice/bin/genEAdvice2EBK2.sh|0750
+hth-eAdvice/bin/genEAdvice2EBK3.sh|0750
+hth-eAdvice/bin/genPaperAdvice2EBK.sh|0750
+hth-eAdvice/config/db.ibank.batch.properties|0640
+hth-eAdvice/config/system_batch.properties|0640
+hth-eAdvice/tools/verify_eadvice.awk|0644
+hth-eAdvice/transfer/windows/FTHTHUA1.wsf|0644
+hth-eAdvice/transfer/windows/FTHTHUA2.wsf|0644
+hth-eAdvice/transfer/windows/FTHTHUA3.wsf|0644
+hth-eAdvice/transfer/windows/FTHTHUF1.wsf|0644

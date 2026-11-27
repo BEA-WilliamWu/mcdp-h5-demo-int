@@ -14,7 +14,7 @@
 
 | 层 | 文件 / 包 | 负责内容 |
 | --- | --- | --- |
-| 启动 | `bin/MTBBatch.sh`、`MTBBatch.bat`、`GenHthCrmExtract.sh` | 环境、独立日志、启动 JAR、返回退出码 |
+| 启动 | `hth-mtb/bin/` | 环境、独立日志、启动 JAR、返回退出码 |
 | 入口 | `MTBBatchMain` | 任务选择、日期检查、配置装配、统一失败日志 |
 | 调度 | `MTBBatchExecutor.executeCrmExtract` | 创建任务服务、记录开始/结束时间、笔数及字节数 |
 | 任务服务 | `crm/CrmExtractService` | 同日互斥、临时文件、成功后的原子发布、失败清理 |
@@ -29,7 +29,7 @@
 
 ## 构建及部署
 
-04u AIX 的 MTB 和 eAdvice 部署包、数据库配置和验证命令见 [04u 部署说明](deploy/04u/README.md)。
+04u AIX 的 MTB 和 eAdvice 部署包、数据库配置和验证命令见 [04u 部署说明](README-04u-AIX.md)。
 
 ```sh
 cd hth-batch-job
@@ -41,8 +41,7 @@ python3 -m unittest discover -s tools -p 'test_*.py'
 H2 只用于测试，不进入生产 JAR。服务器必须有 **Java 21**；旧 BCO Java 8 不能运行此 JAR。
 构建在开发机 / pipeline 执行，运行服务器不需要 Maven。
 
-启动脚本和共用的 `Env.sh` 统一放在 `bin/`。直接从源码目录运行时，脚本读取模块的 `config/`，并启动模块 `target/` 下的 JAR。
-04u 的上传目录由部署清单生成，安装后各模块从自己的 `bin/` 启动，使用各自的 `config/` 和 `lib/`。
+公共启动环境在根目录 `conf/`。每个模块的 `bin/`、`config/` 和 `tools/` 与 04u 的安装目录一一对应。从源码目录启动时，脚本优先使用模块 `lib/` 下的 JAR，其次使用 Maven 在 `target/` 生成的 JAR。
 
 `BATCH_HOME` 默认从脚本位置计算。`HTH_JAVA_HOME`、`JAVA_HOME`、`CONFIG_DIR`、`LOG_DIR`、`BATCH_JAR`、
 `JVM_OPTS` 均允许部署环境覆盖。建议使用绝对路径。`.sh` 固定 LF，避免 Windows
@@ -50,7 +49,7 @@ H2 只用于测试，不进入生产 JAR。服务器必须有 **Java 21**；旧 
 
 ## 数据库和输出配置
 
-04u 上的 MTB 外部配置默认在 `/HTHBatch/hth-mtb/config`。从源码目录运行时则使用 `$BATCH_HOME/hth-mtb/config`。
+04u 上的 MTB 外部配置默认在 `/HTHBatch/hth-mtb/config`。从源码目录运行时则使用对应模块下的 `config/`。
 使用 `-Dconfig.path` 指向其他目录时，
 两个配置文件均必须存在；缺失时失败，不回退到 JAR 内配置或 BCO 数据库。
 
@@ -70,7 +69,7 @@ jdbc.conn.autocommit=false
 
 也可把 BCO 的密文连接字段追加到两个模块现有的 `config/db.ibank.batch.properties`。
 应用识别这些字段后解密并提交给 JDBC。包装密钥由运行环境注入。
-配置方式见 [04u 部署说明](deploy/04u/README.md#配置-oracle)。
+配置方式见 [04u 部署说明](README-04u-AIX.md#配置-oracle)。
 
 `system_batch.properties`：
 
@@ -100,7 +99,7 @@ sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh 20261007
 sh /HTHBatch/hth-mtb/bin/GenHthCrmExtract.sh
 ```
 
-Windows：`bin\MTBBatch.bat CRM_EXTRACT 20261007`。
+Windows：`hth-mtb\bin\MTBBatch.bat CRM_EXTRACT 20261007`。
 
 只抽取一个业务日，不是运行时间：
 `CREATION_DATE >= 2026-10-07 00:00:00 AND CREATION_DATE < 2026-10-08 00:00:00`，
@@ -140,7 +139,7 @@ NULL 输出空字段，Event_Time 的 `HHmmss` 转为 `HH:mm:ss`。
 ## 检查与测试
 
 ```sh
-python3 tools/verify_hth_crm_csv.py /path/to/hthtomtb_mvp1apis_D261007.csv 20261007
+python3 hth-mtb/tools/verify_hth_crm_csv.py /path/to/hthtomtb_mvp1apis_D261007.csv 20261007
 ```
 
 检查日志 `HTH_CRM_1293 stage=END status=SUCCESS`，核对 `count`、`size`、`file`。

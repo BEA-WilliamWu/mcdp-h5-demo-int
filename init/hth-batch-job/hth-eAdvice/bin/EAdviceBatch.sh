@@ -18,8 +18,13 @@ if [ "$#" -eq 2 ]; then
     [ "${#2}" -eq 8 ] || usage
 fi
 
-script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd) || exit 50
-. "$script_dir/Env.sh" || exit 50
+hth_module_home=$(CDPATH= cd "$(dirname "$0")/.." && pwd) || exit 50
+hth_env=$hth_module_home/../conf/Env.sh
+if [ ! -r "$hth_env" ]; then
+    printf '%s\n' "HTH_EADVICE cannot read common launcher environment: $hth_env" >&2
+    exit 50
+fi
+. "$hth_env" || exit 50
 cd "$BATCH_HOME" || exit 50
 if [ ! -r "$BATCH_JAR" ]; then
     echo "HTH_EADVICE cannot read batch JAR: $BATCH_JAR" >&2

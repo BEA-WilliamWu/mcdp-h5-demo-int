@@ -13,7 +13,12 @@ class BatchLauncherTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
         source = Path(__file__).resolve().parents[1]
-        shutil.copytree(source / "bin", self.home / "bin")
+        for module in ("hth-mtb", "hth-eAdvice"):
+            shutil.copytree(source / module / "bin", self.home / module / "bin")
+        conf = self.home / "conf"
+        conf.mkdir()
+        for file in ("Env.sh", "HTHBatchEnv.sh"):
+            shutil.copyfile(source / "conf" / file, conf / file)
         java_bin = self.home / "fake java" / "bin"
         java_bin.mkdir(parents=True)
         java = java_bin / "java"
@@ -31,8 +36,8 @@ class BatchLauncherTest(unittest.TestCase):
                         BATCH_HOME=str(self.home), CONFIG_DIR="config with spaces", LOG_DIR="relative logs",
                         BATCH_JAR="test.jar", JVM_OPTS="-Xmx64M", HTH_TEST_EXIT="0")
 
-    def launch(self, *args, launcher="GenHthCrmExtract.sh"):
-        return subprocess.run(["sh", str(self.home / "bin" / launcher), *args],
+    def launch(self, *args, module="hth-mtb", launcher="GenHthCrmExtract.sh"):
+        return subprocess.run(["sh", str(self.home / module / "bin" / launcher), *args],
                               cwd="/", env=self.env, text=True, capture_output=True, timeout=10)
 
     def test_date_arguments_paths_with_spaces_and_full_log_path(self):
@@ -65,9 +70,7 @@ class BatchLauncherTest(unittest.TestCase):
         self.assertEqual(50, self.launch().returncode)
 
     def test_scheduler_key_takes_precedence_over_shared_file(self):
-        conf = self.home / "conf"
-        conf.mkdir()
-        (conf / "bco-db-key.env").write_text("return 50\n")
+        (self.home / "conf" / "bco-db-key.env").write_text("return 50\n")
         self.env["HTH_BATCH_BCO_WRAPPING_KEY"] = "scheduler-test-key"
         self.env["HTH_TEST_EXPECTED_KEY"] = "scheduler-test-key"
         self.assertEqual(0, self.launch("20261116").returncode)
@@ -93,7 +96,6 @@ class BatchLauncherTest(unittest.TestCase):
                if key not in ("BATCH_HOME", "CONFIG_DIR", "LOG_DIR", "BATCH_JAR", "HTH_BATCH_COMMON_ENV",
                               "HTH_JAVA_HOME", "JAVA_HOME")}
         conf = self.home / "conf"
-        conf.mkdir()
         java = Path(self.env["JAVA_HOME"])
         (conf / "HTHBatchEnv.sh").write_text(f'export HTH_JAVA_HOME="{java}"\n')
         key_file = conf / "bco-db-key.env"
@@ -101,23 +103,20 @@ class BatchLauncherTest(unittest.TestCase):
         key_file.chmod(0o600)
         env["HTH_TEST_EXPECTED_KEY"] = "local-test-key"
 
-        for installed in (False, True):
+        for jar_subdir in ("target", "lib"):
             for module, launcher, jar_name, args in modules:
-                with self.subTest(installed=installed, module=module):
+                with self.subTest(jar_subdir=jar_subdir, module=module):
                     module_home = self.home / module
-                    jar_dir = module_home / ("lib" if installed else "target")
-                    jar_dir.mkdir(parents=True)
+                    jar_dir = module_home / jar_subdir
+                    jar_dir.mkdir()
                     (jar_dir / jar_name).touch()
-                    batch_home = module_home if installed else self.home
-                    if installed:
-                        shutil.copytree(self.home / "bin", module_home / "bin")
                     result = subprocess.run(
-                        ["sh", str(batch_home / "bin" / launcher), *args],
+                        ["sh", str(module_home / "bin" / launcher), *args],
                         cwd="/", env=env, text=True, capture_output=True, timeout=10,
                     )
                     self.assertEqual(0, result.returncode, result.stderr)
                     log_path = Path(result.stdout.splitlines()[0].split("log=", 1)[1])
-                    self.assertEqual(batch_home / "logs", log_path.parent)
+                    self.assertEqual(module_home / "logs", log_path.parent)
                     arguments = log_path.read_text().splitlines()
                     self.assertIn(f"-Dconfig.path={module_home / 'config'}", arguments)
                     self.assertIn(str(jar_dir / jar_name), arguments)
@@ -134,7 +133,7 @@ class BatchLauncherTest(unittest.TestCase):
         for launcher, job in entry_points:
             for args in ((), ("20261116",)):
                 with self.subTest(launcher=launcher, args=args):
-                    result = self.launch(*args, launcher=launcher)
+                    result = self.launch(*args, module="hth-eAdvice", launcher=launcher)
                     self.assertEqual(0, result.returncode, result.stderr)
                     log = Path(result.stdout.splitlines()[0].split("log=", 1)[1])
                     self.assertTrue(log.name.startswith(f"EAdviceBatch.{job}."))
@@ -146,10 +145,10 @@ class BatchLauncherTest(unittest.TestCase):
         launcher = "genEAdvice2EBK3.sh"
         for args in (("bad",), ("20261116", "extra")):
             with self.subTest(args=args):
-                self.assertEqual(2, self.launch(*args, launcher=launcher).returncode)
+                self.assertEqual(2, self.launch(*args, module="hth-eAdvice", launcher=launcher).returncode)
         self.assertFalse((self.home / "relative logs").exists())
         self.env["HTH_TEST_EXIT"] = "7"
-        self.assertEqual(50, self.launch("20261116", launcher=launcher).returncode)
+        self.assertEqual(50, self.launch("20261116", module="hth-eAdvice", launcher=launcher).returncode)
 
 
 if __name__ == "__main__":
